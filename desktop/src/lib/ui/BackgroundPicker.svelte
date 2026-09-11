@@ -15,11 +15,16 @@
   import { fade } from 'svelte/transition';
   import { Check } from '@lucide/svelte';
   import { FAST, EASE } from '../motion';
+  import { creditFor } from '../credits';
 
   export let options: { id: string; label: string }[] = [];
   export let value: string;
   export let size: 'compact' | 'large' = 'compact';
   export let onChoose: (id: string) => void;
+
+  /* Shown here rather than only in Settings, because this is where footage
+     recorded in someone else's world is actually chosen. */
+  $: credit = creditFor(value);
 </script>
 
 <div class="grid" class:large={size === 'large'}>
@@ -47,6 +52,12 @@
     </button>
   {/each}
 </div>
+
+{#if credit}
+  <p class="credit" class:large={size === 'large'} transition:fade={{ duration: FAST, easing: EASE }}>
+    Recorded in {credit.world}, a world by {credit.creator}
+  </p>
+{/if}
 
 <style>
   .grid {
@@ -138,5 +149,17 @@
 
   .item.selected .label {
     color: var(--text);
+  }
+
+  .credit {
+    margin: var(--s-2) 0 0;
+    font-size: var(--t-meta);
+    color: var(--text-faint);
+    line-height: 1.4;
+  }
+
+  .credit.large {
+    margin-top: var(--s-3);
+    font-size: var(--t-caption);
   }
 </style>

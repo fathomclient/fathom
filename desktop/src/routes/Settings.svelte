@@ -41,7 +41,9 @@
   import Button from '../lib/ui/Button.svelte';
   import BackgroundPicker from '../lib/ui/BackgroundPicker.svelte';
   import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
+  import { WORLD_CREDITS } from '../lib/credits';
   import {
+    openPage,
     recoveryView,
     setChoice,
     setSetting,
@@ -216,6 +218,18 @@
                 size="large"
                 onChoose={onBackground}
               />
+            </Section>
+
+            <!-- Their creators allow the footage to be used with credit. -->
+            <Section label="Background credits" material>
+              {#each WORLD_CREDITS as credit}
+                <Row title={credit.world} detail="A world by {credit.creator}, on CurseForge">
+                  <svelte:fragment slot="control">
+                    <Button onClick={() => void openPage(credit.worldPage)}>World</Button>
+                    <Button onClick={() => void openPage(credit.creatorPage)}>Creator</Button>
+                  </svelte:fragment>
+                </Row>
+              {/each}
             </Section>
           {/if}
 

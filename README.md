@@ -1,64 +1,47 @@
 # Fathom
 
-An open-source, privacy-first launcher for Minecraft: Java Edition 1.8.9.
+A free, open-source launcher for Minecraft: Java Edition 1.8.9, built for
+performance and privacy.
 
-**This launcher does not distribute Minecraft.** It signs you in with your own
-Microsoft account, verifies that the account is entitled to Java Edition, and
-then downloads the game from Mojang's own servers.
+Fathom signs you in with your own Microsoft account, checks that the account
+owns the game, and downloads Minecraft from Mojang's own servers. It manages
+profiles and mods, and includes Fathom Optimizations, an in-game performance and
+HUD mod.
 
-There is no launcher account, no telemetry, no analytics, no ads, no device
-identifier, no kernel driver, and no background service. Those are checkable
-claims, not slogans — see [PRIVACY.md](PRIVACY.md) and [NETWORK.md](NETWORK.md).
+- **Private.** No telemetry, analytics, ads, launcher account or background
+  service. See [PRIVACY.md](PRIVACY.md) and [NETWORK.md](NETWORK.md).
+- **Legitimate.** No cracked accounts, no ownership bypass, and no redistributed
+  game files.
 
-## Status
+Not affiliated with, endorsed by, or associated with Mojang or Microsoft.
 
-Foundation. It signs in, verifies entitlement, downloads game files in the
-background, and builds a launch command. It does **not** yet implement a mod
-loader or self-update. [ARCHITECTURE.md](ARCHITECTURE.md) §8
-lists every known limitation; the interface says so on screen rather than
-offering controls that do not work.
+## Build
 
-## What it will not do
-
-No cracked accounts, no offline-mode ownership bypass, no authentication bypass,
-no redistributed game binaries. No registry tweaks, no service disabling, no
-Defender exclusions, no realtime priority, no overclocking. The reasoning is in
-[docs/research/security-model.md](docs/research/security-model.md) §9.
-
-## Build and run
+Needs Rust and Node.js. Run the interface dev server, then the app:
 
 ```bash
-cargo run -p launcher-ui
+npm --prefix desktop install
 ```
 
 ```bash
-cargo run -p launcher-cli -- doctor
+npm --prefix desktop run dev
 ```
 
-### Building without a Microsoft application id
+```bash
+cargo run -p launcher-desktop
+```
 
-Microsoft requires every launcher to register its own application and have it
-approved for the Minecraft API; approval is a manual review. See
+`tools/package-portable.ps1` builds a portable release.
+
+### Signing in
+
+Microsoft sign-in needs an Azure application id approved for the Minecraft API.
+Set it with `FATHOM_AZURE_CLIENT_ID`. **Forks must register their own**; see
 [auth-feasibility.md](docs/research/auth-feasibility.md).
 
-Until that lands, a fake local identity lets the rest of the launcher be built
-and tested:
-
-```bash
-FATHOM_DEV_AUTH=i-understand-this-is-not-real cargo run -p launcher-ui --features dev-auth
-```
-
-It owns nothing, cannot join online-mode servers, and **cannot be built into a
-release binary** — that combination is a compile error. Installing and verifying
-game files needs no account at all, so most of the launcher is testable without
-it.
-
-Signing in needs an Azure application id that Microsoft has approved for the
-Minecraft API. Registrations that have not been approved receive HTTP 403.
-
-```bash
-FATHOM_AZURE_CLIENT_ID=<your-application-id> cargo run -p launcher-ui
-```
+For development without one, build with `--features dev-auth` and set
+`FATHOM_DEV_AUTH=i-understand-this-is-not-real`. That identity is fake, cannot
+play online, and cannot be compiled into a release build.
 
 ## Checks
 
@@ -70,23 +53,17 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-```bash
-cargo deny check
-```
-
 ## Documents
 
 | File | What it covers |
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Layering, decisions, limitations |
-| [PRIVACY.md](PRIVACY.md) | What is stored, what leaves the machine, and what we cannot promise |
+| [PRIVACY.md](PRIVACY.md) | What is stored and what leaves the machine |
 | [NETWORK.md](NETWORK.md) | Every reachable host, and how the allowlist is enforced |
-| [THREAT_MODEL.md](THREAT_MODEL.md) | Fourteen threats, what stops each, and what is still open |
-| [ATTRIBUTION.md](ATTRIBUTION.md) | Creator credits for background footage, and third-party fonts and icons |
-| [docs/research/](docs/research/) | The research this is built on |
+| [THREAT_MODEL.md](THREAT_MODEL.md) | Threats, mitigations, and what is still open |
+| [ATTRIBUTION.md](ATTRIBUTION.md) | Creator credits and third-party assets |
 
 ## Licence
 
-Apache-2.0. Not affiliated with, endorsed by, or associated with Mojang or
-Microsoft. Third-party assets and creator credits are listed in
-[ATTRIBUTION.md](ATTRIBUTION.md).
+Apache-2.0. Background footage recorded in community worlds is credited in
+[ATTRIBUTION.md](ATTRIBUTION.md) and in the launcher under Settings → Appearance.

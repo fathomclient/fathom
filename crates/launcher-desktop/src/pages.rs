@@ -16,17 +16,36 @@
 //! # Why not a plugin
 //!
 //! `tauri-plugin-opener` would add exactly the general capability above to the
-//! WebView's permission surface. Two dozen lines here keep the boundary at four
-//! constants.
+//! WebView's permission surface. Two dozen lines here keep the boundary at a
+//! table of constants.
 
 /// Every page the launcher will open, by id.
 ///
 /// Adding one is adding a line here. There is no other way in.
-const PAGES: [(&str, &str); 4] = [
+const PAGES: [(&str, &str); 8] = [
     ("optifine", "https://optifine.net/downloads"),
     ("legacy-fabric", "https://legacyfabric.net/"),
     ("fabric-api", "https://github.com/Legacy-Fabric/fabric"),
     ("adoptium", "https://adoptium.net/"),
+    // Creator credits for background footage recorded in their worlds. Settings
+    // → Appearance links to these; `desktop/src/lib/credits.ts` names the ids and
+    // ATTRIBUTION.md is the full record.
+    (
+        "credit-tideworn",
+        "https://www.curseforge.com/minecraft/worlds/tideworn-8-sqkm-forgotten-flooded-city",
+    ),
+    (
+        "credit-milkshake-mp3",
+        "https://www.curseforge.com/members/milkshake_mp3/projects",
+    ),
+    (
+        "credit-tokyo-inspired-city",
+        "https://www.curseforge.com/minecraft/worlds/tokyo-inspired-city",
+    ),
+    (
+        "credit-coincoffer",
+        "https://www.curseforge.com/members/coincoffer/projects",
+    ),
 ];
 
 pub fn url_for(id: &str) -> Option<&'static str> {
@@ -154,6 +173,24 @@ mod tests {
 
         for (id, url) in PAGES {
             assert!(url.starts_with("https://"), "{id} is not https");
+        }
+    }
+
+    /// The background credits are part of the terms the footage is used under,
+    /// so losing one of these ids would silently break a link in Settings.
+    #[test]
+    fn every_background_credit_resolves_to_the_creators_curseforge_page() {
+        for id in [
+            "credit-tideworn",
+            "credit-milkshake-mp3",
+            "credit-tokyo-inspired-city",
+            "credit-coincoffer",
+        ] {
+            let url = url_for(id).unwrap_or_else(|| panic!("{id} must resolve"));
+            assert!(
+                url.starts_with("https://www.curseforge.com/"),
+                "{id} should point at CurseForge, not {url}"
+            );
         }
     }
 
