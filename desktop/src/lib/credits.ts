@@ -31,7 +31,15 @@ export const WORLD_CREDITS: WorldCredit[] = [
     creator: 'CoinCoffer',
     worldPage: 'credit-tokyo-inspired-city',
     creatorPage: 'credit-coincoffer',
-    backgrounds: ['bg_6midnight', 'bg_6clear'],
+    backgrounds: [
+      'bg_6midnight',
+      'bg_6clear',
+      'bg_6pull_city-overlook',
+      'bg_6pull_moon-tower',
+      'bg_6pull_red-tower',
+      'bg_6pull_storm-panorama',
+      'bg_6pull_neon-grid',
+    ],
   },
 ];
 

@@ -125,10 +125,90 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private static final float OPEN_SECONDS = 0.16f;
     private static final float DOCK_DELAY_SECONDS = 0.04f;
 
+    /**
+     * The launcher's glass, at the launcher's own opacities.
+     *
+     * <p>None of these are new numbers. {@code .launch} in
+     * {@code desktop/src/routes/Home.svelte} -- the slab the launcher's home
+     * page is built around -- is {@code rgba(12, 14, 19, 0.68)} with the strong
+     * edge, the strong sheen and a shadow under it. The small pills along its
+     * chrome are {@code --glass-fill}: the same family at 0.58, with the plain
+     * edge and the plain sheen. Fathom's tokens already carry both colours, so
+     * this is the launcher's material named in the launcher's own terms rather
+     * than a hand-matched approximation of it.
+     *
+     * <p>What cannot come across is the blur, and that is why the opacities
+     * here are lower than the launcher's rather than equal to them. The launcher
+     * backs its glass with {@code backdrop-filter}: the fill can afford to be
+     * heavy because the blur behind it is doing the work of looking like a
+     * material. This renderer draws over a video frame already on the
+     * framebuffer, and blurring it again would cost a pass over the whole window
+     * every frame to soften footage the source is already defocusing. Matching
+     * the launcher's 0.68 exactly was tried and read as a flat tint, because
+     * without the blur the only thing left saying "glass" is what you can see
+     * through it. So: the launcher's colours and its edge and sheen, at an
+     * opacity low enough that the footage is visibly behind the button.
+     */
+    private static final int MENU_GLASS = Skin.fade(Skin.GLASS_HOVER, 0.42f);
+    private static final int MENU_GLASS_HOVER = Skin.fade(Skin.GLASS_HOVER, 0.58f);
+    private static final int MENU_GLASS_PRESSED = Skin.fade(Skin.GLASS_PRESSED, 0.74f);
+
+    /**
+     * The dock's pills, thinner again.
+     *
+     * <p>Two rows, two weights. The destinations carry a label and have to hold
+     * it against whatever the video is doing; the dock carries a 13-unit icon
+     * and can afford to be barely there until the pointer arrives.
+     */
+    private static final int DOCK_GLASS = Skin.fade(Skin.GLASS, 0.34f);
+    private static final int DOCK_GLASS_HOVER = Skin.fade(Skin.GLASS, 0.52f);
+    private static final int DOCK_GLASS_PRESSED = Skin.fade(Skin.GLASS_PRESSED, 0.68f);
+
+    /** {@code --glass-sheen-strong}: the lit top edge of the launcher's slab. */
+    private static final int MENU_SHEEN = Skin.fade(0xFFFFFF, 0.13f);
+
+    /**
+     * How far the shadow under a primary button reaches.
+     *
+     * <p>The launcher's is {@code 0 26px 70px}, which is a drop shadow on a page
+     * that scrolls. Here the buttons sit in the middle of the window with
+     * nothing under them, so the same spread would read as a smudge; this is the
+     * part of the launcher's material that is matched in spirit rather than in
+     * numbers.
+     */
+    private static final float MENU_SHADOW_SPREAD = 14f;
+
+    /**
+     * What this screen owes, and to whom.
+     *
+     * <p>The menu video was recorded in someone else's world, on terms that ask
+     * for credit. {@code ATTRIBUTION.md} is the repository's record of that,
+     * which is the right place for it and the wrong place for a player to have
+     * to look: the people owed the credit are credited where the footage is
+     * actually shown. Label, subject, and who it belongs to.
+     */
+    private static final String[][] CREDITS = {
+        {"Menu background", "Tideworn - 8 sqkm Forgotten Flooded City",
+            "A world by milkshake_mp3, on CurseForge"},
+        {"Launcher backgrounds", "Tokyo Inspired City",
+            "A world by CoinCoffer, on CurseForge"},
+        {"Typeface", "Geist", "Vercel and basement.studio, SIL Open Font Licence 1.1"},
+    };
+
+    private static final String[] CREDITS_FOOTER = {
+        "Recorded in Minecraft by the Fathom project. Full credits in ATTRIBUTION.md.",
+        "Not an official Minecraft product. Not approved by or associated with Mojang.",
+    };
+
+    private static final float CREDITS_CLOSE_WIDTH = 86f;
+
     private final Controls controls = new Controls();
     private final Pointer pointer = new Pointer();
     private Motion opening;
     private Motion dockOpening;
+    private Motion creditsFade;
+    /** Whether the credits panel is up. While it is, nothing behind it answers. */
+    private boolean creditsOpen;
     private float openedAt;
     private int captureFrames;
     private boolean captured;
@@ -154,6 +234,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             opening = new Motion(0f, OPEN_SECONDS);
             opening.to(1f, now);
             dockOpening = new Motion(0f, OPEN_SECONDS);
+            creditsFade = new Motion(0f, Skin.FAST);
+            creditsOpen = false;
             openedAt = now;
             // The clock has not run since the last Fathom screen closed, so
             // without this the first frame carries all of that time and every
@@ -233,6 +315,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             client.startIntegratedServer("New World", "New World", null);
         } else if ("hud-editor".equalsIgnoreCase(target)) {
             FathomNavigation.push(client, new HudEditorScreen(Runtime.hud()));
+        } else if ("credits".equalsIgnoreCase(target)) {
+            // The credits are a panel on this screen rather than a screen of
+            // their own, so the gate opens them here and lets the menu capture
+            // photograph them in place.
+            creditsOpen = true;
+            creditsFade.to(1f, Gfx.clock().seconds());
         } else {
             FathomNavigation.openHub(client, Runtime.hud());
         }
@@ -318,6 +406,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.popAlpha();
 
         footer(ui);
+        credits(ui);
 
         controls.drawOverlays(ui);
     }
@@ -383,7 +472,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     }
 
     private boolean chromeAction(GlRenderer ui, Rect area, String label) {
-        Controls.State state = controls.state("menu.account", area, true);
+        Controls.State state = controls.state("menu.account", area, !creditsOpen);
         if (state.hover > 0.01f) {
             ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_XS,
                     Skin.scaleAlpha(Skin.FILL_HOVER, state.hover));
@@ -443,7 +532,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      * importance.
      */
     private void dock(GlRenderer ui) {
-        float dockWidth = DOCK_BUTTON * 5f + DOCK_GAP * 4f;
+        float dockWidth = DOCK_BUTTON * 6f + DOCK_GAP * 5f;
         float y = ui.height() - FOOTER_HEIGHT - DOCK_BUTTON - Skin.S3;
         float x = column.centreX() - dockWidth / 2f;
         if (dockAction(ui, "menu.fathom", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.GRID, "Fathom")) {
@@ -463,6 +552,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             client.setScreen(new ResourcePackScreen(this));
         }
         x += DOCK_BUTTON + DOCK_GAP;
+        if (dockAction(ui, "menu.credits", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.STAR,
+                "Credits")) {
+            creditsOpen = true;
+            creditsFade.to(1f, Gfx.clock().seconds());
+        }
+        x += DOCK_BUTTON + DOCK_GAP;
         if (dockAction(ui, "menu.quit", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.CLOSE, "Quit")) {
             client.scheduleStop();
         }
@@ -470,10 +565,16 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     }
 
     private boolean menuButton(GlRenderer ui, String id, Rect area, String label) {
-        Controls.State state = controls.state(id, area, true);
-        int face = Skin.mix(Skin.mix(Skin.GLASS, Skin.GLASS_HOVER, state.hover), Skin.GLASS_PRESSED, state.press);
+        Controls.State state = controls.state(id, area, !creditsOpen);
+        int face = Skin.mix(Skin.mix(MENU_GLASS, MENU_GLASS_HOVER, state.hover),
+                MENU_GLASS_PRESSED, state.press);
         int edge = Skin.mix(Skin.GLASS_EDGE_STRONG, Skin.fade(Skin.ACCENT, 0.76f), state.hover);
         float sink = state.press * 0.5f;
+        // The launcher's slab casts one. Without it the button sits *on* the
+        // footage rather than in front of it, and half of what reads as glass
+        // there is the separation the shadow gives it.
+        ui.shadow(area.x, area.y + sink, area.right(), area.bottom() + sink, Skin.R_XS,
+                MENU_SHADOW_SPREAD, Skin.SHADOW);
         ui.rounded(area.x, area.y + sink, area.right(), area.bottom() + sink, Skin.R_XS, face);
         if (state.hover > 0.01f) {
             // A wash, not a fill: the hovered button warms toward the accent
@@ -483,6 +584,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         }
         ui.outline(area.x, area.y + sink, area.right(), area.bottom() + sink, Skin.R_XS,
                 Skin.HAIRLINE, edge);
+        // The one-unit sheen inside the top edge, as on every launcher surface.
+        ui.fill(area.x + Skin.R_XS, area.y + sink + Skin.HAIRLINE, area.right() - Skin.R_XS,
+                area.y + sink + Skin.HAIRLINE * 2f, MENU_SHEEN);
         if (state.hover > 0.01f) {
             ui.rounded(area.x + Skin.S2, area.y + sink, area.right() - Skin.S2,
                     area.y + sink + 1.5f, 0.75f, Skin.scaleAlpha(Skin.ACCENT, state.hover));
@@ -497,11 +601,17 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
 
     /** Compact secondary action with an immediate hover label. */
     private boolean dockAction(GlRenderer ui, String id, Rect area, Icon icon, String label) {
-        Controls.State state = controls.state(id, area, true);
-        int face = Skin.mix(Skin.mix(Skin.GLASS, Skin.GLASS_HOVER, state.hover), Skin.GLASS_PRESSED, state.press);
+        Controls.State state = controls.state(id, area, !creditsOpen);
+        // The launcher's small pill: --glass-fill, the plain edge, the plain
+        // sheen. Lighter than the two destinations above it, which is the
+        // difference between a place to go and a thing to change.
+        int face = Skin.mix(Skin.mix(DOCK_GLASS, DOCK_GLASS_HOVER, state.hover),
+                DOCK_GLASS_PRESSED, state.press);
         ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_XS, face);
         ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_XS, Skin.HAIRLINE,
                 Skin.mix(Skin.GLASS_EDGE, Skin.fade(Skin.ACCENT, 0.72f), state.hover));
+        ui.fill(area.x + Skin.R_XS, area.y + Skin.HAIRLINE, area.right() - Skin.R_XS,
+                area.y + Skin.HAIRLINE * 2f, Skin.SHEEN);
         float iconSize = 13f;
         // Muted rather than faint: faint is a hub value, tuned against a panel
         // two shades from black, and it disappears into a snowfield.
@@ -526,6 +636,96 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.outline(tip.x, tip.y, tip.right(), tip.bottom(), Skin.R_XS, Skin.HAIRLINE, Skin.EDGE);
         ui.textCentred(dockTooltip, tip.centreX(), Controls.baseline(ui, tip, Type.CAPTION),
                 Type.CAPTION, Skin.TEXT_MUTED);
+    }
+
+
+    // -----------------------------------------------------------------------
+    // Credits
+    // -----------------------------------------------------------------------
+
+    /**
+     * The credits panel.
+     *
+     * <p>A panel over the menu rather than a screen of its own, because leaving
+     * this screen stops the video: a credits page for footage, with the footage
+     * switched off behind it, would be a strange way to show somebody what they
+     * are being shown. The world darkens, the panel is Fathom's own near-black,
+     * and everything underneath stops answering the pointer while it is up.
+     */
+    private void credits(GlRenderer ui) {
+        float shown = creditsFade.value(Gfx.clock().seconds());
+        if (shown <= 0.001f) {
+            return;
+        }
+        ui.pushAlpha(shown);
+
+        // Darker than the chrome but lighter than the hub's scrim: the video is
+        // the subject of half these credits, so it stays legible behind them.
+        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.fade(0x000000, 0.62f));
+
+        float pad = Skin.S5;
+        float labelLine = ui.lineHeight(Type.LABEL);
+        float titleLine = ui.lineHeight(Type.BODY_STRONG);
+        float captionLine = ui.lineHeight(Type.CAPTION);
+
+        float text = 0f;
+        for (String[] entry : CREDITS) {
+            text = Math.max(text, ui.measure(entry[0], Type.LABEL));
+            text = Math.max(text, ui.measure(entry[1], Type.BODY_STRONG));
+            text = Math.max(text, ui.measure(entry[2], Type.CAPTION));
+        }
+        for (String line : CREDITS_FOOTER) {
+            text = Math.max(text, ui.measure(line, Type.CAPTION));
+        }
+        float width = Math.min(ui.width() - Skin.S8 * 2f, text + pad * 2f);
+        float height = pad
+                + ui.lineHeight(Type.TITLE) + Skin.S4
+                + CREDITS.length * (labelLine + titleLine + captionLine + Skin.S4)
+                + CREDITS_FOOTER.length * captionLine + Skin.S4
+                + Skin.H_MD + pad;
+        Rect panel = new Rect(Math.round((ui.width() - width) / 2f),
+                Math.round((ui.height() - height) / 2f), width, height);
+
+        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, 18f, Skin.SHADOW);
+        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, Skin.PANEL);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, Skin.HAIRLINE,
+                Skin.EDGE);
+        ui.fill(panel.x + Skin.R_MD, panel.y + Skin.HAIRLINE, panel.right() - Skin.R_MD,
+                panel.y + Skin.HAIRLINE * 2f, Skin.SHEEN);
+
+        float x = panel.x + pad;
+        float y = panel.y + pad;
+        ui.text("Credits", x, y + ui.ascent(Type.TITLE), Type.TITLE, Skin.TEXT);
+        y += ui.lineHeight(Type.TITLE) + Skin.S4;
+
+        for (String[] entry : CREDITS) {
+            ui.text(entry[0], x, y + ui.ascent(Type.LABEL), Type.LABEL, Skin.TEXT_FAINT);
+            y += labelLine;
+            ui.text(entry[1], x, y + ui.ascent(Type.BODY_STRONG), Type.BODY_STRONG, Skin.TEXT);
+            y += titleLine;
+            ui.text(entry[2], x, y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_MUTED);
+            y += captionLine + Skin.S4;
+        }
+
+        for (String line : CREDITS_FOOTER) {
+            ui.text(line, x, y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_DISABLED);
+            y += captionLine;
+        }
+
+        // The launcher's own control, unthinned: it is on Fathom's near-black
+        // here, which is the surface that material was drawn for.
+        Rect close = new Rect(panel.right() - pad - CREDITS_CLOSE_WIDTH,
+                panel.bottom() - pad - Skin.H_MD, CREDITS_CLOSE_WIDTH, Skin.H_MD);
+        if (controls.secondary(ui, "menu.credits.close", close, "Close", true)) {
+            closeCredits();
+        }
+
+        ui.popAlpha();
+    }
+
+    private void closeCredits() {
+        creditsOpen = false;
+        creditsFade.to(0f, Gfx.clock().seconds());
     }
 
     /**
@@ -606,9 +806,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             return true;
         }
         if (keyCode == Keyboard.KEY_ESCAPE) {
-            // Nothing. There is nowhere above the main menu, and a menu that
-            // quit the game on Escape would be a menu that quits the game on the
-            // key everybody presses to back out of things.
+            // Escape backs out of the credits, and otherwise does nothing: there
+            // is nowhere above the main menu, and a menu that quit the game on
+            // Escape would be a menu that quits the game on the key everybody
+            // presses to back out of things.
+            if (creditsOpen) {
+                closeCredits();
+            }
             return true;
         }
         return false;

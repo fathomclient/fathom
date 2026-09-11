@@ -758,7 +758,7 @@ export async function shellStatus(): Promise<ShellStatus> {
 }
 
 export async function background(): Promise<string> {
-  if (!inTauri) return 'bg_1';
+  if (!inTauri) return 'bg_5rain';
   return invoke<string>('background');
 }
 

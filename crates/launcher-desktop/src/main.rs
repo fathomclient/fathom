@@ -97,7 +97,45 @@ fn background(state: tauri::State<'_, State>) -> Result<String, String> {
 /// These are also asset filenames, which is why nothing else is accepted: the
 /// value ends up inside a URL, and "the WebView asked for it" is not a reason
 /// to trust a string.
-const BACKGROUNDS: [&str; 5] = ["static", "bg_1", "bg_2", "bg_3", "bg_4"];
+///
+/// Every id here must appear in `desktop/src/lib/backgrounds.ts`, which is the
+/// catalogue the interface offers and says what each id's asset is. The two
+/// lists drifted once: the picker offered the bg_5 and bg_6 recordings while
+/// this list still ended at `bg_4`, so choosing one was refused here and the
+/// window kept the background it already had, with nothing on screen to say so.
+/// The test at the bottom of this file reads that catalogue and fails if they
+/// disagree again.
+const BACKGROUNDS: [&str; 15] = [
+    "static",
+    "bg_1",
+    "bg_2",
+    "bg_3",
+    "bg_4",
+    "bg_5rain",
+    "bg_5noraintickfrozen",
+    "bg_5noraintickunfrozen",
+    "bg_6midnight",
+    "bg_6clear",
+    "bg_6pull_city-overlook",
+    "bg_6pull_moon-tower",
+    "bg_6pull_red-tower",
+    "bg_6pull_storm-panorama",
+    "bg_6pull_neon-grid",
+];
+
+/// Whether a background decodes video, for the interface's "Animated
+/// background" switch.
+///
+/// Three kinds, two answers: the midnight gradient and the still frames are not
+/// animated, and everything else is a clip. Spelled as a prefix rather than a
+/// second list because the stills are all crops of one recording and are named
+/// for it.
+fn animated(choice: &str) -> bool {
+    choice != "static" && !choice.starts_with("bg_6pull_")
+}
+
+/// What a first run shows, and what an unreadable preference falls back to.
+const DEFAULT_BACKGROUND: &str = "bg_5rain";
 
 /// Accept an id written by an older build.
 ///
@@ -139,7 +177,7 @@ fn set_background(state: tauri::State<'_, State>, choice: String) -> Result<(), 
         let path = paths.root().join("appearance.json");
         let body = serde_json::json!({
             "background": choice,
-            "animated_background": choice != "static",
+            "animated_background": animated(&choice),
         });
         if let Err(error) = std::fs::write(&path, body.to_string()) {
             // Not fatal. The background changed for this session; only the
@@ -152,26 +190,32 @@ fn set_background(state: tauri::State<'_, State>, choice: String) -> Result<(), 
 
 fn stored_background() -> String {
     let Ok(paths) = DataPaths::discover() else {
-        return "bg_1".to_owned();
+        return DEFAULT_BACKGROUND.to_owned();
     };
     let Ok(raw) = std::fs::read_to_string(paths.root().join("appearance.json")) else {
-        return "bg_1".to_owned();
+        return DEFAULT_BACKGROUND.to_owned();
     };
     // A byte-order mark is what a hand-edit in Notepad leaves behind, and
     // serde_json treats one as a syntax error.
     let raw = raw.trim_start_matches('\u{feff}');
     let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
-        return "bg_1".to_owned();
+        return DEFAULT_BACKGROUND.to_owned();
     };
-    if value.get("animated_background") == Some(&serde_json::Value::Bool(false)) {
-        return "static".to_owned();
-    }
-    value
+    // The id wins when there is one. The flag is only consulted when there is
+    // not: a still frame is saved as `animated_background: false` and is still a
+    // background, so reading the flag first would turn every saved still back
+    // into the midnight gradient on the next launch.
+    if let Some(id) = value
         .get("background")
         .and_then(serde_json::Value::as_str)
         .and_then(normalise)
-        .unwrap_or("bg_1")
-        .to_owned()
+    {
+        return id.to_owned();
+    }
+    if value.get("animated_background") == Some(&serde_json::Value::Bool(false)) {
+        return "static".to_owned();
+    }
+    DEFAULT_BACKGROUND.to_owned()
 }
 
 fn main() {
@@ -299,6 +343,63 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The picker and this allowlist have to name the same backgrounds.
+    ///
+    /// They drifted once, and the failure was silent in both directions: the
+    /// interface offered five recordings this file refused, so the click did
+    /// nothing and the only evidence was a line in the log. Reading the
+    /// interface's own list is the cheapest way to make that a build failure
+    /// instead.
+    #[test]
+    fn the_picker_offers_exactly_what_this_file_allows() {
+        let shell = include_str!("../../../desktop/src/lib/backgrounds.ts");
+        let list = shell
+            .split_once("export const BACKGROUNDS: BackgroundOption[] = [")
+            .expect("the interface must declare a background list")
+            .1
+            .split_once("];")
+            .expect("the list must end")
+            .0;
+        let offered: Vec<&str> = list
+            .match_indices("{ id: '")
+            .map(|(at, marker)| {
+                let rest = &list[at + marker.len()..];
+                rest.split_once("'").expect("an id is quoted").0
+            })
+            .collect();
+
+        for id in &offered {
+            assert!(
+                BACKGROUNDS.contains(id),
+                "the picker offers {id}, which this file would refuse"
+            );
+        }
+        for id in BACKGROUNDS {
+            assert!(
+                offered.contains(&id),
+                "{id} is allowed here but the picker never offers it"
+            );
+        }
+    }
+
+    /// A default nothing accepts is a first run with no background at all.
+    #[test]
+    fn the_default_background_is_one_of_the_allowed_ids() {
+        assert_eq!(normalise(DEFAULT_BACKGROUND), Some(DEFAULT_BACKGROUND));
+    }
+
+    /// Only clips are animated. The gradient and the still frames are not, and
+    /// a still that reported itself as animated would be described wrongly by
+    /// the switch in Settings.
+    #[test]
+    fn only_video_backgrounds_count_as_animated() {
+        assert!(animated("bg_1"));
+        assert!(animated("bg_5rain"));
+        assert!(!animated("static"));
+        assert!(!animated("bg_6pull_neon-grid"));
+        assert!(!animated("bg_6pull_city-overlook"));
+    }
 
     /// The bug that made the background black: a preference written by the
     /// previous interface spells the id without an underscore, and the asset

@@ -16,6 +16,7 @@
   import { Check } from '@lucide/svelte';
   import { FAST, EASE } from '../motion';
   import { creditFor } from '../credits';
+  import { openPage } from '../api';
 
   export let options: { id: string; label: string }[] = [];
   export let value: string;
@@ -54,8 +55,14 @@
 </div>
 
 {#if credit}
+  <!-- The world and its creator are the link. A credit that says who made
+       something and then makes you go and find them is half a credit. -->
   <p class="credit" class:large={size === 'large'} transition:fade={{ duration: FAST, easing: EASE }}>
-    Recorded in {credit.world}, a world by {credit.creator}
+    Recorded in <button class="link" on:click={() => void openPage(credit.worldPage)}
+      >{credit.world}</button
+    >, a world by <button class="link" on:click={() => void openPage(credit.creatorPage)}
+      >{credit.creator}</button
+    >
   </p>
 {/if}
 
@@ -161,5 +168,26 @@
   .credit.large {
     margin-top: var(--s-3);
     font-size: var(--t-caption);
+  }
+
+  /* A link, not a button that looks like one: it is inside a sentence, it takes
+     its size from the sentence, and the underline is what says it is clickable
+     without putting a box in the middle of a line of prose. */
+  .link {
+    display: inline;
+    padding: 0;
+    font: inherit;
+    color: var(--text-muted);
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.28);
+    text-underline-offset: 3px;
+    transition:
+      color var(--m-fast) var(--ease),
+      text-decoration-color var(--m-fast) var(--ease);
+  }
+
+  .link:hover {
+    color: var(--text);
+    text-decoration-color: var(--accent);
   }
 </style>

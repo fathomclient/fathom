@@ -3,6 +3,17 @@
 #   pwsh tools/dev.ps1            normal
 #   pwsh tools/dev.ps1 -DevAuth   plus the fake development identity
 #
+# `pwsh` is PowerShell 7, which is a separate install from the Windows
+# PowerShell every Windows machine already has. Without it:
+#
+#   powershell -ExecutionPolicy Bypass -File tools\dev.ps1
+#
+# Nothing in here needs 7. Or skip the script entirely and run its two halves
+# yourself, which is all it does:
+#
+#   npm --prefix desktop run dev     (one terminal)
+#   cargo run -p launcher-desktop    (another)
+#
 # WHAT THIS GIVES YOU
 #
 # Edit anything under `desktop/src` and the window updates immediately. No

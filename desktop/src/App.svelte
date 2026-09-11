@@ -45,6 +45,7 @@
   import BackgroundPicker from './lib/ui/BackgroundPicker.svelte';
   import FathomIcon from './lib/ui/FathomIcon.svelte';
   import { FATHOM_ICONS } from './lib/icons.generated';
+  import { BACKGROUNDS } from './lib/backgrounds';
   import { EASE, FAST, NORMAL } from './lib/motion';
   import {
     background as loadBackground,
@@ -85,24 +86,12 @@
     { id: 'settings', label: 'Settings', icon: FATHOM_ICONS.settings },
   ];
 
-  export const BACKGROUNDS = [
-    { id: 'static', label: 'Midnight' },
-    { id: 'bg_1', label: 'Cherry Grove' },
-    { id: 'bg_2', label: 'Snowfall' },
-    { id: 'bg_3', label: 'Midnight Coast' },
-    { id: 'bg_4', label: 'Savanna' },
-    { id: 'bg_5rain', label: 'Rainforest Storm' },
-    { id: 'bg_5noraintickfrozen', label: 'Rainforest Twilight' },
-    { id: 'bg_5noraintickunfrozen', label: 'Rainforest Drift' },
-    { id: 'bg_6midnight', label: 'Midnight Metropolis' },
-    { id: 'bg_6clear', label: 'Metropolis' },
-  ];
 
   let route = 'home';
   let settingsCategory = 'general';
   let home: HomeView | null = null;
   let status: ShellStatus | null = null;
-  let choice = 'bg_1';
+  let choice = 'bg_5rain';
   let pickerOpen = false;
   let accountOpen = false;
   let railOpen = false;
@@ -485,11 +474,15 @@
             tabindex="-1"
           >
             <span class="picker-title">Background</span>
-            <BackgroundPicker
-              options={BACKGROUNDS}
-              value={choice}
-              onChoose={chooseBackground}
-            />
+            <!-- The list is taller than the window has room for, so it scrolls
+                 and the title stays put. -->
+            <div class="picker-scroll">
+              <BackgroundPicker
+                options={BACKGROUNDS}
+                value={choice}
+                onChoose={chooseBackground}
+              />
+            </div>
           </div>
         {/if}
       </div>
@@ -842,6 +835,21 @@
     flex-direction: column;
     gap: var(--s-2);
     z-index: 20;
+    /* Never taller than the window it opens into. The popover grows upward from
+       the bottom bar, so without a ceiling a long list runs off the top of the
+       screen and the entries up there cannot be reached at all. */
+    max-height: calc(100vh - var(--bottombar-height) - var(--s-6));
+  }
+
+  .picker-scroll {
+    overflow-y: auto;
+    /* Scrolling to the end of this list must not then scroll the page behind
+       it. */
+    overscroll-behavior: contain;
+    /* The tiles scale slightly on hover; the padding is the room that grows
+       into, and the negative margin keeps the grid its full width regardless. */
+    margin: 0 calc(var(--s-1) * -1);
+    padding: 2px var(--s-1);
   }
 
   .picker-title {

@@ -42,6 +42,7 @@
   import BackgroundPicker from '../lib/ui/BackgroundPicker.svelte';
   import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
   import { WORLD_CREDITS } from '../lib/credits';
+  import { kindOf } from '../lib/backgrounds';
   import {
     openPage,
     recoveryView,
@@ -53,7 +54,7 @@
   } from '../lib/api';
 
   export let category = 'general';
-  export let choice = 'bg_1';
+  export let choice = 'bg_5rain';
   export let backgrounds: { id: string; label: string }[] = [];
   export let onBackground: (id: string) => void;
   export let onNavigate: (route: string, category?: string) => void = () => {};
@@ -134,7 +135,7 @@
         );
 
   $: cacheAction = recovery?.actions.find((action) => action.id === 'clear-cache');
-  $: animated = choice !== 'static';
+  $: animated = kindOf(choice) === 'video';
   $: activeLabel = CATEGORIES.find((c) => c.id === category)?.label ?? 'Settings';
 </script>
 
@@ -204,7 +205,7 @@
                   <Switch
                     checked={animated}
                     label="Animated background"
-                    onChange={(value) => onBackground(value ? 'bg_1' : 'static')}
+                    onChange={(value) => onBackground(value ? 'bg_5rain' : 'static')}
                   />
                 </svelte:fragment>
               </Row>
@@ -220,15 +221,24 @@
               />
             </Section>
 
-            <!-- Their creators allow the footage to be used with credit. -->
+            <!-- Their creators allow the footage to be used with credit.
+                 The world and the creator are the links, rather than a pair of
+                 buttons off to the right saying "World" and "Creator": the name
+                 is the thing you would click, and a credit whose subject is not
+                 the link makes you read a label to find out where it goes. -->
             <Section label="Background credits" material>
               {#each WORLD_CREDITS as credit}
-                <Row title={credit.world} detail="A world by {credit.creator}, on CurseForge">
-                  <svelte:fragment slot="control">
-                    <Button onClick={() => void openPage(credit.worldPage)}>World</Button>
-                    <Button onClick={() => void openPage(credit.creatorPage)}>Creator</Button>
-                  </svelte:fragment>
-                </Row>
+                <div class="credit-row">
+                  <button class="credit-world" on:click={() => void openPage(credit.worldPage)}>
+                    {credit.world}
+                  </button>
+                  <p class="credit-by">
+                    A world by <button
+                      class="credit-creator"
+                      on:click={() => void openPage(credit.creatorPage)}>{credit.creator}</button
+                    > on CurseForge
+                  </p>
+                </div>
               {/each}
             </Section>
           {/if}
@@ -390,6 +400,65 @@
 {/if}
 
 <style>
+  /* Row's geometry, by hand: these are rows in the same glass as every other
+     list, but their content is a sentence with links in it rather than a title,
+     a detail and a control. */
+  .credit-row {
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    box-shadow: 0 -1px 0 var(--chrome-line);
+    transition: background var(--m-fast) var(--ease);
+  }
+
+  .credit-row:first-child {
+    box-shadow: none;
+  }
+
+  .credit-row:hover {
+    background: var(--fill);
+  }
+
+  .credit-world {
+    display: block;
+    padding: 0;
+    font-size: var(--t-row);
+    font-weight: var(--w-semibold);
+    letter-spacing: var(--track-snug);
+    color: var(--text);
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.26);
+    text-underline-offset: 3px;
+    transition:
+      color var(--m-fast) var(--ease),
+      text-decoration-color var(--m-fast) var(--ease);
+  }
+
+  .credit-by {
+    margin: 2px 0 0;
+    font-size: var(--t-body);
+    color: var(--text-muted);
+  }
+
+  .credit-creator {
+    display: inline;
+    padding: 0;
+    font: inherit;
+    color: var(--text-muted);
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.26);
+    text-underline-offset: 3px;
+    transition:
+      color var(--m-fast) var(--ease),
+      text-decoration-color var(--m-fast) var(--ease);
+  }
+
+  .credit-world:hover,
+  .credit-creator:hover {
+    color: var(--text);
+    text-decoration-color: var(--accent);
+  }
+
   .settings {
     display: grid;
     grid-template-columns: 200px 1fr;

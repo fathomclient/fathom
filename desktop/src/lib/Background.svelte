@@ -29,18 +29,21 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { kindOf, sourceFor } from './backgrounds';
 
-  export let choice: string = 'bg_1';
+  export let choice: string = 'bg_5rain';
   /** False while Minecraft runs or the window is hidden. */
   export let playing: boolean = true;
 
-  type Slot = { src: string; visible: boolean };
+  /* `still` decides which element the slot renders. A still is one <img>: the
+     same crossfade, without a decoder to start or stop. */
+  type Slot = { src: string; visible: boolean; still: boolean };
 
   let slots: [Slot, Slot] = [
-    { src: '', visible: false },
-    { src: '', visible: false },
+    { src: '', visible: false, still: false },
+    { src: '', visible: false, still: false },
   ];
-  let elements: (HTMLVideoElement | null)[] = [null, null];
+  let elements: (HTMLVideoElement | HTMLImageElement | null)[] = [null, null];
   let front = 0;
   /* The reactive statement below runs once before the DOM exists. Without this
      guard it would set `current` while both elements are still null, and the
@@ -50,8 +53,12 @@
      snaps. See the note on `transition-duration` in the markup. */
   let docVisible = true;
 
-  const isStatic = (value: string) => value === 'static';
-  const sourceFor = (value: string) => `/backgrounds/${value}.webm`;
+  const isStatic = (value: string) => kindOf(value) === 'gradient';
+
+  /* Only a video can be told to play. Asking an <img> would be a runtime error
+     in the one place this component exists to keep quiet. */
+  const asVideo = (element: HTMLVideoElement | HTMLImageElement | null) =>
+    element instanceof HTMLVideoElement ? element : null;
 
   let current = '';
 
@@ -65,8 +72,8 @@
       slots[front].visible = false;
       slots = slots;
       window.setTimeout(() => {
-        if (current !== 'static') return;
-        elements[front]?.pause();
+        if (!isStatic(current)) return;
+        asVideo(elements[front])?.pause();
         slots[front].src = '';
         slots = slots;
       }, 280);
@@ -74,6 +81,7 @@
     }
 
     const back = front === 0 ? 1 : 0;
+    slots[back].still = kindOf(value) === 'still';
     slots[back].src = sourceFor(value);
     slots = slots;
 
@@ -93,11 +101,15 @@
         if (settled) return;
         const element = elements[back];
         if (element) {
-          if (element.readyState >= 2) {
+          // A decoded video frame and a decoded image are the same question
+          // asked of two different elements: `readyState` for one, `complete`
+          // for the other.
+          const video = asVideo(element);
+          if (video ? video.readyState >= 2 : (element as HTMLImageElement).complete) {
             done();
             return;
           }
-          element.addEventListener('canplay', done, { once: true });
+          element.addEventListener(video ? 'canplay' : 'load', done, { once: true });
           element.addEventListener('error', done, { once: true });
           return;
         }
@@ -113,7 +125,7 @@
     });
 
     if (current !== value) return; // superseded while loading
-    if (playing) void elements[back]?.play().catch(() => {});
+    if (playing) void asVideo(elements[back])?.play().catch(() => {});
 
     slots[back].visible = true;
     slots[front].visible = false;
@@ -126,7 +138,7 @@
     // decodes at rest, which is the whole reason for two slots.
     window.setTimeout(() => {
       if (front === outgoing) return;
-      elements[outgoing]?.pause();
+      asVideo(elements[outgoing])?.pause();
       slots[outgoing].src = '';
       slots = slots;
     }, 320);
@@ -137,7 +149,7 @@
   $: {
     // Pausing is not politeness: a decoding video is GPU and power the game
     // should have while it is running.
-    const element = elements[front];
+    const element = asVideo(elements[front]);
     if (element && slots[front].src) {
       if (playing) void element.play().catch(() => {});
       else element.pause();
@@ -170,19 +182,32 @@
            background is black forever. This fade fires at startup, so any
            launch into an unfocused or minimised window hit it. With a zero
            duration there is no transition to freeze. -->
-      <video
-        bind:this={elements[index]}
-        class="footage"
-        style="opacity: {slot.visible ? 1 : 0}; transition-duration: {docVisible
-          ? 'var(--m-slow)'
-          : '0ms'}"
-        src={slot.src}
-        muted
-        loop
-        playsinline
-        preload="auto"
-        aria-hidden="true"
-      ></video>
+      {#if slot.still}
+        <img
+          bind:this={elements[index]}
+          class="footage"
+          style="opacity: {slot.visible ? 1 : 0}; transition-duration: {docVisible
+            ? 'var(--m-slow)'
+            : '0ms'}"
+          src={slot.src}
+          alt=""
+          aria-hidden="true"
+        />
+      {:else}
+        <video
+          bind:this={elements[index]}
+          class="footage"
+          style="opacity: {slot.visible ? 1 : 0}; transition-duration: {docVisible
+            ? 'var(--m-slow)'
+            : '0ms'}"
+          src={slot.src}
+          muted
+          loop
+          playsinline
+          preload="auto"
+          aria-hidden="true"
+        ></video>
+      {/if}
     {/if}
   {/each}
 
