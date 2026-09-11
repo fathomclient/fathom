@@ -1,0 +1,89 @@
+# Supply-chain and licence policy, enforced in CI.
+#
+# The licence allowlist is the point of this file. `docs/research/mod-policies.md`
+# §9 recommends Apache-2.0 for the project and a machine-checked gate that fails
+# the build if anything copyleft or NonCommercial enters the tree. That gate is
+# below: adding a GPL/LGPL/CC-BY-NC dependency is a build failure, not a
+# discussion in a review thread six months later.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # `ttf-parser` is marked unmaintained, not vulnerable. It reaches us three
+    # levels down through iced's text stack (cosmic-text, rustybuzz) and
+    # winit's Wayland decorations; there is no upgrade that removes it, and
+    # nothing short of changing UI toolkit would. Accepted deliberately, and
+    # it is a point in favour of revisiting the toolkit choice rather than a
+    # reason to silence the tool.
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser: unmaintained (not a vulnerability); pulled in transitively by iced 0.13's text stack, no upgrade path" },
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz: unmaintained (not a vulnerability); same iced text stack as above" },
+    { id = "RUSTSEC-2024-0384", reason = "instant: unmaintained (not a vulnerability); reaches us via iced_futures -> wasm-timer -> parking_lot 0.11" },
+
+    # RUSTSEC-2023-0071 (Marvin Attack) is a real vulnerability, and unlike the
+    # three above it arrives through a dependency WE chose: `rsa`, via
+    # jsonwebtoken's `rust_crypto` feature, which we use to verify Mojang's
+    # entitlement signature.
+    #
+    # Reachability: Marvin is a timing sidechannel in RSA *private key*
+    # operations -- PKCS#1 v1.5 decryption and signing. This program performs
+    # only RS256 signature *verification* against a public key compiled into
+    # the binary. It holds no RSA private key and never decrypts or signs, so
+    # the vulnerable code paths are not reachable from our code.
+    #
+    # This is an accepted risk with an escape hatch, not a dismissal: switching
+    # jsonwebtoken to its `aws_lc_rs` backend removes the `rsa` crate entirely,
+    # at the cost of requiring a C toolchain (cmake, nasm) to build. Revisit if
+    # `rsa` ever gains a reachable-from-verification advisory, or if the build
+    # environment gains that toolchain anyway.
+    { id = "RUSTSEC-2023-0071", reason = "rsa: private-key timing sidechannel; we only verify signatures with a public key, so the affected operations are never invoked. See THREAT_MODEL.md." },
+]
+
+[licenses]
+version = 2
+# Anything not on this list fails the build.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "MPL-2.0",         # file-level copyleft; acceptable as an unmodified dependency
+    "BSL-1.0",
+    "Unlicense",
+    "OpenSSL",              # ring's combined notice; no OpenSSL code is linked
+    "CDLA-Permissive-2.0",  # webpki-roots: the Mozilla CA bundle, a data licence
+]
+confidence-threshold = 0.9
+
+# Deliberately absent, and they must stay absent:
+#   GPL-*, LGPL-*, AGPL-*  -> would force our own licence
+#   CC-BY-NC-*             -> not an open-source licence at all (OSD #6)
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Nothing in this project should need to reach the network except through
+# `launcher_core::network`. These bans make an accidental second HTTP or TLS
+# stack a build failure rather than something a reviewer has to notice.
+deny = [
+    { crate = "openssl", reason = "rustls only; no C TLS stack" },
+    { crate = "openssl-sys", reason = "rustls only; no C TLS stack" },
+    { crate = "native-tls", reason = "rustls only" },
+    { crate = "reqwest", reason = "ureq is the only HTTP client" },
+    { crate = "curl", reason = "ureq is the only HTTP client" },
+    { crate = "sentry", reason = "no crash reporting, ever" },
+    { crate = "opentelemetry", reason = "no telemetry, ever" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

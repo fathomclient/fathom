@@ -1,0 +1,318 @@
+@import './theme.generated.css';
+
+/*
+ * Fathom's visual system.
+ *
+ * TWO IDEAS, AND EVERYTHING ELSE FOLLOWS FROM THEM.
+ *
+ * 1. THE CHROME IS BLACK AND THE CENTRE IS NOT. The rail, the top bar and the
+ *    bottom bar are pure #000 so they read as a frame around the gameplay. The
+ *    centre is the only place the video shows through.
+ *
+ * 2. MATERIAL, NOT CARDS. Foreground surfaces are dark glass: a translucent
+ *    fill, a real backdrop blur, one hairline bright edge and a soft internal
+ *    highlight at the top. That is what makes something feel like it is
+ *    *sitting on* the footage rather than *covering* it.
+ *
+ * The glass is used sparingly. The previous version of this file encouraged a
+ * card around everything, and the result was a page made of nested rectangles.
+ * Most content now sits directly on the background with type and spacing doing
+ * the grouping; glass is reserved for the launch control, popovers, drawers,
+ * dialogs and genuinely important status.
+ *
+ * Everything is a token. A component that writes a raw hex colour, a raw pixel
+ * size or a raw duration is a bug in this file, not a shortcut.
+ */
+
+@font-face {
+  /* Geist Sans, bundled. Never fetched: a launcher that reaches out to a font
+     CDN on start has a network request nobody asked for and a hole in its
+     privacy story.
+
+     Geist over Inter, which this build used before. Inter is excellent and
+     completely anonymous -- it is the default of every dashboard shipped in
+     the last five years. Geist has more geometry in the letterforms and holds a
+     heavy weight better at large sizes, which is what the launch composition
+     needs. */
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  /* Vendored under `src/lib/fonts/`, with its SIL Open Font License alongside,
+     rather than imported from the `geist` npm package: that package does not
+     export this subpath, and a font file is a static asset that never changes.
+     Vendoring it also means the build has one fewer install-time dependency for
+     something that is ultimately 70 KB of bytes. */
+  src: url('./fonts/Geist-Variable.woff2') format('woff2-variations');
+}
+
+:root:not(*) {
+  /* -- chrome ----------------------------------------------------------- */
+  --chrome: #000000;
+  --chrome-line: rgba(255, 255, 255, 0.06);
+  --chrome-line-strong: rgba(255, 255, 255, 0.11);
+
+  /* -- the glass material ------------------------------------------------
+     Four parts, and all four are needed. Drop any one and it stops reading as
+     material: fill alone is a grey box, blur alone is a smudge, the edge alone
+     is a border, and the highlight alone is a gradient. */
+  --glass-fill: rgba(17, 19, 25, 0.58);
+  --glass-fill-strong: rgba(12, 14, 19, 0.80);
+  --glass-fill-solid: rgba(9, 10, 14, 0.96);
+  --glass-blur: 24px;
+  --glass-blur-strong: 34px;
+  /* The thin bright edge. Low contrast on purpose: at higher opacity it stops
+     being a lit edge and becomes a stroke. */
+  --glass-edge: rgba(255, 255, 255, 0.10);
+  --glass-edge-strong: rgba(255, 255, 255, 0.16);
+  /* The internal highlight, applied as an inset shadow at the top only. This
+     is the single detail that most makes a surface look lit rather than
+     filled. */
+  --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-sheen-strong: inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  --glass-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --glass-shadow-strong: 0 26px 70px rgba(0, 0, 0, 0.62);
+
+  /* -- flat surfaces -----------------------------------------------------
+     For things that are inside glass already, where a second blur would be
+     wasted work and a second edge would be clutter. */
+  --fill: rgba(255, 255, 255, 0.045);
+  --fill-hover: rgba(255, 255, 255, 0.085);
+  --fill-active: rgba(255, 255, 255, 0.12);
+  --fill-sunken: rgba(0, 0, 0, 0.28);
+
+  /* -- static background ------------------------------------------------ */
+  /* Midnight, not black: a considered blue-black that has to look finished on
+     its own, because it is a first-class choice and not a fallback. */
+  --midnight-top: #0d1119;
+  --midnight-mid: #080b11;
+  --midnight-bottom: #030408;
+
+  /* -- text --------------------------------------------------------------
+     Four levels and no more. A fifth grey is how a palette stops meaning
+     anything. */
+  --text: #f4f6f9;
+  --text-muted: #a2a9b6;
+  --text-faint: #7b8391;
+  --text-disabled: #575d69;
+  /* Section labels and eyebrows, which sit ON the background rather than
+     inside a material and therefore need more weight than metadata does. */
+  --text-label: #969dab;
+
+  /* -- accent ------------------------------------------------------------
+     A dark red. Deep enough to sit on black without glowing, clear enough to
+     read as red rather than maroon. It is the only hue in the product, which
+     is what makes it mean something. */
+  --accent: #c4303c;
+  --accent-strong: #e0505c;
+  --accent-deep: #841c24;
+  --accent-glow: rgba(196, 48, 60, 0.34);
+  --accent-wash: rgba(196, 48, 60, 0.13);
+
+  --good: #4fc98a;
+  --warn: #e0ae57;
+  /* Deliberately a different red from the accent: if selection and failure
+     shared a colour, a chosen row and a broken one would look the same. */
+  --bad: #e87272;
+
+  /* -- type --------------------------------------------------------------
+     Compact by default -- most of a game client is 13-15px -- but with real
+     contrast at the top of the scale. The old scale topped out at 22px for a
+     page title, which is why every page read as a form. */
+  --font: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --t-meta: 11px;
+  --t-caption: 12px;
+  --t-body: 13px;
+  --t-body-lg: 14px;
+  --t-row: 15px;
+  --t-section: 17px;
+  --t-page: 26px;
+
+  --w-normal: 400;
+  --w-medium: 500;
+  --w-semibold: 600;
+  --w-bold: 700;
+
+  /* Tightened as size grows, which is what keeps a large heading from looking
+     like a stretched small one. */
+  --track-tight: -0.022em;
+  --track-snug: -0.012em;
+  --track-wide: 0.06em;
+  --track-caps: 0.09em;
+
+  /* -- spacing -----------------------------------------------------------
+     A 4px scale. Every gap, margin and padding in the product comes from
+     here. The rule this replaces: seven screens each picking 9px, 10px, 11px,
+     13px and 14px by eye, which is why Settings and the rest of the launcher
+     read as two different products. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+
+  /* Page frame. One value, so every screen's content starts on the same line. */
+  --page-pad-x: 28px;
+  --page-pad-y: 24px;
+  --page-gap: var(--s-5);
+  --column: 780px;
+  --column-wide: 1000px;
+
+  /* -- control heights ---------------------------------------------------
+     Three sizes. A control that is none of these is a control that will not
+     line up with the ones beside it. */
+  --h-sm: 26px;
+  --h-md: 30px;
+  --h-lg: 36px;
+
+  /* -- geometry ---------------------------------------------------------- */
+  --rail-width: 56px;
+  /* How wide the rail's hover tray floats out to. Overlay, never layout: the
+     content must not reflow because a pointer crossed the navigation. */
+  --rail-tray-width: 186px;
+  --topbar-height: 46px;
+  --bottombar-height: 38px;
+
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* -- motion ------------------------------------------------------------
+     Three durations and ONE curve. The curve is an ease-out, not an
+     ease-in-out: a transition the user caused should start at full speed,
+     because they already know it started -- they pressed the thing. */
+  --m-fast: 140ms;
+  --m-normal: 180ms;
+  --m-slow: 220ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* For things leaving, which should get out of the way promptly. */
+  --ease-in: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+}
+
+* {
+  box-sizing: border-box;
+  /* No system focus ring: it is a blue rectangle from another design system.
+     Focus is styled per control, and never removed without a replacement. */
+  outline: none;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--chrome);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--t-body);
+  font-weight: var(--w-normal);
+  /* Tighter than the browser default. A game client is dense; 1.5 is for
+     articles. */
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* This is an application, not a document. */
+  user-select: none;
+  cursor: default;
+}
+
+/* Geist's tabular figures, so version numbers and counts do not jitter when
+   they change. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* -- the glass utility ----------------------------------------------------
+   One class, so the material is defined once. A component that reimplements
+   this with its own rgba values will drift from it within a week, and the
+   whole point of a material is that every instance of it is the same
+   substance. */
+.glass {
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    var(--glass-sheen),
+    var(--glass-shadow);
+  border-radius: var(--r-lg);
+}
+
+.glass-strong {
+  background: var(--glass-fill-strong);
+  backdrop-filter: blur(var(--glass-blur-strong)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(1.3);
+  border: 1px solid var(--glass-edge-strong);
+  box-shadow:
+    var(--glass-sheen-strong),
+    var(--glass-shadow-strong);
+  border-radius: var(--r-xl);
+}
+
+/* Text over footage needs its own contrast rather than a plate behind it.
+   Putting a box behind every label to make it readable would be covering up
+   the thing we went to the trouble of showing. */
+.on-footage {
+  /* Two shadows: a tight one for edge definition against bright pixels, and a
+     wide soft one that darkens the area around the glyphs. One alone is not
+     enough over sunlit grass. */
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.85),
+    0 2px 18px rgba(0, 0, 0, 0.95);
+}
+
+/* Scrollbars, restyled. The default Windows scrollbar is the single most
+   effective way to make an application look unfinished. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--r-pill);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

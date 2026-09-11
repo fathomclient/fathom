@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The only capability the windows have: calling Fathom's own commands. No plugin permissions are granted, because no plugins are compiled in. 'console' is the game console, which is the same bundle under a second label and needs the same nothing.",
+  "windows": ["main", "console"],
+  "permissions": ["core:default"]
+}

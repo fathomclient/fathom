@@ -1,0 +1,113 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/launcher-core",
+    "crates/launcher-ui",
+    "crates/launcher-desktop",
+    "crates/launcher-cli",
+    # Release tooling. Never a dependency of a shipped binary; see its README.
+    "crates/fathom-release",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/fathomclient/fathom"
+authors = ["Launcher contributors"]
+
+[workspace.dependencies]
+launcher-core = { path = "crates/launcher-core", version = "0.1.0" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+directories = "6.0"
+tempfile = "3"
+
+# Network. rustls only: no OpenSSL, no native-tls, no system TLS version skew.
+ureq = { version = "3.1", default-features = false, features = ["json", "rustls", "gzip"] }
+
+# Hashing. sha1 for Mojang artifact verification (that is what they publish),
+# sha2 for our own update manifests.
+sha1 = "0.10"
+sha2 = "0.10"
+base64 = "0.22"
+
+# Entitlement JWT signature verification (ownership gate).
+# `rust_crypto` rather than `aws_lc_rs`: pure Rust, no C toolchain, consistent
+# with the rustls choice. Without an explicit provider feature, jsonwebtoken
+# *panics* at first use -- our tests caught exactly that.
+jsonwebtoken = { version = "11", default-features = false, features = [
+    "use_pem",
+    "rust_crypto",
+] }
+
+# OS credential store: DPAPI-backed Credential Manager / Keychain / Secret Service.
+# The default `v1` feature selects exactly those three platform stores.
+keyring = "4"
+
+# Randomness, for the local bridge's per-session token.
+#
+# The operating system's own source, directly: a token that authenticates the
+# game against the launcher must be unguessable, and a PRNG seeded from a clock
+# is guessable by anything that knows roughly when the game started. `getrandom`
+# is already in the tree transitively; naming it adds a direct dependency and no
+# new weight.
+getrandom = "0.3"
+
+# Natives extraction. Untrusted archive input; see fs_safety.
+zip = { version = "8", default-features = false, features = ["deflate"] }
+
+# Update signature verification (Ed25519).
+#
+# Already in the tree: jsonwebtoken's `rust_crypto` backend depends on it, so
+# naming it directly adds a direct dependency and no new transitive weight.
+#
+# `default-features = false` drops `rand_core`, which we do not need: the
+# launcher only ever *verifies*. Key generation lives in `fathom-release`, a
+# separate crate that is never linked into a shipped binary.
+ed25519-dalek = { version = "2.2", default-features = false, features = [
+    "std",
+    "zeroize",
+] }
+
+# Image decoding is optimised even in a debug build.
+#
+# The launcher decodes one 1280x720 JPEG per background frame, thirty times a
+# second. Optimised that is 5.1 ms; at `opt-level = 0` it is about 150 ms, which
+# makes a debug build play the background at 6 fps and look exactly like the bug
+# this rewrite exists to fix. Optimising two leaf dependencies costs a few
+# seconds on the first build, changes nothing about our own code being
+# debuggable, and means what a developer sees is what a user sees.
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.jpeg-decoder]
+opt-level = 3
+
+# ...and in release, for a different reason and with more at stake.
+#
+# `[profile.release]` below is `opt-level = "z"`, which is right for a launcher
+# whose binary size is a shipped cost and whose own code is not hot. The JPEG
+# decoder is the exception: it runs thirty times a second. Optimising it for
+# size instead of speed costs the vectorised inner loops the decode depends on,
+# which risks shipping a release that plays the background slower than the
+# development build does -- the failure being fixed here, reintroduced in the
+# only build a user ever runs. These two lines apply to two leaf dependencies
+# and leave the rest of the binary optimised for size.
+[profile.release.package.image]
+opt-level = 3
+
+[profile.release.package.jpeg-decoder]
+opt-level = 3
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

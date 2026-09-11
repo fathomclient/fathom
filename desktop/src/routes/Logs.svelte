@@ -1,0 +1,191 @@
+<!--
+  Logs.
+
+  Two real files: the launcher's own log, and the most recent Minecraft session.
+  Nothing is buffered in the interface and nothing is synthesised — this shows
+  the bytes on disk, which are the bytes a user would attach to a bug report.
+
+  Copy and Save hand over what is on screen, filter included, because the
+  useful thing to send is usually the twenty lines around a failure rather than
+  the whole session.
+-->
+<script lang="ts">
+  import { onMount, tick } from 'svelte';
+  import { fade } from 'svelte/transition';
+  import { Copy, RefreshCw, Search, ArrowDownToLine, Check } from '@lucide/svelte';
+
+  import Page from '../lib/ui/Page.svelte';
+  import Button from '../lib/ui/Button.svelte';
+  import Segmented from '../lib/ui/Segmented.svelte';
+  import Switch from '../lib/ui/Switch.svelte';
+  import { FAST } from '../lib/motion';
+  import { logsView, type LogSource } from '../lib/api';
+
+  let sources: LogSource[] = [];
+  let active = 'launcher';
+  let query = '';
+  let autoScroll = true;
+  let copied = false;
+  let pane: HTMLDivElement | null = null;
+
+  async function load() {
+    sources = await logsView();
+    if (autoScroll) {
+      await tick();
+      if (pane) pane.scrollTop = pane.scrollHeight;
+    }
+  }
+
+  onMount(() => {
+    void load();
+    // Polled rather than pushed: the command bridge is request/response, and a
+    // two-second refresh on a screen somebody is actively watching is cheaper
+    // than an event channel that exists for one page.
+    const timer = setInterval(() => void load(), 2000);
+    return () => clearInterval(timer);
+  });
+
+  $: current = sources.find((source) => source.id === active);
+  $: lines = (current?.lines ?? []).filter((line) =>
+    query.trim() === '' ? true : line.text.toLowerCase().includes(query.toLowerCase()),
+  );
+
+  async function copy() {
+    await navigator.clipboard.writeText(lines.map((line) => line.text).join('\n'));
+    copied = true;
+    setTimeout(() => (copied = false), 1400);
+  }
+</script>
+
+<Page title="Logs" summary={current?.label ?? ''} wide>
+  <svelte:fragment slot="actions">
+    <div class="search">
+      <Search size={13} strokeWidth={2} />
+      <input bind:value={query} placeholder="Filter" spellcheck="false" />
+    </div>
+    <Button onClick={() => void load()}>
+      <RefreshCw size={13} strokeWidth={2} />
+      Refresh
+    </Button>
+    <Button onClick={copy}>
+      {#if copied}
+        <Check size={13} strokeWidth={2.4} />
+        Copied
+      {:else}
+        <Copy size={13} strokeWidth={2} />
+        Copy
+      {/if}
+    </Button>
+  </svelte:fragment>
+
+  <div class="controls">
+    <Segmented
+      options={sources.map((source) => ({ id: source.id, label: source.label }))}
+      value={active}
+      onChange={(id) => (active = id)}
+    />
+    <div class="follow">
+      <ArrowDownToLine size={13} strokeWidth={2} />
+      <span>Follow</span>
+      <Switch checked={autoScroll} label="Follow" onChange={(value) => (autoScroll = value)} />
+    </div>
+  </div>
+
+  <div class="pane glass" bind:this={pane}>
+    {#if current?.note}
+      <p class="note" in:fade={{ duration: FAST }}>{current.note}</p>
+    {:else if lines.length === 0}
+      <p class="note">Nothing matches “{query}”.</p>
+    {:else}
+      {#each lines as line}
+        <div class="line {line.level}">{line.text}</div>
+      {/each}
+    {/if}
+  </div>
+</Page>
+
+<style>
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+  }
+
+  .follow {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    margin-left: auto;
+    font-size: var(--t-caption);
+    color: var(--text-muted);
+  }
+
+  .search {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    height: var(--h-md);
+    padding: 0 var(--s-3);
+    border-radius: var(--r-sm);
+    background: var(--fill-sunken);
+    border: 1px solid var(--chrome-line-strong);
+    color: var(--text-faint);
+    transition: border-color var(--m-fast) var(--ease);
+  }
+
+  .search:focus-within {
+    border-color: var(--accent);
+  }
+
+  .search input {
+    width: 130px;
+    background: none;
+    border: none;
+    font-size: var(--t-body);
+    color: var(--text);
+  }
+
+  .search input::placeholder {
+    color: var(--text-disabled);
+  }
+
+  .pane {
+    height: calc(100vh - 260px);
+    min-height: 260px;
+    overflow: auto;
+    padding: var(--s-3);
+    /* Monospace, because a log is columnar: timestamps and levels only line up
+       in a fixed-width face, and a proportional one makes scanning it harder
+       than reading it in Notepad. */
+    font-family: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
+    font-size: var(--t-caption);
+    line-height: 1.5;
+    /* Selectable, unlike the rest of the product: the whole point is to copy
+       lines out of it. */
+    user-select: text;
+    cursor: text;
+  }
+
+  .line {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text-muted);
+  }
+
+  .line.error {
+    color: var(--bad);
+  }
+  .line.warn {
+    color: var(--warn);
+  }
+  .line.debug {
+    color: var(--text-disabled);
+  }
+
+  .note {
+    margin: 0;
+    color: var(--text-faint);
+    font-family: var(--font);
+    font-size: var(--t-body);
+  }
+</style>

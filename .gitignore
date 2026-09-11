@@ -1,0 +1,23 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# Java module build output. `minecraft/fathom-optimizations` is compiled either by
+# Gradle or, in environments without it, by javac straight into build/classes.
+/minecraft/*/build/
+/minecraft/*/.gradle/
+
+# Signing keys. `fathom-release keygen` writes here by default if someone runs
+# it from the repository root, which they should not -- keys belong on offline
+# media. This is the second line of defence, not the first.
+*.key
+*.pem
+
+# Portable release output from tools/package-portable.ps1.
+/dist
+
+# Node dependencies and Vite build output for the Tauri desktop shell.
+# `desktop/public` is source and stays tracked; `desktop/dist` is generated.
+/desktop/node_modules
+/desktop/dist
+/desktop/.vite

@@ -1,0 +1,14 @@
+﻿{
+    "source":  "bg_2.mp4",
+    "height":  720,
+    "crossfade_frames":  24,
+    "blur_sigma":  13,
+    "fps":  30,
+    "saturation":  0.85,
+    "width":  1280,
+    "gamma":  1.1,
+    "generated":  "2026-08-28T12:30:10.4275469-07:00",
+    "frames":  300,
+    "scene":  "snowfall at night",
+    "start_seconds":  30
+}

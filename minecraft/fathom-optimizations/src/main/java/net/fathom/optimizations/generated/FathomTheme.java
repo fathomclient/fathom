@@ -1,0 +1,105 @@
+package net.fathom.optimizations.generated;
+
+/** Generated from assets/theme/fathom-theme.json. Do not edit. */
+public final class FathomTheme {
+    private FathomTheme() {}
+
+    public static final int COLOR_CHROME = 0xFF000000;
+    public static final int COLOR_CHROME_LINE = 0x0FFFFFFF;
+    public static final int COLOR_CHROME_LINE_STRONG = 0x1CFFFFFF;
+    public static final int COLOR_PANEL = 0xF008090C;
+    public static final int COLOR_RAISED = 0xF70D0F14;
+    public static final int COLOR_RAISED_HOVER = 0xFA171A20;
+    public static final int COLOR_OVERLAY = 0xFC101318;
+    public static final int COLOR_GLASS_FILL = 0x94111319;
+    public static final int COLOR_GLASS_FILL_STRONG = 0xCC0C0E13;
+    public static final int COLOR_GLASS_FILL_SOLID = 0xF5090A0E;
+    public static final int COLOR_GLASS_EDGE = 0x1AFFFFFF;
+    public static final int COLOR_GLASS_EDGE_STRONG = 0x29FFFFFF;
+    public static final int COLOR_EDGE = 0x1AFFFFFF;
+    public static final int COLOR_EDGE_STRONG = 0x29FFFFFF;
+    public static final int COLOR_SHEEN = 0x12FFFFFF;
+    public static final int COLOR_FILL = 0x0BFFFFFF;
+    public static final int COLOR_FILL_HOVER = 0x16FFFFFF;
+    public static final int COLOR_FILL_ACTIVE = 0x1FFFFFFF;
+    public static final int COLOR_FILL_PRESSED = 0x26FFFFFF;
+    public static final int COLOR_FILL_SUNKEN = 0x47000000;
+    public static final int COLOR_FILL_DISABLED = 0x08FFFFFF;
+    public static final int COLOR_FOCUS = 0x8CC4303C;
+    public static final int COLOR_SCRIM = 0xD1000000;
+    public static final int COLOR_SHADOW = 0x99000000;
+    public static final int COLOR_MIDNIGHT_TOP = 0xFF0D1119;
+    public static final int COLOR_MIDNIGHT_MID = 0xFF080B11;
+    public static final int COLOR_MIDNIGHT_BOTTOM = 0xFF030408;
+    public static final int COLOR_TEXT = 0xFFF4F6F9;
+    public static final int COLOR_TEXT_MUTED = 0xFFA2A9B6;
+    public static final int COLOR_TEXT_FAINT = 0xFF7B8391;
+    public static final int COLOR_TEXT_DISABLED = 0xFF575D69;
+    public static final int COLOR_TEXT_LABEL = 0xFF969DAB;
+    public static final int COLOR_ACCENT = 0xFFC4303C;
+    public static final int COLOR_ACCENT_STRONG = 0xFFE0505C;
+    public static final int COLOR_ACCENT_DEEP = 0xFF841C24;
+    public static final int COLOR_ACCENT_GLOW = 0x57C4303C;
+    public static final int COLOR_ACCENT_WASH = 0x21C4303C;
+    public static final int COLOR_GOOD = 0xFF4FC98A;
+    public static final int COLOR_WARN = 0xFFE0AE57;
+    public static final int COLOR_BAD = 0xFFE87272;
+    public static final int COLOR_BAD_WASH = 0x24E87272;
+
+    public static final float DIM_S_1 = 4.0f;
+    public static final float DIM_S_2 = 8.0f;
+    public static final float DIM_S_3 = 12.0f;
+    public static final float DIM_S_4 = 16.0f;
+    public static final float DIM_S_5 = 20.0f;
+    public static final float DIM_S_6 = 24.0f;
+    public static final float DIM_S_8 = 32.0f;
+    public static final float DIM_S_10 = 40.0f;
+    public static final float DIM_PAGE_PAD_X = 28.0f;
+    public static final float DIM_PAGE_PAD_Y = 24.0f;
+    public static final float DIM_PAGE_GAP = 20.0f;
+    public static final float DIM_COLUMN = 780.0f;
+    public static final float DIM_COLUMN_WIDE = 1000.0f;
+    public static final float DIM_H_SM = 26.0f;
+    public static final float DIM_H_MD = 30.0f;
+    public static final float DIM_H_LG = 36.0f;
+    public static final float DIM_RAIL_WIDTH = 56.0f;
+    public static final float DIM_RAIL_TRAY_WIDTH = 186.0f;
+    public static final float DIM_RAIL_ROW = 40.0f;
+    public static final float DIM_TOPBAR_HEIGHT = 46.0f;
+    public static final float DIM_BOTTOMBAR_HEIGHT = 38.0f;
+    public static final float DIM_HUB_HEADER_HEIGHT = 62.0f;
+    public static final float DIM_R_XS = 6.0f;
+    public static final float DIM_R_SM = 9.0f;
+    public static final float DIM_R_MD = 12.0f;
+    public static final float DIM_R_LG = 16.0f;
+    public static final float DIM_R_XL = 20.0f;
+    public static final float DIM_R_PILL = 999.0f;
+    public static final float DIM_HAIRLINE = 1.0f;
+    public static final float DIM_HUB_MAX_WIDTH = 1460.0f;
+    public static final float DIM_HUB_MAX_HEIGHT = 900.0f;
+    public static final float DIM_HUB_MIN_WIDTH = 600.0f;
+    public static final float DIM_HUB_MIN_HEIGHT = 380.0f;
+    public static final float RATIO_HUB_SCREEN_FRACTION_X = 0.910f;
+    public static final float RATIO_HUB_SCREEN_FRACTION_Y = 0.880f;
+
+    public static final float TYPE_META = 11.0f;
+    public static final float TYPE_CAPTION = 12.0f;
+    public static final float TYPE_BODY = 13.0f;
+    public static final float TYPE_BODY_LG = 14.0f;
+    public static final float TYPE_ROW = 15.0f;
+    public static final float TYPE_SECTION = 17.0f;
+    public static final float TYPE_PAGE = 26.0f;
+
+    public static final float MOTION_HOVER = 0.110f;
+    public static final float MOTION_PRESS = 0.075f;
+    public static final float MOTION_TOGGLE = 0.160f;
+    public static final float MOTION_SELECTION = 0.160f;
+    public static final float MOTION_SIDEBAR = 0.200f;
+    public static final float MOTION_DRAWER = 0.215f;
+    public static final float MOTION_HUB = 0.200f;
+    public static final float MOTION_HUB_CLOSE = 0.120f;
+    public static final float MOTION_FAST = 0.110f;
+    public static final float MOTION_NORMAL = 0.160f;
+    public static final float MOTION_SLOW = 0.200f;
+    public static final float MOTION_STAGGER = 0.022f;
+}

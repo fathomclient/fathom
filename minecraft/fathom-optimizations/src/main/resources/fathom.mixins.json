@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "package": "net.fathom.optimizations.fabric.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "minVersion": "0.8",
+  "client": [
+    "GameRendererFovMixin",
+    "GameMenuScreenMixin",
+    "InGameHudCrosshairMixin",
+    "InGameHudMixin",
+    "MinecraftClientFrameCapMixin",
+    "MinecraftClientFrameMixin",
+    "MinecraftClientMenuMixin",
+    "TextRendererWidthMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,14 @@
+﻿{
+    "source":  "bg_1.mp4",
+    "height":  720,
+    "crossfade_frames":  24,
+    "blur_sigma":  13,
+    "fps":  30,
+    "saturation":  0.8,
+    "width":  1280,
+    "gamma":  0.69,
+    "generated":  "2026-08-28T12:30:05.9460156-07:00",
+    "frames":  300,
+    "scene":  "cherry grove",
+    "start_seconds":  15
+}

@@ -1,0 +1,30 @@
+[package]
+name = "launcher-cli"
+description = "Headless companion: inspect paths, the network allowlist, Java, and profiles."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "fathom-cli"
+path = "src/main.rs"
+
+[features]
+default = []
+# Forwards to launcher-core's dev-auth, so `fathom-cli launch` can drive the
+# whole chain with the fake local identity while Microsoft application approval
+# is pending. NEVER enable for a release build: launcher-core's
+# `auth/development.rs` turns that combination into a compile error.
+dev-auth = ["launcher-core/dev-auth"]
+
+[dependencies]
+launcher-core.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

@@ -1,0 +1,214 @@
+// Fathom Optimizations — the Minecraft-side module.
+//
+// The `core` package has no Minecraft or Fabric dependencies and compiles with a bare
+// JDK 8 (see README.md and tools/build-optimization-module.ps1). The `fabric` package
+// needs this build: Loom resolves Minecraft, the Legacy Fabric intermediary and the yarn
+// mappings, and remaps the Mixins against them.
+
+plugins {
+    // Pinned to a released version. This was `1.7-SNAPSHOT`, a mutable
+    // coordinate: the artifact behind it can change without the version
+    // changing, so a build was neither reproducible nor auditable. That was an
+    // open finding in THREAT_MODEL.md; 1.7.4 is the released build and closes
+    // it.
+    id 'fabric-loom' version '1.7.4'
+    id 'java'
+}
+
+version = project.mod_version
+group = project.maven_group
+base { archivesName = project.archives_base_name }
+
+// Legacy Fabric publishes its own intermediary mappings for the versions Mojang
+// predates Fabric on. Without this, Loom looks for 1.8.9 intermediary on the
+// modern Fabric maven, where it does not exist.
+loom {
+    intermediaryUrl = 'https://maven.legacyfabric.net/net/fabricmc/intermediary/%1$s/intermediary-%1$s-v2.jar'
+
+    // WORKFLOW B -- game-side module development.
+    //
+    // `gradle runClient` starts a real, decompiled-against, mod-loaded
+    // Minecraft 1.8.9 through Loom's own tooling. That is the legitimate way to
+    // develop a Fabric mod, and it is how this module gets tested inside the
+    // game while Fathom's production Microsoft authentication is pending
+    // approval.
+    //
+    // WHAT THIS IS NOT: a way to play. Loom's development client runs
+    // unauthenticated, so it can reach singleplayer and nothing else -- no
+    // online-mode server will accept it, because there is no session to
+    // validate. That is a property of having no credential, not a restriction
+    // we added, and it is exactly why this is an acceptable development path
+    // and not a bypass.
+    //
+    // The run directory is inside the module's own build tree, so a developer's
+    // real `.minecraft` is never touched.
+    runs {
+        client {
+            client()
+            setConfigName('Fathom Module (development)')
+            ideConfigGenerated(true)
+            runDir('run')
+
+            // Opt-in visual QA: capture the menu through Minecraft's own
+            // framebuffer path, then stop. These flags are absent from
+            // ordinary builds.
+            //
+            //   gradle runClient -PcaptureMenu
+            //   gradle runClient -PcaptureMenu -PcaptureFrame=4   (mid-opening)
+            //
+            // The frame number exists because the opening animation is part of
+            // the specification and "it compiles" is not evidence that it runs.
+            if (project.hasProperty('captureMenu')) {
+                vmArg '-Dfathom.captureMenu=true'
+                if (project.hasProperty('captureFrame')) {
+                    vmArg "-Dfathom.captureMenuFrame=${project.property('captureFrame')}"
+                }
+            }
+            if (project.hasProperty('captureVideoFrames')) {
+                vmArg "-Dfathom.captureMenuVideoFrames=${project.property('captureVideoFrames')}"
+            }
+            if (project.hasProperty('captureUi')) {
+                vmArg "-Dfathom.captureUi=${project.property('captureUi')}"
+                if ('menu'.equalsIgnoreCase(project.property('captureUi').toString())) {
+                    vmArg '-Dfathom.captureMenu=true'
+                }
+            }
+            if (project.hasProperty('railOpen')) {
+                vmArg '-Dfathom.captureRail=true'
+            }
+            if (project.hasProperty('hoverProbe')) {
+                vmArg '-Dfathom.hoverInstrumentation=true'
+            }
+            if (project.hasProperty('transitionProbe')) {
+                vmArg '-Dfathom.transitionInstrumentation=true'
+            }
+            if (project.hasProperty('profilesDir')) {
+                vmArg "-Dfathom.profilesDir=${project.property('profilesDir')}"
+            }
+            if (project.hasProperty('hudFont')) {
+                vmArg "-Dfathom.hudFont=${project.property('hudFont')}"
+            }
+            if (project.hasProperty('qualityUi')) {
+                vmArg "-Dfathom.highQualityUi=${project.property('qualityUi')}"
+            }
+
+            // Point the module at a config file in the run directory, so the
+            // launcher's own `config/fathom-performance.properties` contract can
+            // be exercised by hand: edit that file, restart, observe.
+            def clientWidth = project.findProperty('clientWidth') ?: '1280'
+            def clientHeight = project.findProperty('clientHeight') ?: '720'
+            programArgs('--width', clientWidth.toString(), '--height', clientHeight.toString())
+        }
+    }
+}
+
+repositories {
+    // Legacy Fabric first: it hosts the 1.8.9 intermediary mappings.
+    maven {
+        name = 'Legacy Fabric'
+        url = 'https://maven.legacyfabric.net/'
+    }
+    maven {
+        name = 'Fabric'
+        url = 'https://maven.fabricmc.net/'
+    }
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.legacyfabric:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Deliberately no Fabric API dependency yet. This milestone adds instrumentation and
+    // architecture, not gameplay hooks, and every dependency is one more thing a user has
+    // to have installed for the mod to load.
+
+    // No test dependency. The tests are plain `main` methods
+    // (`CoreTests`, `OptTests`) so that `core` can be verified with nothing but
+    // a JDK -- which is how it was verified, because this build has never run.
+    // Adding JUnit would be a dependency carried for tests that do not use it.
+}
+
+java {
+    // Two different Javas, on purpose.
+    //
+    // Gradle and Loom themselves need Java 17 to run. The mod must be Java 8
+    // bytecode, because that is what Minecraft 1.8.9 declares and what its
+    // players have. A toolchain expresses exactly that: build on 17, compile
+    // with the JDK 8 that is installed alongside it.
+    //
+    // This replaces `sourceCompatibility`/`targetCompatibility` plus
+    // `options.release = 8`. `--release` is a JDK 9+ flag, so asking a JDK 8
+    // javac for it fails outright.
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = 'UTF-8'
+    // -Xlint:all with no -Werror: a warning here should be read, not fatal, because the
+    // Mixin annotation processor emits some that are not ours to fix.
+    it.options.compilerArgs << '-Xlint:all'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+jar {
+    from('../../LICENSE') {
+        // If a licence file exists at the repository root it travels with the jar.
+        // Shipping code without one is the mistake mod-policies.md §5 is about.
+        rename { "${it}_${project.archives_base_name}" }
+    }
+}
+
+// The core has no Minecraft dependencies, so its tests run on a plain JVM. Under Gradle
+// they are ordinary JUnit tests; the same assertions also run standalone via
+// net.fathom.optimizations.core.CoreTests, which is how they were verified for this
+// milestone.
+test {
+    useJUnit()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
+
+// The core suites are `main` methods, not JUnit: the point of the core/fabric
+// split is that the core has no dependencies, and adding a test framework to
+// prove that would defeat it. `gradle test` therefore finds nothing to run, so
+// the suites are executed here instead — one JVM each, failing the build on a
+// non-zero exit.
+def coreSuites = [
+        'net.fathom.optimizations.core.ConfigTests',
+        'net.fathom.optimizations.core.CoreTests',
+        'net.fathom.optimizations.core.FeatureTests',
+        'net.fathom.optimizations.core.HudTests',
+        'net.fathom.optimizations.core.ModuleTests',
+        'net.fathom.optimizations.core.OptTests',
+        'net.fathom.optimizations.core.UiTests',
+        'net.fathom.optimizations.core.ProfileTests',
+        'net.fathom.optimizations.core.ProfileLocationTests',
+]
+
+def coreTest = tasks.register('coreTest') {
+    group = 'verification'
+    description = 'Runs the dependency-free core suites.'
+    dependsOn tasks.named('testClasses')
+    doLast {
+        coreSuites.each { suite ->
+            javaexec {
+                classpath = sourceSets.test.runtimeClasspath
+                mainClass = suite
+            }
+        }
+    }
+}
+
+tasks.named('check').configure { dependsOn coreTest }

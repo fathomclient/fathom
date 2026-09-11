@@ -1,0 +1,11 @@
+pluginManagement {
+    repositories {
+        // Legacy Fabric's own repositories, and nothing else. mod-policies.md §7 rules
+        // out mirrors and scraping; the same rule applies to build inputs.
+        maven { name = 'Legacy Fabric'; url = 'https://maven.legacyfabric.net/' }
+        maven { name = 'Fabric';       url = 'https://maven.fabricmc.net/' }
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'fathom-optimizations'
