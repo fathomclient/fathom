@@ -215,8 +215,8 @@ final class ModsSection implements Section {
         float selected = controls.towards("mod.card." + feature.id() + "#selected",
                 feature == open, Skin.SELECTION);
         int face = Skin.mix(Skin.RAISED, Skin.RAISED_HOVER, surface.hover);
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_SM, face);
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_SM, Skin.HAIRLINE,
+        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_MD, face);
+        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_MD, Skin.HAIRLINE,
                 Skin.mix(Skin.EDGE, Skin.ACCENT, Math.max(selected, surface.hover * 0.35f)));
         if (feature.enabled()) {
             ui.rounded(card.x + Skin.S3, card.y, card.right() - Skin.S3, card.y + 2f, 1f,
@@ -224,7 +224,7 @@ final class ModsSection implements Section {
         }
 
         Rect iconBox = new Rect(card.x + Skin.S3, card.y + Skin.S3, 34f, 34f);
-        ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_XS,
+        ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_SM,
                 feature.enabled() ? Skin.ACCENT_WASH : Skin.FILL);
         ui.icon(Icon.of(feature.icon()), iconBox.centreX() - ICON / 2f,
                 iconBox.centreY() - ICON / 2f, ICON,

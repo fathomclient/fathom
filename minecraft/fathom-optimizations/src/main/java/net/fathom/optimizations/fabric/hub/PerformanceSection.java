@@ -177,8 +177,8 @@ final class PerformanceSection implements Section {
 
     private void meter(HubContext context, Rect area, String label, String value, String unit) {
         Renderer ui = context.ui();
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_SM, Skin.FILL);
-        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_SM, Skin.HAIRLINE, Skin.EDGE);
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_MD, Skin.FILL);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_MD, Skin.HAIRLINE, Skin.EDGE);
         Controls.label(ui, label, area.x + Skin.S3, area.y + Skin.S3);
         float baseline = area.bottom() - Skin.S4;
         float width = ui.text(value, area.x + Skin.S3, baseline, Type.DISPLAY, Skin.TEXT);

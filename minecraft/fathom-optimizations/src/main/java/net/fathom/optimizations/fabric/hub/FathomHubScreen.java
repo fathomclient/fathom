@@ -311,9 +311,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         ui.pushTransform(0f, (1f - open) * 16f + exit * 3f,
                 scale, panel.centreX(), panel.centreY());
 
-        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, 30f, Skin.SHADOW);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, Skin.PANEL);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, Skin.HAIRLINE, Skin.EDGE_STRONG);
+        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_XL, 30f, Skin.SHADOW);
+        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_XL, Skin.PANEL);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_XL, Skin.HAIRLINE, Skin.EDGE_STRONG);
 
         Rect header = panel.top(Skin.HEADER_HEIGHT);
         Rect body = panel.belowTop(Skin.HEADER_HEIGHT);
@@ -346,14 +346,14 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         int chrome = Skin.fade(Skin.CHROME, 0.92f);
         // Two pieces, because a rounded rectangle rounds all four corners and
         // these must round only the two that touch the panel's edge.
-        ui.rounded(header.x, header.y, header.right(), header.y + Skin.R_LG * 2f, Skin.R_LG, chrome);
-        ui.fill(header.x, header.y + Skin.R_LG, header.right(), header.bottom(), chrome);
+        ui.rounded(header.x, header.y, header.right(), header.y + Skin.R_XL * 2f, Skin.R_XL, chrome);
+        ui.fill(header.x, header.y + Skin.R_XL, header.right(), header.bottom(), chrome);
         ui.fill(header.x, header.bottom(), header.right(), header.bottom() + Skin.HAIRLINE, Skin.CHROME_LINE_STRONG);
 
         int railFill = Skin.fade(Skin.CHROME, 0.5f);
-        ui.fill(rail.x, rail.y, rail.right(), rail.bottom() - Skin.R_LG, railFill);
-        ui.rounded(rail.x, rail.bottom() - Skin.R_LG * 2f, rail.right(), rail.bottom(), Skin.R_LG, railFill);
-        ui.fill(rail.right(), rail.y, rail.right() + Skin.HAIRLINE, rail.bottom() - Skin.R_LG, Skin.CHROME_LINE);
+        ui.fill(rail.x, rail.y, rail.right(), rail.bottom() - Skin.R_XL, railFill);
+        ui.rounded(rail.x, rail.bottom() - Skin.R_XL * 2f, rail.right(), rail.bottom(), Skin.R_XL, railFill);
+        ui.fill(rail.right(), rail.y, rail.right() + Skin.HAIRLINE, rail.bottom() - Skin.R_XL, Skin.CHROME_LINE);
     }
 
     private void header(GlRenderer ui, Rect header) {
@@ -470,8 +470,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private void search(GlRenderer ui) {
         Controls.State s = controls.state(SEARCH_ID, searchBox, true);
         boolean focused = controls.focused(SEARCH_ID);
-        ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_XS, Skin.FILL_SUNKEN);
-        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_XS, Skin.HAIRLINE,
+        // `--r-md`, the radius of the launcher's own search field.
+        ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MD, Skin.FILL_SUNKEN);
+        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MD, Skin.HAIRLINE,
                 focused ? Skin.ACCENT : (s.hovered ? Skin.EDGE_STRONG : Skin.EDGE));
 
         float icon = 13f;
@@ -536,11 +537,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         float lift = Math.max(0f, (openWidth - Skin.RAIL_WIDTH)
                 / Math.max(1f, Skin.RAIL_TRAY_WIDTH - Skin.RAIL_WIDTH));
         if (lift > 0.01f) {
-            ui.shadow(tray.x, tray.y, tray.right(), tray.bottom(), Skin.R_LG, 18f,
+            ui.shadow(tray.x, tray.y, tray.right(), tray.bottom(), Skin.R_XL, 18f,
                     Skin.scaleAlpha(Skin.SHADOW, lift));
         }
-        ui.fill(tray.x, tray.y, tray.right(), tray.bottom() - Skin.R_LG, trayFill);
-        ui.rounded(tray.x, tray.bottom() - Skin.R_LG * 2f, tray.right(), tray.bottom(), Skin.R_LG, trayFill);
+        ui.fill(tray.x, tray.y, tray.right(), tray.bottom() - Skin.R_XL, trayFill);
+        ui.rounded(tray.x, tray.bottom() - Skin.R_XL * 2f, tray.right(), tray.bottom(), Skin.R_XL, trayFill);
         ui.fill(tray.right(), tray.y, tray.right() + Skin.HAIRLINE, tray.bottom(), Skin.CHROME_LINE_STRONG);
 
         float rowHeight = Math.min(Skin.RAIL_ROW, (rail.height - Skin.S4) / sections.size());
@@ -560,7 +561,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
             float on = controls.towards("rail." + index + "#on", active, Skin.SELECTION);
             if (s.hover > 0.01f || on > 0.01f) {
-                ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.R_XS,
+                // A capsule, as the launcher's rail items are.
+                ui.rounded(row.x, row.y, row.right(), row.bottom(), row.height / 2f,
                         Skin.mix(Skin.scaleAlpha(Skin.FILL_HOVER, s.hover), Skin.FILL, on));
             }
 

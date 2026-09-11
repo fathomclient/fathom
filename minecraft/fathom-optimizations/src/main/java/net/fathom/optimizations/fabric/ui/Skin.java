@@ -215,6 +215,15 @@ public final class Skin {
     public static final float PRESS = FathomTheme.MOTION_PRESS;
     public static final float TOGGLE = FathomTheme.MOTION_TOGGLE;
     public static final float SELECTION = FathomTheme.MOTION_SELECTION;
+
+    /**
+     * The gap between one row arriving and the next.
+     *
+     * <p>22ms, the launcher's own. Long enough that a list reads as arriving in
+     * order, short enough that the last row is not still on its way when the
+     * pointer reaches the first.
+     */
+    public static final float STAGGER = FathomTheme.MOTION_STAGGER;
     public static final float SIDEBAR = FathomTheme.MOTION_SIDEBAR;
     public static final float DRAWER = FathomTheme.MOTION_DRAWER;
     public static final float HUB = FathomTheme.MOTION_HUB;

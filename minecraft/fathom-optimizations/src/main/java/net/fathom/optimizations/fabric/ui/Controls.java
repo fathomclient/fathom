@@ -329,8 +329,12 @@ public final class Controls {
         if (on > 0.01f) {
             face = Skin.mix(face, Skin.ACCENT_WASH, on);
         }
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_XS, face);
-        focusRing(ui, id, area, s, Skin.R_XS);
+        // An icon in a circle, not an icon in a rounded square: the launcher
+        // draws its icon-only controls at `--r-pill`, and a square one beside
+        // them reads as a different family of control.
+        float round = Math.min(area.width, area.height) / 2f;
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), round, face);
+        focusRing(ui, id, area, s, round);
         float size = Math.min(area.width, area.height) * 0.56f;
         int tint = !enabled
                 ? Skin.TEXT_DISABLED
@@ -341,14 +345,16 @@ public final class Controls {
 
     private void button(
             Renderer ui, String id, Rect area, int face, int text, String label, State s, boolean outlined) {
-        // A pressed button sinks by half a unit. Small enough that nobody reads
-        // it as motion, absent it feels like a picture of a button.
-        float sink = s.press * 0.5f;
-        ui.rounded(area.x, area.y + sink, area.right(), area.bottom() + sink, Skin.R_XS, face);
+        // A pressed button sinks one unit, which is what `.btn:active` does in
+        // the launcher: `transform: translateY(1px)`. It was half a unit here,
+        // which is below the threshold where a pointer feels an answer.
+        float sink = s.press;
+        // `--r-sm`, the radius every button in the launcher is drawn at.
+        ui.rounded(area.x, area.y + sink, area.right(), area.bottom() + sink, Skin.R_SM, face);
         if (outlined) {
-            ui.outline(area.x, area.y + sink, area.right(), area.bottom() + sink, Skin.R_XS, Skin.HAIRLINE, Skin.EDGE);
+            ui.outline(area.x, area.y + sink, area.right(), area.bottom() + sink, Skin.R_SM, Skin.HAIRLINE, Skin.EDGE);
         }
-        focusRing(ui, id, area, s, Skin.R_XS);
+        focusRing(ui, id, area, s, Skin.R_SM);
         ui.textCentred(
                 Text.fit(ui, label, Type.BODY_STRONG, area.width - Skin.S3),
                 area.centreX(),
@@ -426,8 +432,10 @@ public final class Controls {
         if (options == null || options.length == 0) {
             return selected;
         }
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_XS, Skin.FILL_SUNKEN);
-        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_XS, Skin.HAIRLINE, Skin.EDGE);
+        // The launcher's segmented control: `--r-md` around the track, `--r-sm`
+        // around the option that is on.
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_MD, Skin.FILL_SUNKEN);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_MD, Skin.HAIRLINE, Skin.EDGE);
 
         float segment = area.width / options.length;
         // The selection slides between segments rather than jumping, so the eye
@@ -439,7 +447,7 @@ public final class Controls {
         }
         mark.to(selected, now);
         float markX = area.x + segment * mark.value(now);
-        ui.rounded(markX + 2f, area.y + 2f, markX + segment - 2f, area.bottom() - 2f, Skin.R_XS - 2f,
+        ui.rounded(markX + 2f, area.y + 2f, markX + segment - 2f, area.bottom() - 2f, Skin.R_SM,
                 Skin.FILL_ACTIVE);
 
         int result = selected;
@@ -498,8 +506,8 @@ public final class Controls {
 
         float pan = scrolls ? pan(id, box, total, selectedX, selectedWidth) : 0f;
 
-        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_XS, Skin.FILL_SUNKEN);
-        ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_XS, Skin.HAIRLINE, Skin.EDGE);
+        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_MD, Skin.FILL_SUNKEN);
+        ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_MD, Skin.HAIRLINE, Skin.EDGE);
 
         ui.clip(box.x, box.y, box.right(), box.bottom());
 
@@ -516,7 +524,7 @@ public final class Controls {
         float drawnX = box.x - pan + markX.value(now);
         float drawnWidth = markWidth.value(now);
         ui.rounded(drawnX + 2f, box.y + 2f, drawnX + drawnWidth - 2f,
-                box.bottom() - 2f, Skin.R_XS - 2f, Skin.FILL_ACTIVE);
+                box.bottom() - 2f, Skin.R_SM, Skin.FILL_ACTIVE);
 
         int result = selected;
         float x = box.x - pan;

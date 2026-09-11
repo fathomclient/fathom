@@ -216,8 +216,8 @@ final class ProfilesSection implements Section {
     private void card(HubContext context, ProfileRuntime runtime, FathomProfile profile, int total, Rect card) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_SM, Skin.FILL);
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_SM, Skin.HAIRLINE, Skin.EDGE);
+        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_MD, Skin.FILL);
+        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_MD, Skin.HAIRLINE, Skin.EDGE);
         Rect inner = card.inset(Skin.S4, Skin.S4);
         boolean live = profile.id().equals(runtime.liveId());
         boolean renaming = profile.id().equals(renamingId);
