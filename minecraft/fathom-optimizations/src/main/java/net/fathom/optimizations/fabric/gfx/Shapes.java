@@ -63,6 +63,7 @@ final class Shapes {
     private final Atlas atlas;
     private final Map<Integer, Mask> exactDiscs = new HashMap<Integer, Mask>();
     private final Map<Integer, Mask> exactRings = new HashMap<Integer, Mask>();
+    private final Map<Integer, Mask> exactNotches = new HashMap<Integer, Mask>();
 
     /** One framebuffer-sized coverage mask in the shared shape atlas. */
     static final class Mask {
@@ -85,6 +86,7 @@ final class Shapes {
     void build() {
         exactDiscs.clear();
         exactRings.clear();
+        exactNotches.clear();
         byte[] white = new byte[WHITE_SIZE * WHITE_SIZE];
         for (int index = 0; index < white.length; index++) {
             white[index] = (byte) 0xFF;
@@ -112,6 +114,35 @@ final class Shapes {
         atlas.uploadCoverage(exactDiscCoverage(size), at[0], at[1], size, size);
         found = new Mask(at[0], at[1], size);
         exactDiscs.put(Integer.valueOf(size), found);
+        return found;
+    }
+
+    /**
+     * The corner a rounded rectangle does <em>not</em> cover.
+     *
+     * <p>Everything else here masks in what should be drawn. This masks in what
+     * should be painted over: the little square outside the curve. It is how an
+     * image gets rounded corners without the renderer being able to sample two
+     * textures at once -- draw the picture square, then paint its four corners
+     * out in whatever is behind it.
+     */
+    Mask exactNotch(int pixels) {
+        int size = Math.max(1, Math.min(96, pixels));
+        Mask found = exactNotches.get(Integer.valueOf(size));
+        if (found != null) {
+            return found;
+        }
+        int[] at = atlas.allocate(size, size);
+        if (at == null) {
+            return null;
+        }
+        byte[] coverage = exactDiscCoverage(size);
+        for (int index = 0; index < coverage.length; index++) {
+            coverage[index] = (byte) (255 - (coverage[index] & 0xFF));
+        }
+        atlas.uploadCoverage(coverage, at[0], at[1], size, size);
+        found = new Mask(at[0], at[1], size);
+        exactNotches.put(Integer.valueOf(size), found);
         return found;
     }
 
@@ -168,16 +199,67 @@ final class Shapes {
         return exactCoverage(size, 0);
     }
 
+    /**
+     * An antialiased quarter-ring whose core is solid at every angle.
+     *
+     * <p>Not area coverage, which is what {@link #exactCoverage} measures and
+     * what a fill wants. A stroke wants a distance field: how far each texel is
+     * from the middle of the band, solid until the last half pixel and fading
+     * over it. The difference is the whole of "the corners look different from
+     * the sides".
+     *
+     * <p>Area coverage is exactly right and still looks wrong on a curve. A
+     * two-pixel band lying along the grid covers whole pixels and arrives at
+     * full strength; the same band at 45 degrees cuts every pixel at an angle
+     * and no texel is ever entirely inside it, so the arc peaked at about half
+     * the brightness of the straight edge it ran into. Measured on the hub's
+     * cards: 195 along the top, 100 at the corner's diagonal. A distance field
+     * reaches 255 down the centre of the stroke wherever that centre happens to
+     * be, so the corner arrives at the weight of the side, and only the fringe
+     * is soft -- which is what antialiasing is meant to be for.
+     */
     private static byte[] exactRingCoverage(int size, int width) {
-        return exactCoverage(size, width);
+        byte[] coverage = new byte[size * size];
+        float middle = size - width / 2f;
+        // A hairline needs a wider solid core than its own width suggests. A
+        // one-pixel band saturates only where the curve happens to pass through
+        // a pixel's centre, and everywhere else it lands short -- so a hairline
+        // corner measured 36 against its straight edge's 49 while a two-pixel
+        // one already matched at 195. Half a pixel of extra core costs a curve
+        // that reads a shade softer at its outer fringe and buys one that
+        // reads at the same weight as the edge it joins.
+        float half = Math.max(width / 2f, 1f);
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                float px = x + 0.5f;
+                float py = y + 0.5f;
+                float distance = (float) Math.sqrt(px * px + py * py);
+                // Solid through the core, then a fade. The fade is wider than
+                // the half pixel geometry alone would ask for because the mask
+                // is sampled bilinearly on its way to the framebuffer, which
+                // softens the stroke a second time. Measured against the
+                // straight edges these arcs run into: at 0.5 the hub's corners
+                // came out at 170 of 195 and the menu's at 44.7 of 49.3; at
+                // 0.72 both match.
+                float inside = half + 0.72f - Math.abs(distance - middle);
+                int value = Math.round(Math.max(0f, Math.min(1f, inside)) * 255f);
+                coverage[y * size + x] = (byte) value;
+            }
+        }
+        return coverage;
     }
 
-    /** Eight-by-eight subpixel coverage at the size the corner reaches the framebuffer. */
+    /**
+     * Eight-by-eight subpixel coverage at the size the corner reaches the
+     * framebuffer.
+     *
+     * <p>Fills only. A stroke is {@link #exactRingCoverage} instead.
+     */
     private static byte[] exactCoverage(int size, int ringWidth) {
         byte[] coverage = new byte[size * size];
         final int samples = 8;
         float outer = size;
-        float inner = Math.max(0f, size - ringWidth);
+        float inner = ringWidth == 0 ? 0f : Math.max(0f, size - ringWidth);
         float outerSquared = outer * outer;
         float innerSquared = inner * inner;
         for (int y = 0; y < size; y++) {
@@ -198,6 +280,7 @@ final class Shapes {
         }
         return coverage;
     }
+
 
     /**
      * A whole circle, filling the region.

@@ -16,6 +16,7 @@ import net.minecraft.client.util.ScreenshotUtils;
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
@@ -80,11 +81,12 @@ import net.fathom.optimizations.fabric.hud.HudEditorScreen;
  */
 public final class FathomMenuScreen extends Screen implements FathomScreen {
 
-    private static final float BUTTON_WIDTH = 320f;
-    private static final float MENU_BUTTON_HEIGHT = 40f;
+    private static final float BUTTON_WIDTH = 360f;
+    private static final float MENU_BUTTON_HEIGHT = 44f;
     private static final float BUTTON_GAP = 10f;
-    private static final float DOCK_BUTTON = 28f;
-    private static final float DOCK_GAP = 6f;
+    /** Big enough to be a target and to read at a glance, with the icon at 15. */
+    private static final float DOCK_BUTTON = 34f;
+    private static final float DOCK_GAP = 7f;
     private static final float TOPBAR_HEIGHT = Skin.TOPBAR_HEIGHT;
     private static final float FOOTER_HEIGHT = Skin.BOTTOMBAR_HEIGHT;
 
@@ -96,10 +98,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      * step on the type scale: Geist 600 at 20, treatment A's tracking, with its
      * cap line 14 units under the mark's ink.
      */
-    private static final float MARK_SIZE = 64f;
+    private static final float MARK_SIZE = 78f;
     private static final float MARK_INK = MARK_SIZE * BrandMark.INK_FRACTION;
-    private static final Type WORDMARK = new Type(20f, Type.Weight.SEMIBOLD);
-    private static final float WORDMARK_GAP = 14f;
+    private static final Type WORDMARK = new Type(25f, Type.Weight.SEMIBOLD);
+    private static final float WORDMARK_GAP = 16f;
     private static final float LOCKUP_TO_ACTIONS = 40f;
 
     /** The launcher top bar's brand treatment: 24 mark, body semibold, 0.16em. */
@@ -168,8 +170,17 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private static final int DOCK_GLASS_HOVER = Skin.fade(Skin.GLASS, 0.52f);
     private static final int DOCK_GLASS_PRESSED = Skin.fade(Skin.GLASS_PRESSED, 0.68f);
 
-    /** {@code --glass-sheen-strong}: the lit top edge of the launcher's slab. */
-    private static final int MENU_SHEEN = Skin.fade(0xFFFFFF, 0.13f);
+    /**
+     * The lit top edge.
+     *
+     * <p>{@code --glass-sheen} rather than the strong one the launcher's slab
+     * uses. The strong value is a 13% white line directly under a 1-pixel
+     * border, and measured off the framebuffer the two together came out as a
+     * 49 and a 42 on neighbouring rows -- a top edge twice the weight of the
+     * outline everywhere else on the same button, which is what made the ring
+     * look like it changed thickness as it went round.
+     */
+    private static final int MENU_SHEEN = Skin.SHEEN;
 
     /**
      * How far the shadow under a primary button reaches.
@@ -209,6 +220,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     /** How long an account notice stays up before it fades on its own. */
     private static final float NOTICE_SECONDS = 5f;
 
+    /** Five across, three down: the fifteen scenes the launcher offers. */
+    private static final int SCENE_COLUMNS = 5;
+    private static final float SCENES_PANEL_WIDTH = 660f;
+
     private final Controls controls = new Controls();
     private final Pointer pointer = new Pointer();
     private Motion opening;
@@ -216,6 +231,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private Motion creditsFade;
     /** Whether the credits panel is up. While it is, nothing behind it answers. */
     private boolean creditsOpen;
+    private Motion scenesFade;
+    /** Whether the scene picker is up. Same rule: it owns the pointer. */
+    private boolean scenesOpen;
     private float openedAt;
     private int captureFrames;
     private boolean captured;
@@ -246,6 +264,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             dockOpening = new Motion(0f, OPEN_SECONDS);
             creditsFade = new Motion(0f, Skin.FAST);
             creditsOpen = false;
+            scenesFade = new Motion(0f, Skin.FAST);
+            scenesOpen = false;
             openedAt = now;
             // The clock has not run since the last Fathom screen closed, so
             // without this the first frame carries all of that time and every
@@ -264,7 +284,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             @Override
             public void run() {
                 if (worldArt()) {
-                    MenuVideo.draw(client, Runtime.menuBackgroundQuality());
+                    MenuScenes.draw(client, scene(), Runtime.menuBackgroundQuality());
                 } else {
                     net.minecraft.client.gui.DrawableHelper.fill(0, 0,
                             (int) new net.minecraft.client.util.Window(client).getScaledWidth(),
@@ -330,6 +350,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             // says back. In a development client there is no launcher on the
             // other end, which is the case worth seeing.
             openAccount(true);
+        } else if ("scenes".equalsIgnoreCase(target)) {
+            scenesOpen = true;
+            scenesFade.to(1f, Gfx.clock().seconds());
         } else if ("credits".equalsIgnoreCase(target)) {
             // The credits are a panel on this screen rather than a screen of
             // their own, so the gate opens them here and lets the menu capture
@@ -423,6 +446,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
 
         footer(ui);
         notices(ui);
+        scenes(ui);
         credits(ui);
 
         controls.drawOverlays(ui);
@@ -438,11 +462,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // wordmark, S3, hairline, S3, route.
         float wordWidth = BrandMark.wordmarkWidth(ui, CHROME_WORDMARK, CHROME_TRACKING);
         float crumbWidth = ui.measure("Home", CRUMB);
-        float leftWidth = Skin.S2 + CHROME_MARK + Skin.S2 + wordWidth
-                + Skin.S3 * 2f + Skin.HAIRLINE + crumbWidth + Skin.S4;
+        // S3 at both ends. It used to lead with S2 and trail with S4, so the
+        // cluster had twice as much air after "Home" as it had before the mark.
+        float leftWidth = Skin.S3 + CHROME_MARK + Skin.S2 + wordWidth
+                + Skin.S3 * 2f + Skin.HAIRLINE + crumbWidth + Skin.S3;
         Rect left = new Rect(Skin.S3, Skin.S3, leftWidth, TOPBAR_HEIGHT - Skin.S2);
         glassCluster(ui, left);
-        float markX = left.x + Skin.S2;
+        float markX = left.x + Skin.S3;
         float markY = Math.round(left.centreY() - CHROME_MARK / 2f);
         BrandMark.drawSmall(ui, markX, markY, CHROME_MARK, Skin.TEXT, Skin.ACCENT);
 
@@ -493,11 +519,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     }
 
     private boolean chromeAction(GlRenderer ui, Rect area, String label) {
-        Controls.State state = controls.state("menu.account", area, !creditsOpen);
+        Controls.State state = controls.state("menu.account", area, !modal());
         // A pill, like every other icon-led control here and in the launcher,
         // inset from the cluster so its curve sits inside the cluster's own
         // rather than running along it.
-        Rect pill = new Rect(area.x, area.y + 2f, area.width - 3f, area.height - 4f);
+        Rect pill = new Rect(area.x + 2f, area.y + 2f, area.width - 4f, area.height - 4f);
         float round = pill.height / 2f;
         float sink = state.press;
         // Drawn at rest, not only under the pointer. `--fill` is the launcher's
@@ -666,7 +692,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      * importance.
      */
     private void dock(GlRenderer ui) {
-        float dockWidth = DOCK_BUTTON * 6f + DOCK_GAP * 5f;
+        float dockWidth = DOCK_BUTTON * 7f + DOCK_GAP * 6f;
         float y = ui.height() - FOOTER_HEIGHT - DOCK_BUTTON - Skin.S3;
         float x = column.centreX() - dockWidth / 2f;
         if (dockAction(ui, "menu.fathom", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.GRID, "Fathom")) {
@@ -686,6 +712,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             client.setScreen(new ResourcePackScreen(this));
         }
         x += DOCK_BUTTON + DOCK_GAP;
+        if (dockAction(ui, "menu.scenes", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.LAYERS,
+                "Background")) {
+            scenesOpen = true;
+            scenesFade.to(1f, Gfx.clock().seconds());
+        }
+        x += DOCK_BUTTON + DOCK_GAP;
         if (dockAction(ui, "menu.credits", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.STAR,
                 "Credits")) {
             creditsOpen = true;
@@ -698,8 +730,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         drawDockTooltip(ui);
     }
 
+    /** Whether a panel is over the screen, in which case nothing under it answers. */
+    private boolean modal() {
+        return creditsOpen || scenesOpen;
+    }
+
     private boolean menuButton(GlRenderer ui, String id, Rect area, String label) {
-        Controls.State state = controls.state(id, area, !creditsOpen);
+        Controls.State state = controls.state(id, area, !modal());
         int face = Skin.mix(Skin.mix(MENU_GLASS, MENU_GLASS_HOVER, state.hover),
                 MENU_GLASS_PRESSED, state.press);
         int edge = Skin.mix(Skin.GLASS_EDGE_STRONG, Skin.fade(Skin.ACCENT, 0.76f), state.hover);
@@ -726,10 +763,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // The one-unit sheen inside the top edge, as on every launcher surface.
         ui.fill(area.x + Skin.R_XL, area.y + lift + Skin.HAIRLINE, area.right() - Skin.R_XL,
                 area.y + lift + Skin.HAIRLINE * 2f, MENU_SHEEN);
-        if (state.hover > 0.01f) {
-            ui.rounded(area.x + Skin.R_XL, area.y + lift, area.right() - Skin.R_XL,
-                    area.y + lift + 1.5f, 0.75f, Skin.scaleAlpha(Skin.ACCENT, state.hover));
-        }
         // The row title, not the caption size. These are the two destinations
         // the screen exists for, on a 38-unit face; a 12px label on it reads as
         // a disabled control rather than as the primary action.
@@ -740,7 +773,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
 
     /** Compact secondary action with an immediate hover label. */
     private boolean dockAction(GlRenderer ui, String id, Rect area, Icon icon, String label) {
-        Controls.State state = controls.state(id, area, !creditsOpen);
+        Controls.State state = controls.state(id, area, !modal());
         // The launcher's small pill: --glass-fill, the plain edge, the plain
         // sheen. Lighter than the two destinations above it, which is the
         // difference between a place to go and a thing to change.
@@ -757,7 +790,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.rounded(area.x, area.y + sink, area.right(), area.bottom() + sink, round, face);
         ui.outline(area.x, area.y + sink, area.right(), area.bottom() + sink, round, Skin.HAIRLINE,
                 Skin.mix(Skin.GLASS_EDGE, Skin.fade(Skin.ACCENT, 0.72f), state.hover));
-        float iconSize = 13f;
+        float iconSize = 15f;
         // Muted rather than faint: faint is a hub value, tuned against a panel
         // two shades from black, and it disappears into a snowfield.
         ui.icon(icon, area.centreX() - iconSize / 2f, area.centreY() + sink - iconSize / 2f,
@@ -868,6 +901,174 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.popAlpha();
     }
 
+
+    // -----------------------------------------------------------------------
+    // The scene picker
+    // -----------------------------------------------------------------------
+
+    /** Which scene is behind the menu, as the profile last recorded it. */
+    private MenuScenes.Scene scene() {
+        net.fathom.optimizations.core.module.FathomModule module =
+                Runtime.features() == null ? null : Runtime.features().find("main-menu");
+        return MenuScenes.byLabel(module == null
+                ? MenuScenes.DEFAULT_LABEL
+                : module.choice("scene", MenuScenes.DEFAULT_LABEL));
+    }
+
+    /**
+     * Switch scenes, and write it down.
+     *
+     * <p>Saved immediately rather than when something closes, because this
+     * screen does not close: somebody who picks a background and then presses
+     * Singleplayer has left the menu for the rest of the session, and a
+     * preference that only survives when you leave a screen the polite way is
+     * not a preference.
+     */
+    private void chooseScene(MenuScenes.Scene scene) {
+        net.fathom.optimizations.core.module.FathomModule module =
+                Runtime.features() == null ? null : Runtime.features().find("main-menu");
+        net.fathom.optimizations.core.module.Setting setting =
+                module == null ? null : module.setting("scene");
+        if (!(setting instanceof net.fathom.optimizations.core.module.Setting.Choice)) {
+            return;
+        }
+        ((net.fathom.optimizations.core.module.Setting.Choice) setting).set(scene.label);
+        if (!scene.animated) {
+            // Let the decoder and its thread go: nothing is playing now.
+            MenuVideo.stop();
+        }
+        if (Runtime.hud() != null) {
+            String failure = Runtime.hud().saveAll();
+            if (failure != null) {
+                notice("The background changed, but could not be saved: " + failure);
+            }
+        }
+    }
+
+    private void closeScenes() {
+        scenesOpen = false;
+        scenesFade.to(0f, Gfx.clock().seconds());
+    }
+
+    /**
+     * The launcher's background picker, in the game.
+     *
+     * <p>The same fifteen scenes under the same names, the same tick on the one
+     * in use, and the same credit underneath -- the launcher puts the world and
+     * its creator under the grid because that is where the footage is chosen,
+     * and this is the other place it is chosen.
+     *
+     * <p>Choosing is immediate. There is no confirm step and no preview pane:
+     * the menu behind this panel <em>is</em> the preview.
+     */
+    private void scenes(GlRenderer ui) {
+        float shown = scenesFade.value(Gfx.clock().seconds());
+        if (shown <= 0.001f) {
+            return;
+        }
+        ui.pushAlpha(shown);
+        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.fade(0x000000, 0.62f));
+
+        MenuScenes.Scene[] all = MenuScenes.all();
+        float pad = Skin.S5;
+        float gap = Skin.S2;
+        float width = Math.min(SCENES_PANEL_WIDTH, ui.width() - Skin.S8 * 2f);
+        float tileWidth = (width - pad * 2f - gap * (SCENE_COLUMNS - 1)) / SCENE_COLUMNS;
+        float tileHeight = tileWidth * 9f / 16f;
+        float labelLine = ui.lineHeight(Type.CAPTION);
+        float rowHeight = tileHeight + 2f + labelLine + gap;
+        int rows = (all.length + SCENE_COLUMNS - 1) / SCENE_COLUMNS;
+
+        float height = pad
+                + ui.lineHeight(Type.TITLE) + Skin.S4
+                + rows * rowHeight
+                + labelLine + Skin.S4
+                + Skin.H_MD + pad;
+        Rect panel = new Rect(Math.round((ui.width() - width) / 2f),
+                Math.round((ui.height() - height) / 2f), width, height);
+
+        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, 20f, Skin.SHADOW);
+        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, Skin.PANEL);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, Skin.HAIRLINE,
+                Skin.EDGE);
+        ui.fill(panel.x + Skin.R_LG, panel.y + Skin.HAIRLINE, panel.right() - Skin.R_LG,
+                panel.y + Skin.HAIRLINE * 2f, Skin.SHEEN);
+
+        float x = panel.x + pad;
+        float y = panel.y + pad;
+        ui.text("Background", x, y + ui.ascent(Type.TITLE), Type.TITLE, Skin.TEXT);
+        y += ui.lineHeight(Type.TITLE) + Skin.S4;
+
+        MenuScenes.Scene current = scene();
+        MenuScenes.Scene chosen = null;
+        for (int index = 0; index < all.length; index++) {
+            MenuScenes.Scene scene = all[index];
+            float tileX = x + (index % SCENE_COLUMNS) * (tileWidth + gap);
+            float tileY = y + (index / SCENE_COLUMNS) * rowHeight;
+            Rect tile = new Rect(tileX, tileY, tileWidth, tileHeight);
+            boolean selected = scene.label.equals(current.label);
+            Controls.State state = controls.state("menu.scene." + scene.id, tile, true);
+
+            if (scene.gradient) {
+                // No picture for the flat field, so the tile is the field.
+                ui.gradient(tile.x, tile.y, tile.right(), tile.bottom(), Skin.R_SM,
+                        0xFF0D1119, 0xFF030408);
+            } else {
+                int texture = MenuScenes.texture(scene);
+                if (texture > 0) {
+                    ui.image(texture, tile.x, tile.y, tile.right(), tile.bottom(), Skin.R_SM,
+                            MenuScenes.aspect(), Skin.PANEL);
+                } else {
+                    ui.rounded(tile.x, tile.y, tile.right(), tile.bottom(), Skin.R_SM,
+                            Skin.FILL_SUNKEN);
+                }
+            }
+
+            int edge = selected
+                    ? Skin.ACCENT
+                    : Skin.mix(Skin.EDGE, Skin.EDGE_STRONG, state.hover);
+            ui.outline(tile.x, tile.y, tile.right(), tile.bottom(), Skin.R_SM,
+                    selected ? Skin.HAIRLINE * 2f : Skin.HAIRLINE, edge);
+
+            if (selected) {
+                // The launcher's tick, in the same corner.
+                float mark = 15f;
+                Rect tick = new Rect(tile.right() - mark - Skin.S1, tile.y + Skin.S1, mark, mark);
+                ui.rounded(tick.x, tick.y, tick.right(), tick.bottom(), mark / 2f, Skin.ACCENT);
+                ui.icon(Icon.CHECK, tick.x + 3f, tick.y + 3f, mark - 6f, 0xFFFFFFFF);
+            }
+
+            ui.text(Text.fit(ui, scene.label, Type.CAPTION, tileWidth), tile.x,
+                    tile.bottom() + 2f + ui.ascent(Type.CAPTION), Type.CAPTION,
+                    selected ? Skin.TEXT : Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, state.hover));
+
+            if (state.clicked) {
+                chosen = scene;
+            }
+        }
+        y += rows * rowHeight;
+
+        // The credit belongs where the footage is chosen, which is here.
+        String credit = current.credited()
+                ? "Recorded in " + current.world + ", a world by " + current.creator
+                : "Recorded in Minecraft by the Fathom project.";
+        ui.text(Text.fit(ui, credit, Type.CAPTION, width - pad * 2f), x,
+                y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_DISABLED);
+
+        Rect close = new Rect(panel.right() - pad - CREDITS_CLOSE_WIDTH,
+                panel.bottom() - pad - Skin.H_MD, CREDITS_CLOSE_WIDTH, Skin.H_MD);
+        if (controls.secondary(ui, "menu.scenes.close", close, "Close", true)) {
+            closeScenes();
+        }
+
+        ui.popAlpha();
+
+        // Applied after the loop, because choosing changes what the loop reads.
+        if (chosen != null) {
+            chooseScene(chosen);
+        }
+    }
+
     private void closeCredits() {
         creditsOpen = false;
         creditsFade.to(0f, Gfx.clock().seconds());
@@ -957,6 +1158,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             // presses to back out of things.
             if (creditsOpen) {
                 closeCredits();
+            } else if (scenesOpen) {
+                closeScenes();
             }
             return true;
         }

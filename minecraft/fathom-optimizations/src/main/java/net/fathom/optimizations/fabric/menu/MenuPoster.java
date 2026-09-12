@@ -59,6 +59,13 @@ final class MenuPoster {
         drawTexture(client, texture);
     }
 
+    /** The plain field, for the scene that is not a picture at all. */
+    static void drawFlat(MinecraftClient client) {
+        Window window = new Window(client);
+        DrawableHelper.fill(0, 0, (int) window.getScaledWidth(), (int) window.getScaledHeight(),
+                0xFF05060A);
+    }
+
     /** Draw one prepared frame and the common contrast treatment over it. */
     static void drawTexture(MinecraftClient client, int textureId) {
         Window window = new Window(client);

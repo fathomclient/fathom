@@ -255,6 +255,15 @@ final class Modules {
                 // Keep the persisted id for compatibility with existing profiles.
                 .setting(new Setting.Toggle("panorama", "Cinematic background",
                         "Fathom's static, preprocessed Minecraft poster behind the menu.", true))
+                // The same fifteen the launcher offers, under the same names.
+                // `MenuScenes` is the other half of this list and the picker on
+                // the menu writes here, so the two surfaces cannot disagree.
+                .setting(new Setting.Choice("scene", "Scene",
+                        "Which recording sits behind the menu.", "Rainforest Storm",
+                        "Cherry Grove", "City Overlook", "Metropolis", "Midnight",
+                        "Midnight Coast", "Midnight Metropolis", "Moon Tower", "Neon Grid",
+                        "Rainforest Drift", "Rainforest Storm", "Rainforest Twilight",
+                        "Red Tower", "Savanna", "Snowfall", "Storm Panorama"))
                 .build());
 
         // -- Visual --------------------------------------------------------

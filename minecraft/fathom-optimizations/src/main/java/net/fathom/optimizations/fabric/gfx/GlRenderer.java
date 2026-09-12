@@ -340,7 +340,7 @@ public final class GlRenderer implements Renderer {
         float t = snap(deviceY(top));
         float r = snap(deviceX(right));
         float b = snap(deviceY(bottom));
-        float rad = Math.min(deviceSize(radius), Math.min((r - l) / 2f, (b - t) / 2f));
+        float rad = cornerRadius(radius, r - l, b - t);
 
         batch.bind(sheet.texture());
         if (rad < 0.6f) {
@@ -362,6 +362,26 @@ public final class GlRenderer implements Renderer {
         corner(r - rad, b - rad, rad, false, false, lower);
     }
 
+    /**
+     * A corner radius in whole device pixels.
+     *
+     * <p>Corners are stamped from a mask generated at {@code round(radius)} and
+     * then drawn into a quad {@code radius} across. While those two disagreed --
+     * a 14-unit radius at a 1.25 scale is 17.5 device pixels, stamped from an
+     * 18-pixel mask -- every corner was a resampled copy of the shape it should
+     * have been, which is what made an outline look thicker at the corners than
+     * along the sides. Rounding here means the mask is drawn at exactly its own
+     * size and the ring keeps one thickness the whole way round.
+     */
+    private float cornerRadius(float radius, float width, float height) {
+        float limit = Math.min(width / 2f, height / 2f);
+        float device = Math.min(deviceSize(radius), limit);
+        if (device < 0.6f) {
+            return device;
+        }
+        return Math.min(Math.max(1f, Math.round(device)), limit);
+    }
+
     /** One corner of a rounded rectangle: the quarter disc, oriented. */
     private void corner(float x, float y, float size, boolean leftSide, boolean topSide, int argb) {
         Shapes.Mask mask = highQuality ? shapes.exactDisc(Math.max(1, Math.round(size))) : null;
@@ -373,6 +393,9 @@ public final class GlRenderer implements Renderer {
 
     private void maskCorner(float x, float y, float size, boolean leftSide, boolean topSide,
             int argb, int maskX, int maskY, int maskSize) {
+        // Texel centres. Sampling the mask's full extent instead was tried and
+        // measured worse -- 159 against 170 down the middle of a corner arc --
+        // because it lands every pixel on a texel boundary and blends the pair.
         float far = sheet.u(maskX + maskSize - 0.5f);
         float near = sheet.u(maskX + 0.5f);
         float farV = sheet.v(maskY + maskSize - 0.5f);
@@ -396,7 +419,7 @@ public final class GlRenderer implements Renderer {
         float r = snap(deviceX(right));
         float b = snap(deviceY(bottom));
         float w = Math.max(1f, Math.round(deviceSize(thickness)));
-        float rad = Math.min(deviceSize(radius), Math.min((r - l) / 2f, (b - t) / 2f));
+        float rad = cornerRadius(radius, r - l, b - t);
 
         batch.bind(sheet.texture());
         if (!highQuality) {
@@ -430,6 +453,74 @@ public final class GlRenderer implements Renderer {
                 arc(l + rad, b - rad, rad - w / 2f, 90f, 180f, w, colour);
             }
         }
+    }
+
+    /**
+     * A picture, cover-cropped into a rounded rectangle.
+     *
+     * <p>For the scene thumbnails, and anything else that has to show a real
+     * image inside this interface. The crop is CSS {@code object-fit: cover}:
+     * the image fills the box on its tighter axis and loses the overflow on the
+     * other, so a 16:9 still in a 16:9 tile loses nothing and in a squarer tile
+     * loses its sides rather than stretching.
+     *
+     * <p>The corners are painted out afterwards in {@code backdrop} rather than
+     * masked in. One quad samples one texture, and the picture and the corner
+     * mask live in different ones; painting the leftover square in the colour
+     * behind the tile reaches the same place from the other side.
+     *
+     * @param sourceAspect width over height of the image itself
+     * @param backdrop     what sits behind this tile, for the corners
+     */
+    public void image(int textureId, float left, float top, float right, float bottom,
+            float radius, float sourceAspect, int backdrop) {
+        if (textureId <= 0 || right <= left || bottom <= top) {
+            return;
+        }
+        int colour = tint(0xFFFFFFFF);
+        if (Colour.invisible(colour)) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float rad = cornerRadius(radius, r - l, b - t);
+
+        float target = (r - l) / (b - t);
+        float u0 = 0f;
+        float v0 = 0f;
+        float u1 = 1f;
+        float v1 = 1f;
+        if (sourceAspect > target) {
+            float keep = target / sourceAspect;
+            u0 = (1f - keep) / 2f;
+            u1 = 1f - u0;
+        } else if (sourceAspect > 0f) {
+            float keep = sourceAspect / target;
+            v0 = (1f - keep) / 2f;
+            v1 = 1f - v0;
+        }
+
+        batch.bind(textureId);
+        quad(l, t, r, b, u0, v0, u1, v1, colour);
+
+        if (rad < 0.6f) {
+            return;
+        }
+        int cover = tint(backdrop);
+        if (Colour.invisible(cover)) {
+            return;
+        }
+        Shapes.Mask notch = shapes.exactNotch(Math.max(1, Math.round(rad)));
+        if (notch == null) {
+            return;
+        }
+        batch.bind(sheet.texture());
+        maskCorner(l, t, rad, true, true, cover, notch.x, notch.y, notch.size);
+        maskCorner(r - rad, t, rad, false, true, cover, notch.x, notch.y, notch.size);
+        maskCorner(l, b - rad, rad, true, false, cover, notch.x, notch.y, notch.size);
+        maskCorner(r - rad, b - rad, rad, false, false, cover, notch.x, notch.y, notch.size);
     }
 
     /**

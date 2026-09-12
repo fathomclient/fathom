@@ -43,6 +43,9 @@ import java.util.Map;
  */
 final class GlyphPage {
 
+    /** How hard partial coverage is pulled toward solid. See {@link #darkenStems}. */
+    private static final float STEM_GAMMA = 0.8f;
+
     /** What is rasterised up front. */
     private static final char FIRST = 32;
     private static final char LAST = 126;
@@ -189,6 +192,7 @@ final class GlyphPage {
         graphics.drawGlyphVector(vector, -x0, -y0);
         graphics.dispose();
 
+        darkenStems(image);
         atlas.upload(image, at[0], at[1]);
 
         Glyph glyph = new Glyph(
@@ -204,5 +208,36 @@ final class GlyphPage {
                 false);
         glyphs.put(key, glyph);
         return glyph;
+    }
+
+    /**
+     * Thicken the coverage a little, the way a browser does.
+     *
+     * <p>Java2D's greyscale antialiasing is linear coverage: a stem half a pixel
+     * wide comes out at 50% alpha, and at a caption size on a dark background
+     * that reads as a grey smear rather than as a letter. Every text renderer
+     * people call sharp -- the launcher's included, by way of the browser --
+     * applies a gamma to that coverage so partial pixels land darker than
+     * linear and stems keep their weight at small sizes.
+     *
+     * <p>{@code alpha^0.8} is the mild end of that. A fully covered pixel is
+     * untouched, a half-covered one goes from 0.50 to 0.57, and a blank one
+     * stays blank -- so letters gain weight without their edges blooming into a
+     * halo. It runs once per glyph, into the atlas, and costs nothing to draw.
+     */
+    private static void darkenStems(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pixel = image.getRGB(x, y);
+                int alpha = pixel >>> 24;
+                if (alpha == 0 || alpha == 255) {
+                    continue;
+                }
+                int lifted = Math.round(255f * (float) Math.pow(alpha / 255f, STEM_GAMMA));
+                image.setRGB(x, y, (Math.min(255, lifted) << 24) | (pixel & 0xFFFFFF));
+            }
+        }
     }
 }

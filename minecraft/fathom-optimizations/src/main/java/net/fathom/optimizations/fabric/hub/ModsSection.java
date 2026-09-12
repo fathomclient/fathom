@@ -215,16 +215,18 @@ final class ModsSection implements Section {
         float selected = controls.towards("mod.card." + feature.id() + "#selected",
                 feature == open, Skin.SELECTION);
         int face = Skin.mix(Skin.RAISED, Skin.RAISED_HOVER, surface.hover);
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_MD, face);
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_MD, Skin.HAIRLINE,
-                Skin.mix(Skin.EDGE, Skin.ACCENT, Math.max(selected, surface.hover * 0.35f)));
-        if (feature.enabled()) {
-            ui.rounded(card.x + Skin.S3, card.y, card.right() - Skin.S3, card.y + 2f, 1f,
-                    Skin.ACCENT);
-        }
+        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_LG, face);
+        // A module that is on is outlined in the accent the whole way round,
+        // rather than wearing a bar along its top edge. The bar said the same
+        // thing in a quarter of the places you might look for it, and against a
+        // rounded corner it stopped short of the curve at both ends.
+        float lit = feature.enabled() ? 1f : Math.max(selected, surface.hover * 0.35f);
+        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_LG,
+                feature.enabled() ? Skin.HAIRLINE * 2f : Skin.HAIRLINE,
+                Skin.mix(Skin.EDGE, Skin.ACCENT, lit));
 
         Rect iconBox = new Rect(card.x + Skin.S3, card.y + Skin.S3, 34f, 34f);
-        ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_SM,
+        ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_MD,
                 feature.enabled() ? Skin.ACCENT_WASH : Skin.FILL);
         ui.icon(Icon.of(feature.icon()), iconBox.centreX() - ICON / 2f,
                 iconBox.centreY() - ICON / 2f, ICON,
@@ -336,9 +338,9 @@ final class ModsSection implements Section {
         Rect panel = area.offset((1f - shown) * 28f, 0f);
 
         ui.pushAlpha(shown);
-        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, 20f, Skin.SHADOW);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, Skin.RAISED);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, Skin.HAIRLINE, Skin.EDGE);
+        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, 20f, Skin.SHADOW);
+        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, Skin.RAISED);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, Skin.HAIRLINE, Skin.EDGE);
 
         Rect inner = panel.inset(Skin.S5, Skin.S5);
         Rect head = inner.top(52f);
