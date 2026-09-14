@@ -19,6 +19,54 @@ version = project.mod_version
 group = project.maven_group
 base { archivesName = project.archives_base_name }
 
+// ---------------------------------------------------------------------------
+// NanoVG foundation -- see docs/ingame-ui-nanovg.md
+// ---------------------------------------------------------------------------
+//
+// NanoVG on 1.8.9 means LWJGL 3 beside the game's LWJGL 2.9.4, and the two
+// cannot share a classloader: both define org.lwjgl.BufferUtils,
+// org.lwjgl.PointerBuffer and the org.lwjgl.opengl.GL* classes, with different
+// APIs. NanoVG's GL backend also looks up org.lwjgl.opengl.GL by name for its
+// function pointers, so LWJGL 3's OpenGL module has to come too. None of it may
+// go on the game's classpath.
+//
+//   lwjgl3   the LWJGL 3 jars and this machine's natives, resolved on their own.
+//   nanovg   a source set compiled against LWJGL 3 and Fathom's `core` only --
+//            never against Minecraft or LWJGL 2 -- whose classes are loaded
+//            together with `lwjgl3` into an isolated, child-first classloader
+//            (fabric/gfx/nanovg/NanoVg.java).
+//
+// Development only in this phase: `gradle runClient -Pnanovg`, or
+// `-PcaptureUi=nanovg` (screenshot) or `nanovg-live` for the renderer showcase. Nothing here is packaged into
+// the mod jar yet; how that should be done is the next phase.
+
+def lwjgl3Natives = { ->
+    String os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    String arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
+    boolean arm = arch.contains('aarch64') || arch.contains('arm64')
+    if (os.contains('win')) return arm ? 'natives-windows-arm64' : 'natives-windows'
+    if (os.contains('mac')) return arm ? 'natives-macos-arm64' : 'natives-macos'
+    return arm ? 'natives-linux-arm64' : 'natives-linux'
+}()
+
+def nanovgWanted = project.hasProperty('nanovg') ||
+        String.valueOf(project.findProperty('captureUi')).toLowerCase().startsWith('nanovg')
+
+configurations {
+    lwjgl3 {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+sourceSets {
+    nanovg {
+        java.srcDir 'src/nanovg/java'
+    }
+}
+
+def nanovgClasspathFile = layout.buildDirectory.file('nanovg/classpath.txt')
+
 // Legacy Fabric publishes its own intermediary mappings for the versions Mojang
 // predates Fabric on. Without this, Loom looks for 1.8.9 intermediary on the
 // modern Fabric maven, where it does not exist.
@@ -79,6 +127,11 @@ loom {
             if (project.hasProperty('hoverProbe')) {
                 vmArg '-Dfathom.hoverInstrumentation=true'
             }
+            if (project.hasProperty('qaAllModules')) {
+                // Visual-only stress mode: renders every module card as enabled
+                // without changing the user's saved module configuration.
+                vmArg '-Dfathom.qaAllModules=true'
+            }
             if (project.hasProperty('transitionProbe')) {
                 vmArg '-Dfathom.transitionInstrumentation=true'
             }
@@ -90,6 +143,11 @@ loom {
             }
             if (project.hasProperty('qualityUi')) {
                 vmArg "-Dfathom.highQualityUi=${project.property('qualityUi')}"
+            }
+            // NanoVG foundation: where the isolated classpath is listed.
+            // `writeNanoVgClasspath` produces the file before the client starts.
+            if (nanovgWanted) {
+                vmArg "-Dfathom.nanovg.classpathFile=${nanovgClasspathFile.get().asFile.absolutePath}"
             }
 
             // Point the module at a config file in the run directory, so the
@@ -119,6 +177,16 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings "net.legacyfabric:yarn:${project.yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // LWJGL 3, for the NanoVG backend only -- see the NanoVG section above. The
+    // `lwjgl3` configuration is never added to the game's classpath, and the
+    // `nanovg` source set compiles against LWJGL 3 and Fathom's core alone.
+    ['lwjgl', 'lwjgl-opengl', 'lwjgl-nanovg'].each { module ->
+        lwjgl3 "org.lwjgl:${module}:${project.lwjgl3_version}"
+        lwjgl3 "org.lwjgl:${module}:${project.lwjgl3_version}:${lwjgl3Natives}"
+        nanovgCompileOnly "org.lwjgl:${module}:${project.lwjgl3_version}"
+    }
+    nanovgCompileOnly sourceSets.main.output
 
     // Deliberately no Fabric API dependency yet. This milestone adds instrumentation and
     // architecture, not gameplay hooks, and every dependency is one more thing a user has
@@ -212,3 +280,29 @@ def coreTest = tasks.register('coreTest') {
 }
 
 tasks.named('check').configure { dependsOn coreTest }
+
+// The NanoVG backend is not on the game classpath, so nothing else compiles it.
+// Checking it here stops it rotting between development runs; it resolves only
+// LWJGL 3's compile-time jars, never natives, and nothing is packaged.
+tasks.named('check').configure { dependsOn tasks.named('nanovgClasses') }
+
+// The NanoVG backend's classes and LWJGL 3, listed one per line for the
+// development client to load in isolation. Written at execution time, so a build
+// that does not ask for NanoVG never resolves LWJGL 3 at all.
+def writeNanoVgClasspath = tasks.register('writeNanoVgClasspath') {
+    group = 'build'
+    description = 'Lists the isolated classpath the NanoVG backend is loaded from.'
+    dependsOn tasks.named('nanovgClasses')
+    def entries = sourceSets.nanovg.output.classesDirs + configurations.lwjgl3
+    inputs.files(entries)
+    outputs.file(nanovgClasspathFile)
+    doLast {
+        File out = nanovgClasspathFile.get().asFile
+        out.parentFile.mkdirs()
+        out.text = entries.files.collect { it.absolutePath }.join(System.lineSeparator())
+    }
+}
+
+if (nanovgWanted) {
+    tasks.matching { it.name == 'runClient' }.configureEach { dependsOn writeNanoVgClasspath }
+}

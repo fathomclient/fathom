@@ -1,5 +1,11 @@
 # The in-game UI renderer — evaluation and decision
 
+> **Being revisited (2026-09-12).** The project has chosen to move the in-game UI to
+> NanoVG. The foundation — an isolated LWJGL 3 backend behind the `Renderer` seam this
+> document created — is proven but not yet used by any production screen. Measurements
+> that update §3.2 and §3.5 (native size, stencil buffer, GL state) are in
+> [`ingame-ui-nanovg.md`](ingame-ui-nanovg.md). The analysis below is kept as written.
+
 **Outcome first: Fathom draws its in-game interface with its own GPU renderer —
 batched geometry through Minecraft's own vertex pipeline, glyphs rasterised from the
 launcher's Geist at device resolution, anti-aliased corners and edges from a coverage

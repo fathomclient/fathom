@@ -199,7 +199,8 @@ final class ProfilesSection implements Section {
             ui.text(Text.fit(ui, describe(profile), Type.CAPTION, room), row.x + Skin.S3,
                     top + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_FAINT);
             if (live) {
-                Controls.badge(ui, "Live", row.vcentreRight(Skin.S3, Controls.badgeWidth(ui, "Live"), 20f), Skin.GOOD);
+                controls.badge(ui, "profiles.live." + profile.id(), "Live",
+                        row.vcentreRight(Skin.S3, Controls.badgeWidth(ui, "Live"), 20f), Skin.GOOD);
             }
 
             if (state.clicked && !chosen) {
@@ -210,14 +211,14 @@ final class ProfilesSection implements Section {
             }
         }
         ui.unclip();
-        scroller.rail(ui, list);
+        scroller.rail(ui, list, context.pointer(), context.now());
     }
 
     private void card(HubContext context, ProfileRuntime runtime, FathomProfile profile, int total, Rect card) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_LG, Skin.FILL);
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_LG, Skin.HAIRLINE, Skin.EDGE);
+        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, Skin.FILL);
+        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
         Rect inner = card.inset(Skin.S4, Skin.S4);
         boolean live = profile.id().equals(runtime.liveId());
         boolean renaming = profile.id().equals(renamingId);

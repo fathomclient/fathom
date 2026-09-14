@@ -10,8 +10,6 @@ import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.core.ui.VideoOptionDomain;
-import net.fathom.optimizations.fabric.gfx.Gfx;
-import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.Skin;
 
@@ -157,7 +155,8 @@ final class QuickSection implements Section {
         // Beside the column, not against the far edge of a panel the column
         // does not reach: a scrollbar half a screen away from what it scrolls
         // belongs to nothing.
-        scroller.rail(ui, new Rect(area.x, area.y, width + Skin.S4, area.height));
+        scroller.rail(ui, new Rect(area.x, area.y, width + Skin.S4, area.height),
+                context.pointer(), context.now());
     }
 
     /**
@@ -185,12 +184,11 @@ final class QuickSection implements Section {
         Renderer ui = context.ui();
         Rect row = area.inset(0f, 2f);
         ClientPrefs prefs = context.hud().prefs();
-        GlRenderer renderer = Gfx.peek();
-        String effective = renderer == null
-                ? ""
-                : "Currently " + String.format(java.util.Locale.ROOT, "%.2f", Float.valueOf(renderer.scale()))
-                        + "× on " + renderer.scaleInfo().framebufferWidth() + "×"
-                        + renderer.scaleInfo().framebufferHeight();
+        int framebufferWidth = Math.round(ui.width() * ui.scale());
+        int framebufferHeight = Math.round(ui.height() * ui.scale());
+        String effective = "Currently "
+                + String.format(java.util.Locale.ROOT, "%.2f", Float.valueOf(ui.scale()))
+                + "× on " + framebufferWidth + "×" + framebufferHeight;
         label(context, row, "Fathom UI scale", effective);
 
         Rect control = row.vcentreRight(0f, CONTROL, Skin.H_SM);

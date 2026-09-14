@@ -11,7 +11,6 @@ import com.mojang.blaze3d.platform.GlStateManager;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.util.Window;
 
 import net.fathom.optimizations.core.module.ModuleRegistry;
 import net.fathom.optimizations.core.module.ModuleStore;
@@ -27,6 +26,7 @@ import net.fathom.optimizations.core.module.ClientPrefs;
 import net.fathom.optimizations.core.module.SessionName;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.GlRenderer;
+import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
 
 /**
  * The HUD: what is drawn, where, and how the editor sees it.
@@ -50,6 +50,9 @@ public final class FathomHud {
     private final HudRegistry registry = HudRegistry.standard();
     private final ClickTracker clicks = new ClickTracker();
     private final Map<String, HudWidget> renderers = new LinkedHashMap<String, HudWidget>();
+    /** Reused selection and entries: the HUD is an every-game-frame hot path. */
+    private final List<Drawable> drawing = new ArrayList<Drawable>();
+    private final List<Drawable> drawablePool = new ArrayList<Drawable>();
     private final File gameDirectory;
     private final ModuleRegistry features;
     private final ModuleStore featureStore = new ModuleStore();
@@ -315,15 +318,16 @@ public final class FathomHud {
                     net.fathom.optimizations.core.instrument.Probe.Section.HUD, probe);
             return;
         }
-        Window window = new Window(client);
-        int screenWidth = (int) window.getScaledWidth();
-        int screenHeight = (int) window.getScaledHeight();
+        MinecraftGuiSize viewport = MinecraftGuiSize.get(client);
+        int screenWidth = viewport.width();
+        int screenHeight = viewport.height();
 
         // Decided before anything opens a frame, because an empty HUD has to
         // cost nothing at all. Taking the GL state is cheap but it is not free,
         // and a player with every widget switched off should not pay for a
         // typeface decision about text that is never drawn.
-        List<Drawable> drawing = new ArrayList<Drawable>();
+        drawing.clear();
+        int drawableCursor = 0;
         for (Widget widget : registry.all()) {
             HudWidget renderer = renderers.get(widget.id());
             if (renderer == null) {
@@ -346,10 +350,16 @@ public final class FathomHud {
             if (!editing && !renderer.visible(client)) {
                 continue;
             }
-            drawing.add(new Drawable(
-                    renderer,
-                    placement(widget.id()),
-                    features.owningWidget(widget.id())));
+            Drawable drawable;
+            if (drawableCursor == drawablePool.size()) {
+                drawable = new Drawable();
+                drawablePool.add(drawable);
+            } else {
+                drawable = drawablePool.get(drawableCursor);
+            }
+            drawableCursor++;
+            drawing.add(drawable.set(
+                    renderer, placement(widget.id()), features.owningWidget(widget.id())));
         }
 
         if (!drawing.isEmpty()) {
@@ -398,14 +408,15 @@ public final class FathomHud {
 
     /** A widget that is going to be drawn, and where. */
     private static final class Drawable {
-        final HudWidget renderer;
-        final Placement placement;
-        final FathomModule owner;
+        HudWidget renderer;
+        Placement placement;
+        FathomModule owner;
 
-        Drawable(HudWidget renderer, Placement placement, FathomModule owner) {
+        Drawable set(HudWidget renderer, Placement placement, FathomModule owner) {
             this.renderer = renderer;
             this.placement = placement;
             this.owner = owner;
+            return this;
         }
     }
 

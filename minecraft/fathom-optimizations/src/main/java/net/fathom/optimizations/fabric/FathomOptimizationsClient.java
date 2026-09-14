@@ -6,6 +6,9 @@ import java.util.List;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.resource.ReloadableResourceManager;
+import net.minecraft.resource.ResourceManager;
+import net.minecraft.resource.ResourceReloadListener;
 
 import net.fathom.optimizations.core.config.LauncherConfig;
 import net.fathom.optimizations.core.guard.Guard;
@@ -60,6 +63,7 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         repairLegacyFovCorruption();
+        installRendererReloadHook();
         OptimizationRegistry registry = OptimizationRegistry.standard();
 
         // What the launcher's Performance page wrote, if anything. An absent or
@@ -183,6 +187,28 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
                 "" + hud.sessionName()
                         + ", launcher bridge " + bridge.state().name().toLowerCase(java.util.Locale.ROOT)
                         + ". Press " + hud.hubKey().keyName() + " in game to open Fathom Hub.");
+    }
+
+    /**
+     * Resource packs can replace Minecraft's texture/font state while a Fathom
+     * renderer still owns GPU objects. Recreate both renderer backends after a
+     * reload instead of retaining stale pages, images or an isolated context.
+     */
+    private static void installRendererReloadHook() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || !(client.getResourceManager() instanceof ReloadableResourceManager)) {
+            return;
+        }
+        ((ReloadableResourceManager) client.getResourceManager()).registerListener(new ResourceReloadListener() {
+            @Override
+            public void reload(ResourceManager manager) {
+                // NanoVG wrappers must be dropped before the GL textures they
+                // reference. Neither backend retains stale image names across
+                // a resource-pack reload.
+                net.fathom.optimizations.fabric.gfx.Gfx.dispose();
+                net.fathom.optimizations.fabric.menu.FathomMenuScreen.disposeResources();
+            }
+        });
     }
 
     /**

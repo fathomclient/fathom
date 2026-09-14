@@ -6,7 +6,6 @@ import java.util.List;
 import org.lwjgl.input.Keyboard;
 
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.util.Window;
 import net.minecraft.client.util.ScreenshotUtils;
 
 import net.fathom.optimizations.core.hud.Anchor;
@@ -15,6 +14,8 @@ import net.fathom.optimizations.core.hud.Snap;
 import net.fathom.optimizations.core.hud.Widget;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.Text;
+import net.fathom.optimizations.core.ui.anim.Timing;
+import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
@@ -22,9 +23,11 @@ import net.fathom.optimizations.fabric.gfx.FathomScreen;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.GlRenderer;
+import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.VisualEffects;
 
 /**
  * The HUD editor: arrange your screen while looking at your screen.
@@ -85,11 +88,22 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     // the row they sit in. Both were measured against the panel in the game
     // after the buttons were added and drew outside it.
     private static final float INSPECTOR_WIDTH = 272f;
+    private static final Anchor[] ANCHORS = Anchor.values();
+    private static final String[] ANCHOR_LABELS = anchorLabels();
+
+    private static String[] anchorLabels() {
+        String[] labels = new String[ANCHORS.length];
+        for (int index = 0; index < ANCHORS.length; index++) {
+            labels[index] = ANCHORS[index].label();
+        }
+        return labels;
+    }
     private static final float INSPECTOR_HEIGHT = 268f;
 
     private final FathomHud hud;
     private final Controls controls = new Controls();
     private final Pointer pointer = new Pointer();
+    private final Transition transition = new Transition(Timing.SCREEN_ENTER, Timing.SCREEN_EXIT);
 
     private String dragging;
     private String resizing;
@@ -106,6 +120,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private String note = "";
     private int captureFrames;
     private boolean captured;
+    private boolean transitionStarted;
+    private boolean closing;
 
     /** Logical units per Minecraft scaled pixel, recomputed every frame. */
     private float mcToLogical = 1f;
@@ -121,6 +137,11 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         buttons.clear();
         Gfx.restartClock();
         pointer.reset();
+        if (!transitionStarted) {
+            transition.open(Gfx.clock().seconds());
+            transitionStarted = true;
+        }
+        controls.setInputEnabled(!closing);
         if ("hud-editor".equalsIgnoreCase(System.getProperty("fathom.captureUi", ""))
                 && selected == null && !hud.registry().all().isEmpty()) {
             selected = hud.registry().all().get(0).name();
@@ -146,15 +167,16 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
     @Override
     public void render(int ignoredX, int ignoredY, float ignoredDelta) {
-        Window window = new Window(client);
-        screenWidth = (int) window.getScaledWidth();
-        screenHeight = (int) window.getScaledHeight();
+        MinecraftGuiSize viewport = MinecraftGuiSize.get(client);
+        screenWidth = viewport.width();
+        screenHeight = viewport.height();
 
         // The widgets themselves, in the game's own space and font. Drawn before
         // Fathom takes the GL state, because it is the game's pass.
         hud.render(client, true);
 
         float delta = Gfx.begin(client, Runtime.uiScale());
+        boolean restorePrevious = false;
         try {
             GlRenderer ui = Gfx.renderer(client);
             pointer.poll(client, ui);
@@ -170,6 +192,15 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             } else if (resizing != null) {
                 resize(mouseX);
             }
+
+            float now = Gfx.clock().seconds();
+            float shown = transition.visibility(now);
+            float enter = transition.enter(now);
+            float exit = transition.exit(now);
+            ui.pushAlpha(shown);
+            ui.pushTransform(0f, (1f - enter) * 8f + exit * 3f,
+                    0.990f + enter * 0.010f - exit * 0.004f,
+                    ui.width() / 2f, ui.height() / 2f);
 
             // A very light wash, so the editor is distinguishable from the game
             // without hiding what the HUD has to sit over.
@@ -190,8 +221,17 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             }
             controls.drawOverlays(ui);
             controls.end();
+            ui.popTransform();
+            ui.popAlpha();
+            restorePrevious = transition.finished(now);
         } finally {
             Gfx.end();
+        }
+        if (restorePrevious && !FathomNavigation.back(client, this)) {
+            closing = false;
+            controls.setInputEnabled(true);
+            problem = "navigation history was lost";
+            transition.open(Gfx.clock().seconds());
         }
         captureSettledFrame();
     }
@@ -319,7 +359,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             float t = toLogical(positioned.box.y);
             float r = toLogical(positioned.box.right());
             float b = toLogical(positioned.box.bottom());
-            ui.outline(l - 2f, t - 2f, r + 2f, b + 2f, Skin.R_XS, Skin.HAIRLINE,
+            ui.outline(l - 2f, t - 2f, r + 2f, b + 2f, Skin.R_SMALL, Skin.HAIRLINE,
                     active ? Skin.ACCENT_STRONG : Skin.argb(0.42f, 0xFFFFFF));
 
             if (active) {
@@ -330,7 +370,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             }
             if (hovered && dragging == null && resizing == null) {
                 float labelWidth = ui.measure(positioned.widget.name(), Type.CAPTION) + Skin.S3;
-                ui.rounded(l - 2f, t - 24f, l - 2f + labelWidth, t - 6f, Skin.R_XS, Skin.OVERLAY);
+                ui.rounded(l - 2f, t - 24f, l - 2f + labelWidth, t - 6f, Skin.R_SMALL, Skin.OVERLAY);
                 ui.text(positioned.widget.name(), l + 4f, t - 11f, Type.CAPTION, Skin.TEXT);
             }
         }
@@ -446,9 +486,11 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         Placement placement = hud.placement(widget.id());
         Rect panel = new Rect(ui.width() - INSPECTOR_WIDTH - Skin.S5, Skin.S5, INSPECTOR_WIDTH, INSPECTOR_HEIGHT);
 
-        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, 20f, Skin.SHADOW);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, Skin.RAISED);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MD, Skin.HAIRLINE, Skin.EDGE);
+        VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
+        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.RAISED);
+        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
+                Skin.R_MEDIUM, Skin.RAISED, 1f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
 
         Rect inner = panel.inset(Skin.S4, Skin.S4);
         ui.text(Text.fit(ui, widget.name(), Type.ROW_TITLE, inner.width), inner.x,
@@ -458,19 +500,14 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
         // Anchor, as a dropdown rather than a row that cycles: nine values is
         // too many to step through one press at a time.
-        Anchor[] anchors = Anchor.values();
-        String[] labels = new String[anchors.length];
-        for (int index = 0; index < anchors.length; index++) {
-            labels[index] = anchors[index].label();
-        }
         ui.text("Anchor", inner.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
         Rect anchorBox = new Rect(inner.x, y + 16f, inner.width, Skin.H_SM);
-        int chosen = controls.dropdown(ui, "insp.anchor", anchorBox, labels, placement.anchor().ordinal());
-        if (chosen != placement.anchor().ordinal() && chosen >= 0 && chosen < anchors.length) {
+        int chosen = controls.dropdown(ui, "insp.anchor", anchorBox, ANCHOR_LABELS, placement.anchor().ordinal());
+        if (chosen != placement.anchor().ordinal() && chosen >= 0 && chosen < ANCHORS.length) {
             // The offset is reset with the anchor: keeping it would send the
             // widget somewhere nobody chose, because an offset means a distance
             // from a different edge now.
-            hud.place(widget.id(), placement.withAnchor(anchors[chosen]).withOffset(4, 4));
+            hud.place(widget.id(), placement.withAnchor(ANCHORS[chosen]).withOffset(4, 4));
             problem = hud.save();
         }
         y += 16f + Skin.H_SM + Skin.S3;
@@ -746,6 +783,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
     @Override
     public boolean handleFathomKey(char character, int keyCode) {
+        if (closing) {
+            return true;
+        }
         switch (keyCode) {
             case Keyboard.KEY_ESCAPE:
                 close();
@@ -822,11 +862,18 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     private void close() {
+        if (closing) {
+            return;
+        }
         problem = hud.saveAll();
         if (problem == null) {
-            if (!FathomNavigation.back(client, this)) {
-                problem = "navigation history was lost";
-            }
+            closing = true;
+            dragging = null;
+            resizing = null;
+            guides = new ArrayList<Snap.Guide>();
+            controls.setInputEnabled(false);
+            controls.closePopover();
+            transition.close(Gfx.clock().seconds());
         }
         // A failed save keeps the editor open with the reason on screen. Closing
         // anyway would silently discard the arrangement somebody just made.

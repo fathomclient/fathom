@@ -34,6 +34,8 @@ public final class Pointer {
 
     /** Enough for gaming mice while keeping the hot path allocation-free. */
     private static final int BUTTONS = 16;
+    /** LWJGL 2 reports conventional wheel detents in multiples of 120. */
+    private static final int WHEEL_DELTA = 120;
 
     private float x;
     private float y;
@@ -52,7 +54,7 @@ public final class Pointer {
      *
      * <p>Call once, at the top of a frame, before anything asks a question.
      */
-    public void poll(MinecraftClient client, GlRenderer renderer) {
+    public void poll(MinecraftClient client, net.fathom.optimizations.core.ui.render.Renderer renderer) {
         if (!Mouse.isCreated()) {
             return;
         }
@@ -185,7 +187,13 @@ public final class Pointer {
      * anything else.
      */
     public int wheelNotches() {
-        return wheel == 0 ? 0 : (wheel > 0 ? 1 : -1);
+        if (wheel == 0) {
+            return 0;
+        }
+        int notches = wheel / WHEEL_DELTA;
+        // Preserve high-resolution wheels that report a sub-detent delta, but
+        // do not collapse a rapid multi-notch scroll into a single step.
+        return notches == 0 ? (wheel > 0 ? 1 : -1) : notches;
     }
 
     /** Whether the cursor is inside a rectangle, in logical units. */

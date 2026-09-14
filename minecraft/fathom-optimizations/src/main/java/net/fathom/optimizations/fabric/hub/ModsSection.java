@@ -13,6 +13,7 @@ import net.fathom.optimizations.core.module.Keybind;
 import net.fathom.optimizations.core.module.Setting;
 import net.fathom.optimizations.core.hud.Sensitivity;
 import net.fathom.optimizations.core.ui.anim.Motion;
+import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.ResponsiveGrid;
 import net.fathom.optimizations.core.ui.layout.Text;
@@ -21,6 +22,7 @@ import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.VisualEffects;
 
 /**
  * The Mods page: every feature, searchable, with its settings a click away.
@@ -63,6 +65,9 @@ import net.fathom.optimizations.fabric.ui.Skin;
  */
 final class ModsSection implements Section {
 
+    /** Visual-QA only: exercise a full grid of lit cards without changing saved module state. */
+    private static final boolean FORCE_ENABLED_QA = Boolean.getBoolean("fathom.qaAllModules");
+
     private static final float CARD_HEIGHT = 116f;
     private static final float CARD_GAP = 12f;
     private static final float MIN_CARD_WIDTH = 190f;
@@ -74,7 +79,7 @@ final class ModsSection implements Section {
 
     private final Scroller scroller = new Scroller();
     private final Scroller drawerScroll = new Scroller();
-    private final Motion drawer = new Motion(0f, Skin.DRAWER);
+    private final Motion drawer = new Motion(0f, Timing.PANEL);
 
     /** The text setting being typed into, or null. */
     private Setting.Text editing;
@@ -148,7 +153,7 @@ final class ModsSection implements Section {
             card(context, cards.get(index), card);
         }
         ui.unclip();
-        scroller.rail(ui, body);
+        scroller.rail(ui, body, context.pointer(), context.now());
 
         if (cards.isEmpty()) {
             empty(context, body);
@@ -212,40 +217,52 @@ final class ModsSection implements Section {
         Controls controls = context.controls();
         Rect card = area;
         Controls.State surface = controls.state("mod.card." + feature.id(), card, true);
+        boolean visuallyEnabled = feature.enabled() || FORCE_ENABLED_QA;
+        float enabled = controls.towards("mod.card." + feature.id() + "#enabled",
+                visuallyEnabled, Timing.TOGGLE);
         float selected = controls.towards("mod.card." + feature.id() + "#selected",
-                feature == open, Skin.SELECTION);
-        int face = Skin.mix(Skin.RAISED, Skin.RAISED_HOVER, surface.hover);
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_LG, face);
+                feature == open, Timing.NAVIGATION);
+        float scale = 1f - surface.press * 0.004f;
+        ui.pushTransform(0f, surface.press * 0.35f, scale, card.centreX(), card.centreY());
+
+        int resting = Skin.mix(Skin.RAISED, Skin.ACCENT_WASH, enabled * 0.16f);
+        int face = Skin.mix(resting, Skin.RAISED_HOVER, surface.hover * (1f - enabled * 0.20f));
+        VisualEffects.moduleGlow(ui, card, Skin.R_CARD, enabled, surface.hover);
+        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, face);
+        VisualEffects.topLight(ui, card.x, card.y, card.right(), card.bottom(),
+                Skin.R_CARD, face, 0.72f + surface.hover * 0.28f);
         // A module that is on is outlined in the accent the whole way round,
         // rather than wearing a bar along its top edge. The bar said the same
         // thing in a quarter of the places you might look for it, and against a
         // rounded corner it stopped short of the curve at both ends.
-        float lit = feature.enabled() ? 1f : Math.max(selected, surface.hover * 0.35f);
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_LG,
-                feature.enabled() ? Skin.HAIRLINE * 2f : Skin.HAIRLINE,
-                Skin.mix(Skin.EDGE, Skin.ACCENT, lit));
+        float lit = Math.max(enabled, selected);
+        int edge = VisualEffects.hoverBrighten(Skin.mix(Skin.EDGE, Skin.ACCENT, lit), surface.hover);
+        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD,
+                Skin.HAIRLINE * (1f + enabled * 0.70f),
+                edge);
 
         Rect iconBox = new Rect(card.x + Skin.S3, card.y + Skin.S3, 34f, 34f);
-        ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_MD,
-                feature.enabled() ? Skin.ACCENT_WASH : Skin.FILL);
+        ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_MEDIUM,
+                Skin.mix(Skin.FILL, Skin.ACCENT_WASH, enabled));
+        int icon = Skin.mix(Skin.TEXT_FAINT, Skin.ACCENT_STRONG, enabled);
         ui.icon(Icon.of(feature.icon()), iconBox.centreX() - ICON / 2f,
                 iconBox.centreY() - ICON / 2f, ICON,
-                feature.enabled() ? Skin.ACCENT_STRONG : Skin.TEXT_FAINT);
+                VisualEffects.hoverBrighten(icon, surface.hover));
 
         float titleX = iconBox.right() + Skin.S3;
         float titleRoom = card.right() - Skin.S3 - titleX;
         ui.text(Text.fit(ui, feature.name(), Type.ROW_TITLE, titleRoom), titleX,
                 card.y + Skin.S3 + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE,
-                feature.enabled() ? Skin.TEXT : Skin.TEXT_MUTED);
+                Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, enabled));
 
-        String status = feature.enabled() ? "Enabled" : "Disabled";
+        String status = visuallyEnabled ? "Enabled" : "Disabled";
         ui.text(status, titleX, card.y + Skin.S3 + 19f + ui.ascent(Type.CAPTION), Type.CAPTION,
-                feature.enabled() ? Skin.ACCENT_STRONG : Skin.TEXT_DISABLED);
+                Skin.mix(Skin.TEXT_DISABLED, Skin.ACCENT_STRONG, enabled));
 
         String badge = compactBadge(feature);
         if (!badge.isEmpty()) {
             float badgeWidth = Controls.badgeWidth(ui, badge);
-            Controls.badge(ui, badge,
+            controls.badge(ui, "mod.badge." + feature.id(), badge,
                     new Rect(card.right() - Skin.S3 - badgeWidth,
                             card.y + Skin.S3 + 17f, badgeWidth, 20f),
                     unmet(feature) ? Skin.TEXT_MUTED : Skin.WARN);
@@ -267,14 +284,16 @@ final class ModsSection implements Section {
         }
         if (feature.switchable()) {
             Rect toggle = footer.vcentreRight(0f, Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT);
-            if (controls.toggle(ui, "mod.toggle." + feature.id(), toggle, feature.enabled(), true)) {
+            if (controls.toggle(ui, "mod.toggle." + feature.id(), toggle, visuallyEnabled, true)) {
                 context.setFeatureEnabled(feature, !feature.enabled());
             }
         } else {
             float width = Controls.badgeWidth(ui, feature.implementation().label());
-            Controls.badge(ui, feature.implementation().label(),
+            controls.badge(ui, "mod.implementation." + feature.id(), feature.implementation().label(),
                     footer.vcentreRight(0f, width, 20f), Skin.WARN);
         }
+
+        ui.popTransform();
 
         // Clicking unused card space is an Options shortcut; action controls
         // above have separate bounds and therefore retain their own behavior.
@@ -338,9 +357,11 @@ final class ModsSection implements Section {
         Rect panel = area.offset((1f - shown) * 28f, 0f);
 
         ui.pushAlpha(shown);
-        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, 20f, Skin.SHADOW);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, Skin.RAISED);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_LG, Skin.HAIRLINE, Skin.EDGE);
+        VisualEffects.overlayShadow(ui, panel, Skin.R_CARD);
+        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.RAISED);
+        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
+                Skin.R_CARD, Skin.RAISED, 1f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
 
         Rect inner = panel.inset(Skin.S5, Skin.S5);
         Rect head = inner.top(52f);
@@ -408,7 +429,7 @@ final class ModsSection implements Section {
             }
         }
         ui.unclip();
-        drawerScroll.rail(ui, viewport);
+        drawerScroll.rail(ui, viewport, context.pointer(), context.now());
 
         // Reset appears only once there is something to undo, so it is not a
         // permanent invitation to lose your settings.

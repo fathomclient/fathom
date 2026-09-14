@@ -2,6 +2,10 @@ package net.fathom.optimizations.fabric.hub;
 
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.render.Renderer;
+import net.fathom.optimizations.core.ui.anim.Motion;
+import net.fathom.optimizations.core.ui.anim.Spring;
+import net.fathom.optimizations.core.ui.anim.Timing;
+import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Skin;
 
 /**
@@ -9,7 +13,7 @@ import net.fathom.optimizations.fabric.ui.Skin;
  *
  * <p>Several sections need one and none of them needs a different one.
  *
- * <h2>The glide is delta-driven</h2>
+ * <h2>The glide is a bounded spring</h2>
  *
  * <p>Advanced with the frame's delta from the one animation clock, so a scroll
  * decelerates at the same rate at 30 frames a second and at 300, and does not
@@ -27,20 +31,32 @@ public final class Scroller {
     /** Logical units per wheel notch. About two rows. */
     private static final float NOTCH = 110f;
 
+    private final Spring position = Spring.smooth(0f);
+    private final Motion visibility = new Motion(0.22f, Timing.STANDARD);
+    private final Motion emphasis = new Motion(0f, Timing.HOVER_OUT);
+    private float target;
     private float offset;
-    private float velocity;
     private float contentHeight;
     private float viewportHeight;
+    private float activeFor;
+    private boolean dragging;
+    private float dragGrab;
 
     /** Turn the wheel. Positive notches are away from the user. */
     public void wheel(int notches) {
-        velocity -= notches * NOTCH;
+        target -= notches * NOTCH;
+        if (notches != 0) {
+            activeFor = 0.65f;
+        }
     }
 
     /** Put it back at the top. */
     public void reset() {
         offset = 0f;
-        velocity = 0f;
+        target = 0f;
+        position.set(0f);
+        activeFor = 0f;
+        dragging = false;
     }
 
     /**
@@ -51,24 +67,18 @@ public final class Scroller {
     public float offset(float delta, float content, float viewport) {
         this.contentHeight = content;
         this.viewportHeight = viewport;
-
-        // Exponential decay towards zero: fast at first, then settling, with no
-        // fixed number of frames anywhere in it.
-        offset += velocity * delta * 6f;
-        velocity *= (float) Math.pow(0.0016d, delta);
-        if (Math.abs(velocity) < 1f) {
-            velocity = 0f;
-        }
+        activeFor = Math.max(0f, activeFor - Math.max(0f, delta));
 
         float maximum = Math.max(0f, content - viewport);
-        if (offset < 0f) {
-            offset = 0f;
-            velocity = 0f;
+        target = clamp(target, 0f, maximum);
+        // A filtered list can become shorter between frames. Jumping an invalid
+        // old offset to its new bound prevents a blank viewport; ordinary wheel
+        // movement still follows the smooth spring.
+        if (offset < 0f || offset > maximum) {
+            offset = clamp(offset, 0f, maximum);
+            position.set(offset);
         }
-        if (offset > maximum) {
-            offset = maximum;
-            velocity = 0f;
-        }
+        offset = clamp(position.update(target, delta), 0f, maximum);
         return offset;
     }
 
@@ -80,23 +90,75 @@ public final class Scroller {
      * content rather than beside it, because a scrollbar that takes layout space
      * makes every list narrower for the sake of the ones that overflow.
      */
-    public void rail(Renderer ui, Rect viewport) {
+    public void rail(Renderer ui, Rect viewport, Pointer pointer, float now) {
         if (contentHeight <= viewportHeight || viewport.height <= 0f) {
+            dragging = false;
+            visibility.set(0.22f, now);
+            emphasis.set(0f, now);
             return;
         }
         float width = 4f;
         float x = viewport.right() - width;
-        ui.rounded(x, viewport.y, x + width, viewport.bottom(), width / 2f, Skin.argb(0.18f, 0x000000));
+
+        // Keep both end caps out of a rounded parent's corner quadrants. A
+        // full-height rail reached the exact top and bottom of cards/panels and
+        // was visible through their rectangular scissor at the curved corners.
+        float endInset = Math.min(Skin.R_SMALL, viewport.height / 2f);
+        float trackTop = viewport.y + endInset;
+        float trackHeight = Math.max(0f, viewport.height - endInset * 2f);
+        if (trackHeight <= 0f) {
+            return;
+        }
 
         float visible = viewportHeight / contentHeight;
-        float handle = Math.max(32f, viewport.height * visible);
+        float handle = Math.min(trackHeight, Math.max(32f, trackHeight * visible));
         float progress = offset / Math.max(1f, contentHeight - viewportHeight);
-        float handleY = viewport.y + (viewport.height - handle) * progress;
-        ui.rounded(x, handleY, x + width, handleY + handle, width / 2f, Skin.argb(0.28f, 0xFFFFFF));
+        float handleY = trackTop + (trackHeight - handle) * progress;
+
+        // The visual is four units wide, while the hit target is twelve. The
+        // scrollbar becomes easier to grab without taking any content space.
+        boolean hovered = pointer != null && pointer.over(x - 8f, handleY - 2f, 12f, handle + 4f);
+        if (!dragging && hovered && pointer.pressed(0)) {
+            dragging = true;
+            dragGrab = pointer.y() - handleY;
+            // The rail overlays content. Owning this press also swallows its
+            // eventual release, so the row beneath cannot receive half a click.
+            pointer.consume(0);
+        }
+        if (dragging) {
+            if (pointer == null || !pointer.down(0)) {
+                dragging = false;
+            } else {
+                float railTravel = Math.max(1f, trackHeight - handle);
+                float next = clamp((pointer.y() - dragGrab - trackTop) / railTravel, 0f, 1f);
+                target = next * Math.max(0f, contentHeight - viewportHeight);
+                offset = target;
+                position.set(target);
+                activeFor = 0.65f;
+                handleY = trackTop + railTravel * next;
+            }
+        }
+
+        boolean active = dragging || hovered || activeFor > 0f;
+        visibility.to(active ? 1f : 0.22f, now, active ? Timing.HOVER_IN : Timing.STANDARD);
+        emphasis.to(dragging ? 1f : (hovered ? 0.62f : 0f), now,
+                active ? Timing.HOVER_IN : Timing.HOVER_OUT);
+        float alpha = visibility.opacity(now);
+        float bright = emphasis.opacity(now);
+        ui.rounded(x, trackTop, x + width, trackTop + trackHeight,
+                net.fathom.optimizations.core.ui.render.RoundedGeometry.pill(width, trackHeight),
+                Skin.argb(0.11f + alpha * 0.08f, 0x000000));
+        ui.rounded(x, handleY, x + width, handleY + handle,
+                net.fathom.optimizations.core.ui.render.RoundedGeometry.pill(width, handle),
+                Skin.argb(0.16f + alpha * 0.18f + bright * 0.18f, 0xFFFFFF));
     }
 
     /** Whether there is anything to scroll, for a caller that lays out around it. */
     public boolean overflowing() {
         return contentHeight > viewportHeight;
+    }
+
+    private static float clamp(float value, float low, float high) {
+        return value < low ? low : (value > high ? high : value);
     }
 }

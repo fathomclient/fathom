@@ -8,7 +8,6 @@ import net.fathom.optimizations.core.module.ModuleRegistry;
 import net.fathom.optimizations.core.input.KeybindCaptureState;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.fabric.Runtime;
-import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.gfx.SpikeScreen;
@@ -39,7 +38,8 @@ public final class HubContext {
     private final ModuleRegistry features;
     private final Controls controls;
     private final Screen screen;
-    private final GlRenderer renderer;
+    /** The renderer selected for the frame currently being drawn. */
+    private Renderer renderer;
     private final Pointer pointer;
     private final KeybindCaptureState keybindCapture = new KeybindCaptureState();
 
@@ -55,14 +55,12 @@ public final class HubContext {
             ModuleRegistry features,
             Controls controls,
             Screen screen,
-            GlRenderer renderer,
             Pointer pointer) {
         this.client = client;
         this.hud = hud;
         this.features = features;
         this.controls = controls;
         this.screen = screen;
-        this.renderer = renderer;
         this.pointer = pointer;
     }
 
@@ -72,7 +70,15 @@ public final class HubContext {
 
     /** What draws. Logical units in, device pixels out. */
     public Renderer ui() {
+        if (renderer == null) {
+            throw new IllegalStateException("the Hub has no open renderer frame");
+        }
         return renderer;
+    }
+
+    /** Bind sections to the backend selected for this frame. */
+    void setRenderer(Renderer renderer) {
+        this.renderer = renderer;
     }
 
     /**

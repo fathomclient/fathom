@@ -8,6 +8,9 @@ import net.minecraft.client.option.GameOptions;
 
 import net.fathom.optimizations.core.module.FathomModule;
 import net.fathom.optimizations.core.module.Keybind;
+import net.fathom.optimizations.core.ui.anim.Clock;
+import net.fathom.optimizations.core.ui.anim.Motion;
+import net.fathom.optimizations.core.ui.anim.Timing;
 
 /**
  * Hold a key to narrow the field of view.
@@ -41,12 +44,10 @@ import net.fathom.optimizations.core.module.Keybind;
  */
 public final class Zoom {
 
-    /** How long the ease takes, in seconds. Matches the interface's own timing. */
-    private static final double DURATION = 0.18;
-
-    private static long lastNanos;
+    private static final Clock CLOCK = new Clock(System.nanoTime());
+    private static final Motion PROGRESS = new Motion(0f, Timing.STANDARD);
     /** 0 is no zoom, 1 is fully zoomed. */
-    private static double progress;
+    private static float progress;
 
     private static boolean touchedOptions;
     private static float savedSensitivity;
@@ -109,22 +110,17 @@ public final class Zoom {
     }
 
     private static void advance(boolean wanted, FathomModule module) {
-        long now = System.nanoTime();
-        double elapsed = lastNanos == 0L ? 0.0 : (now - lastNanos) / 1_000_000_000.0;
-        lastNanos = now;
-        // A stall must not teleport the animation; the interface clamps its
-        // delta for the same reason.
-        if (elapsed > 0.10) {
-            elapsed = 0.10;
-        }
+        CLOCK.advance(System.nanoTime());
+        float now = CLOCK.seconds();
 
         boolean animate = module == null || module.toggle("animate", true);
         if (!animate) {
-            progress = wanted ? 1.0 : 0.0;
+            PROGRESS.set(wanted ? 1f : 0f, now);
+            progress = PROGRESS.opacity(now);
             return;
         }
-        double step = elapsed / DURATION;
-        progress = wanted ? Math.min(1.0, progress + step) : Math.max(0.0, progress - step);
+        PROGRESS.to(wanted ? 1f : 0f, now, Timing.STANDARD);
+        progress = PROGRESS.opacity(now);
     }
 
     private static void applyOptions(MinecraftClient client, FathomModule module, boolean wanted) {

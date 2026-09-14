@@ -18,40 +18,53 @@ final class GlStateSnapshot {
     /** GL_FRAMEBUFFER_BINDING; shared by the core, ARB and EXT variants. */
     private static final int FRAMEBUFFER_BINDING = 0x8CA6;
 
-    private final boolean framebufferSupported;
-    private final int framebuffer;
+    /** Reused query storage. Every capture runs on Minecraft's render thread. */
+    private static final IntBuffer INT_QUERY = BufferUtils.createIntBuffer(16);
+    private static final FloatBuffer FLOAT_QUERY = BufferUtils.createFloatBuffer(16);
+
+    private boolean framebufferSupported;
+    private int framebuffer;
     private final int[] viewport = new int[4];
     private final int[] scissorBox = new int[4];
-    private final boolean scissor;
-    private final boolean blend;
-    private final boolean depth;
-    private final boolean depthMask;
-    private final boolean alpha;
-    private final boolean cull;
-    private final boolean activeTextureEnabled;
-    private final boolean uiTextureEnabled;
-    private final int blendSrcRgb;
-    private final int blendDstRgb;
-    private final int blendSrcAlpha;
-    private final int blendDstAlpha;
-    private final int depthFunc;
-    private final int alphaFunc;
-    private final float alphaRef;
-    private final int cullFace;
-    private final int activeTexture;
-    private final int activeTexture2d;
-    private final int uiTexture2d;
-    private final boolean shadersSupported;
-    private final int program;
-    private final int matrixMode;
+    private boolean scissor;
+    private boolean blend;
+    private boolean depth;
+    private boolean depthMask;
+    private boolean alpha;
+    private boolean cull;
+    private boolean activeTextureEnabled;
+    private boolean uiTextureEnabled;
+    private int blendSrcRgb;
+    private int blendDstRgb;
+    private int blendSrcAlpha;
+    private int blendDstAlpha;
+    private int depthFunc;
+    private int alphaFunc;
+    private float alphaRef;
+    private int cullFace;
+    private int activeTexture;
+    private int activeTexture2d;
+    private int uiTexture2d;
+    private boolean shadersSupported;
+    private int program;
+    private int matrixMode;
     private final float[] colour = new float[4];
     private boolean restored;
+    private boolean captured;
 
     static GlStateSnapshot capture() {
-        return new GlStateSnapshot();
+        return new GlStateSnapshot().captureInto();
     }
 
-    private GlStateSnapshot() {
+    GlStateSnapshot() {}
+
+    /** Capture into this owner again, without allocating a snapshot or query buffers. */
+    GlStateSnapshot captureInto() {
+        if (captured && !restored) {
+            throw new IllegalStateException("GL state snapshot is already live");
+        }
+        restored = false;
+        captured = true;
         framebufferSupported = GLX.supportsFbo();
         framebuffer = framebufferSupported ? GL11.glGetInteger(FRAMEBUFFER_BINDING) : 0;
         readInts(GL11.GL_VIEWPORT, viewport);
@@ -99,10 +112,11 @@ final class GlStateSnapshot {
         GlStateManager.matrixMode(GL11.GL_TEXTURE);
         GlStateManager.pushMatrix();
         GlStateManager.matrixMode(matrixMode);
+        return this;
     }
 
     void restore() {
-        if (restored) {
+        if (restored || !captured) {
             return;
         }
         restored = true;
@@ -174,13 +188,15 @@ final class GlStateSnapshot {
         // LWJGL 2's glGet wrapper validates the destination against OpenGL's
         // maximum possible return width (16), even for four-value queries such
         // as GL_VIEWPORT and GL_SCISSOR_BOX.
-        IntBuffer buffer = BufferUtils.createIntBuffer(16);
+        IntBuffer buffer = INT_QUERY;
+        buffer.clear();
         GL11.glGetInteger(name, buffer);
         for (int i = 0; i < values.length; i++) values[i] = buffer.get(i);
     }
 
     private static void readFloats(int name, float[] values) {
-        FloatBuffer buffer = BufferUtils.createFloatBuffer(16);
+        FloatBuffer buffer = FLOAT_QUERY;
+        buffer.clear();
         GL11.glGetFloat(name, buffer);
         for (int i = 0; i < values.length; i++) values[i] = buffer.get(i);
     }

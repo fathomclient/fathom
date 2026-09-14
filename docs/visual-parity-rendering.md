@@ -81,6 +81,19 @@ glance. It is also the fallback when the typeface cannot be loaded.
 
 ## Rounded geometry and quality setting
 
+`Skin` exposes semantic radii rather than component-local numbers: `R_SMALL`
+(6), `R_CONTROL` (9), `R_MEDIUM` (12), `R_CARD` (16), and `R_PANEL` (20)
+logical units. True pills and circular controls use `Skin.pill(area)`, which is
+always half the shorter side. `RoundedGeometry` clamps every supplied radius to
+that same physical limit before either renderer receives it.
+
+Borders keep the requested outer bounds. Because NanoVG centres a stroke on its
+path, the backend insets the stroked rectangle by half the stroke width and
+reduces the path radius by the same amount. The compatibility renderer uses the
+same normalized geometry and device-pixel alignment helpers. Fills, borders,
+focus rings, clips, shadows, and hover overlays therefore derive from one
+concentric shape instead of independently rounded rectangles.
+
 High-quality rendering is on by default. Rounded fills and outlines use cached
 coverage masks generated at the final device-pixel radius with 8x8 subpixel
 coverage. The cached masks live in the renderer's existing atlas, so steady
@@ -177,6 +190,7 @@ gradle runClient -PcaptureUi=Performance
 gradle runClient -PcaptureUi=hud-editor
 gradle runClient -PcaptureUi=Performance -PqualityUi=false
 gradle runClient -PcaptureUi=Mods -PrailOpen
+gradle runClient -PcaptureUi=Mods -PqaAllModules
 gradle runClient -PcaptureUi=Mods -PclientWidth=2560 -PclientHeight=1440
 gradle runClient -PcaptureUi=Mods -PhoverProbe
 gradle runClient -PcaptureUi=hud
@@ -191,6 +205,8 @@ typeface for the run without touching a saved preference file.
 `-PrailOpen` pins the label tray, which otherwise only exists while a pointer
 is on it and so cannot appear in a still. `-PclientWidth` / `-PclientHeight`
 drive the resolution sweep. `-PhoverProbe` prints a line per hover change.
+`-PqaAllModules` renders the Mods grid as fully enabled without changing or
+saving module state, providing a deterministic repeated-glow stress capture.
 
 ## Tests
 

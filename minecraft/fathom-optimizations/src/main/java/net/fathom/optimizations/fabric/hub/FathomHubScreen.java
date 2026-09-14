@@ -11,20 +11,25 @@ import net.minecraft.client.util.ScreenshotUtils;
 import net.fathom.optimizations.core.input.KeybindCaptureState;
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
+import net.fathom.optimizations.core.ui.anim.Spring;
+import net.fathom.optimizations.core.ui.anim.Timing;
+import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
+import net.fathom.optimizations.core.ui.render.FathomRenderer;
+import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.gfx.FathomScreen;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Gfx;
-import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.hud.FathomHud;
 import net.fathom.optimizations.fabric.ui.BrandMark;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.VisualEffects;
 
 /**
  * Fathom Hub — the screen Right Shift opens.
@@ -84,12 +89,10 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private final List<Section> sections = new ArrayList<Section>();
 
     private HubContext context;
-    /** 0 while closed, 1 while open. Entrance only. */
-    private Motion opening;
-    /** 0 normally, 1 at the end of the dedicated lightweight exit. */
-    private Motion exiting;
+    /** Shared entry/exit lifecycle; entry and exit remain independent. */
+    private Transition transition;
     /** Which rail row the marker is on, so it slides rather than jumps. */
-    private Motion railMark;
+    private Spring railMark;
     /** How far through a page change we are, for the content's slide. */
     private Motion pageSwap;
     /** Width of the label tray beyond the always-visible icon rail. */
@@ -116,8 +119,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     public void init() {
         buttons.clear();
         if (context == null) {
-            GlRenderer renderer = Gfx.renderer(client);
-            context = new HubContext(client, hud, Runtime.features(), controls, this, renderer, pointer);
+            context = new HubContext(client, hud, Runtime.features(), controls, this, pointer);
             sections.add(new ModsSection());
             sections.add(new PerformanceSection());
             sections.add(new ProfilesSection());
@@ -126,13 +128,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             sections.add(new DiagnosticsSection());
 
             float now = Gfx.clock().seconds();
-            opening = new Motion(0f, Skin.HUB);
-            opening.to(1f, now);
-            exiting = new Motion(0f, Skin.HUB_CLOSE);
+            transition = new Transition(Timing.SCREEN_ENTER, Timing.SCREEN_EXIT);
+            transition.open(now);
             openedAtNs = System.nanoTime();
-            railMark = new Motion(0f, Skin.SELECTION);
-            railTray = new Motion(0f, Skin.SIDEBAR);
-            pageSwap = new Motion(1f, Skin.SELECTION);
+            railMark = Spring.accent(0f);
+            railTray = new Motion(0f, Timing.NAVIGATION);
+            pageSwap = new Motion(1f, Timing.NAVIGATION);
             sections.get(0).opened(context);
             selectCaptureSection();
             // Visual QA for the label tray. A capture is a still, and the tray
@@ -146,6 +147,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         Gfx.frames().reset();
         pointer.reset();
         controls.reset();
+        controls.setInputEnabled(!closing);
     }
 
     @Override
@@ -168,7 +170,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         }
         closing = true;
         closeStartedNs = System.nanoTime();
-        exiting.to(1f, Gfx.clock().seconds());
+        transition.close(Gfx.clock().seconds());
+        // Exit is a distinct state, not opening in reverse. Make the fading UI
+        // inert immediately so a release or repeat cannot mutate settings.
+        controls.setInputEnabled(false);
+        context.keybindCapture().cancel();
         controls.closePopover();
     }
 
@@ -178,10 +184,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     @Override
     public void render(int ignoredMouseX, int ignoredMouseY, float ignoredDelta) {
-        float delta = Gfx.begin(client, Runtime.uiScale());
+        Renderer ui = Gfx.beginScreen(client, Runtime.uiScale());
+        float delta = Gfx.screenDelta();
         boolean restorePrevious = false;
         try {
-            GlRenderer ui = Gfx.renderer(client);
+            context.setRenderer(ui);
             pointer.poll(client, ui);
             // Offered to the page before anything else sees it, so a keybind
             // waiting for a mouse button gets the button rather than a click on
@@ -202,11 +209,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             draw(ui);
             controls.end();
 
-            restorePrevious = closing && exiting.settled(Gfx.clock().seconds());
+            restorePrevious = transition.finished(Gfx.clock().seconds());
         } finally {
-            Gfx.end();
+            Gfx.endScreen();
         }
-        if (!openingMeasured && opening.settled(Gfx.clock().seconds())) {
+        if (!openingMeasured && !closing && transition.entered(Gfx.clock().seconds())) {
             openingMeasured = true;
             if (Boolean.getBoolean("fathom.transitionInstrumentation")) {
                 System.out.println("[Fathom] Hub open QA: "
@@ -251,7 +258,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             if (sections.get(index).title().equalsIgnoreCase(target)) {
                 current = index;
                 previous = index;
-                railMark.set(index, Gfx.clock().seconds());
+                railMark.set(index);
                 sections.get(index).opened(context);
                 return;
             }
@@ -280,14 +287,15 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         client.scheduleStop();
     }
 
-    private void layout(GlRenderer ui) {
+    private void layout(Renderer ui) {
         float availableWidth = Math.max(320f, ui.width() - Skin.S6 * 2f);
         float availableHeight = Math.max(240f, ui.height() - Skin.S6 * 2f);
         float width = clamp(ui.width() * Skin.SCREEN_FRACTION_X,
                 Math.min(Skin.MIN_WIDTH, availableWidth), Math.min(Skin.MAX_WIDTH, availableWidth));
         float height = clamp(ui.height() * Skin.SCREEN_FRACTION_Y,
                 Math.min(Skin.MIN_HEIGHT, availableHeight), Math.min(Skin.MAX_HEIGHT, availableHeight));
-        panel = new Rect((ui.width() - width) / 2f, (ui.height() - height) / 2f, width, height);
+        panel = Skin.pixelAligned(ui,
+                new Rect((ui.width() - width) / 2f, (ui.height() - height) / 2f, width, height));
     }
 
     private static float clamp(float value, float low, float high) {
@@ -295,11 +303,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         return value < low ? low : (value > top ? top : value);
     }
 
-    private void draw(GlRenderer ui) {
+    private void draw(Renderer ui) {
         float now = Gfx.clock().seconds();
-        float open = opening.value(now);
-        float exit = exiting.value(now);
-        float shown = open * (1f - exit);
+        float open = transition.enter(now);
+        float exit = transition.exit(now);
+        float shown = transition.visibility(now);
 
         // The world, darkened hard and left as context.
         ui.fill(0f, 0f, ui.width(), ui.height(), Skin.scaleAlpha(Skin.SCRIM, shown));
@@ -307,13 +315,15 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         ui.pushAlpha(shown);
         // Rises and grows a little as it arrives. Small enough that nobody reads
         // it as an effect; absent, the hub appears rather than opens.
-        float scale = 0.985f + 0.015f * open - 0.010f * exit;
-        ui.pushTransform(0f, (1f - open) * 16f + exit * 3f,
+        float scale = 0.990f + 0.010f * open - 0.004f * exit;
+        ui.pushTransform(0f, (1f - open) * 8f + exit * 3f,
                 scale, panel.centreX(), panel.centreY());
 
-        ui.shadow(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_XL, 30f, Skin.SHADOW);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_XL, Skin.PANEL);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_XL, Skin.HAIRLINE, Skin.EDGE_STRONG);
+        VisualEffects.panelShadow(ui, panel, Skin.R_PANEL);
+        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_PANEL, Skin.PANEL);
+        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
+                Skin.R_PANEL, Skin.PANEL, 0.72f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_PANEL, Skin.HAIRLINE, Skin.EDGE_STRONG);
 
         Rect header = panel.top(Skin.HEADER_HEIGHT);
         Rect body = panel.belowTop(Skin.HEADER_HEIGHT);
@@ -342,21 +352,32 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     }
 
     /** The black frame: a header bar and a rail, with the panel's own corners. */
-    private void chrome(GlRenderer ui, Rect header, Rect rail) {
+    private void chrome(Renderer ui, Rect header, Rect rail) {
         int chrome = Skin.fade(Skin.CHROME, 0.92f);
-        // Two pieces, because a rounded rectangle rounds all four corners and
-        // these must round only the two that touch the panel's edge.
-        ui.rounded(header.x, header.y, header.right(), header.y + Skin.R_XL * 2f, Skin.R_XL, chrome);
-        ui.fill(header.x, header.y + Skin.R_XL, header.right(), header.bottom(), chrome);
+        if (ui instanceof FathomRenderer) {
+            ((FathomRenderer) ui).rounded(header.x, header.y, header.right(), header.bottom(),
+                    Skin.R_PANEL, Skin.R_PANEL, 0f, 0f, chrome);
+        } else {
+            ui.rounded(header.x, header.y, header.right(), header.y + Skin.R_PANEL * 2f,
+                    Skin.R_PANEL, chrome);
+            ui.fill(header.x, header.y + Skin.R_PANEL, header.right(), header.bottom(), chrome);
+        }
         ui.fill(header.x, header.bottom(), header.right(), header.bottom() + Skin.HAIRLINE, Skin.CHROME_LINE_STRONG);
 
         int railFill = Skin.fade(Skin.CHROME, 0.5f);
-        ui.fill(rail.x, rail.y, rail.right(), rail.bottom() - Skin.R_XL, railFill);
-        ui.rounded(rail.x, rail.bottom() - Skin.R_XL * 2f, rail.right(), rail.bottom(), Skin.R_XL, railFill);
-        ui.fill(rail.right(), rail.y, rail.right() + Skin.HAIRLINE, rail.bottom() - Skin.R_XL, Skin.CHROME_LINE);
+        if (ui instanceof FathomRenderer) {
+            ((FathomRenderer) ui).rounded(rail.x, rail.y, rail.right(), rail.bottom(),
+                    0f, 0f, 0f, Skin.R_PANEL, railFill);
+        } else {
+            ui.fill(rail.x, rail.y, rail.right(), rail.bottom() - Skin.R_PANEL, railFill);
+            ui.rounded(rail.x, rail.bottom() - Skin.R_PANEL * 2f, rail.right(), rail.bottom(),
+                    Skin.R_PANEL, railFill);
+        }
+        ui.fill(rail.right() - Skin.HAIRLINE, rail.y, rail.right(),
+                rail.bottom() - Skin.R_PANEL, Skin.CHROME_LINE);
     }
 
-    private void header(GlRenderer ui, Rect header) {
+    private void header(Renderer ui, Rect header) {
         Rect inner = header.inset(Skin.S5, 0f);
         float cursor = inner.x;
 
@@ -410,7 +431,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
      * Profile" under Gradle. It is the loadout now, and choosing another one
      * switches it live — modules, settings, HUD and keys, without a restart.
      */
-    private void sessionLine(GlRenderer ui, Rect header, float x, float room) {
+    private void sessionLine(Renderer ui, Rect header, float x, float room) {
         net.fathom.optimizations.fabric.profile.ProfileRuntime profiles = hud.profiles();
         float pickerWidth = 0f;
         if (profiles != null) {
@@ -463,28 +484,32 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         String restart = context.restartNote();
         if (restart != null) {
             Rect badge = new Rect(x, header.bottom() + Skin.S2, room, 20f);
-            Controls.badge(ui, restart + " — restart required", badge, Skin.WARN);
+            controls.badge(ui, "hub.restart", restart + " — restart required", badge, Skin.WARN);
         }
     }
 
-    private void search(GlRenderer ui) {
+    private void search(Renderer ui) {
         Controls.State s = controls.state(SEARCH_ID, searchBox, true);
         boolean focused = controls.focused(SEARCH_ID);
+        float focus = controls.towards(SEARCH_ID + "#focus", focused, Timing.STANDARD);
+        float response = Math.max(s.hover, focus);
         // `--r-md`, the radius of the launcher's own search field.
-        ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MD, Skin.FILL_SUNKEN);
-        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MD, Skin.HAIRLINE,
-                focused ? Skin.ACCENT : (s.hovered ? Skin.EDGE_STRONG : Skin.EDGE));
+        ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MEDIUM,
+                Skin.mix(Skin.FILL_SUNKEN, Skin.FILL, s.hover * 0.40f + focus * 0.35f));
+        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE,
+                Skin.mix(Skin.mix(Skin.EDGE, Skin.EDGE_STRONG, s.hover), Skin.ACCENT, focus));
 
         float icon = 13f;
         ui.icon(Icon.SEARCH, searchBox.x + Skin.S3, searchBox.centreY() - icon / 2f, icon,
-                focused ? Skin.TEXT_MUTED : Skin.TEXT_FAINT);
+                Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, response));
 
         String value = context.search();
         float textX = searchBox.x + Skin.S3 + icon + Skin.S2;
         float baseline = Controls.baseline(ui, searchBox, Type.BODY);
         float room = searchBox.right() - textX - Skin.S3 - (value.isEmpty() ? 0f : 22f);
         if (value.isEmpty()) {
-            ui.text("Search", textX, baseline, Type.BODY, Skin.TEXT_DISABLED);
+            ui.text("Search", textX, baseline, Type.BODY,
+                    Skin.mix(Skin.TEXT_DISABLED, Skin.TEXT_FAINT, response));
         } else {
             ui.text(Text.fit(ui, value, Type.BODY, room), textX, baseline, Type.BODY, Skin.TEXT);
             Rect clear = searchBox.vcentreRight(Skin.S1, 22f, 22f);
@@ -528,7 +553,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         return new Rect(rail.x, rail.y, openWidth, rail.height);
     }
 
-    private void rail(GlRenderer ui, Rect rail, Rect tray) {
+    private void rail(Renderer ui, Rect rail, Rect tray) {
         float now = Gfx.clock().seconds();
         float openWidth = tray.width;
         int trayFill = Skin.fade(Skin.CHROME, 0.97f);
@@ -537,20 +562,31 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         float lift = Math.max(0f, (openWidth - Skin.RAIL_WIDTH)
                 / Math.max(1f, Skin.RAIL_TRAY_WIDTH - Skin.RAIL_WIDTH));
         if (lift > 0.01f) {
-            ui.shadow(tray.x, tray.y, tray.right(), tray.bottom(), Skin.R_XL, 18f,
-                    Skin.scaleAlpha(Skin.SHADOW, lift));
+            ui.shadow(tray.x, tray.y, tray.right(), tray.bottom(), Skin.R_PANEL, 18f,
+                    Skin.scaleAlpha(Skin.SHADOW, lift * VisualEffects.SHADOW_STRENGTH));
         }
-        ui.fill(tray.x, tray.y, tray.right(), tray.bottom() - Skin.R_XL, trayFill);
-        ui.rounded(tray.x, tray.bottom() - Skin.R_XL * 2f, tray.right(), tray.bottom(), Skin.R_XL, trayFill);
-        ui.fill(tray.right(), tray.y, tray.right() + Skin.HAIRLINE, tray.bottom(), Skin.CHROME_LINE_STRONG);
+        float trailingRadius = Skin.R_PANEL * lift;
+        if (ui instanceof FathomRenderer) {
+            ((FathomRenderer) ui).rounded(tray.x, tray.y, tray.right(), tray.bottom(),
+                    0f, 0f, trailingRadius, Skin.R_PANEL, trayFill);
+        } else {
+            ui.fill(tray.x, tray.y, tray.right(), tray.bottom() - Skin.R_PANEL, trayFill);
+            ui.rounded(tray.x, tray.bottom() - Skin.R_PANEL * 2f, tray.right(), tray.bottom(),
+                    Skin.R_PANEL, trayFill);
+        }
+        // A centred/full-height edge used to continue through the tray's curved
+        // lower-right corner. Stop it where that curve begins.
+        ui.fill(tray.right() - Skin.HAIRLINE, tray.y, tray.right(),
+                tray.bottom() - trailingRadius, Skin.CHROME_LINE_STRONG);
 
         float rowHeight = Math.min(Skin.RAIL_ROW, (rail.height - Skin.S4) / sections.size());
-        railMark.to(current, now);
-
         // The indicator: a short accent bar that slides between rows. Not a
         // filled red block — the selected row is brighter material and this.
-        float markY = rail.y + Skin.S3 + railMark.value(now) * rowHeight;
-        ui.rounded(rail.x + 6f, markY + rowHeight * 0.25f, rail.x + 9f, markY + rowHeight * 0.75f, 1.5f, Skin.ACCENT);
+        float markY = rail.y + Skin.S3 + railMark.update(current, context.delta()) * rowHeight;
+        Rect marker = Rect.of(rail.x + 6f, markY + rowHeight * 0.25f,
+                rail.x + 9f, markY + rowHeight * 0.75f);
+        VisualEffects.navigationGlow(ui, marker, 1f);
+        ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker), Skin.ACCENT);
 
         for (int index = 0; index < sections.size(); index++) {
             Section section = sections.get(index);
@@ -559,16 +595,17 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             Controls.State s = controls.state("rail." + index, row, true);
             boolean active = index == current;
 
-            float on = controls.towards("rail." + index + "#on", active, Skin.SELECTION);
+            float on = controls.towards("rail." + index + "#on", active, Timing.NAVIGATION);
             if (s.hover > 0.01f || on > 0.01f) {
                 // A capsule, as the launcher's rail items are.
-                ui.rounded(row.x, row.y, row.right(), row.bottom(), row.height / 2f,
+                ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.pill(row),
                         Skin.mix(Skin.scaleAlpha(Skin.FILL_HOVER, s.hover), Skin.FILL, on));
             }
 
             float iconSize = 17f;
-            int tint = Skin.mix(s.hovered ? Skin.TEXT_MUTED : Skin.TEXT_FAINT, Skin.TEXT, on);
-            ui.icon(section.icon(), row.x + Skin.S3, row.centreY() - iconSize / 2f, iconSize, tint);
+            int tint = Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover), Skin.TEXT, on);
+            ui.icon(section.icon(), row.x + Skin.S3, row.centreY() - iconSize / 2f, iconSize,
+                    VisualEffects.hoverBrighten(tint, s.hover));
             // Faded in on the room there actually is for a word, not on how far
             // the tray has travelled. Keyed to travel, the first tenth of the
             // animation left about nine units beside each icon, which is enough
@@ -608,7 +645,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         }
     }
 
-    private void content(GlRenderer ui, Rect content) {
+    private void content(Renderer ui, Rect content) {
         Section section = sections.get(current);
         Rect inner = content.inset(Skin.S6, Skin.S5);
 
@@ -616,7 +653,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         // section change read as movement between pages rather than a redraw.
         float swap = pageSwap.value(Gfx.clock().seconds());
         float direction = current >= previous ? 1f : -1f;
-        float slide = (1f - swap) * 18f * direction;
+        float slide = (1f - swap) * 8f * direction;
 
         ui.clip(content.x, content.y, content.right(), content.bottom());
         ui.pushAlpha(swap);
@@ -675,6 +712,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     @Override
     public boolean handleFathomKey(char character, int keyCode) {
+        if (closing) {
+            return true;
+        }
         if (context.keybindCapture().active()) {
             KeybindCaptureState.Outcome result =
                     context.keybindCapture().keyboard(keyCode, Keyboard.KEY_ESCAPE);

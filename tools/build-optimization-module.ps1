@@ -74,6 +74,7 @@ Write-Host "javac: $javac"
 
 $classes = Join-Path $module 'build\classes'
 $testClasses = Join-Path $module 'build\test-classes'
+$resources = Join-Path $module 'src\main\resources'
 foreach ($directory in @($classes, $testClasses, $Output)) {
     if (Test-Path $directory) { Remove-Item $directory -Recurse -Force }
     New-Item -ItemType Directory -Force $directory | Out-Null
@@ -84,8 +85,11 @@ foreach ($directory in @($classes, $testClasses, $Output)) {
 # Only `core`. Globbing the whole source tree would pull in the fabric package
 # and fail on the first Minecraft import, which is the failure this split
 # exists to avoid.
-$sources = Get-ChildItem (Join-Path $module 'src\main\java\net\fathom\optimizations\core') -Recurse -Filter *.java |
-           ForEach-Object { $_.FullName }
+$sourceRoots = @(
+    (Join-Path $module 'src\main\java\net\fathom\optimizations\core'),
+    (Join-Path $module 'src\main\java\net\fathom\optimizations\generated')
+)
+$sources = Get-ChildItem $sourceRoots -Recurse -Filter *.java | ForEach-Object { $_.FullName }
 if (-not $sources) { throw "no core sources found under $module" }
 
 Write-Host ""
@@ -98,13 +102,19 @@ if (-not $SkipTests) {
     $testSources = Get-ChildItem (Join-Path $module 'src\test\java') -Recurse -Filter *.java |
                    ForEach-Object { $_.FullName }
     Write-Host "Compiling $($testSources.Count) test sources..."
-    & $javac -encoding UTF-8 -cp $classes -d $testClasses @testSources
+    # Compile the production sources into the isolated test output as well.
+    # This is reliable across the JDKs used on Windows, where javac has failed
+    # to discover package classes from an absolute directory classpath here.
+    & $javac -encoding UTF-8 -d $testClasses @sources @testSources
     if ($LASTEXITCODE -ne 0) { throw "javac failed on the test sources (exit $LASTEXITCODE)." }
 
-    foreach ($suite in @('CoreTests', 'OptTests', 'ConfigTests')) {
+    foreach ($suite in @(
+        'CoreTests', 'OptTests', 'ConfigTests', 'FeatureTests', 'HudTests',
+        'UiTests', 'ModuleTests', 'ProfileTests', 'ProfileLocationTests'
+    )) {
         Write-Host ""
         Write-Host "== $suite =="
-        & java -cp "$classes;$testClasses" "net.fathom.optimizations.core.$suite"
+        & java -cp "$testClasses;$resources" "net.fathom.optimizations.core.$suite"
         if ($LASTEXITCODE -ne 0) { throw "$suite failed (exit $LASTEXITCODE)." }
     }
 }

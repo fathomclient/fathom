@@ -5,6 +5,9 @@ import org.lwjgl.input.Keyboard;
 import net.minecraft.client.gui.screen.Screen;
 
 import net.fathom.optimizations.core.ui.anim.Motion;
+import net.fathom.optimizations.core.ui.anim.Spring;
+import net.fathom.optimizations.core.ui.anim.Timing;
+import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
@@ -12,6 +15,7 @@ import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.VisualEffects;
 
 /**
  * The renderer spike, and the control gallery.
@@ -51,8 +55,8 @@ public final class SpikeScreen extends Screen implements FathomScreen {
 
     private final Controls controls = new Controls();
     private final Pointer pointer = new Pointer();
-    private final Motion opening = new Motion(0f, Skin.HUB);
-    private final Motion panel = new Motion(1f, Skin.DRAWER);
+    private final Transition transition = new Transition(Timing.SCREEN_ENTER, Timing.SCREEN_EXIT);
+    private final Motion panel = new Motion(1f, Timing.PANEL);
 
     private boolean toggleOn = true;
     private boolean toggleOff;
@@ -62,7 +66,9 @@ public final class SpikeScreen extends Screen implements FathomScreen {
     private int option;
     private int colour = 0xC4303C;
     private double slider = 0.62d;
+    private final Spring scrollMotion = Spring.smooth(0f);
     private float scroll;
+    private float scrollTarget;
     private long previousHeap;
     private long allocated;
     private boolean closing;
@@ -74,10 +80,14 @@ public final class SpikeScreen extends Screen implements FathomScreen {
         buttons.clear();
         Gfx.renderer(client);
         Gfx.restartClock();
-        opening.to(1f, Gfx.clock().seconds());
+        transition.open(Gfx.clock().seconds());
+        closing = false;
         Gfx.frames().reset();
         pointer.reset();
         controls.reset();
+        scroll = 0f;
+        scrollTarget = 0f;
+        scrollMotion.set(0f);
         previousHeap = usedHeap();
     }
 
@@ -100,7 +110,7 @@ public final class SpikeScreen extends Screen implements FathomScreen {
             draw(ui);
             controls.end();
 
-            if (closing && opening.settled(Gfx.clock().seconds())) {
+            if (transition.finished(Gfx.clock().seconds())) {
                 if (!FathomNavigation.back(client, this)) {
                     throw new IllegalStateException("renderer spike has no navigation return target");
                 }
@@ -111,19 +121,25 @@ public final class SpikeScreen extends Screen implements FathomScreen {
     }
 
     private void draw(GlRenderer ui) {
-        float open = opening.value(Gfx.clock().seconds());
-        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.scaleAlpha(Skin.SCRIM, open));
+        float now = Gfx.clock().seconds();
+        float visible = transition.visibility(now);
+        float enter = transition.enter(now);
+        float exit = transition.exit(now);
+        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.scaleAlpha(Skin.SCRIM, visible));
 
         float width = Math.min(1100f, ui.width() - Skin.S8 * 2f);
         float height = Math.min(720f, ui.height() - Skin.S8 * 2f);
         Rect frame = new Rect((ui.width() - width) / 2f, (ui.height() - height) / 2f, width, height);
 
-        ui.pushAlpha(open);
-        ui.pushTransform(0f, (1f - open) * 14f, 0.985f + 0.015f * open, frame.centreX(), frame.centreY());
+        ui.pushAlpha(visible);
+        ui.pushTransform(0f, (1f - enter) * 8f + exit * 3f,
+                0.990f + 0.010f * enter - 0.004f * exit, frame.centreX(), frame.centreY());
 
-        ui.shadow(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_LG, 28f, Skin.SHADOW);
-        ui.rounded(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_LG, Skin.PANEL);
-        ui.outline(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_LG, Skin.HAIRLINE, Skin.EDGE_STRONG);
+        VisualEffects.panelShadow(ui, frame, Skin.R_CARD);
+        ui.rounded(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_CARD, Skin.PANEL);
+        VisualEffects.topLight(ui, frame.x, frame.y, frame.right(), frame.bottom(),
+                Skin.R_CARD, Skin.PANEL, 0.72f);
+        ui.outline(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE_STRONG);
 
         Rect inner = frame.inset(Skin.S6, Skin.S6);
         ui.text("Renderer spike", inner.x, inner.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
@@ -164,8 +180,8 @@ public final class SpikeScreen extends Screen implements FathomScreen {
         float cell = (area.width - gap * (cells.length - 1)) / cells.length;
         for (int index = 0; index < cells.length; index++) {
             Rect box = new Rect(area.x + (cell + gap) * index, area.y, cell, area.height);
-            ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_SM, Skin.FILL);
-            ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_SM, Skin.HAIRLINE, Skin.EDGE);
+            ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_CONTROL, Skin.FILL);
+            ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_CONTROL, Skin.HAIRLINE, Skin.EDGE);
             Controls.label(ui, cells[index][0], box.x + Skin.S3, box.y + Skin.S3);
             ui.text(cells[index][1], box.x + Skin.S3, box.y + 48f, Type.TITLE, Skin.TEXT);
             ui.text(Text.fit(ui, cells[index][2], Type.CAPTION, box.width - Skin.S3 * 2f), box.x + Skin.S3,
@@ -264,14 +280,14 @@ public final class SpikeScreen extends Screen implements FathomScreen {
         }
         float shown = panel.value(Gfx.clock().seconds());
         float grown = Skin.H_MD + (box.height - Skin.H_MD) * shown;
-        ui.rounded(box.x, box.y, box.right(), box.y + grown, Skin.R_MD, Skin.RAISED);
-        ui.outline(box.x, box.y, box.right(), box.y + grown, Skin.R_MD, Skin.HAIRLINE, Skin.EDGE);
+        ui.rounded(box.x, box.y, box.right(), box.y + grown, Skin.R_MEDIUM, Skin.RAISED);
+        ui.outline(box.x, box.y, box.right(), box.y + grown, Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
         ui.text(panelOpen ? "Click to close" : "Click to open", box.x + Skin.S3, box.y + Skin.H_MD / 2f + 4f,
                 Type.BODY, Skin.TEXT_MUTED);
         if (shown > 0.3f) {
             ui.pushAlpha((shown - 0.3f) / 0.7f);
             ui.gradient(box.x + Skin.S3, box.y + Skin.H_MD, box.right() - Skin.S3, box.y + Skin.H_MD + 44f,
-                    Skin.R_SM, Skin.ACCENT, Skin.ACCENT_DEEP);
+                    Skin.R_CONTROL, Skin.ACCENT, Skin.ACCENT_DEEP);
             ui.textCentred("Gradient, rounded, anti-aliased", box.centreX(), box.y + Skin.H_MD + 28f,
                     Type.BODY_STRONG, Skin.TEXT);
             float[] radii = {0f, 4f, 10f, 20f};
@@ -299,11 +315,13 @@ public final class SpikeScreen extends Screen implements FathomScreen {
 
         int notches = pointer.wheelNotches();
         if (notches != 0 && list.contains(pointer.x(), pointer.y())) {
-            scroll -= notches * 60f;
+            scrollTarget -= notches * 60f;
         }
-        scroll = Math.max(0f, Math.min(scroll, Math.max(0f, contentHeight - list.height)));
+        float maximum = Math.max(0f, contentHeight - list.height);
+        scrollTarget = Math.max(0f, Math.min(scrollTarget, maximum));
+        scroll = Math.max(0f, Math.min(scrollMotion.update(scrollTarget, controls.delta()), maximum));
 
-        ui.rounded(list.x, list.y, list.right(), list.bottom(), Skin.R_SM, Skin.FILL_SUNKEN);
+        ui.rounded(list.x, list.y, list.right(), list.bottom(), Skin.R_CONTROL, Skin.FILL_SUNKEN);
         ui.clip(list.x, list.y, list.right(), list.bottom());
         for (int index = 0; index < rows; index++) {
             Rect row = new Rect(list.x + 4f, list.y + index * rowHeight - scroll, list.width - 8f, rowHeight - 2f);
@@ -322,10 +340,13 @@ public final class SpikeScreen extends Screen implements FathomScreen {
 
         if (contentHeight > list.height) {
             float trackX = list.right() - 6f;
-            ui.rounded(trackX, list.y, trackX + 4f, list.bottom(), 2f, Skin.argb(0.18f, 0x000000));
-            float handle = Math.max(32f, list.height * list.height / contentHeight);
+            float trackTop = list.y + Skin.R_SMALL;
+            float trackHeight = Math.max(0f, list.height - Skin.R_SMALL * 2f);
+            ui.rounded(trackX, trackTop, trackX + 4f, trackTop + trackHeight, 2f,
+                    Skin.argb(0.18f, 0x000000));
+            float handle = Math.min(trackHeight, Math.max(32f, trackHeight * list.height / contentHeight));
             float progress = scroll / Math.max(1f, contentHeight - list.height);
-            float handleY = list.y + (list.height - handle) * progress;
+            float handleY = trackTop + (trackHeight - handle) * progress;
             ui.rounded(trackX, handleY, trackX + 4f, handleY + handle, 2f, Skin.argb(0.28f, 0xFFFFFF));
         }
     }
@@ -370,7 +391,9 @@ public final class SpikeScreen extends Screen implements FathomScreen {
                 return true;
             }
             closing = true;
-            opening.to(0f, Gfx.clock().seconds());
+            controls.setInputEnabled(false);
+            controls.closePopover();
+            transition.close(Gfx.clock().seconds());
             return true;
         }
         return false;

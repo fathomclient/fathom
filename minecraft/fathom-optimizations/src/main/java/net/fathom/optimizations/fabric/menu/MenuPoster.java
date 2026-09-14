@@ -18,7 +18,7 @@ import net.minecraft.client.gui.DrawableHelper;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.Tessellator;
 import net.minecraft.client.render.VertexFormats;
-import net.minecraft.client.util.Window;
+import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
 
 /** Static first-frame fallback and shared presentation for the animated menu background. */
 final class MenuPoster {
@@ -50,6 +50,15 @@ final class MenuPoster {
 
     private MenuPoster() {}
 
+    /** Release the classpath poster texture on a resource reload. Render thread only. */
+    static void dispose() {
+        if (texture > 0) {
+            GlStateManager.bindTexture(0);
+            GL11.glDeleteTextures(texture);
+        }
+        texture = -1;
+    }
+
     /** Draws the poster with CSS-style cover cropping and linear sampling. */
     static void draw(MinecraftClient client) {
         if (!bind()) {
@@ -61,16 +70,16 @@ final class MenuPoster {
 
     /** The plain field, for the scene that is not a picture at all. */
     static void drawFlat(MinecraftClient client) {
-        Window window = new Window(client);
-        DrawableHelper.fill(0, 0, (int) window.getScaledWidth(), (int) window.getScaledHeight(),
+        MinecraftGuiSize viewport = MinecraftGuiSize.get(client);
+        DrawableHelper.fill(0, 0, viewport.width(), viewport.height(),
                 0xFF05060A);
     }
 
     /** Draw one prepared frame and the common contrast treatment over it. */
     static void drawTexture(MinecraftClient client, int textureId) {
-        Window window = new Window(client);
-        int width = Math.max(1, (int) window.getScaledWidth());
-        int height = Math.max(1, (int) window.getScaledHeight());
+        MinecraftGuiSize viewport = MinecraftGuiSize.get(client);
+        int width = viewport.width();
+        int height = viewport.height();
         DrawableHelper.fill(0, 0, width, height, 0xFF050506);
         if (textureId <= 0) {
             return;

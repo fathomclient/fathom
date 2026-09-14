@@ -123,7 +123,7 @@ final class PerformanceSection implements Section {
             row(context, switches, entries.get(index), row);
         }
         ui.unclip();
-        scroller.rail(ui, body);
+        scroller.rail(ui, body, context.pointer(), context.now());
     }
 
     private void qualityRow(HubContext context, Rect area) {
@@ -177,8 +177,8 @@ final class PerformanceSection implements Section {
 
     private void meter(HubContext context, Rect area, String label, String value, String unit) {
         Renderer ui = context.ui();
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_LG, Skin.FILL);
-        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_LG, Skin.HAIRLINE, Skin.EDGE);
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CARD, Skin.FILL);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
         Controls.label(ui, label, area.x + Skin.S3, area.y + Skin.S3);
         float baseline = area.bottom() - Skin.S4;
         float width = ui.text(value, area.x + Skin.S3, baseline, Type.DISPLAY, Skin.TEXT);
@@ -243,7 +243,8 @@ final class PerformanceSection implements Section {
                     : entry.implementedInCore() ? "Written, not hooked up" : "Planned";
             float badgeWidth = Controls.badgeWidth(ui, state);
             Rect badge = row.vcentreRight(Skin.S3, badgeWidth, 20f);
-            Controls.badge(ui, state, badge, jvm ? Skin.WARN : Skin.TEXT_DISABLED);
+            controls.badge(ui, "perf.badge." + entry.id(), state, badge,
+                    jvm ? Skin.WARN : Skin.TEXT_DISABLED);
             room = badge.x - row.x - Skin.S5;
             if (jvm && badge.contains(context.pointer().x(), context.pointer().y())
                     && context.pointer().released(0)) {

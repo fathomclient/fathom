@@ -9,12 +9,12 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.Tessellator;
 import net.minecraft.client.render.VertexFormats;
-import net.minecraft.client.util.Window;
 
 import net.fathom.optimizations.core.ui.Colour;
 import net.fathom.optimizations.core.ui.UiScale;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
+import net.fathom.optimizations.core.ui.render.RoundedGeometry;
 import net.fathom.optimizations.core.ui.render.Type;
 
 /**
@@ -50,6 +50,7 @@ import net.fathom.optimizations.core.ui.render.Type;
 public final class GlRenderer implements Renderer {
 
     private static final int MAX_DEPTH = 32;
+    private static final int LOGGED_IMBALANCES = 5;
 
     private final MinecraftClient client;
     private final Batch batch = new Batch(this);
@@ -76,6 +77,8 @@ public final class GlRenderer implements Renderer {
     private boolean created;
     private boolean inFrame;
     private boolean highQuality = true;
+    /** One render-thread snapshot, reused every frame to avoid hot-path garbage. */
+    private final GlStateSnapshot frameState = new GlStateSnapshot();
     private GlStateSnapshot inheritedState;
 
     /** Device pixels to Minecraft's scaled units — the projection, undone. */
@@ -88,16 +91,20 @@ public final class GlRenderer implements Renderer {
     private float zoom = 1f;
     private final float[] transformStack = new float[MAX_DEPTH * 3];
     private int transformDepth;
+    private int transformOverflow;
 
     /** Current clip, in device pixels, or null-ish when nothing is clipped. */
     private final float[] clipStack = new float[MAX_DEPTH * 4];
     private int clipDepth;
+    private int clipOverflow;
 
     private float alpha = 1f;
     private final float[] alphaStack = new float[MAX_DEPTH];
     private int alphaDepth;
+    private int alphaOverflow;
 
     private final Stats stats = new Stats();
+    private int imbalanceReports;
 
     /** What the last frame cost, for the diagnostics section and the spike. */
     public static final class Stats {
@@ -160,7 +167,7 @@ public final class GlRenderer implements Renderer {
         if (inFrame) {
             throw new IllegalStateException("a Fathom frame is already open");
         }
-        GlStateSnapshot snapshot = GlStateSnapshot.capture();
+        GlStateSnapshot snapshot = frameState.captureInto();
         try {
             if (!created) {
                 sheet.create();
@@ -171,27 +178,36 @@ public final class GlRenderer implements Renderer {
                 stats.fallbackFont = fonts.usingFallback();
             }
 
-            UiScale next = new UiScale(client.width, client.height, preference);
-            if (UiScale.differs(next.scale(), ui.scale())) {
+            int framebufferWidth = Math.max(1, client.width);
+            int framebufferHeight = Math.max(1, client.height);
+            float nextScale = UiScale.scaleFor(framebufferHeight, preference);
+            boolean dimensionsChanged = framebufferWidth != ui.framebufferWidth()
+                    || framebufferHeight != ui.framebufferHeight();
+            if (UiScale.differs(nextScale, ui.scale())) {
                 // The rasters are only right for one scale. Rebuilding them is a
                 // few milliseconds and happens when a window is resized, which is
                 // already a frame nobody is measuring.
                 fonts.reset();
                 icons.reset();
             }
-            ui = next;
+            if (dimensionsChanged || UiScale.differs(nextScale, ui.scale())) {
+                ui = new UiScale(framebufferWidth, framebufferHeight, preference);
+            }
 
-            Window window = new Window(client);
-            vertexScaleX = (float) (window.getScaledWidth() / Math.max(1, client.width));
-            vertexScaleY = (float) (window.getScaledHeight() / Math.max(1, client.height));
+            MinecraftGuiSize minecraftUi = MinecraftGuiSize.get(client);
+            vertexScaleX = minecraftUi.width() / (float) framebufferWidth;
+            vertexScaleY = minecraftUi.height() / (float) framebufferHeight;
 
             offsetX = 0f;
             offsetY = 0f;
             zoom = 1f;
             transformDepth = 0;
+            transformOverflow = 0;
             clipDepth = 0;
+            clipOverflow = 0;
             alpha = 1f;
             alphaDepth = 0;
+            alphaOverflow = 0;
             stats.reset();
             stats.glyphPages = fonts.pageCount();
             stats.iconEntries = icons.count();
@@ -231,7 +247,13 @@ public final class GlRenderer implements Renderer {
         }
         try {
             batch.flush();
+            reportImbalance();
             clipDepth = 0;
+            clipOverflow = 0;
+            transformDepth = 0;
+            transformOverflow = 0;
+            alphaDepth = 0;
+            alphaOverflow = 0;
         } finally {
             GlStateSnapshot snapshot = inheritedState;
             inheritedState = null;
@@ -244,6 +266,16 @@ public final class GlRenderer implements Renderer {
 
     public boolean inFrame() {
         return inFrame;
+    }
+
+    private void reportImbalance() {
+        int open = transformDepth + transformOverflow + clipDepth + clipOverflow
+                + alphaDepth + alphaOverflow;
+        if (open > 0 && imbalanceReports < LOGGED_IMBALANCES) {
+            imbalanceReports++;
+            System.err.println("[Fathom] GL frame ended with " + open
+                    + " unmatched clip/alpha/transform push(es); a component is not popping what it pushed");
+        }
     }
 
     /**
@@ -263,6 +295,9 @@ public final class GlRenderer implements Renderer {
 
     /** Drop every texture. For a resource reload or a shutdown. */
     public void dispose() {
+        if (inFrame) {
+            endFrame();
+        }
         batch.flush();
         fonts.delete();
         icons.delete();
@@ -375,7 +410,7 @@ public final class GlRenderer implements Renderer {
      */
     private float cornerRadius(float radius, float width, float height) {
         float limit = Math.min(width / 2f, height / 2f);
-        float device = Math.min(deviceSize(radius), limit);
+        float device = RoundedGeometry.radius(deviceSize(radius), width, height);
         if (device < 0.6f) {
             return device;
         }
@@ -422,15 +457,13 @@ public final class GlRenderer implements Renderer {
         float rad = cornerRadius(radius, r - l, b - t);
 
         batch.bind(sheet.texture());
-        if (!highQuality) {
-            // The fallback is intentionally cheaper, not merely different:
-            // four square-cornered quads and no curve masks or arc stamps.
-            solid(l, t, r, t + w, colour);
-            solid(l, b - w, r, b, colour);
-            solid(l, t + w, l + w, b - w, colour);
-            solid(r - w, t + w, r, b - w, colour);
-            return;
-        }
+        // Border geometry is never a quality toggle. The old fast path drew
+        // four square quads here, so a rounded control kept its curved fill but
+        // acquired a blocky rectangular outline whenever NanoVG was unavailable
+        // or the saved UI-quality preference was Low. Exact ring masks are
+        // cached by device radius and width; after the first occurrence this is
+        // the same four corner quads as the square path, with no per-frame
+        // rasterisation or allocation.
         // The four straight sides, drawn inside the rectangle so a bordered box
         // is the size it says it is.
         solid(l + rad, t, r - rad, t + w, colour);
@@ -726,6 +759,10 @@ public final class GlRenderer implements Renderer {
 
     @Override
     public void clip(float left, float top, float right, float bottom) {
+        if (clipDepth >= MAX_DEPTH || clipOverflow > 0) {
+            clipOverflow++;
+            return;
+        }
         float l = deviceX(left);
         float t = deviceY(top);
         float r = deviceX(right);
@@ -736,9 +773,6 @@ public final class GlRenderer implements Renderer {
             t = Math.max(t, clipStack[base + 1]);
             r = Math.min(r, clipStack[base + 2]);
             b = Math.min(b, clipStack[base + 3]);
-        }
-        if (clipDepth >= MAX_DEPTH) {
-            return;
         }
         int base = clipDepth * 4;
         clipStack[base] = l;
@@ -751,6 +785,10 @@ public final class GlRenderer implements Renderer {
 
     @Override
     public void unclip() {
+        if (clipOverflow > 0) {
+            clipOverflow--;
+            return;
+        }
         if (clipDepth == 0) {
             return;
         }
@@ -780,6 +818,7 @@ public final class GlRenderer implements Renderer {
     @Override
     public void pushAlpha(float value) {
         if (alphaDepth >= MAX_DEPTH) {
+            alphaOverflow++;
             return;
         }
         alphaStack[alphaDepth++] = alpha;
@@ -788,6 +827,10 @@ public final class GlRenderer implements Renderer {
 
     @Override
     public void popAlpha() {
+        if (alphaOverflow > 0) {
+            alphaOverflow--;
+            return;
+        }
         if (alphaDepth == 0) {
             alpha = 1f;
             return;
@@ -803,6 +846,7 @@ public final class GlRenderer implements Renderer {
     @Override
     public void pushTransform(float translateX, float translateY, float scale, float originX, float originY) {
         if (transformDepth >= MAX_DEPTH) {
+            transformOverflow++;
             return;
         }
         int base = transformDepth * 3;
@@ -821,6 +865,10 @@ public final class GlRenderer implements Renderer {
 
     @Override
     public void popTransform() {
+        if (transformOverflow > 0) {
+            transformOverflow--;
+            return;
+        }
         if (transformDepth == 0) {
             return;
         }

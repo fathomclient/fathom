@@ -1,29 +1,39 @@
 package net.fathom.optimizations.core.ui.anim;
 
-import net.fathom.optimizations.generated.FathomTheme;
-
 /**
- * One easing family, and the three durations that go with it.
+ * The intentionally small set of easing curves used by Fathom animation.
  *
- * <h2>Why one family</h2>
+ * <h2>Why one dominant family</h2>
  *
- * <p>The launcher has a single {@code --ease} token and three durations. An
+ * <p>The launcher has a single dominant {@code --ease} token. An
  * interface where different controls decelerate differently reads as several
  * interfaces, and nobody can say why. The curve here is the launcher's:
  * cubic-bezier(0.2, 0.8, 0.2, 1).
  *
- * <p>Ease-<em>out</em> rather than ease-in-out because a transition the user
+ * <p>The standard is ease-<em>out</em> rather than ease-in-out because a transition the user
  * caused should begin at full speed. They already know it started; they pressed
- * the thing. Ease-in-out is for motion that begins on its own.
+ * the thing. Smooth is for motion that begins on its own; exit is a shorter,
+ * quieter ease-out. Those are the only exceptions.
  */
 public final class Ease {
 
-    /** Selection marks, hovers, toggles. Seconds. */
-    public static final float FAST = FathomTheme.MOTION_FAST;
-    /** The default: section changes, popovers, status. */
-    public static final float NORMAL = FathomTheme.MOTION_NORMAL;
-    /** A screen opening or closing. Nothing else without a reason. */
-    public static final float SLOW = FathomTheme.MOTION_SLOW;
+    /** The only interpolation curves used by ordinary UI motion. */
+    public enum Curve {
+        /** Immediate response followed by a controlled deceleration. */
+        STANDARD {
+            @Override public float apply(float amount) { return Ease.out(amount); }
+        },
+        /** Symmetric motion for content that moves without a direct press. */
+        SMOOTH {
+            @Override public float apply(float amount) { return Ease.inOut(amount); }
+        },
+        /** A prompt, slightly quieter deceleration used only for dismissal. */
+        EXIT {
+            @Override public float apply(float amount) { return Ease.exit(amount); }
+        };
+
+        public abstract float apply(float amount);
+    }
 
     private Ease() {}
 
@@ -73,15 +83,10 @@ public final class Ease {
                 + 3f * t * t * (1f - second);
     }
 
-    /**
-     * The same curve reversed, for something leaving.
-     *
-     * <p>Used only where a thing has to accelerate away — a dismissed toast.
-     * A control that eased in should ease out on the same curve, not this one.
-     */
-    public static float in(float t) {
+    /** A responsive ease-out for dismissal; shorter and quieter than entry. */
+    public static float exit(float t) {
         float x = clamp01(t);
-        return x * x * x;
+        return x * (2f - x);
     }
 
     /** For motion the interface starts by itself. Rare, on purpose. */
@@ -97,6 +102,15 @@ public final class Ease {
     /** Linear interpolation, for colours and positions. */
     public static float mix(float from, float to, float amount) {
         return from + (to - from) * clamp01(amount);
+    }
+
+    /** Sample a delayed, time-based transition without allocating a Motion. */
+    public static float sample(float now, float startedAt, float delay, float duration, Curve curve) {
+        if (duration <= 0f) {
+            return now >= startedAt + delay ? 1f : 0f;
+        }
+        float progress = clamp01((now - startedAt - Math.max(0f, delay)) / duration);
+        return (curve == null ? Curve.STANDARD : curve).apply(progress);
     }
 
     public static float clamp01(float value) {

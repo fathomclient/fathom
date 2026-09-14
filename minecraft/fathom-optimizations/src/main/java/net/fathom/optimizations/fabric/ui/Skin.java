@@ -1,6 +1,9 @@
 package net.fathom.optimizations.fabric.ui;
 
 import net.fathom.optimizations.core.ui.Colour;
+import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.render.Renderer;
+import net.fathom.optimizations.core.ui.render.RoundedGeometry;
 import net.fathom.optimizations.generated.FathomTheme;
 
 /**
@@ -154,11 +157,23 @@ public final class Skin {
     // Geometry
     // -----------------------------------------------------------------------
 
-    public static final float R_XS = FathomTheme.DIM_R_XS;
-    public static final float R_SM = FathomTheme.DIM_R_SM;
-    public static final float R_MD = FathomTheme.DIM_R_MD;
-    public static final float R_LG = FathomTheme.DIM_R_LG;
-    public static final float R_XL = FathomTheme.DIM_R_XL;
+    /** Small inset shapes: swatches, tags and compact tooltips. */
+    public static final float R_SMALL = FathomTheme.DIM_R_XS;
+    /** Ordinary buttons, fields and navigation rows. */
+    public static final float R_CONTROL = FathomTheme.DIM_R_SM;
+    /** Search, segmented controls, popovers and compact floating panels. */
+    public static final float R_MEDIUM = FathomTheme.DIM_R_MD;
+    /** Cards, drawers and substantial overlays. */
+    public static final float R_CARD = FathomTheme.DIM_R_LG;
+    /** The outer application panel and large destination controls. */
+    public static final float R_PANEL = FathomTheme.DIM_R_XL;
+
+    // Generated-scale aliases retained for code outside the component layer.
+    public static final float R_XS = R_SMALL;
+    public static final float R_SM = R_CONTROL;
+    public static final float R_MD = R_MEDIUM;
+    public static final float R_LG = R_CARD;
+    public static final float R_XL = R_PANEL;
 
     /** Three control heights. A control that is none of these will not line up. */
     public static final float H_SM = FathomTheme.DIM_H_SM;
@@ -205,31 +220,6 @@ public final class Skin {
     public static final float MIN_HEIGHT = FathomTheme.DIM_HUB_MIN_HEIGHT;
 
     // -----------------------------------------------------------------------
-    // Motion — seconds, because that is what the animation clock speaks
-    // -----------------------------------------------------------------------
-
-    public static final float FAST = FathomTheme.MOTION_FAST;
-    public static final float NORMAL = FathomTheme.MOTION_NORMAL;
-    public static final float SLOW = FathomTheme.MOTION_SLOW;
-    public static final float HOVER = FathomTheme.MOTION_HOVER;
-    public static final float PRESS = FathomTheme.MOTION_PRESS;
-    public static final float TOGGLE = FathomTheme.MOTION_TOGGLE;
-    public static final float SELECTION = FathomTheme.MOTION_SELECTION;
-
-    /**
-     * The gap between one row arriving and the next.
-     *
-     * <p>22ms, the launcher's own. Long enough that a list reads as arriving in
-     * order, short enough that the last row is not still on its way when the
-     * pointer reaches the first.
-     */
-    public static final float STAGGER = FathomTheme.MOTION_STAGGER;
-    public static final float SIDEBAR = FathomTheme.MOTION_SIDEBAR;
-    public static final float DRAWER = FathomTheme.MOTION_DRAWER;
-    public static final float HUB = FathomTheme.MOTION_HUB;
-    public static final float HUB_CLOSE = FathomTheme.MOTION_HUB_CLOSE;
-
-    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
@@ -247,5 +237,31 @@ public final class Skin {
 
     public static int mix(int from, int to, float amount) {
         return Colour.mix(from, to, amount);
+    }
+
+    /** Clamp a semantic radius to geometry that can physically contain it. */
+    public static float radius(float semanticRadius, Rect area) {
+        return RoundedGeometry.radius(semanticRadius, area.width, area.height);
+    }
+
+    /** A true pill is always half the shorter dimension, never a magic radius. */
+    public static float pill(Rect area) {
+        return RoundedGeometry.pill(area.width, area.height);
+    }
+
+    /** Radius for a concentric child inset from a rounded parent. */
+    public static float innerRadius(float outerRadius, Rect outer, float inset) {
+        return RoundedGeometry.insetRadius(outerRadius, outer.width, outer.height, inset);
+    }
+
+    /** Align a static edge to the framebuffer at every GUI scale. */
+    public static float snap(Renderer ui, float logical) {
+        return RoundedGeometry.snap(logical, ui.scale());
+    }
+
+    /** Align all four outer edges of a static rectangle to device pixels. */
+    public static Rect pixelAligned(Renderer ui, Rect area) {
+        return Rect.of(snap(ui, area.x), snap(ui, area.y),
+                snap(ui, area.right()), snap(ui, area.bottom()));
     }
 }

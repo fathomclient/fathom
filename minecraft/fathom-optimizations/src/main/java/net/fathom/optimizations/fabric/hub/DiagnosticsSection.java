@@ -14,6 +14,7 @@ import net.fathom.optimizations.core.instrument.Session;
 import net.fathom.optimizations.core.module.LaunchSession;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.Text;
+import net.fathom.optimizations.core.ui.render.FrameRenderer;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
@@ -209,7 +210,7 @@ final class DiagnosticsSection implements Section {
             }
         }
         ui.unclip();
-        scroller.rail(ui, body);
+        scroller.rail(ui, body, context.pointer(), context.now());
     }
 
     /**
@@ -337,8 +338,14 @@ final class DiagnosticsSection implements Section {
                         + " ms"));
         out.add(fact("Fathom draw",
                 millis(frames.uiMeanMillis()) + " ms mean, p99 " + millis(frames.uiPercentileMillis(0.99f))));
+        Renderer activeUi = context.ui();
+        if (activeUi instanceof FrameRenderer) {
+            out.add(fact("Backend", ((FrameRenderer) activeUi).describe()));
+        } else {
+            out.add(fact("Backend", "Fathom GL fallback"));
+        }
         GlRenderer renderer = Gfx.peek();
-        if (renderer != null) {
+        if (!Gfx.vectorFrame() && renderer != null) {
             GlRenderer.Stats stats = renderer.stats();
             out.add(fact("Geometry", stats.lastQuads + " quads in " + stats.lastDraws + " draw calls"));
             out.add(fact("Caches", stats.glyphPages + " glyph pages, " + stats.iconEntries + " icons"));
@@ -358,6 +365,14 @@ final class DiagnosticsSection implements Section {
             if (stats.fallbackFont) {
                 out.add(warning("Typeface", "Geist missing, using a fallback"));
             }
+        } else {
+            int framebufferWidth = Math.round(activeUi.width() * activeUi.scale());
+            int framebufferHeight = Math.round(activeUi.height() * activeUi.scale());
+            out.add(fact("Scale", String.format(java.util.Locale.ROOT, "%.2f", Float.valueOf(activeUi.scale()))
+                    + "× on " + framebufferWidth + "×" + framebufferHeight
+                    + (context.hud().prefs().scaleIsAutomatic() ? " (automatic)" : " ("
+                            + context.hud().prefs().scaleLabel() + ")")));
+            out.add(fact("Animations", String.valueOf(context.controls().animationCount())));
         }
 
         out.add(heading("Client"));

@@ -13,6 +13,16 @@ public final class Colour {
 
     private Colour() {}
 
+    /** An opaque colour from {@code 0xRRGGBB}. */
+    public static int rgb(int rgb) {
+        return 0xFF000000 | (rgb & 0xFFFFFF);
+    }
+
+    /** Pack 0-255 channels. Out-of-range channels are clamped. */
+    public static int rgba(int red, int green, int blue, int alpha) {
+        return (channel(alpha) << 24) | (channel(red) << 16) | (channel(green) << 8) | channel(blue);
+    }
+
     /** Pack an alpha fraction and an RGB triple. */
     public static int argb(float alpha, int rgb) {
         int a = Math.round(clamp01(alpha) * 255f);
@@ -64,6 +74,10 @@ public final class Colour {
     /** Whether drawing this would change anything. */
     public static boolean invisible(int colour) {
         return ((colour >>> 24) & 0xFF) == 0;
+    }
+
+    private static int channel(int value) {
+        return value < 0 ? 0 : (value > 255 ? 255 : value);
     }
 
     private static int blend(int from, int to, float t) {

@@ -23,6 +23,7 @@ import net.minecraft.client.MinecraftClient;
 
 /** Buffered, independently clocked presentation of the prepared menu footage. */
 final class MenuVideo {
+    private static final String[] QUALITY_CHOICES = {"High", "Auto", "Low", "Off"};
 
     private static final String ROOT =
             "/assets/fathom-optimizations/textures/menu/bg_5rain/";
@@ -137,6 +138,21 @@ final class MenuVideo {
         }
     }
 
+    /** Stop decoding and release the streaming texture on a resource reload. */
+    static synchronized void dispose() {
+        stop();
+        if (texture > 0) {
+            GlStateManager.bindTexture(0);
+            GL11.glDeleteTextures(texture);
+        }
+        texture = -1;
+        textureWidth = 0;
+        textureHeight = 0;
+        displayedIndex = -1;
+        configured = "";
+        nextFrameAt = 0L;
+    }
+
     static long uploadedFrames() {
         return uploadedFrames;
     }
@@ -198,7 +214,7 @@ final class MenuVideo {
 
     private static String normalise(String raw) {
         if (raw != null) {
-            for (String choice : new String[] {"High", "Auto", "Low", "Off"}) {
+            for (String choice : QUALITY_CHOICES) {
                 if (choice.equalsIgnoreCase(raw.trim())) return choice;
             }
         }

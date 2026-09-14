@@ -11,13 +11,21 @@ import net.fathom.optimizations.core.ui.VideoOptionDomain;
 import net.fathom.optimizations.core.ui.anim.Clock;
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
+import net.fathom.optimizations.core.ui.anim.Spring;
+import net.fathom.optimizations.core.ui.anim.Timing;
+import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.ResponsiveGrid;
 import net.fathom.optimizations.core.ui.layout.Text;
+import net.fathom.optimizations.core.ui.render.CanvasState;
+import net.fathom.optimizations.core.ui.render.FrameScale;
 import net.fathom.optimizations.core.ui.render.Icon;
+import net.fathom.optimizations.core.ui.render.ImageRef;
+import net.fathom.optimizations.core.ui.render.Paint;
+import net.fathom.optimizations.core.ui.render.RoundedGeometry;
+import net.fathom.optimizations.core.ui.render.TextAlign;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
-import net.fathom.optimizations.generated.FathomTheme;
 
 /**
  * The interface layer, tested without a game.
@@ -53,6 +61,10 @@ public final class UiTests {
         aReversalLeavesFromWhereItIs();
         aMotionNeverQueuesTheTripItWasOn();
         askingForTheTargetItAlreadyHasIsIgnored();
+        aTripOverrideDoesNotBecomeTheNextTripsDefault();
+        aMotionMapsOpacityGeometryAndColour();
+        anImmediateCloseCannotFinishOpeningFirst();
+        aSmoothSpringIsFrameRateIndependentAndBounded();
         theCurveStartsFastAndEndsExactly();
         theSharedDurationsAreWithinTheSpecifiedBands();
 
@@ -67,11 +79,27 @@ public final class UiTests {
         aRectangleSplitsWithoutDrifting();
         aRectangleKnowsWhatIsInsideIt();
         insettingNeverProducesANegativeSize();
+        roundedGeometryIsBoundedAndConcentric();
+        staticEdgesSnapAtEveryMinecraftGuiScale();
         responsiveGridUsesAvailableWidthWithoutClipping();
 
         // -- colour -----------------------------------------------------------
         opacityScalingIsRelativeNotAbsolute();
         validFovIsPreservedAndOnlyCorruptionIsRepaired();
+
+        colourChannelsPackAndClamp();
+
+        // -- vector renderer state -------------------------------------------
+        nestedClipsIntersect();
+        aReplacingClipEscapesItsParentAndPopsBack();
+        clipsAreStoredWhereTheyWereDrawn();
+        overflowingPushesStillBalance();
+        opacityMultipliesDownTheStack();
+        offscreenShapesAreCulled();
+        theMinecraftFrameScaleMatchesVanillaCoordinates();
+        theFathomFrameScaleIsUiScale();
+        alignmentFillsInAMissingHalf();
+        resourceImagesAreInternedAndPaintsAreReusable();
 
         // -- navigation -----------------------------------------------------
         nestedScreensReturnToTheExactObjectThatOpenedThem();
@@ -84,6 +112,151 @@ public final class UiTests {
         onlyTheUnfocusedPolicyLowersAValidLimit();
 
         report();
+    }
+
+    // -----------------------------------------------------------------------
+    // Vector renderer state
+    // -----------------------------------------------------------------------
+
+    static void colourChannelsPackAndClamp() {
+        check(Colour.rgb(0x841C24) == 0xFF841C24, "rgb is opaque");
+        check(Colour.rgba(132, 28, 36, 128) == 0x80841C24, "channels pack as ARGB");
+        check(Colour.rgba(300, -5, 0, 255) == 0xFFFF0000, "out-of-range channels clamp");
+        pass("colour channels pack and clamp");
+    }
+
+    static void nestedClipsIntersect() {
+        CanvasState state = new CanvasState();
+        state.intersectClip(0f, 0f, 100f, 100f);
+        state.intersectClip(50f, -20f, 150f, 60f);
+        check(state.clipLeft() == 50f && state.clipTop() == 0f
+                && state.clipRight() == 100f && state.clipBottom() == 60f, "a nested clip is the intersection");
+        state.intersectClip(200f, 200f, 300f, 300f);
+        check(state.clipRight() >= state.clipLeft() && state.clipBottom() >= state.clipTop(),
+                "disjoint clips give an empty rectangle, never a negative one");
+        check(state.popClip() && state.popClip(), "each push pops");
+        check(state.clipLeft() == 0f && state.clipRight() == 100f, "and the outer clip is back");
+        check(state.popClip() && !state.clipped(), "until nothing is clipped");
+        check(!state.popClip(), "a pop too many is reported, not a crash");
+        pass("nested clips intersect");
+    }
+
+    static void aReplacingClipEscapesItsParentAndPopsBack() {
+        CanvasState state = new CanvasState();
+        state.intersectClip(0f, 0f, 100f, 100f);
+        state.pushClip(80f, 80f, 300f, 300f);
+        check(state.clipRight() == 300f, "a replacing clip ignores its parent");
+        state.pushUnclipped();
+        check(!state.clipped(), "an unclipped scope clips nothing");
+        state.intersectClip(10f, 10f, 20f, 20f);
+        check(state.clipLeft() == 10f && state.clipRight() == 20f, "and a clip inside it starts afresh");
+        state.popClip();
+        state.popClip();
+        state.popClip();
+        check(state.clipped() && state.clipRight() == 100f, "popping returns to the original clip");
+        pass("a replacing clip escapes its parent and pops back");
+    }
+
+    static void clipsAreStoredWhereTheyWereDrawn() {
+        CanvasState state = new CanvasState();
+        state.pushTransform(10f, 20f, 2f, 0f, 0f);
+        state.intersectClip(0f, 0f, 50f, 50f);
+        check(state.clipLeft() == 10f && state.clipTop() == 20f
+                && state.clipRight() == 110f && state.clipBottom() == 120f, "a clip is transformed when pushed");
+        state.popTransform();
+        check(state.clipRight() == 110f, "and a later transform does not move it");
+        state.pushTransform(0f, 0f, 2f, 50f, 50f);
+        check(state.frameX(50f) == 50f && state.frameX(60f) == 70f, "scaling is about the origin given");
+        pass("clips are stored where they were drawn");
+    }
+
+    static void overflowingPushesStillBalance() {
+        CanvasState state = new CanvasState();
+        int pushes = CanvasState.MAX_DEPTH + 5;
+        for (int i = 0; i < pushes; i++) {
+            state.pushAlpha(0.9f);
+            state.intersectClip(0f, 0f, 100f - i, 100f);
+            state.pushTransform(1f, 0f, 1f, 0f, 0f);
+        }
+        check(state.unbalanced() == pushes * 3, "every push is counted, stored or not");
+        boolean matched = true;
+        for (int i = 0; i < pushes; i++) {
+            matched &= state.popAlpha() && state.popClip() && state.popTransform();
+        }
+        check(matched, "every pop matches a push");
+        check(state.unbalanced() == 0 && state.alpha() == 1f && !state.clipped() && state.offsetX() == 0f,
+                "and the state is back where it started");
+        pass("overflowing pushes still balance");
+    }
+
+    static void opacityMultipliesDownTheStack() {
+        CanvasState state = new CanvasState();
+        state.pushAlpha(0.5f);
+        state.pushAlpha(0.5f);
+        check(Math.abs(state.alpha() - 0.25f) < 0.0001f, "opacities multiply");
+        state.pushAlpha(Float.NaN);
+        check(state.alpha() == 0f, "NaN is transparent rather than everything breaking");
+        state.popAlpha();
+        state.popAlpha();
+        check(Math.abs(state.alpha() - 0.5f) < 0.0001f, "and pop back");
+        pass("opacity multiplies down the stack");
+    }
+
+    static void offscreenShapesAreCulled() {
+        CanvasState state = new CanvasState();
+        check(!state.culled(-50f, -50f, -10f, -10f), "nothing is culled without a clip");
+        state.intersectClip(0f, 0f, 100f, 100f);
+        check(state.culled(120f, 0f, 150f, 20f), "a shape right of the clip is culled");
+        check(!state.culled(90f, 90f, 150f, 150f), "one overlapping it is not");
+        state.pushAlpha(0f);
+        check(state.culled(10f, 10f, 20f, 20f), "anything at zero opacity is culled");
+        pass("offscreen shapes are culled");
+    }
+
+    static void theMinecraftFrameScaleMatchesVanillaCoordinates() {
+        FrameScale scale = new FrameScale().set(FrameScale.Mode.MINECRAFT, 1920, 1080, 3, 1f);
+        check(scale.ratio() == 3f, "the ratio is the GUI scale factor");
+        check(scale.logicalWidth() == 640f && scale.logicalHeight() == 360f, "logical units are vanilla's scaled pixels");
+        check(scale.mouseY(1079) == 0f, "the top device row is logical zero");
+        pass("the Minecraft frame scale matches vanilla coordinates");
+    }
+
+    static void theFathomFrameScaleIsUiScale() {
+        FrameScale scale = new FrameScale().set(FrameScale.Mode.FATHOM, 2560, 1440, 4, 1f);
+        check(Math.abs(scale.ratio() - UiScale.scaleFor(1440, 1f)) < 0.0001f, "Fathom's scale ignores the GUI scale");
+        check(Math.abs(scale.logicalHeight() - 720f) < 0.01f, "and keeps the reference height");
+        check(new FrameScale().set(FrameScale.Mode.MINECRAFT, 0, 0, 0, 1f).ratio() >= 1f,
+                "a degenerate framebuffer never divides by zero");
+        pass("the Fathom frame scale is UiScale");
+    }
+
+    static void alignmentFillsInAMissingHalf() {
+        check(TextAlign.normalise(TextAlign.CENTER) == (TextAlign.CENTER | TextAlign.BASELINE),
+                "vertical defaults to baseline");
+        check(TextAlign.normalise(TextAlign.MIDDLE) == (TextAlign.LEFT | TextAlign.MIDDLE),
+                "horizontal defaults to left");
+        check(TextAlign.normalise(TextAlign.LEFT | TextAlign.RIGHT | TextAlign.TOP) == (TextAlign.LEFT | TextAlign.TOP),
+                "a contradictory alignment is repaired, not honoured");
+        check(TextAlign.offsetX(TextAlign.RIGHT, 40f) == -40f && TextAlign.offsetX(TextAlign.CENTER, 40f) == -20f,
+                "offsets follow the alignment");
+        pass("alignment fills in a missing half");
+    }
+
+    static void resourceImagesAreInternedAndPaintsAreReusable() {
+        check(ImageRef.resource("/a/b.png") == ImageRef.resource("/a/b.png"),
+                "a resource is one reference, however often it is asked for");
+        Paint paint = new Paint();
+        check(paint.vertical(0f, 10f, 0xFF000000, 0x00000000) == paint && paint.kind() == Paint.Kind.LINEAR,
+                "a paint reshapes itself");
+        check(paint.solid(0).invisible(), "an invisible paint says so");
+        boolean refused = false;
+        try {
+            ImageRef.pixels(true).update(java.nio.ByteBuffer.allocate(4), 1, 1);
+        } catch (IllegalArgumentException expected) {
+            refused = true;
+        }
+        check(refused, "pixels must be in a direct buffer");
+        pass("resource images are interned and paints are reusable");
     }
 
     // -----------------------------------------------------------------------
@@ -219,21 +392,79 @@ public final class UiTests {
         pass("asking for the target it already has is ignored");
     }
 
+    static void aTripOverrideDoesNotBecomeTheNextTripsDefault() {
+        Motion motion = new Motion(0f, 0.24f, Ease.Curve.STANDARD);
+        motion.to(1f, 0f, 0.10f, Ease.Curve.EXIT);
+        check(motion.settled(0.10f), "the overridden trip uses its requested duration");
+        motion.to(0f, 0.10f);
+        check(!motion.settled(0.20f), "the next trip restores the motion's default duration");
+        check(motion.value(0.34f) == 0f, "and reaches the reversed target on that default duration");
+        pass("a trip override does not become the next trip's default");
+    }
+
+    static void aMotionMapsOpacityGeometryAndColour() {
+        Motion motion = new Motion(0f, Timing.STANDARD);
+        motion.to(1f, 0f);
+        float mapped = motion.between(8f, 16f, Timing.STANDARD / 2f);
+        check(mapped > 8f && mapped < 16f, "one scalar maps onto position, scale or radius");
+        int colour = motion.colour(0xFF000000, 0xFFFFFFFF, Timing.STANDARD / 2f);
+        check((colour & 0x00FFFFFF) != 0 && (colour & 0x00FFFFFF) != 0x00FFFFFF,
+                "the same motion interpolates packed colour");
+        motion.to(Float.NaN, Timing.STANDARD / 2f);
+        check(motion.target() == 1f, "an invalid target cannot poison a live animation");
+        pass("a motion maps opacity, geometry and colour");
+    }
+
+    static void anImmediateCloseCannotFinishOpeningFirst() {
+        Transition transition = new Transition(Timing.SCREEN_ENTER, Timing.SCREEN_EXIT);
+        transition.open(0f);
+        float visible = transition.visibility(0.04f);
+        transition.close(0.04f);
+        check(Math.abs(transition.visibility(0.04f) - visible) < 0.0001f,
+                "closing begins at the exact visible value");
+        check(transition.visibility(0.08f) <= visible,
+                "entry cannot keep brightening after close was requested");
+        check(transition.finished(0.04f + Timing.SCREEN_EXIT)
+                        && transition.visibility(0.04f + Timing.SCREEN_EXIT) == 0f,
+                "exit finishes cleanly at invisible");
+        pass("an immediate close cannot finish opening first");
+    }
+
+    static void aSmoothSpringIsFrameRateIndependentAndBounded() {
+        Spring coarse = Spring.smooth(0f);
+        Spring fine = Spring.smooth(0f);
+        coarse.update(1f, 0.1f);
+        coarse.update(1f, 0.1f);
+        for (int frame = 0; frame < 20; frame++) {
+            fine.update(1f, 0.01f);
+        }
+        check(Math.abs(coarse.value() - fine.value()) < 0.0002f,
+                "the same elapsed time gives the same spring position");
+        check(coarse.value() >= 0f && coarse.value() <= 1f,
+                "the smooth spring does not overshoot");
+        float beforeReverse = coarse.value();
+        coarse.update(0f, 0f);
+        check(coarse.value() == beforeReverse, "retargeting a spring never snaps");
+        for (int frame = 0; frame < 100; frame++) {
+            coarse.update(0f, 0.01f);
+        }
+        check(coarse.value() == 0f && coarse.settled(0f), "a spring settles at its exact target");
+        pass("a smooth spring is frame-rate independent and bounded");
+    }
+
     /**
-     * The regression that motivated this test: {@code Skin} referenced motion
-     * constants the generator had not been re-run to produce, so the module
-     * stopped compiling and the durations nobody could see were also the
-     * durations nobody had checked.
+     * The public timing vocabulary stays small and inside the requested bands.
      */
     static void theSharedDurationsAreWithinTheSpecifiedBands() {
-        band(FathomTheme.MOTION_HOVER, 0.090f, 0.130f, "hover");
-        band(FathomTheme.MOTION_PRESS, 0.060f, 0.090f, "press");
-        band(FathomTheme.MOTION_TOGGLE, 0.140f, 0.180f, "toggle");
-        band(FathomTheme.MOTION_SELECTION, 0.140f, 0.180f, "selection");
-        band(FathomTheme.MOTION_SIDEBAR, 0.180f, 0.220f, "sidebar");
-        band(FathomTheme.MOTION_DRAWER, 0.190f, 0.240f, "drawer");
-        band(FathomTheme.MOTION_HUB, 0.160f, 0.220f, "hub open");
-        band(FathomTheme.MOTION_HUB_CLOSE, 0.090f, 0.150f, "hub close");
+        band(Timing.HOVER_IN, 0.090f, 0.140f, "hover in");
+        band(Timing.HOVER_OUT, 0.090f, 0.140f, "hover out");
+        band(Timing.PRESS, 0.070f, 0.110f, "press");
+        band(Timing.TOGGLE, 0.140f, 0.190f, "toggle");
+        band(Timing.NAVIGATION, 0.160f, 0.220f, "navigation");
+        band(Timing.PANEL, 0.180f, 0.260f, "panel");
+        band(Timing.SCREEN_ENTER, 0.180f, 0.260f, "screen open");
+        band(Timing.SCREEN_EXIT, 0.090f, 0.180f, "screen close");
+        band(Timing.TOOLTIP, 0.100f, 0.150f, "tooltip");
         pass("the shared durations are within the specified bands");
     }
 
@@ -246,6 +477,7 @@ public final class UiTests {
         check(Ease.out(0f) == 0f, "starts at zero");
         check(Ease.out(1f) == 1f, "ends at one");
         check(Ease.out(0.25f) > 0.5f, "and is more than half done a quarter of the way in");
+        check(Ease.exit(0.1f) > 0.1f, "exit responds on its first visible sample");
         check(Ease.out(-5f) == 0f && Ease.out(5f) == 1f, "outside the range is clamped");
         pass("the curve starts fast and ends exactly");
     }
@@ -353,6 +585,33 @@ public final class UiTests {
         check(tiny.inset(20f).height == 0f, "no negative height");
         check(tiny.inset(20f).empty(), "and it says it is empty");
         pass("insetting never produces a negative size");
+    }
+
+    static void roundedGeometryIsBoundedAndConcentric() {
+        check(RoundedGeometry.radius(20f, 24f, 80f) == 12f,
+                "a radius cannot exceed half the shorter side");
+        check(RoundedGeometry.radius(Float.NaN, 40f, 20f) == 0f,
+                "an invalid radius cannot poison a path");
+        check(RoundedGeometry.radius(Float.POSITIVE_INFINITY, 40f, 20f) == 10f,
+                "an unbounded pill request still resolves to physical geometry");
+        check(RoundedGeometry.pill(80f, 22f) == 11f,
+                "a pill is exactly half its height when height is shorter");
+        check(RoundedGeometry.insetRadius(12f, 120f, 36f, 2f) == 10f,
+                "a two-unit inset subtracts two units from the outer arc");
+        check(RoundedGeometry.insetRadius(20f, 18f, 18f, 5f) == 4f,
+                "an already-clamped outer arc remains concentric when inset");
+        pass("rounded geometry is bounded and concentric");
+    }
+
+    static void staticEdgesSnapAtEveryMinecraftGuiScale() {
+        for (int scale = 1; scale <= 4; scale++) {
+            float snapped = RoundedGeometry.snap(10.37f, scale);
+            check(Math.abs(snapped * scale - Math.round(snapped * scale)) < 0.0001f,
+                    "a snapped edge lands on a device pixel at GUI scale " + scale);
+            check(RoundedGeometry.radius(9f, 100f, 36f) == 9f,
+                    "semantic radii stay in logical units at GUI scale " + scale);
+        }
+        pass("static edges snap at every Minecraft GUI scale");
     }
 
     // -----------------------------------------------------------------------

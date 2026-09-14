@@ -44,8 +44,9 @@ public interface Renderer {
     /**
      * A filled rectangle with rounded corners.
      *
-     * <p>Anti-aliased, at any fractional radius, including radii larger than
-     * half the shorter side — which is how a pill is drawn.
+     * <p>Anti-aliased at any fractional radius. Implementations normalise the
+     * radius to at most half the shorter side; callers should use
+     * {@link RoundedGeometry#pill} when the semantic shape is a pill.
      */
     void rounded(float left, float top, float right, float bottom, float radius, int argb);
 
@@ -142,6 +143,6 @@ public interface Renderer {
     /** The interface's height, in logical units. */
     float height();
 
-    /** Logical units per device pixel, for anything that has to know. */
+    /** Device pixels per logical unit, for anything that has to align an edge. */
     float scale();
 }

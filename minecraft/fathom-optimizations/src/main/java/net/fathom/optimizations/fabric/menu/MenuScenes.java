@@ -17,6 +17,12 @@ import com.mojang.blaze3d.platform.GlStateManager;
 
 import net.minecraft.client.MinecraftClient;
 
+import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.render.FathomRenderer;
+import net.fathom.optimizations.core.ui.render.ImageRef;
+import net.fathom.optimizations.core.ui.render.Renderer;
+import net.fathom.optimizations.fabric.gfx.GlRenderer;
+
 /**
  * What the menu can sit on, and the picture behind whichever is chosen.
  *
@@ -56,6 +62,8 @@ public final class MenuScenes {
         /** The world it was recorded in, or null when it is vanilla. */
         public final String world;
         public final String creator;
+        /** Interned once; asking NanoVG for a thumbnail allocates nothing. */
+        private final ImageRef image;
 
         Scene(String id, String label, boolean animated, boolean gradient,
                 String world, String creator) {
@@ -65,6 +73,7 @@ public final class MenuScenes {
             this.gradient = gradient;
             this.world = world;
             this.creator = creator;
+            this.image = gradient ? null : ImageRef.resource(ROOT + id + ".jpg");
         }
 
         public boolean credited() {
@@ -76,6 +85,8 @@ public final class MenuScenes {
     private static final String TIDEWORN_BY = "milkshake_mp3";
     private static final String TOKYO = "Tokyo Inspired City";
     private static final String TOKYO_BY = "CoinCoffer";
+    private static final String ROOT = "/assets/fathom-optimizations/textures/menu/scenes/";
+    private static final float SOURCE_ASPECT = 16f / 9f;
 
     private static final Scene[] SCENES = {
         new Scene("bg_1", "Cherry Grove", false, false, null, null),
@@ -98,13 +109,21 @@ public final class MenuScenes {
     /** The scene a profile with no choice recorded gets. */
     public static final String DEFAULT_LABEL = "Rainforest Storm";
 
-    private static final String ROOT = "/assets/fathom-optimizations/textures/menu/scenes/";
-    private static final float SOURCE_ASPECT = 16f / 9f;
-
     /** Scene id to texture name. Zero means tried and failed; absent means untried. */
     private static final Map<String, Integer> TEXTURES = new HashMap<String, Integer>();
 
     private MenuScenes() {}
+
+    /** Release every classpath scene texture on a resource reload. Render thread only. */
+    static void dispose() {
+        GlStateManager.bindTexture(0);
+        for (Integer texture : TEXTURES.values()) {
+            if (texture != null && texture.intValue() > 0) {
+                GL11.glDeleteTextures(texture.intValue());
+            }
+        }
+        TEXTURES.clear();
+    }
 
     public static Scene[] all() {
         return SCENES;
@@ -135,6 +154,43 @@ public final class MenuScenes {
 
     public static float aspect() {
         return SOURCE_ASPECT;
+    }
+
+    /**
+     * Draw a picker thumbnail through the active UI backend.
+     *
+     * <p>NanoVG decodes the resource asynchronously and caches its image; the
+     * compatibility renderer keeps using the already-owned GL texture path.
+     * Keeping this bridge here prevents the menu from forcing the fallback
+     * renderer merely because one modal contains image tiles.
+     *
+     * @return true when an image is ready and was submitted
+     */
+    public static boolean thumbnail(Renderer ui, Scene scene, Rect area, float radius, int backdrop) {
+        if (scene == null || scene.gradient) {
+            return false;
+        }
+        if (ui instanceof FathomRenderer) {
+            FathomRenderer vector = (FathomRenderer) ui;
+            vector.imageCover(scene.image, area.x, area.y, area.right(), area.bottom(), radius, 1f);
+            return vector.imageState(scene.image) == ImageRef.State.READY;
+        }
+        if (ui instanceof GlRenderer) {
+            // A first-use upload binds a raw GL texture. Flush geometry queued
+            // against the renderer atlas before that bind so a freshly opened
+            // scene picker cannot render its preceding rounded controls with
+            // the thumbnail texture. Cached thumbnails need no extra flush.
+            if (!TEXTURES.containsKey(scene.id)) {
+                ((GlRenderer) ui).flush();
+            }
+            int texture = texture(scene);
+            if (texture > 0) {
+                ((GlRenderer) ui).image(texture, area.x, area.y, area.right(), area.bottom(),
+                        radius, SOURCE_ASPECT, backdrop);
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

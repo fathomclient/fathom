@@ -27,6 +27,9 @@ public final class Gfx {
     private static GlRenderer renderer;
     private static Clock clock;
     private static final Frames FRAMES = new Frames();
+    /** Menu background isolation runs every frame; retain its snapshot too. */
+    private static final GlStateSnapshot ISOLATED_STATE = new GlStateSnapshot();
+    private static boolean isolated;
 
     private Gfx() {}
 
@@ -34,7 +37,7 @@ public final class Gfx {
     public static GlRenderer renderer(MinecraftClient client) {
         if (renderer == null) {
             renderer = new GlRenderer(client);
-            clock = new Clock(System.nanoTime());
+            clock();
         }
         return renderer;
     }
@@ -44,8 +47,11 @@ public final class Gfx {
         return renderer;
     }
 
-    /** The animation clock. */
+    /** The animation clock, created on first use whichever renderer draws. */
     public static Clock clock() {
+        if (clock == null) {
+            clock = new Clock(System.nanoTime());
+        }
         return clock;
     }
 
@@ -72,10 +78,76 @@ public final class Gfx {
         screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
         GlRenderer active = renderer(client);
         active.setHighQuality(net.fathom.optimizations.fabric.Runtime.highQualityUi());
-        float delta = clock.advance(System.nanoTime());
+        float delta = clock().advance(System.nanoTime());
         FRAMES.begin();
         active.beginFrame(scalePreference);
         return delta;
+    }
+
+    /** What {@link #beginScreen} opened, so {@link #endScreen} closes the same thing. */
+    private static boolean vectorOpen;
+    private static boolean glOpen;
+    private static float screenDelta;
+
+    /**
+     * Begin a Fathom screen frame on the best renderer available.
+     *
+     * <p>The vector renderer ({@link Canvas}, NanoVG) when it can start, otherwise
+     * the GL renderer, with the same clock, frame measurements and profiler
+     * section either way. Callers draw through the returned {@code Renderer} and
+     * never learn which one it is.
+     */
+    public static net.fathom.optimizations.core.ui.render.Renderer beginScreen(
+            MinecraftClient client, float scalePreference) {
+        if (vectorOpen || glOpen) {
+            throw new IllegalStateException("a Fathom screen frame is already open");
+        }
+        if (!Boolean.getBoolean("fathom.forceGlRenderer")) {
+            net.fathom.optimizations.core.ui.render.FathomRenderer vector =
+                    Canvas.begin(client, net.fathom.optimizations.core.ui.render.FrameScale.Mode.FATHOM);
+            if (vector != null) {
+                screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
+                screenDelta = clock().advance(System.nanoTime());
+                FRAMES.begin();
+                vectorOpen = true;
+                return vector;
+            }
+        }
+        screenDelta = begin(client, scalePreference);
+        glOpen = true;
+        return renderer;
+    }
+
+    /** Seconds since the previous screen frame, clamped, as of {@link #beginScreen}. */
+    public static float screenDelta() {
+        return screenDelta;
+    }
+
+    /** Whether the frame {@link #beginScreen} opened is the vector renderer's. */
+    public static boolean vectorFrame() {
+        return vectorOpen;
+    }
+
+    /** Close what {@link #beginScreen} opened. Safe to call when nothing is open. */
+    public static void endScreen() {
+        if (glOpen) {
+            glOpen = false;
+            end();
+            return;
+        }
+        if (!vectorOpen) {
+            return;
+        }
+        vectorOpen = false;
+        try {
+            Canvas.end();
+            net.fathom.optimizations.fabric.ui.HoverLatency.frameRendered(clock().frames());
+        } finally {
+            net.fathom.optimizations.core.instrument.Probe.stop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.SCREEN, screenProbe);
+            screenProbe = 0L;
+            FRAMES.end();
+        }
     }
 
     /** End it: flush, put the state back, record what it cost. */
@@ -134,11 +206,19 @@ public final class Gfx {
 
     /** Run a non-Fathom draw pass without leaking any GL state into the UI. */
     public static void isolated(Runnable draw) {
-        GlStateSnapshot before = GlStateSnapshot.capture();
+        if (isolated) {
+            throw new IllegalStateException("nested isolated GL passes are not supported");
+        }
+        GlStateSnapshot before = ISOLATED_STATE.captureInto();
+        isolated = true;
         try {
             draw.run();
         } finally {
-            before.restore();
+            try {
+                before.restore();
+            } finally {
+                isolated = false;
+            }
         }
     }
 
@@ -156,11 +236,15 @@ public final class Gfx {
 
     /** Throw away every texture — for a resource reload. */
     public static void dispose() {
+        // NanoVG may be the only backend a session created. Dispose both
+        // resource owners so fonts, images and the vector context cannot leak.
+        Canvas.dispose();
         if (renderer != null) {
             renderer.dispose();
             renderer = null;
-            clock = null;
         }
+        // The clock is not a GPU resource. Preserve its monotonic timeline so
+        // a resource reload cannot put live Motions' start times in the future.
     }
 
     /**

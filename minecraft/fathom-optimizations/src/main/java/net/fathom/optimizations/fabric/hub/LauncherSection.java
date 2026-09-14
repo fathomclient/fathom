@@ -68,8 +68,8 @@ final class LauncherSection implements Section {
 
         // -- state card -------------------------------------------------------
         Rect card = area.top(84f);
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_LG, Skin.FILL);
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_LG, Skin.HAIRLINE, Skin.EDGE);
+        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, Skin.FILL);
+        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
         Rect inner = card.inset(Skin.S4, Skin.S4);
 
         int dot = state == LauncherBridge.State.READY
