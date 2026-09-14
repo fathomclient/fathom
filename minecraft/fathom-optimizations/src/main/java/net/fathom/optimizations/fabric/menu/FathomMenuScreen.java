@@ -867,7 +867,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         float inset = press * 0.70f;
         Rect visual = Skin.pixelAligned(ui, Rect.of(area.x + inset, area.y + lift + inset * 0.18f,
                 area.right() - inset, area.bottom() + lift - inset * 0.18f));
-        float radius = Skin.R_CARD;
+        float radius = Skin.pill(visual);
         // The launcher's slab casts a shadow, and loses it on the way down --
         // a control that has moved toward the surface should not still be
         // floating above it.
@@ -887,10 +887,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 Skin.HAIRLINE, edge);
         VisualEffects.topLight(ui, visual.x, visual.y, visual.right(), visual.bottom(),
                 radius, face, 0.72f + state.hover * 0.28f);
-        // The stepped edge grows toward the pointer/focus instead of replacing
-        // the whole face with red. It remains visible at rest, so the control
-        // still belongs to Fathom in a static screenshot.
-        VisualEffects.depthBracket(ui, visual, false, 0.54f + emphasis * 0.46f, Skin.ACCENT_STRONG);
+        // The top-right corner strengthens toward the pointer/focus instead of
+        // replacing the whole face with red. It remains visible at rest.
+        VisualEffects.cornerAccent(ui, visual, radius, false,
+                0.54f + emphasis * 0.46f, Skin.ACCENT_STRONG);
         // The row title, not the caption size. These are the two destinations
         // the screen exists for, on a 38-unit face; a 12px label on it reads as
         // a disabled control rather than as the primary action.
@@ -1005,7 +1005,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 Skin.R_MEDIUM, Skin.PANEL, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE,
                 Skin.EDGE);
-        VisualEffects.depthBracket(ui, panel, false, shown, Skin.ACCENT_STRONG);
+        VisualEffects.cornerAccent(ui, panel, Skin.R_MEDIUM, false, shown, Skin.ACCENT_STRONG);
 
         float x = panel.x + pad;
         float y = panel.y + pad;
@@ -1129,7 +1129,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 Skin.R_CARD, Skin.PANEL, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.HAIRLINE,
                 Skin.EDGE);
-        VisualEffects.depthBracket(ui, panel, false, shown, Skin.ACCENT_STRONG);
+        VisualEffects.cornerAccent(ui, panel, Skin.R_CARD, false, shown, Skin.ACCENT_STRONG);
 
         float x = panel.x + pad;
         float y = panel.y + pad;

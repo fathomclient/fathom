@@ -324,7 +324,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_PANEL, Skin.PANEL, 0.72f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_PANEL, Skin.HAIRLINE, Skin.EDGE_STRONG);
-        VisualEffects.depthBracket(ui, panel, false, 0.42f, Skin.ACCENT);
+        VisualEffects.cornerAccent(ui, panel, Skin.R_PANEL, false, 0.42f, Skin.ACCENT);
 
         Rect header = panel.top(Skin.HEADER_HEIGHT);
         Rect body = panel.belowTop(Skin.HEADER_HEIGHT);
@@ -618,7 +618,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                         Skin.mix(Skin.scaleAlpha(Skin.FILL_HOVER, s.hover), Skin.FILL, on));
             }
             if (row.width > 96f) {
-                VisualEffects.depthBracket(ui, row, false, on * 0.72f, Skin.ACCENT);
+                VisualEffects.cornerAccent(ui, row, Skin.pill(row), false, on * 0.72f, Skin.ACCENT);
             }
 
             float iconSize = 17f;

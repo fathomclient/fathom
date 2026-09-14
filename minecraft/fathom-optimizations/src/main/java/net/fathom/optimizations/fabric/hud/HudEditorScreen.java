@@ -491,7 +491,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_MEDIUM, Skin.RAISED, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
-        VisualEffects.depthBracket(ui, panel, false, 0.82f, Skin.ACCENT);
+        VisualEffects.cornerAccent(ui, panel, Skin.R_MEDIUM, false, 0.82f, Skin.ACCENT);
 
         Rect inner = panel.inset(Skin.S4, Skin.S4);
         ui.text(Text.fit(ui, widget.name(), Type.ROW_TITLE, inner.width), inner.x,

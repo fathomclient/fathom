@@ -6,8 +6,8 @@ inventing blur sizes or opacity values locally.
 
 ## Effect vocabulary
 
-- **Depth bracket** is Fathom's signature geometry: a short edge measurement
-  that steps inward twice. It identifies selected or enabled modules, primary
+- **Corner accent** is Fathom's signature geometry: one top-right quarter-circle
+  using the component's real radius. It identifies selected or enabled modules, primary
   actions, connected drawers, and elevated overlays without changing their
   layout or relying on the logo.
 - **Layered surface** adds a very small directional tonal shift from the top of
@@ -43,10 +43,11 @@ the renderer's cached falloff atlas and a single shadow draw; it does not build
 a new texture or raster image per component. Top light is one ordinary
 vertical-gradient fill.
 
-The depth bracket is one NanoVG path. Its compatibility fallback uses four
-small solid rectangles. Layered surfaces reuse the renderer's gradient
-primitive, and the compact depth marker uses scalar bounds so it introduces no
-temporary rectangle allocation in the per-frame path.
+The corner accent is one inset NanoVG path. On capsule buttons it is a pure
+quarter-circle with no horizontal or vertical tails. The fallback clips the
+same rounded outline to that corner. Layered surfaces reuse the renderer's gradient primitive,
+and the compact depth marker uses scalar bounds so it introduces no temporary
+rectangle allocation in the per-frame path.
 
 Neutral panel, overlay, and modal shadows use the existing box-gradient shadow
 presets. Cutout work is limited to the small number of genuinely elevated

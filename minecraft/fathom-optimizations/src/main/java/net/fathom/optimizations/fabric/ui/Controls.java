@@ -590,10 +590,11 @@ public final class Controls {
         // is felt as contact without making neighbouring controls appear to move.
         float scale = 1f - s.press * 0.006f;
         float sink = s.press * 0.45f;
+        float radius = Skin.pill(area);
         ui.pushTransform(0f, sink, scale, area.centreX(), area.centreY());
-        borderedSurface(ui, area, Skin.R_CONTROL, face, edge);
+        borderedSurface(ui, area, radius, face, edge);
         if (signature && s.enabled) {
-            VisualEffects.depthBracket(ui, area, false,
+            VisualEffects.cornerAccent(ui, area, radius, false,
                     0.52f + 0.48f * Math.max(s.hover, s.focused ? 1f : 0f), Skin.ACCENT_STRONG);
         }
         ui.textCentred(
@@ -603,7 +604,7 @@ public final class Controls {
                 Type.BODY_STRONG,
                 text);
         ui.popTransform();
-        focusRing(ui, s, area, Skin.R_CONTROL);
+        focusRing(ui, s, area, radius);
     }
 
     /** Draw the shared animated keyboard-focus ring around a custom-owned control. */
@@ -644,7 +645,7 @@ public final class Controls {
             ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker),
                     Skin.scaleAlpha(Skin.ACCENT, on));
         }
-        VisualEffects.depthBracket(ui, row, false, on * 0.72f, Skin.ACCENT);
+        VisualEffects.cornerAccent(ui, row, Skin.R_CONTROL, false, on * 0.72f, Skin.ACCENT);
         float iconSize = 16f;
         int tint = Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover), Skin.TEXT, on);
         float x = row.x + Skin.S3 + 2f;
@@ -1282,7 +1283,7 @@ public final class Controls {
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_MEDIUM, Skin.OVERLAY, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
-        VisualEffects.depthBracket(ui, panel, false, grown * 0.72f, Skin.ACCENT);
+        VisualEffects.cornerAccent(ui, panel, Skin.R_MEDIUM, false, grown * 0.72f, Skin.ACCENT);
 
         for (int index = 0; index < overlay.options.length; index++) {
             Rect row = new Rect(panel.x + Skin.S1, panel.y + Skin.S1 + rowHeight * index,
@@ -1326,7 +1327,7 @@ public final class Controls {
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_MEDIUM, Skin.OVERLAY, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
-        VisualEffects.depthBracket(ui, panel, false, grown * 0.72f, Skin.ACCENT);
+        VisualEffects.cornerAccent(ui, panel, Skin.R_MEDIUM, false, grown * 0.72f, Skin.ACCENT);
 
         for (int index = 0; index < PALETTE.length; index++) {
             float cx = panel.x + Skin.S2 + (index % columns) * cell;

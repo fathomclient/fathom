@@ -260,7 +260,7 @@ final class ModsSection implements Section {
         ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD,
                 Skin.HAIRLINE * (1f + enabled * 0.32f + selected * 0.68f),
                 edge);
-        VisualEffects.depthBracket(ui, card, false, enabled * 0.62f + selected * 0.38f,
+        VisualEffects.cornerAccent(ui, card, Skin.R_CARD, false, enabled * 0.62f + selected * 0.38f,
                 selected > 0.01f ? Skin.ACCENT_STRONG : Skin.ACCENT);
 
         Rect iconBox = new Rect(card.x + Skin.S3, card.y + Skin.S3, 34f, 34f);
@@ -397,7 +397,7 @@ final class ModsSection implements Section {
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_CARD, Skin.RAISED, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
-        VisualEffects.depthBracket(ui, panel, true, shown, Skin.ACCENT_STRONG);
+        VisualEffects.cornerAccent(ui, panel, Skin.R_CARD, true, shown, Skin.ACCENT_STRONG);
 
         Rect inner = panel.inset(Skin.S5, Skin.S5);
         Rect head = inner.top(52f);

@@ -40,8 +40,8 @@ public final class VisualEffects {
     public static final float FOCUS_INTENSITY = 0.78f;
     /** White added at the top of a surface before fading to transparent. */
     public static final float TOP_LIGHT_OPACITY = 0.04f;
-    /** The signature bracket is a deliberate edge, not another hairline. */
-    public static final float SIGNATURE_STROKE = 1.35f;
+    /** The semantic perimeter is a deliberate edge, not another hairline. */
+    public static final float SIGNATURE_STROKE = 1.5f;
     /** Neutral surface relief from top edge to lower face. */
     public static final float SURFACE_DEPTH = 0.045f;
 
@@ -83,47 +83,46 @@ public final class VisualEffects {
     }
 
     /**
-     * Fathom's signature depth bracket: a short edge segment that steps inward
-     * twice. NanoVG receives one vector path; the compatibility renderer draws
-     * the same three orthogonal segments from cached solid geometry.
+     * One top-corner accent. On a pill this is exactly one quarter-circle from
+     * the top tangent to the side tangent, with no horizontal or vertical tail.
+     * The stroke stays inset inside the owning geometry.
      */
-    public static void depthBracket(Renderer ui, Rect area, boolean left, float strength, int colour) {
+    public static void cornerAccent(Renderer ui, Rect area, float radius, boolean left,
+            float strength, int colour) {
         float shown = clamp(strength);
-        if (shown <= 0.001f || area.width < Skin.SIGNATURE_LENGTH + Skin.S4) {
+        if (shown <= 0.001f || !(area.width > 0f) || !(area.height > 0f)) {
             return;
         }
-        float step = Skin.SIGNATURE_STEP;
-        float y = Skin.snap(ui, area.y + Skin.SIGNATURE_INSET);
-        float inner = left
-                ? area.x + Math.max(Skin.R_CONTROL, Skin.S3)
-                : area.right() - Math.max(Skin.R_CONTROL, Skin.S3);
-        float direction = left ? 1f : -1f;
-        float length = Skin.SIGNATURE_LENGTH * (0.58f + shown * 0.42f);
-        float start = inner + direction * length;
+        float outerRadius = Skin.radius(radius, area);
+        float inset = SIGNATURE_STROKE / 2f;
+        float top = Skin.snap(ui, area.y) + inset;
+        float side = left
+                ? Skin.snap(ui, area.x) + inset
+                : Skin.snap(ui, area.right()) - inset;
+        float curve = Math.max(0f, outerRadius - inset);
+        float tangent = left ? side + curve : side - curve;
+        float direction = left ? -1f : 1f;
+        float topCornerY = top + curve;
         int ink = Skin.scaleAlpha(colour, shown);
 
         if (ui instanceof FathomRenderer) {
             FathomRenderer vector = (FathomRenderer) ui;
+            float handle = curve * 0.5522848f;
             vector.beginPath();
-            vector.moveTo(start, y);
-            vector.lineTo(inner + direction * step * 2f, y);
-            vector.lineTo(inner + direction * step * 2f, y + step);
-            vector.lineTo(inner, y + step);
-            vector.lineTo(inner, y + step * 2f);
+            vector.moveTo(tangent, top);
+            vector.bezierTo(tangent + direction * handle, top,
+                    side, topCornerY - handle, side, topCornerY);
             vector.strokePath(SIGNATURE_STROKE, ink);
             return;
         }
 
-        float stroke = Math.max(Skin.HAIRLINE, SIGNATURE_STROKE);
-        float firstA = Math.min(start, inner + direction * step * 2f);
-        float firstB = Math.max(start, inner + direction * step * 2f);
-        float secondA = Math.min(inner, inner + direction * step * 2f);
-        float secondB = Math.max(inner, inner + direction * step * 2f);
-        ui.fill(firstA, y, firstB, y + stroke, ink);
-        ui.fill(inner + direction * step * 2f - stroke / 2f, y,
-                inner + direction * step * 2f + stroke / 2f, y + step, ink);
-        ui.fill(secondA, y + step, secondB, y + step + stroke, ink);
-        ui.fill(inner - stroke / 2f, y + step, inner + stroke / 2f, y + step * 2f, ink);
+        float clipPad = SIGNATURE_STROKE;
+        float clipLeft = left ? area.x : tangent - clipPad;
+        float clipRight = left ? tangent + clipPad : area.right();
+        ui.clip(clipLeft, area.y, clipRight, topCornerY + clipPad);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), outerRadius,
+                SIGNATURE_STROKE, ink);
+        ui.unclip();
     }
 
     /** A small square depth marker, used where a full bracket would crowd a circular control. */
