@@ -88,6 +88,8 @@ final class ModsSection implements Section {
     private Category filter;
     /** The feature whose settings are open, or null. */
     private FathomModule open;
+    /** Keeps the detail surface alive while its close animation recedes. */
+    private boolean drawerClosing;
     @Override
     public String title() {
         return "Mods";
@@ -112,14 +114,23 @@ final class ModsSection implements Section {
     public void opened(HubContext context) {
         scroller.reset();
         open = null;
+        drawerClosing = false;
         drawer.set(0f, context.now());
+        if (Boolean.getBoolean("fathom.qaOpenSettings")) {
+            for (FathomModule feature : context.features().all()) {
+                if (feature.hasSettings() || !feature.keybinds().isEmpty()) {
+                    open = feature;
+                    break;
+                }
+            }
+        }
         context.keybindCapture().cancel();
     }
 
     @Override
     public void render(HubContext context, Rect area) {
         Renderer ui = context.ui();
-        drawer.to(open == null ? 0f : 1f, context.now());
+        drawer.to(open == null || drawerClosing ? 0f : 1f, context.now());
         float drawn = drawer.value(context.now());
 
         // Filtering owns the complete page width. Opening settings narrows only
@@ -163,6 +174,10 @@ final class ModsSection implements Section {
             Rect panel = new Rect(workspace.right() - drawerWidth, workspace.y,
                     drawerWidth, workspace.height);
             settingsDrawer(context, panel, drawn);
+        }
+        if (drawerClosing && drawer.settled(context.now()) && drawn <= 0.001f) {
+            open = null;
+            drawerClosing = false;
         }
     }
 
@@ -221,14 +236,18 @@ final class ModsSection implements Section {
         float enabled = controls.towards("mod.card." + feature.id() + "#enabled",
                 visuallyEnabled, Timing.TOGGLE);
         float selected = controls.towards("mod.card." + feature.id() + "#selected",
-                feature == open, Timing.NAVIGATION);
-        float scale = 1f - surface.press * 0.004f;
-        ui.pushTransform(0f, surface.press * 0.35f, scale, card.centreX(), card.centreY());
+                feature == open && !drawerClosing, Timing.NAVIGATION);
+        float scale = 1f - surface.press * 0.006f;
+        float lift = surface.press * 0.55f - surface.hover * Skin.HOVER_ELEVATION * (1f - surface.press);
+        ui.pushTransform(0f, lift, scale, card.centreX(), card.centreY());
 
-        int resting = Skin.mix(Skin.RAISED, Skin.ACCENT_WASH, enabled * 0.16f);
-        int face = Skin.mix(resting, Skin.RAISED_HOVER, surface.hover * (1f - enabled * 0.20f));
-        VisualEffects.moduleGlow(ui, card, Skin.R_CARD, enabled, surface.hover);
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, face);
+        int resting = Skin.mix(Skin.RAISED, Skin.ACCENT_WASH, enabled * 0.035f);
+        int face = Skin.mix(resting, Skin.RAISED_HOVER, surface.hover * 0.72f);
+        if (surface.hover > 0.01f) {
+            ui.shadow(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, 5f,
+                    Skin.scaleAlpha(Skin.SHADOW, surface.hover * 0.26f));
+        }
+        VisualEffects.layeredSurface(ui, card, Skin.R_CARD, face, surface.hover);
         VisualEffects.topLight(ui, card.x, card.y, card.right(), card.bottom(),
                 Skin.R_CARD, face, 0.72f + surface.hover * 0.28f);
         // A module that is on is outlined in the accent the whole way round,
@@ -236,14 +255,18 @@ final class ModsSection implements Section {
         // thing in a quarter of the places you might look for it, and against a
         // rounded corner it stopped short of the curve at both ends.
         float lit = Math.max(enabled, selected);
-        int edge = VisualEffects.hoverBrighten(Skin.mix(Skin.EDGE, Skin.ACCENT, lit), surface.hover);
+        int edge = VisualEffects.hoverBrighten(
+                Skin.mix(Skin.EDGE, Skin.ACCENT, enabled * 0.72f + selected * 0.28f), surface.hover);
         ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD,
-                Skin.HAIRLINE * (1f + enabled * 0.70f),
+                Skin.HAIRLINE * (1f + enabled * 0.32f + selected * 0.68f),
                 edge);
+        VisualEffects.depthBracket(ui, card, false, enabled * 0.62f + selected * 0.38f,
+                selected > 0.01f ? Skin.ACCENT_STRONG : Skin.ACCENT);
 
         Rect iconBox = new Rect(card.x + Skin.S3, card.y + Skin.S3, 34f, 34f);
+        VisualEffects.stateGlow(ui, iconBox, Skin.R_MEDIUM, lit, surface.hover);
         ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_MEDIUM,
-                Skin.mix(Skin.FILL, Skin.ACCENT_WASH, enabled));
+                Skin.mix(Skin.FILL, Skin.ACCENT_WASH, enabled * 0.68f + selected * 0.22f));
         int icon = Skin.mix(Skin.TEXT_FAINT, Skin.ACCENT_STRONG, enabled);
         ui.icon(Icon.of(feature.icon()), iconBox.centreX() - ICON / 2f,
                 iconBox.centreY() - ICON / 2f, ICON,
@@ -256,7 +279,14 @@ final class ModsSection implements Section {
                 Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, enabled));
 
         String status = visuallyEnabled ? "Enabled" : "Disabled";
-        ui.text(status, titleX, card.y + Skin.S3 + 19f + ui.ascent(Type.CAPTION), Type.CAPTION,
+        if (enabled > 0.01f) {
+            float marker = 3f;
+            ui.fill(titleX, card.y + Skin.S3 + 23f,
+                    titleX + marker, card.y + Skin.S3 + 23f + marker,
+                    Skin.scaleAlpha(Skin.ACCENT_STRONG, enabled));
+        }
+        ui.text(status, titleX + enabled * 8f,
+                card.y + Skin.S3 + 19f + ui.ascent(Type.CAPTION), Type.CAPTION,
                 Skin.mix(Skin.TEXT_DISABLED, Skin.ACCENT_STRONG, enabled));
 
         String badge = compactBadge(feature);
@@ -340,7 +370,12 @@ final class ModsSection implements Section {
     }
 
     private void openDrawer(HubContext context, FathomModule feature) {
-        open = feature == open ? null : feature;
+        if (feature == open && !drawerClosing) {
+            drawerClosing = true;
+        } else {
+            open = feature;
+            drawerClosing = false;
+        }
         drawerScroll.reset();
         context.keybindCapture().cancel();
         editing = null;
@@ -358,10 +393,11 @@ final class ModsSection implements Section {
 
         ui.pushAlpha(shown);
         VisualEffects.overlayShadow(ui, panel, Skin.R_CARD);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.RAISED);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_CARD, Skin.RAISED, 0f);
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_CARD, Skin.RAISED, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
+        VisualEffects.depthBracket(ui, panel, true, shown, Skin.ACCENT_STRONG);
 
         Rect inner = panel.inset(Skin.S5, Skin.S5);
         Rect head = inner.top(52f);
@@ -386,6 +422,15 @@ final class ModsSection implements Section {
                 head.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
         ui.text(Text.fit(ui, "by " + open.owner(), Type.CAPTION, titleRight - head.x - 30f), head.x + 30f,
                 head.y + 24f + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_DISABLED);
+        if (ui instanceof net.fathom.optimizations.core.ui.render.FathomRenderer) {
+            ((net.fathom.optimizations.core.ui.render.FathomRenderer) ui).horizontalGradient(
+                    head.x, head.bottom() - 1f, head.x + Math.min(124f, head.width * 0.46f), head.bottom(), 0f,
+                    Skin.scaleAlpha(Skin.ACCENT, shown * 0.62f), 0x00841C24);
+        } else {
+            ui.fill(head.x, head.bottom() - Skin.HAIRLINE,
+                    head.x + Math.min(72f, head.width * 0.32f), head.bottom(),
+                    Skin.scaleAlpha(Skin.ACCENT, shown * 0.45f));
+        }
 
         Rect description = inner.belowTop(52f);
         List<String> lines = Text.wrap(ui, open.description(), Type.SMALL, description.width);
@@ -449,7 +494,7 @@ final class ModsSection implements Section {
         ui.popAlpha();
 
         if (closing) {
-            open = null;
+            drawerClosing = true;
             context.keybindCapture().cancel();
             editing = null;
         }

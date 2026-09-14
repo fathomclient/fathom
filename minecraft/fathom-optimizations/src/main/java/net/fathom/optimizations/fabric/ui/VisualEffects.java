@@ -40,16 +40,14 @@ public final class VisualEffects {
     public static final float FOCUS_INTENSITY = 0.78f;
     /** White added at the top of a surface before fading to transparent. */
     public static final float TOP_LIGHT_OPACITY = 0.04f;
+    /** The signature bracket is a deliberate edge, not another hairline. */
+    public static final float SIGNATURE_STROKE = 1.35f;
+    /** Neutral surface relief from top edge to lower face. */
+    public static final float SURFACE_DEPTH = 0.045f;
 
     private static final Shadow PANEL_SHADOW = Shadow.PANEL.withStrength(SHADOW_STRENGTH);
     private static final Shadow OVERLAY_SHADOW = Shadow.DROPDOWN.withStrength(OVERLAY_SHADOW_STRENGTH);
     private static final Shadow MODAL_SHADOW = Shadow.MODAL.withStrength(MODAL_SHADOW_STRENGTH);
-
-    /** A cheap enabled-card bloom; hover only strengthens light that already means "on". */
-    public static void moduleGlow(Renderer ui, Rect area, float radius, float enabled, float hover) {
-        glow(ui, area, radius, GLOW_RADIUS,
-                enabled * (1f + clamp(hover) * HOVER_GLOW_GAIN), 1f);
-    }
 
     /** Soft light behind a selected navigation marker, never behind its icon. */
     public static void navigationGlow(Renderer ui, Rect marker, float selected) {
@@ -71,6 +69,93 @@ public final class VisualEffects {
     public static void selectedButtonGlow(Renderer ui, Rect area, float radius, float selected, float hover) {
         glow(ui, area, radius, GLOW_RADIUS * 0.58f,
                 selected * (0.65f + clamp(hover) * 0.35f), 0.60f);
+    }
+
+    /** A localized active-state light, normally placed behind an icon or state marker. */
+    public static void stateGlow(Renderer ui, Rect source, float radius, float active, float hover) {
+        glow(ui, source, radius, GLOW_RADIUS * 0.72f,
+                active * (0.72f + clamp(hover) * 0.28f), 0.72f);
+    }
+
+    /** Tiny halo for keyboard focus; pointer hover deliberately does not trigger it. */
+    public static void focusGlow(Renderer ui, Rect area, float radius, float focus) {
+        glow(ui, area, radius, GLOW_RADIUS * 0.46f, clamp(focus), 0.42f);
+    }
+
+    /**
+     * Fathom's signature depth bracket: a short edge segment that steps inward
+     * twice. NanoVG receives one vector path; the compatibility renderer draws
+     * the same three orthogonal segments from cached solid geometry.
+     */
+    public static void depthBracket(Renderer ui, Rect area, boolean left, float strength, int colour) {
+        float shown = clamp(strength);
+        if (shown <= 0.001f || area.width < Skin.SIGNATURE_LENGTH + Skin.S4) {
+            return;
+        }
+        float step = Skin.SIGNATURE_STEP;
+        float y = Skin.snap(ui, area.y + Skin.SIGNATURE_INSET);
+        float inner = left
+                ? area.x + Math.max(Skin.R_CONTROL, Skin.S3)
+                : area.right() - Math.max(Skin.R_CONTROL, Skin.S3);
+        float direction = left ? 1f : -1f;
+        float length = Skin.SIGNATURE_LENGTH * (0.58f + shown * 0.42f);
+        float start = inner + direction * length;
+        int ink = Skin.scaleAlpha(colour, shown);
+
+        if (ui instanceof FathomRenderer) {
+            FathomRenderer vector = (FathomRenderer) ui;
+            vector.beginPath();
+            vector.moveTo(start, y);
+            vector.lineTo(inner + direction * step * 2f, y);
+            vector.lineTo(inner + direction * step * 2f, y + step);
+            vector.lineTo(inner, y + step);
+            vector.lineTo(inner, y + step * 2f);
+            vector.strokePath(SIGNATURE_STROKE, ink);
+            return;
+        }
+
+        float stroke = Math.max(Skin.HAIRLINE, SIGNATURE_STROKE);
+        float firstA = Math.min(start, inner + direction * step * 2f);
+        float firstB = Math.max(start, inner + direction * step * 2f);
+        float secondA = Math.min(inner, inner + direction * step * 2f);
+        float secondB = Math.max(inner, inner + direction * step * 2f);
+        ui.fill(firstA, y, firstB, y + stroke, ink);
+        ui.fill(inner + direction * step * 2f - stroke / 2f, y,
+                inner + direction * step * 2f + stroke / 2f, y + step, ink);
+        ui.fill(secondA, y + step, secondB, y + step + stroke, ink);
+        ui.fill(inner - stroke / 2f, y + step, inner + stroke / 2f, y + step * 2f, ink);
+    }
+
+    /** A small square depth marker, used where a full bracket would crowd a circular control. */
+    public static void depthMarker(Renderer ui, float centreX, float centreY, float strength) {
+        float shown = clamp(strength);
+        if (shown <= 0.001f) {
+            return;
+        }
+        float size = 4f;
+        float left = Skin.snap(ui, centreX - size / 2f);
+        float top = Skin.snap(ui, centreY - size / 2f);
+        float right = left + size;
+        float bottom = top + size;
+        glow(ui, left, top, right, bottom, Skin.R_SMALL, GLOW_RADIUS * 0.72f,
+                shown * 0.72f, 0.72f);
+        ui.fill(left, top, right, bottom, Skin.scaleAlpha(Skin.ACCENT, shown));
+        ui.fill(left + 1f, top + 1f, right, bottom,
+                Skin.scaleAlpha(Skin.PANEL, shown * 0.72f));
+    }
+
+    /** Directional material separation: nearly imperceptible light above, depth below. */
+    public static void layeredSurface(Renderer ui, Rect area, float radius, int face, float hover) {
+        int top = Skin.mix(face, 0xFFFFFFFF, 0.018f + clamp(hover) * 0.012f);
+        int bottom = Skin.mix(face, 0xFF000000, SURFACE_DEPTH);
+        ui.gradient(area.x, area.y, area.right(), area.bottom(), radius, top, bottom);
+    }
+
+    /** Near-black environmental falloff for a large content plane. */
+    public static void pageDepth(Renderer ui, Rect area) {
+        int top = Skin.mix(Skin.PANEL, 0xFFFFFFFF, 0.010f);
+        int bottom = Skin.mix(Skin.PANEL, 0xFF000000, 0.052f);
+        ui.gradient(area.x, area.y, area.right(), area.bottom(), 0f, top, bottom);
     }
 
     /**
@@ -122,20 +207,23 @@ public final class VisualEffects {
 
     private static void glow(Renderer ui, Rect area, float radius, float feather,
             float strength, float opacityScale) {
+        glow(ui, area.x, area.y, area.right(), area.bottom(), radius, feather, strength, opacityScale);
+    }
+
+    private static void glow(Renderer ui, float left, float top, float right, float bottom,
+            float radius, float feather, float strength, float opacityScale) {
         float alpha = GLOW_OPACITY * opacityScale * Math.min(1.45f, Math.max(0f, strength));
         if (alpha <= 0.001f) {
             return;
         }
         int colour = Skin.scaleAlpha(Skin.ACCENT_DEEP, alpha);
         if (ui instanceof FathomRenderer) {
-            ((FathomRenderer) ui).glow(area.x, area.y, area.right(), area.bottom(), radius,
-                    feather, colour);
+            ((FathomRenderer) ui).glow(left, top, right, bottom, radius, feather, colour);
         } else {
             // The compatibility renderer uses its one cached falloff atlas.
             // This remains a single batched shadow primitive and creates no
             // texture or CPU-rasterized asset at interaction time.
-            ui.shadow(area.x, area.y, area.right(), area.bottom(), radius,
-                    feather * 0.55f, colour);
+            ui.shadow(left, top, right, bottom, radius, feather * 0.55f, colour);
         }
     }
 

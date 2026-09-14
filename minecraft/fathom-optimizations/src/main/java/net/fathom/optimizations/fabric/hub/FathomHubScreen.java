@@ -324,6 +324,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_PANEL, Skin.PANEL, 0.72f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_PANEL, Skin.HAIRLINE, Skin.EDGE_STRONG);
+        VisualEffects.depthBracket(ui, panel, false, 0.42f, Skin.ACCENT);
 
         Rect header = panel.top(Skin.HEADER_HEIGHT);
         Rect body = panel.belowTop(Skin.HEADER_HEIGHT);
@@ -331,6 +332,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         Rect content = body.rightOf(Skin.RAIL_WIDTH);
 
         chrome(ui, header, rail);
+        VisualEffects.pageDepth(ui, content);
         header(ui, header);
 
         // The tray is decided before the page draws and drawn after it. Decided
@@ -580,13 +582,27 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                 tray.bottom() - trailingRadius, Skin.CHROME_LINE_STRONG);
 
         float rowHeight = Math.min(Skin.RAIL_ROW, (rail.height - Skin.S4) / sections.size());
-        // The indicator: a short accent bar that slides between rows. Not a
-        // filled red block — the selected row is brighter material and this.
+        // A quiet measurement rail remains in place while its active marker
+        // travels between sections. The ticks are deliberately abstract: they
+        // imply precision and depth without becoming literal instrumentation.
+        float depthX = Skin.snap(ui, rail.x + 7.5f);
+        float depthTop = rail.y + Skin.S3 + rowHeight * 0.22f;
+        float depthBottom = rail.y + Skin.S3 + (sections.size() - 1) * rowHeight + rowHeight * 0.78f;
+        ui.fill(depthX, depthTop, depthX + Skin.HAIRLINE, depthBottom,
+                Skin.scaleAlpha(Skin.ACCENT_DEEP, 0.34f));
+        for (int index = 0; index < sections.size(); index++) {
+            float tickY = Skin.snap(ui, rail.y + Skin.S3 + index * rowHeight + rowHeight / 2f);
+            ui.fill(depthX - 1f, tickY, depthX + 3f, tickY + Skin.HAIRLINE,
+                    Skin.scaleAlpha(Skin.TEXT_DISABLED, 0.44f));
+        }
+
+        // The bright marker slides on that fixed rail instead of being replaced.
         float markY = rail.y + Skin.S3 + railMark.update(current, context.delta()) * rowHeight;
-        Rect marker = Rect.of(rail.x + 6f, markY + rowHeight * 0.25f,
-                rail.x + 9f, markY + rowHeight * 0.75f);
+        Rect marker = Rect.of(depthX - 1f, markY + rowHeight * 0.25f,
+                depthX + 2f, markY + rowHeight * 0.75f);
         VisualEffects.navigationGlow(ui, marker, 1f);
         ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker), Skin.ACCENT);
+        VisualEffects.depthMarker(ui, depthX + 0.5f, marker.centreY(), 0.78f);
 
         for (int index = 0; index < sections.size(); index++) {
             Section section = sections.get(index);
@@ -600,6 +616,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                 // A capsule, as the launcher's rail items are.
                 ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.pill(row),
                         Skin.mix(Skin.scaleAlpha(Skin.FILL_HOVER, s.hover), Skin.FILL, on));
+            }
+            if (row.width > 96f) {
+                VisualEffects.depthBracket(ui, row, false, on * 0.72f, Skin.ACCENT);
             }
 
             float iconSize = 17f;

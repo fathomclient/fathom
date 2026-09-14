@@ -132,6 +132,10 @@ loom {
                 // without changing the user's saved module configuration.
                 vmArg '-Dfathom.qaAllModules=true'
             }
+            if (project.hasProperty('qaOpenSettings')) {
+                // Visual-only detail-state capture; never changes saved settings.
+                vmArg '-Dfathom.qaOpenSettings=true'
+            }
             if (project.hasProperty('transitionProbe')) {
                 vmArg '-Dfathom.transitionInstrumentation=true'
             }

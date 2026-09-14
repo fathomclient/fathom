@@ -515,7 +515,7 @@ public final class Controls {
         if (enabled) {
             VisualEffects.primaryButtonGlow(ui, area, Skin.R_CONTROL, s.hover);
         }
-        button(ui, s, area, face, edge, text, label);
+        button(ui, s, area, face, edge, text, label, true);
         return s.clicked;
     }
 
@@ -529,7 +529,7 @@ public final class Controls {
         int edge = Skin.mix(
                 Skin.mix(Skin.EDGE, Skin.EDGE_STRONG, Math.max(s.hover, s.press * 0.65f)),
                 Skin.ACCENT, s.press * 0.32f);
-        button(ui, s, area, face, edge, text, label);
+        button(ui, s, area, face, edge, text, label, false);
         return s.clicked;
     }
 
@@ -539,7 +539,7 @@ public final class Controls {
         int face = Skin.mix(Skin.mix(0x00000000, Skin.FILL_HOVER, s.hover), Skin.FILL_PRESSED, s.press);
         int text = !enabled ? Skin.TEXT_DISABLED : Skin.mix(Skin.TEXT_FAINT, Skin.TEXT, s.hover);
         int edge = Skin.scaleAlpha(Skin.EDGE_STRONG, Math.max(s.hover, s.press) * 0.72f);
-        button(ui, s, area, face, edge, text, label);
+        button(ui, s, area, face, edge, text, label, false);
         return s.clicked;
     }
 
@@ -550,7 +550,7 @@ public final class Controls {
                 ? Skin.FILL_DISABLED
                 : Skin.mix(Skin.BAD_WASH, Skin.fade(Skin.BAD, 0.28f), Math.max(s.hover, s.press));
         int edge = enabled ? Skin.scaleAlpha(Skin.BAD, 0.18f + s.hover * 0.42f) : Skin.EDGE;
-        button(ui, s, area, face, edge, enabled ? Skin.BAD : Skin.TEXT_DISABLED, label);
+        button(ui, s, area, face, edge, enabled ? Skin.BAD : Skin.TEXT_DISABLED, label, false);
         return s.clicked;
     }
 
@@ -572,6 +572,7 @@ public final class Controls {
                     Skin.mix(Skin.scaleAlpha(Skin.EDGE_STRONG, s.hover),
                             Skin.scaleAlpha(Skin.ACCENT, on), on));
         }
+        VisualEffects.depthMarker(ui, area.centreX(), area.bottom() - 1.5f, on);
         float size = Math.round(Math.min(area.width, area.height) * 0.54f);
         int tint = !enabled
                 ? Skin.TEXT_DISABLED
@@ -583,13 +584,18 @@ public final class Controls {
         return s.clicked;
     }
 
-    private void button(Renderer ui, State s, Rect area, int face, int edge, int text, String label) {
+    private void button(Renderer ui, State s, Rect area, int face, int edge, int text, String label,
+            boolean signature) {
         // The visual compresses around a fixed hitbox. Six tenths of a percent
         // is felt as contact without making neighbouring controls appear to move.
         float scale = 1f - s.press * 0.006f;
         float sink = s.press * 0.45f;
         ui.pushTransform(0f, sink, scale, area.centreX(), area.centreY());
         borderedSurface(ui, area, Skin.R_CONTROL, face, edge);
+        if (signature && s.enabled) {
+            VisualEffects.depthBracket(ui, area, false,
+                    0.52f + 0.48f * Math.max(s.hover, s.focused ? 1f : 0f), Skin.ACCENT_STRONG);
+        }
         ui.textCentred(
                 Text.fit(ui, label, Type.BODY_STRONG, area.width - Skin.S3),
                 area.centreX(),
@@ -605,6 +611,7 @@ public final class Controls {
         s.slot.focus.to(s.focused && s.enabled && s.slot.over ? 0f : (s.focused && s.enabled ? 1f : 0f), now);
         float focus = s.slot.focus.value(now);
         if (focus > 0.01f) {
+            VisualEffects.focusGlow(ui, area, radius, focus);
             ui.outline(area.x - 2f, area.y - 2f, area.right() + 2f, area.bottom() + 2f, radius + 2f,
                     Skin.HAIRLINE * 1.5f,
                     Skin.scaleAlpha(Skin.FOCUS, focus * VisualEffects.FOCUS_INTENSITY));
@@ -637,6 +644,7 @@ public final class Controls {
             ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker),
                     Skin.scaleAlpha(Skin.ACCENT, on));
         }
+        VisualEffects.depthBracket(ui, row, false, on * 0.72f, Skin.ACCENT);
         float iconSize = 16f;
         int tint = Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover), Skin.TEXT, on);
         float x = row.x + Skin.S3 + 2f;
@@ -1274,6 +1282,7 @@ public final class Controls {
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_MEDIUM, Skin.OVERLAY, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
+        VisualEffects.depthBracket(ui, panel, false, grown * 0.72f, Skin.ACCENT);
 
         for (int index = 0; index < overlay.options.length; index++) {
             Rect row = new Rect(panel.x + Skin.S1, panel.y + Skin.S1 + rowHeight * index,
@@ -1317,6 +1326,7 @@ public final class Controls {
         VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
                 Skin.R_MEDIUM, Skin.OVERLAY, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
+        VisualEffects.depthBracket(ui, panel, false, grown * 0.72f, Skin.ACCENT);
 
         for (int index = 0; index < PALETTE.length; index++) {
             float cx = panel.x + Skin.S2 + (index % columns) * cell;

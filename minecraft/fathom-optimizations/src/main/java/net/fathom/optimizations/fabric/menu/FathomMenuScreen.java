@@ -867,31 +867,36 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         float inset = press * 0.70f;
         Rect visual = Skin.pixelAligned(ui, Rect.of(area.x + inset, area.y + lift + inset * 0.18f,
                 area.right() - inset, area.bottom() + lift - inset * 0.18f));
+        float radius = Skin.R_CARD;
         // The launcher's slab casts a shadow, and loses it on the way down --
         // a control that has moved toward the surface should not still be
         // floating above it.
-        ui.shadow(visual.x, visual.y, visual.right(), visual.bottom(), Skin.R_PANEL,
+        ui.shadow(visual.x, visual.y, visual.right(), visual.bottom(), radius,
                 MENU_SHADOW_SPREAD * (1f - press * 0.5f),
                 Skin.scaleAlpha(Skin.SHADOW,
                         VisualEffects.SHADOW_STRENGTH * (1f - press * 0.7f)));
-        VisualEffects.primaryButtonGlow(ui, visual, Skin.R_PANEL, emphasis);
-        ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), Skin.R_PANEL, face);
+        VisualEffects.primaryButtonGlow(ui, visual, radius, emphasis);
+        VisualEffects.layeredSurface(ui, visual, radius, face, state.hover);
         if (state.hover > 0.01f) {
             // A wash, not a fill: the hovered button warms toward the accent
             // and stays glass. Solid red is reserved for things that are on.
-            ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), Skin.R_PANEL,
+            ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), radius,
                     Skin.scaleAlpha(Skin.ACCENT_WASH, state.hover * 0.7f));
         }
-        ui.outline(visual.x, visual.y, visual.right(), visual.bottom(), Skin.R_PANEL,
+        ui.outline(visual.x, visual.y, visual.right(), visual.bottom(), radius,
                 Skin.HAIRLINE, edge);
         VisualEffects.topLight(ui, visual.x, visual.y, visual.right(), visual.bottom(),
-                Skin.R_PANEL, face, 0.72f + state.hover * 0.28f);
+                radius, face, 0.72f + state.hover * 0.28f);
+        // The stepped edge grows toward the pointer/focus instead of replacing
+        // the whole face with red. It remains visible at rest, so the control
+        // still belongs to Fathom in a static screenshot.
+        VisualEffects.depthBracket(ui, visual, false, 0.54f + emphasis * 0.46f, Skin.ACCENT_STRONG);
         // The row title, not the caption size. These are the two destinations
         // the screen exists for, on a 38-unit face; a 12px label on it reads as
         // a disabled control rather than as the primary action.
         ui.textCentred(label, visual.centreX(), Controls.baseline(ui, visual, Type.ROW_TITLE),
                 Type.ROW_TITLE, VisualEffects.hoverBrighten(Skin.TEXT_MUTED, emphasis));
-        controls.focusRing(ui, state, area, Skin.R_PANEL);
+        controls.focusRing(ui, state, area, radius);
         return activated(id, state);
     }
 
@@ -900,7 +905,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         Controls.State state = controls.state(id, area, !modal());
         float focus = controls.towards(id + "#menu-focus", state.focused, Timing.HOVER_IN);
         boolean fathom = "menu.fathom".equals(id);
-        float selected = fathom ? Math.max(state.hover, focus) : focus;
+        boolean active = fathom && !modal()
+                || "menu.scenes".equals(id) && scenesFade.value(Gfx.clock().seconds()) > 0.01f
+                || "menu.credits".equals(id) && creditsFade.value(Gfx.clock().seconds()) > 0.01f;
+        float selected = Math.max(active ? 1f : 0f, focus);
         float press = tactilePress(state);
         // The launcher's small pill: --glass-fill, the plain edge, the plain
         // sheen. Lighter than the two destinations above it, which is the
@@ -922,8 +930,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), round, face);
         int hoverEdge = fathom ? Skin.fade(Skin.ACCENT, 0.68f) : Skin.GLASS_EDGE_STRONG;
         int edge = Skin.mix(Skin.GLASS_EDGE, hoverEdge, state.hover);
-        edge = Skin.mix(edge, Skin.fade(Skin.ACCENT, 0.78f), focus);
+        edge = Skin.mix(edge, Skin.fade(Skin.ACCENT, 0.78f), Math.max(focus, selected * 0.72f));
         ui.outline(visual.x, visual.y, visual.right(), visual.bottom(), round, Skin.HAIRLINE, edge);
+        VisualEffects.depthMarker(ui, visual.centreX(), visual.bottom() - 1.5f, selected);
         VisualEffects.topLight(ui, visual.x, visual.y, visual.right(), visual.bottom(),
                 round, face, 0.72f + state.hover * 0.28f);
         float iconSize = DOCK_ICON;
@@ -931,8 +940,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // two shades from black, and it disappears into a snowfield.
         float iconX = Skin.snap(ui, visual.centreX() - iconSize / 2f);
         float iconY = Skin.snap(ui, visual.centreY() - iconSize / 2f);
+        int iconTint = Skin.mix(Skin.TEXT_MUTED, Skin.ACCENT_STRONG, selected * 0.72f);
         ui.icon(icon, iconX, iconY, iconSize,
-                VisualEffects.hoverBrighten(Skin.TEXT_MUTED, Math.max(state.hover, focus)));
+                VisualEffects.hoverBrighten(iconTint, Math.max(state.hover, focus)));
         controls.focusRing(ui, state, area, Skin.pill(area));
         boolean invoked = activated(id, state);
         if (!invoked) {
@@ -995,6 +1005,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 Skin.R_MEDIUM, Skin.PANEL, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE,
                 Skin.EDGE);
+        VisualEffects.depthBracket(ui, panel, false, shown, Skin.ACCENT_STRONG);
 
         float x = panel.x + pad;
         float y = panel.y + pad;
@@ -1118,6 +1129,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 Skin.R_CARD, Skin.PANEL, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.HAIRLINE,
                 Skin.EDGE);
+        VisualEffects.depthBracket(ui, panel, false, shown, Skin.ACCENT_STRONG);
 
         float x = panel.x + pad;
         float y = panel.y + pad;

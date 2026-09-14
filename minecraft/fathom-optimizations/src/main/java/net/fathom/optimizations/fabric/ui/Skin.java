@@ -168,6 +168,19 @@ public final class Skin {
     /** The outer application panel and large destination controls. */
     public static final float R_PANEL = FathomTheme.DIM_R_XL;
 
+    // -----------------------------------------------------------------------
+    // Fathom signature geometry
+    // -----------------------------------------------------------------------
+
+    /** Length of the interrupted edge used by Fathom's stepped depth bracket. */
+    public static final float SIGNATURE_LENGTH = 24f;
+    /** Each turn in the depth bracket moves by this amount. */
+    public static final float SIGNATURE_STEP = 4f;
+    /** Distance between the signature stroke and the surface edge. */
+    public static final float SIGNATURE_INSET = 1.5f;
+    /** A hovered card rises this far before press compression wins. */
+    public static final float HOVER_ELEVATION = 1.25f;
+
     // Generated-scale aliases retained for code outside the component layer.
     public static final float R_XS = R_SMALL;
     public static final float R_SM = R_CONTROL;
