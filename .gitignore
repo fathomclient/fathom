@@ -2,6 +2,22 @@
 **/*.rs.bk
 *.pdb
 
+# Locally downloaded build tools. These are useful for development but are not
+# source and must never be staged with the repository.
+/.tmp-gradle-*/
+/.tmp-gradle-*.zip
+
+# JVM crash and heap diagnostics.
+hs_err_pid*
+replay_pid*
+*.hprof
+
+# Editor and operating-system metadata.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
 # Java module build output. `minecraft/fathom-optimizations` is compiled either by
 # Gradle or, in environments without it, by javac straight into build/classes.
 /minecraft/*/build/
