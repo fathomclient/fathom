@@ -63,8 +63,21 @@ pub enum Destination {
     FabricMaven,
     /// Modrinth API. Only ever on an explicit, per-mod user action.
     ModrinthApi,
-    /// Modrinth CDN. Only ever on an explicit, per-mod user action.
+    /// Modrinth CDN. Only ever on an explicit, per-mod user action. Serves mod
+    /// files, project icons and gallery images.
     ModrinthCdn,
+    /// `CurseForge`'s Core API. Needs an API key, which the user supplies; see
+    /// [`crate::mods::browse::curseforge`]. Only ever on an explicit, per-mod
+    /// user action, and only when a key has been configured.
+    CurseForgeApi,
+    /// `CurseForge`'s file CDN. Where `downloadUrl` points for projects whose
+    /// authors allow third-party distribution.
+    CurseForgeCdn,
+    /// `CurseForge`'s newer file CDN. The same files; which of the two a project
+    /// is served from is `CurseForge`'s choice, not ours, so both are listed.
+    CurseForgeFiles,
+    /// `CurseForge`'s image host: project logos and screenshots.
+    CurseForgeMedia,
 }
 
 impl Destination {
@@ -89,6 +102,10 @@ impl Destination {
         Destination::FabricMaven,
         Destination::ModrinthApi,
         Destination::ModrinthCdn,
+        Destination::CurseForgeApi,
+        Destination::CurseForgeCdn,
+        Destination::CurseForgeFiles,
+        Destination::CurseForgeMedia,
     ];
 
     /// The single hostname this destination resolves to.
@@ -112,6 +129,10 @@ impl Destination {
             Destination::FabricMaven => "maven.fabricmc.net",
             Destination::ModrinthApi => "api.modrinth.com",
             Destination::ModrinthCdn => "cdn.modrinth.com",
+            Destination::CurseForgeApi => "api.curseforge.com",
+            Destination::CurseForgeCdn => "edge.forgecdn.net",
+            Destination::CurseForgeFiles => "mediafilez.forgecdn.net",
+            Destination::CurseForgeMedia => "media.forgecdn.net",
         }
     }
 
@@ -170,6 +191,18 @@ impl Destination {
             Destination::ModrinthApi | Destination::ModrinthCdn => {
                 "Looks up and downloads a mod, only when you explicitly ask for that specific mod."
             }
+            Destination::CurseForgeApi => {
+                "Searches CurseForge for a mod, only when you explicitly ask and only if you have \
+                 supplied your own CurseForge API key. Your key is sent to CurseForge and nowhere \
+                 else."
+            }
+            Destination::CurseForgeCdn | Destination::CurseForgeFiles => {
+                "Downloads a mod file from CurseForge, only when you explicitly ask for that \
+                 specific mod and only when its author allows third-party downloads."
+            }
+            Destination::CurseForgeMedia => {
+                "Fetches a project's icon or screenshots while you are browsing CurseForge."
+            }
         }
     }
 
@@ -177,7 +210,12 @@ impl Destination {
     /// decision rather than merely being part of a core flow.
     pub fn consent(self) -> Consent {
         match self {
-            Destination::ModrinthApi | Destination::ModrinthCdn => Consent::ExplicitPerAction,
+            Destination::ModrinthApi
+            | Destination::ModrinthCdn
+            | Destination::CurseForgeApi
+            | Destination::CurseForgeCdn
+            | Destination::CurseForgeFiles
+            | Destination::CurseForgeMedia => Consent::ExplicitPerAction,
             Destination::JavaVendor => Consent::OptIn,
             Destination::LauncherUpdates => Consent::OptOut,
             // Everything else is implied by an action the user already took.

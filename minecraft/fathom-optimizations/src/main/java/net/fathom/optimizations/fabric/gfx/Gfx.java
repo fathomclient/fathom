@@ -85,6 +85,7 @@ public final class Gfx {
     }
 
     /** What {@link #beginScreen} opened, so {@link #endScreen} closes the same thing. */
+    private static final boolean FORCE_GL_RENDERER = Boolean.getBoolean("fathom.forceGlRenderer");
     private static boolean vectorOpen;
     private static boolean glOpen;
     private static float screenDelta;
@@ -102,7 +103,7 @@ public final class Gfx {
         if (vectorOpen || glOpen) {
             throw new IllegalStateException("a Fathom screen frame is already open");
         }
-        if (!Boolean.getBoolean("fathom.forceGlRenderer")) {
+        if (!FORCE_GL_RENDERER) {
             net.fathom.optimizations.core.ui.render.FathomRenderer vector =
                     Canvas.begin(client, net.fathom.optimizations.core.ui.render.FrameScale.Mode.FATHOM);
             if (vector != null) {

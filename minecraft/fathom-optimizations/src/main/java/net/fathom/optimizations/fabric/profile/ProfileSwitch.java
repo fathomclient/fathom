@@ -49,13 +49,14 @@ import net.fathom.optimizations.fabric.hud.FathomHud;
  *
  * <p>Here is only the mechanism. {@link ProfileRuntime#switchTo} captures the
  * current state before calling {@link #apply}, and if {@code apply} throws —
- * a setting value its module rejects, a key code that is not a number — applies
- * that capture back. The live profile and the stored pointer only move after a
+ * a document that fails validation, or anything unexpected — applies that
+ * capture back. The live profile and the stored pointer only move after a
  * clean apply.
  *
  * <h2>What is skipped rather than failed</h2>
  *
- * <p>A module, widget or optimization this build does not have. A profile made by
+ * <p>A module, widget or optimization this build does not have, and a stored
+ * setting or key value this build cannot use (which resets that one value). A profile made by
  * a newer Fathom must still switch on an older one; failing it outright would
  * make every profile brittle against the next release. Skips are reported, not
  * hidden.
@@ -108,9 +109,18 @@ public final class ProfileSwitch {
                 if (stored == null) {
                     setting.reset();
                 } else if (!setting.parse(stored)) {
-                    throw new ProfileException(module.name() + ": " + setting.id() + " cannot be \"" + stored + "\"");
+                    // A value this build cannot use -- an option an older or
+                    // newer build spelled differently, a hand-edited number --
+                    // costs that one setting, not the whole profile. Failing
+                    // the switch here used to leave a client on the wrong
+                    // profile at startup over a single renamed dropdown entry.
+                    setting.reset();
+                    skipped.add("setting " + module.id() + "." + setting.id() + "=\"" + stored + "\"");
                 }
             }
+            // The whole module has been applied; let it settle anything it
+            // derives from several values at once.
+            module.settingChanged(null);
         }
 
         // 5. arriving modules, now that their settings are right.
@@ -144,7 +154,13 @@ public final class ProfileSwitch {
                 if (stored == null) {
                     keybind.reset();
                 } else {
-                    keybind.set(keyCode(stored, module.name() + ": " + keybind.label()));
+                    Integer code = keyCode(stored);
+                    if (code == null) {
+                        keybind.reset();
+                        skipped.add("key " + module.id() + "." + keybind.id() + "=\"" + stored + "\"");
+                    } else {
+                        keybind.set(code.intValue());
+                    }
                 }
             }
         }
@@ -314,11 +330,11 @@ public final class ProfileSwitch {
         }
     }
 
-    private static int keyCode(String stored, String what) throws ProfileException {
+    private static Integer keyCode(String stored) {
         try {
-            return Integer.parseInt(stored.trim());
+            return Integer.valueOf(Integer.parseInt(stored.trim()));
         } catch (NumberFormatException notANumber) {
-            throw new ProfileException(what + " cannot be key \"" + stored + "\"");
+            return null;
         }
     }
 }

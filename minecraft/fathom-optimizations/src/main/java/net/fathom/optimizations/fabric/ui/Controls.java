@@ -396,16 +396,10 @@ public final class Controls {
         VisualEffects.shadow(ui, l, t, r, b, radius, shadow);
     }
 
-    /**
-     * A surface with a faint light along its top, which is what separates a
-     * material from a flat rectangle without adding a border.
-     */
+    /** A flat surface with its radius normalised to the geometry. No sheen. */
     public static void surface(Renderer ui, float l, float t, float r, float b, float radius, int face) {
         float normal = net.fathom.optimizations.core.ui.render.RoundedGeometry.radius(radius, r - l, b - t);
         ui.rounded(l, t, r, b, normal, face);
-        // A full-size path keeps the top arc concentric with the surface. The
-        // shared effect token is intentionally below the point of glossiness.
-        VisualEffects.topLight(ui, l, t, r, b, normal, face, 1f);
     }
 
     /** A filled surface and its inside stroke, sharing one normalised path. */
@@ -503,18 +497,15 @@ public final class Controls {
     // Buttons
     // -----------------------------------------------------------------------
 
-    /** The one action a panel is for: Fathom red, restrained. */
+    /** The one action a panel is for: a dense red energy surface. */
     public boolean primary(Renderer ui, String id, Rect area, String label, boolean enabled) {
         State s = state(id, area, enabled);
         int face = !enabled
                 ? Skin.FILL_DISABLED
-                : Skin.mix(Skin.mix(Skin.ACCENT_DEEP, Skin.ACCENT, s.hover * 0.7f), Skin.ACCENT_DEEP, s.press);
-        int edge = !enabled ? Skin.EDGE : Skin.mix(Skin.fade(Skin.ACCENT_STRONG, 0.38f), Skin.ACCENT_STRONG,
-                s.hover * 0.45f + s.press * 0.20f);
+                : Skin.mix(Skin.mix(Skin.BASE_RED, Skin.ACTIVE_RED, s.hover * 0.74f), Skin.BASE_RED, s.press);
+        int edge = !enabled ? Skin.EDGE_RECESSED : Skin.mix(Skin.ACTIVE_RED, Skin.HOT_RED,
+                s.hover * 0.66f + s.press * 0.18f);
         int text = !enabled ? Skin.TEXT_DISABLED : VisualEffects.hoverBrighten(Skin.TEXT, s.hover);
-        if (enabled) {
-            VisualEffects.primaryButtonGlow(ui, area, Skin.R_CONTROL, s.hover);
-        }
         button(ui, s, area, face, edge, text, label, true);
         return s.clicked;
     }
@@ -524,12 +515,44 @@ public final class Controls {
         State s = state(id, area, enabled);
         int face = !enabled
                 ? Skin.FILL_DISABLED
-                : Skin.mix(Skin.mix(Skin.FILL, Skin.FILL_HOVER, s.hover), Skin.FILL_PRESSED, s.press);
+                : Skin.mix(Skin.mix(Skin.SURFACE, Skin.ELEVATED, s.hover), Skin.RECESSED, s.press);
         int text = !enabled ? Skin.TEXT_DISABLED : Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, s.hover);
         int edge = Skin.mix(
-                Skin.mix(Skin.EDGE, Skin.EDGE_STRONG, Math.max(s.hover, s.press * 0.65f)),
-                Skin.ACCENT, s.press * 0.32f);
+                Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, Math.max(s.hover, s.press * 0.65f)),
+                Skin.BASE_RED, s.press * 0.32f);
         button(ui, s, area, face, edge, text, label, false);
+        return s.clicked;
+    }
+
+    /**
+     * A compact action embedded in a larger surface. Its moving chevron and
+     * recessed material distinguish it from a generic secondary button.
+     */
+    public boolean recessedAction(Renderer ui, String id, Rect area, String label, boolean enabled) {
+        State s = state(id, area, enabled);
+        float scale = 1f - s.press * 0.010f;
+        float sink = s.press * 0.65f;
+        float radius = Skin.R_CONTROL;
+        int face = !enabled
+                ? Skin.FILL_DISABLED
+                : Skin.mix(Skin.mix(Skin.RECESSED, Skin.SURFACE_HOVER, s.hover), Skin.BACKGROUND, s.press);
+        int edge = !enabled
+                ? Skin.EDGE_RECESSED
+                : Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover), Skin.BASE_RED, s.press * 0.40f);
+
+        ui.pushTransform(0f, sink, scale, area.centreX(), area.centreY());
+        VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), radius,
+                Skin.BORDER_STANDARD, edge);
+        middle(ui, label, area.x + Skin.S3, area,
+                Math.max(0f, area.width - Skin.S3 * 2f - 14f), Type.CAPTION,
+                enabled ? Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, s.hover) : Skin.TEXT_DISABLED);
+        float icon = 11f;
+        float arrowX = area.right() - Skin.S2 - icon + s.hover * 1.5f;
+        ui.icon(Icon.CHEVRON_RIGHT, arrowX, area.centreY() - icon / 2f, icon,
+                enabled ? Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover) : Skin.TEXT_DISABLED);
+        ui.popTransform();
+        focusRing(ui, s, area, radius);
         return s.clicked;
     }
 
@@ -560,23 +583,22 @@ public final class Controls {
         float on = active(s, active);
         int face = Skin.mix(Skin.mix(0x00000000, Skin.FILL_HOVER, s.hover), Skin.FILL_PRESSED, s.press);
         if (on > 0.01f) {
-            face = Skin.mix(face, Skin.ACCENT_WASH, on);
+            face = Skin.mix(face, Skin.scaleAlpha(Skin.BASE_RED, 0.32f), on);
         }
         float round = Skin.pill(area);
-        VisualEffects.selectedButtonGlow(ui, area, round, on, s.hover);
+        VisualEffects.selectedButtonGlow(ui, area, round, on);
         float scale = 1f - s.press * 0.006f;
         ui.pushTransform(0f, 0f, scale, area.centreX(), area.centreY());
         ui.rounded(area.x, area.y, area.right(), area.bottom(), round, face);
         if (s.hover > 0.01f || on > 0.01f) {
             ui.outline(area.x, area.y, area.right(), area.bottom(), round, Skin.HAIRLINE,
                     Skin.mix(Skin.scaleAlpha(Skin.EDGE_STRONG, s.hover),
-                            Skin.scaleAlpha(Skin.ACCENT, on), on));
+                            Skin.scaleAlpha(Skin.ACTIVE_RED, on), on));
         }
-        VisualEffects.depthMarker(ui, area.centreX(), area.bottom() - 1.5f, on);
         float size = Math.round(Math.min(area.width, area.height) * 0.54f);
         int tint = !enabled
                 ? Skin.TEXT_DISABLED
-                : Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT, s.hover), Skin.ACCENT_STRONG, on);
+                : Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT, s.hover), Skin.HOT_RED, on);
         ui.icon(icon, area.centreX() - size / 2f, area.centreY() - size / 2f, size, tint);
         ui.popTransform();
         // Focus belongs to the fixed hitbox, not the compressed press surface.
@@ -590,12 +612,17 @@ public final class Controls {
         // is felt as contact without making neighbouring controls appear to move.
         float scale = 1f - s.press * 0.006f;
         float sink = s.press * 0.45f;
-        float radius = Skin.pill(area);
+        float radius = Skin.R_CONTROL;
         ui.pushTransform(0f, sink, scale, area.centreX(), area.centreY());
-        borderedSurface(ui, area, radius, face, edge);
         if (signature && s.enabled) {
-            VisualEffects.cornerAccent(ui, area, radius, false,
-                    0.52f + 0.48f * Math.max(s.hover, s.focused ? 1f : 0f), Skin.ACCENT_STRONG);
+            // The primary action is the one control that carries light at
+            // rest; hover only brightens its face and edge.
+            VisualEffects.energyGlow(ui, area, radius, s.focused ? 1f : 0.45f);
+            VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
+            ui.outline(area.x, area.y, area.right(), area.bottom(), radius,
+                    Skin.BORDER_ENERGIZED, edge);
+        } else {
+            borderedSurface(ui, area, radius, face, edge);
         }
         ui.textCentred(
                 Text.fit(ui, label, Type.BODY_STRONG, area.width - Skin.S3),
@@ -635,7 +662,7 @@ public final class Controls {
         float hover = s.hover * (1f - on);
         if (hover > 0.01f || on > 0.01f) {
             ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.R_CONTROL,
-                    Skin.mix(Skin.scaleAlpha(Skin.FILL_HOVER, hover), Skin.FILL_ACTIVE, on));
+                    Skin.mix(Skin.scaleAlpha(Skin.SURFACE_HOVER, hover), Skin.ELEVATED, on));
         }
         if (on > 0.01f) {
             float bar = row.height * 0.36f * on;
@@ -643,9 +670,8 @@ public final class Controls {
                     row.x + 3f, row.centreY() + bar / 2f);
             VisualEffects.navigationGlow(ui, marker, on);
             ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker),
-                    Skin.scaleAlpha(Skin.ACCENT, on));
+                    Skin.scaleAlpha(Skin.HOT_RED, on));
         }
-        VisualEffects.cornerAccent(ui, row, Skin.R_CONTROL, false, on * 0.72f, Skin.ACCENT);
         float iconSize = 16f;
         int tint = Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover), Skin.TEXT, on);
         float x = row.x + Skin.S3 + 2f;
@@ -680,21 +706,25 @@ public final class Controls {
         Rect box = new Rect(area.right() - TOGGLE_WIDTH, boxY, TOGGLE_WIDTH, TOGGLE_HEIGHT);
         float radius = Skin.pill(box);
 
-        int off = Skin.mix(0x1FFFFFFF, 0x2EFFFFFF, s.hover);
-        int accent = Skin.mix(Skin.ACCENT_DEEP, Skin.ACCENT, 0.55f + 0.25f * s.hover);
+        // Lighter than the wells toggles usually sit in, so an off switch still
+        // reads as a track rather than a loose knob.
+        int off = Skin.mix(0xFF262D36, 0xFF303843, s.hover);
+        int accent = Skin.mix(Skin.BASE_RED, Skin.ACTIVE_RED, 0.48f + 0.42f * s.hover);
         int track = Skin.mix(off, accent, t);
         if (!enabled) {
             track = Skin.scaleAlpha(track, 0.45f);
         }
         if (enabled) {
-            VisualEffects.toggleGlow(ui, box, t, s.hover);
+            VisualEffects.toggleGlow(ui, box, t);
         }
         ui.rounded(box.x, box.y, box.right(), box.bottom(), radius, track);
-        if (enabled && (t > 0.01f || s.hover > 0.01f)) {
-            // Emphasis is an inside stroke. Growing the geometry by one unit
-            // made the switch wider and taller only while active.
-            ui.outline(box.x, box.y, box.right(), box.bottom(), radius,
-                    Skin.HAIRLINE, Skin.scaleAlpha(Skin.ACCENT_STRONG, t * 0.20f + s.hover * 0.08f));
+        // Emphasis is an inside stroke. Growing the geometry by one unit
+        // made the switch wider and taller only while active.
+        ui.outline(box.x, box.y, box.right(), box.bottom(), radius, Skin.BORDER_STANDARD,
+                Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover),
+                        Skin.scaleAlpha(Skin.HOT_RED, 0.62f + s.hover * 0.20f), t));
+        if (enabled && t > 0.01f) {
+            VisualEffects.innerEnergy(ui, box, radius, t * 0.36f);
         }
         focusRing(ui, s, box, radius);
 
@@ -704,7 +734,7 @@ public final class Controls {
         float travel = box.width - knob - inset * 2f - stretch;
         float knobX = box.x + inset + travel * t;
         int face = enabled
-                ? Skin.mix(0xFFE1E4E9, 0xFFFFFFFF, Math.min(1f, t * 0.78f + s.hover * 0.22f))
+                ? Skin.mix(0xFF9AA1AC, 0xFFFFFFFF, Math.min(1f, t * 0.86f + s.hover * 0.30f))
                 : 0xFFB9BFC9;
         ui.shadow(knobX, box.y + inset, knobX + knob + stretch, box.y + inset + knob, knob / 2f, 2.5f,
                 Skin.fade(0x000000, 0.35f));
@@ -721,7 +751,9 @@ public final class Controls {
         if (options == null || options.length == 0) {
             return selected;
         }
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_MEDIUM, Skin.FILL_SUNKEN);
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_MEDIUM, Skin.RECESSED);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_MEDIUM,
+                Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
 
         float segment = area.width / options.length;
         String markId = id + "#mark";
@@ -736,7 +768,9 @@ public final class Controls {
         float markX = area.x + segment * mark.value(now);
         float innerRadius = Skin.innerRadius(Skin.R_MEDIUM, area, 2f);
         surface(ui, markX + 2f, area.y + 2f, markX + segment - 2f, area.bottom() - 2f,
-                innerRadius, Skin.FILL_ACTIVE);
+                innerRadius, Skin.ELEVATED);
+        ui.outline(markX + 2f, area.y + 2f, markX + segment - 2f, area.bottom() - 2f,
+                innerRadius, Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.ACTIVE_RED, 0.62f));
 
         int result = selected;
         for (int index = 0; index < options.length; index++) {
@@ -746,7 +780,7 @@ public final class Controls {
             float on = active(s, active);
             if (!active && s.hover > 0.01f) {
                 ui.rounded(cell.x + 2f, cell.y + 2f, cell.right() - 2f, cell.bottom() - 2f, innerRadius,
-                        Skin.scaleAlpha(Skin.FILL_HOVER, s.hover * 0.55f));
+                        Skin.scaleAlpha(Skin.SURFACE_HOVER, s.hover * 0.72f));
             }
             ui.textCentred(
                     Text.fit(ui, options[index], Type.BODY_STRONG, cell.width - Skin.S2),
@@ -783,7 +817,8 @@ public final class Controls {
         float selectedWidth = widths[Math.max(0, Math.min(selected, widths.length - 1))];
         float pan = scrolls ? pan(id, box, total, selectedX, selectedWidth) : 0f;
 
-        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_MEDIUM, Skin.FILL_SUNKEN);
+        // One quiet rounded track; the categories inside are text until chosen.
+        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.pill(box), Skin.RECESSED);
         ui.clip(box.x, box.y, box.right(), box.bottom());
 
         String markXId = id + "#mark-x";
@@ -804,9 +839,14 @@ public final class Controls {
         markWidth.to(selectedWidth, now);
         float drawnX = box.x - pan + markX.value(now);
         float drawnWidth = markWidth.value(now);
-        float innerRadius = Skin.innerRadius(Skin.R_MEDIUM, box, 2f);
-        surface(ui, drawnX + 2f, box.y + 2f, drawnX + drawnWidth - 2f, box.bottom() - 2f, innerRadius,
-                Skin.FILL_ACTIVE);
+        Rect activeMark = Rect.of(drawnX + 2f, box.y + 2f,
+                drawnX + drawnWidth - 2f, box.bottom() - 2f);
+        float innerRadius = Skin.pill(activeMark);
+        // A rounded pill that slides between categories; its travel is the motion.
+        ui.rounded(activeMark.x, activeMark.y, activeMark.right(), activeMark.bottom(),
+                innerRadius, Skin.ELEVATED);
+        ui.outline(activeMark.x, activeMark.y, activeMark.right(), activeMark.bottom(),
+                innerRadius, Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.ACTIVE_RED, 0.70f));
 
         int result = selected;
         float x = box.x - pan;
@@ -819,7 +859,7 @@ public final class Controls {
             boolean fullyVisible = cell.x >= box.x && cell.right() <= box.right();
             if (!active && fullyVisible && state.hover > 0.01f) {
                 ui.rounded(cell.x + 2f, cell.y + 2f, cell.right() - 2f, cell.bottom() - 2f, innerRadius,
-                        Skin.scaleAlpha(Skin.FILL_HOVER, state.hover * 0.55f));
+                        Skin.scaleAlpha(Skin.SURFACE_HOVER, state.hover * 0.72f));
             }
             ui.textCentred(options[index], cell.centreX(), baseline(ui, cell, Type.BODY_STRONG),
                     Type.BODY_STRONG,
@@ -922,12 +962,13 @@ public final class Controls {
         }
         float spin = active(s, open);
 
-        int face = Skin.mix(Skin.mix(Skin.FILL, Skin.FILL_HOVER, Math.max(s.hover, spin)), Skin.FILL_PRESSED, s.press);
-        surface(ui, area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL, face);
-        if (spin > 0.01f) {
-            ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL, Skin.HAIRLINE,
-                    Skin.scaleAlpha(Skin.ACCENT, spin));
-        }
+        int face = Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, Math.max(s.hover, spin)),
+                Skin.RECESSED, s.press);
+        VisualEffects.layeredSurface(ui, area, Skin.R_CONTROL, face, s.hover);
+        int edge = Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover),
+                Skin.ACTIVE_RED, spin * 0.82f);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
+                Skin.BORDER_STANDARD, edge);
         focusRing(ui, s, area, Skin.R_CONTROL);
 
         float chevron = 12f;
@@ -993,10 +1034,6 @@ public final class Controls {
         float grow = Math.max(s.hover, dragging ? 1f : 0f);
         float knob = 6.5f + grow * 1.5f;
         float cy = area.centreY();
-        if (grow > 0.01f) {
-            ui.rounded(filled - knob - 4f * grow, cy - knob - 4f * grow, filled + knob + 4f * grow,
-                    cy + knob + 4f * grow, knob + 4f * grow, Skin.scaleAlpha(Skin.ACCENT_WASH, grow));
-        }
         ui.shadow(filled - knob, cy - knob, filled + knob, cy + knob, knob, 2.5f, Skin.fade(0x000000, 0.4f));
         ui.rounded(filled - knob, cy - knob, filled + knob, cy + knob, knob, enabled ? 0xFFFFFFFF : 0xFFB9BFC9);
         focusRing(ui, s, area, Skin.R_SMALL);
@@ -1012,12 +1049,14 @@ public final class Controls {
         State s = state(id, area, true);
         float listen = active(s, listening);
         float pulse = listening ? 0.5f + 0.5f * (float) Math.sin(now * 6.0) : 0f;
-        int face = Skin.mix(Skin.mix(Skin.mix(Skin.FILL_SUNKEN, Skin.FILL_HOVER, s.hover), Skin.FILL_PRESSED, s.press),
-                Skin.ACCENT_WASH, listen);
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL, face);
+        int face = Skin.mix(Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, s.hover), Skin.BACKGROUND, s.press),
+                Skin.scaleAlpha(Skin.BASE_RED, 0.28f), listen);
+        VisualEffects.energyGlow(ui, area, Skin.R_CONTROL, listen * 0.60f);
+        VisualEffects.layeredSurface(ui, area, Skin.R_CONTROL, face, s.hover);
         if (listen > 0.01f) {
-            ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL, Skin.HAIRLINE,
-                    Skin.scaleAlpha(Skin.ACCENT, listen * (0.55f + 0.45f * pulse)));
+            ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
+                    Skin.BORDER_ENERGIZED,
+                    Skin.scaleAlpha(Skin.HOT_RED, listen * (0.64f + 0.26f * pulse)));
         }
         focusRing(ui, s, area, Skin.R_CONTROL);
         ui.textCentred(
@@ -1037,7 +1076,9 @@ public final class Controls {
         Rect down = new Rect(area.x, area.y, button, area.height);
         Rect up = new Rect(area.right() - button, area.y, button, area.height);
 
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL, Skin.FILL_SUNKEN);
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL, Skin.RECESSED);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
+                Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
         ui.textCentred(value, area.centreX(), baseline(ui, area, Type.BODY_STRONG), Type.BODY_STRONG, Skin.TEXT);
 
         int moved = 0;
@@ -1058,12 +1099,12 @@ public final class Controls {
     public boolean textField(Renderer ui, String id, Rect area, String value, boolean editing) {
         State s = state(id, area, true);
         float edit = active(s, editing);
-        int face = Skin.mix(Skin.mix(Skin.FILL_SUNKEN, Skin.FILL_HOVER, s.hover * (1f - edit)), Skin.FILL_PRESSED,
+        int face = Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, s.hover * (1f - edit)), Skin.BACKGROUND,
                 s.press);
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL, face);
+        VisualEffects.layeredSurface(ui, area, Skin.R_CONTROL, face, s.hover);
         if (edit > 0.01f) {
-            ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL, Skin.HAIRLINE,
-                    Skin.scaleAlpha(Skin.ACCENT, edit));
+            ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
+                    Skin.BORDER_ENERGIZED, Skin.scaleAlpha(Skin.ACTIVE_RED, edit));
         }
         focusRing(ui, s, area, Skin.R_CONTROL);
 
@@ -1076,7 +1117,7 @@ public final class Controls {
             float phase = (now % 1.06f) / 1.06f;
             if (phase < 0.55f) {
                 float caret = area.x + Skin.S3 + ui.measure(shown, Type.BODY) + 1f;
-                ui.fill(caret, area.y + 6f, caret + 1.5f, area.bottom() - 6f, Skin.ACCENT_STRONG);
+                ui.fill(caret, area.y + 6f, caret + 1.5f, area.bottom() - 6f, Skin.HOT_RED);
             }
         }
         return s.clicked;
@@ -1103,9 +1144,19 @@ public final class Controls {
             openId = open ? null : id;
             open = !open;
         }
-        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_SMALL, 0xFF000000 | rgb);
-        ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_SMALL, Skin.HAIRLINE,
-                open ? Skin.ACCENT : Skin.mix(Skin.EDGE_STRONG, Skin.TEXT, s.hover * 0.5f));
+        float scale = 1f + s.hover * 0.045f - s.press * 0.018f;
+        ui.pushTransform(0f, 0f, scale, box.centreX(), box.centreY());
+        VisualEffects.selectedButtonGlow(ui, box, Skin.R_SMALL, open ? 1f : 0f);
+        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_SMALL, Skin.RECESSED);
+        Rect colourFace = box.inset(3f, 3f);
+        ui.rounded(colourFace.x, colourFace.y, colourFace.right(), colourFace.bottom(),
+                Skin.innerRadius(Skin.R_SMALL, box, 3f), 0xFF000000 | rgb);
+        ui.outline(colourFace.x, colourFace.y, colourFace.right(), colourFace.bottom(),
+                Skin.innerRadius(Skin.R_SMALL, box, 3f), Skin.HAIRLINE,
+                Skin.scaleAlpha(0xFFFFFFFF, 0.28f));
+        ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_SMALL, Skin.BORDER_STANDARD,
+                open ? Skin.HOT_RED : Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover));
+        ui.popTransform();
         focusRing(ui, s, box, Skin.R_SMALL);
 
         if (open) {
@@ -1161,11 +1212,11 @@ public final class Controls {
         float mark = slot.active.value(now);
         if (hover > 0.01f || mark > 0.01f) {
             ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
-                    Skin.mix(Skin.scaleAlpha(Skin.FILL_HOVER, hover), Skin.FILL_ACTIVE, mark));
+                    Skin.mix(Skin.scaleAlpha(Skin.SURFACE_HOVER, hover), Skin.ELEVATED, mark));
         }
         if (mark > 0.01f) {
             ui.rounded(area.x, area.centreY() - 9f * mark, area.x + 3f, area.centreY() + 9f * mark, 1.5f,
-                    Skin.scaleAlpha(Skin.ACCENT, mark));
+                    Skin.scaleAlpha(Skin.HOT_RED, mark));
         }
     }
 
@@ -1258,9 +1309,9 @@ public final class Controls {
                 left + width / 2f, top + height / 2f);
         Rect tooltip = new Rect(left, top, width, height);
         VisualEffects.overlayShadow(ui, tooltip, Skin.R_CONTROL);
-        ui.rounded(left, top, left + width, top + height, Skin.R_CONTROL, Skin.OVERLAY);
-        VisualEffects.topLight(ui, left, top, left + width, top + height,
-                Skin.R_CONTROL, Skin.OVERLAY, 1f);
+        VisualEffects.layeredSurface(ui, tooltip, Skin.R_CONTROL, Skin.FLOATING, 0f);
+        ui.outline(left, top, left + width, top + height, Skin.R_CONTROL,
+                Skin.BORDER_STANDARD, Skin.EDGE_ELEVATED);
         ui.text(Text.fit(ui, lastTooltipText, Type.SMALL, width - Skin.S3 * 2f), left + Skin.S3,
                 baseline(ui, top, height, Type.SMALL), Type.SMALL, Skin.TEXT_MUTED);
         ui.popTransform();
@@ -1279,11 +1330,9 @@ public final class Controls {
         ui.pushAlpha(grown);
         ui.pushTransform(0f, (1f - grown) * (upwards ? 4f : -4f));
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.OVERLAY);
-        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
-                Skin.R_MEDIUM, Skin.OVERLAY, 1f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
-        VisualEffects.cornerAccent(ui, panel, Skin.R_MEDIUM, false, grown * 0.72f, Skin.ACCENT);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM,
+                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.ACTIVE_RED, 0.40f));
 
         for (int index = 0; index < overlay.options.length; index++) {
             Rect row = new Rect(panel.x + Skin.S1, panel.y + Skin.S1 + rowHeight * index,
@@ -1292,12 +1341,12 @@ public final class Controls {
                     && row.contains(pointer.x(), pointer.y());
             boolean active = index == overlay.selected;
             if (over) {
-                ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.R_CONTROL, Skin.FILL_HOVER);
+                ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.R_CONTROL, Skin.SURFACE_HOVER);
             }
             ui.text(Text.fit(ui, overlay.options[index], Type.BODY, row.width - Skin.S6), row.x + Skin.S3,
                     baseline(ui, row, Type.BODY), Type.BODY, active || over ? Skin.TEXT : Skin.TEXT_MUTED);
             if (active) {
-                ui.icon(Icon.CHECK, row.right() - Skin.S3 - 12f, row.centreY() - 6f, 12f, Skin.ACCENT_STRONG);
+                ui.icon(Icon.CHECK, row.right() - Skin.S3 - 12f, row.centreY() - 6f, 12f, Skin.HOT_RED);
             }
             if (over && pointer.released(0)) {
                 choiceId = overlay.id;
@@ -1323,11 +1372,9 @@ public final class Controls {
 
         ui.pushAlpha(grown);
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.OVERLAY);
-        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
-                Skin.R_MEDIUM, Skin.OVERLAY, 1f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
-        VisualEffects.cornerAccent(ui, panel, Skin.R_MEDIUM, false, grown * 0.72f, Skin.ACCENT);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM,
+                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.ACTIVE_RED, 0.40f));
 
         for (int index = 0; index < PALETTE.length; index++) {
             float cx = panel.x + Skin.S2 + (index % columns) * cell;

@@ -69,7 +69,9 @@ public abstract class TextRendererWidthMixin {
 
     @Inject(method = "getStringWidth(Ljava/lang/String;)I", at = @At("HEAD"), cancellable = true)
     private void fathom$widthFromMemo(String text, CallbackInfoReturnable<Integer> callback) {
-        if (!Runtime.enabled("render.font.metrics-cache")) {
+        // A static refreshed once per frame. Looking the switch up by string here
+        // parsed and allocated an id on every width query the game made.
+        if (!Runtime.fontMetricsCache) {
             return;
         }
         Integer known = fathom$memo().lookup(text);
@@ -80,7 +82,7 @@ public abstract class TextRendererWidthMixin {
 
     @Inject(method = "getStringWidth(Ljava/lang/String;)I", at = @At("RETURN"))
     private void fathom$rememberWidth(String text, CallbackInfoReturnable<Integer> callback) {
-        if (!Runtime.enabled("render.font.metrics-cache")) {
+        if (!Runtime.fontMetricsCache) {
             return;
         }
         fathom$memo().remember(text, callback.getReturnValueI());

@@ -230,7 +230,8 @@ The launcher may contact **only** these hosts, and every one of them has a state
 | `resources.download.minecraft.net` | Assets |
 | `<our static release host>` | Launcher updates only |
 | Java vendor host (e.g. Adoptium API) | JRE provisioning, **only if** the user chooses managed Java |
-| `api.modrinth.com` / CurseForge API | **Only** on an explicit per-mod user action (see `mod-policies.md` §7) |
+| `api.modrinth.com` / `cdn.modrinth.com` | **Only** on an explicit per-mod user action (see `mod-policies.md` §7) |
+| `api.curseforge.com` / `edge.forgecdn.net` / `mediafilez.forgecdn.net` / `media.forgecdn.net` | Same rule, and **only** once the user has supplied their own CurseForge API key (see `docs/mod-browser.md`) |
 
 Rules:
 

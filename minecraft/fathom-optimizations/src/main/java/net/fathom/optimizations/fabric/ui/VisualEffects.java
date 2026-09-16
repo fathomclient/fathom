@@ -2,176 +2,183 @@ package net.fathom.optimizations.fabric.ui;
 
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.render.FathomRenderer;
+import net.fathom.optimizations.core.ui.render.Paint;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Shadow;
 
 /**
- * Fathom's restrained depth vocabulary.
+ * Fathom's depth and energy vocabulary.
  *
- * <p>On NanoVG, accent light is one box gradient and top lighting is one
- * vertical gradient. The compatibility renderer uses its already-cached
- * falloff atlas. Shadows use the shared {@link Shadow} presets. No helper reads
- * the framebuffer, allocates an image, or creates a texture per frame. Keeping the strengths here also prevents a page made
- * of many controls from becoming brighter than a modal simply because each
- * component invented its own opacity.
+ * <p>Dark, flat materials; red light only where something is active. Hover
+ * never produces light -- it moves, brightens a surface a step, and strengthens
+ * a border. Glow is a tight 4-6 unit falloff around an active edge or icon, not
+ * a bloom around a component, and there is no white decorative lighting.
  *
- * <p>Red light is semantic: these helpers are for enabled, selected, focused,
- * or primary interaction states. Ordinary elevation remains neutral black.
+ * <p>On NanoVG a glow is one box gradient; the compatibility renderer uses its
+ * cached falloff atlas. Shadows use the shared {@link Shadow} presets. No
+ * helper reads the framebuffer, allocates an image, or creates a texture per
+ * frame.
  */
 public final class VisualEffects {
 
     private VisualEffects() {}
 
-    /** Feather width of the ordinary accent bloom; reaches only a few pixels. */
-    public static final float GLOW_RADIUS = 7f;
-    /** Maximum resting opacity of the dark-red bloom. */
-    public static final float GLOW_OPACITY = 0.10f;
-    /** Additional light mixed into an edge or icon at full hover. */
-    public static final float HOVER_BRIGHTNESS = 0.14f;
-    /** How much hover can strengthen an already-semantic accent glow. */
-    public static final float HOVER_GLOW_GAIN = 0.45f;
+    /** Feather of an active component's edge glow. */
+    public static final float GLOW_RADIUS = 6f;
+    /** Maximum opacity of the red energy falloff. */
+    public static final float GLOW_OPACITY = 0.30f;
+    /** Compact controls and markers use a tighter field than cards. */
+    public static final float CONTROL_GLOW_RADIUS = 4f;
+    /** Width of the inner red falloff on an energized perimeter. */
+    public static final float INNER_ENERGY_WIDTH = 3f;
+    /** Card separation and localized icon-light reach. */
+    public static final float CARD_SHADOW_SPREAD = 6f;
+    public static final float CARD_SHADOW_OPACITY = 0.55f;
+    public static final float ICON_ENERGY_REACH = 34f;
+    /** Hover is motion: a small lift and scale, fast. */
+    public static final float CARD_HOVER_LIFT = 1.5f;
+    public static final float CARD_HOVER_SCALE = 0.005f;
+    public static final float ICON_HOVER_SCALE = 0.03f;
+    /** Enable/disable accent change settles within this interval. */
+    public static final float ACTIVATION_PULSE_SECONDS = 0.40f;
+    /** Brightness mixed into text, icons and borders at full hover. */
+    public static final float HOVER_BRIGHTNESS = 0.10f;
     /** Strength of the neutral shadow under an ordinary large panel. */
-    public static final float SHADOW_STRENGTH = 0.72f;
+    public static final float SHADOW_STRENGTH = 0.92f;
     /** Floating controls may separate more clearly than resting panels. */
-    public static final float OVERLAY_SHADOW_STRENGTH = 0.92f;
+    public static final float OVERLAY_SHADOW_STRENGTH = 1.00f;
     /** Modals are deepest, but still use one restrained falloff. */
-    public static final float MODAL_SHADOW_STRENGTH = 0.88f;
+    public static final float MODAL_SHADOW_STRENGTH = 1.00f;
     /** Shared intensity of the keyboard-focus ring. */
     public static final float FOCUS_INTENSITY = 0.78f;
-    /** White added at the top of a surface before fading to transparent. */
-    public static final float TOP_LIGHT_OPACITY = 0.04f;
-    /** The semantic perimeter is a deliberate edge, not another hairline. */
-    public static final float SIGNATURE_STROKE = 1.5f;
-    /** Neutral surface relief from top edge to lower face. */
-    public static final float SURFACE_DEPTH = 0.045f;
+    /** Surface relief from top edge to lower face: darkening only, never a sheen. */
+    public static final float SURFACE_DEPTH = 0.16f;
 
     private static final Shadow PANEL_SHADOW = Shadow.PANEL.withStrength(SHADOW_STRENGTH);
     private static final Shadow OVERLAY_SHADOW = Shadow.DROPDOWN.withStrength(OVERLAY_SHADOW_STRENGTH);
     private static final Shadow MODAL_SHADOW = Shadow.MODAL.withStrength(MODAL_SHADOW_STRENGTH);
+    // Mutable paints are intentionally shared: the UI renders on one thread and
+    // each is consumed before the next helper mutates it. This avoids a hot-path allocation.
+    private static final Paint ENERGY_PAINT = new Paint();
+    private static final Paint PAGE_PAINT = new Paint();
 
-    /** Soft light behind a selected navigation marker, never behind its icon. */
+    /** Tight light behind a selected navigation marker. */
     public static void navigationGlow(Renderer ui, Rect marker, float selected) {
-        glow(ui, marker, Skin.pill(marker), GLOW_RADIUS * 0.72f, selected, 0.72f);
+        glow(ui, marker, Skin.pill(marker), CONTROL_GLOW_RADIUS, selected, 0.90f);
     }
 
     /** One small falloff around an enabled switch track. */
-    public static void toggleGlow(Renderer ui, Rect track, float enabled, float hover) {
-        glow(ui, track, Skin.pill(track), GLOW_RADIUS * 0.58f,
-                enabled * (1f + clamp(hover) * HOVER_GLOW_GAIN), 0.62f);
+    public static void toggleGlow(Renderer ui, Rect track, float enabled) {
+        glow(ui, track, Skin.pill(track), CONTROL_GLOW_RADIUS, enabled, 0.60f);
     }
 
-    /** Primary actions gain a low hover bloom without turning into luminous slabs. */
-    public static void primaryButtonGlow(Renderer ui, Rect area, float radius, float hover) {
-        glow(ui, area, radius, GLOW_RADIUS * 0.78f, clamp(hover), 0.72f);
+    /** Selected icon controls use the smallest accent falloff in the system. */
+    public static void selectedButtonGlow(Renderer ui, Rect area, float radius, float selected) {
+        glow(ui, area, radius, CONTROL_GLOW_RADIUS, selected, 0.60f);
     }
 
-    /** Selected icon controls use the smallest accent bloom in the system. */
-    public static void selectedButtonGlow(Renderer ui, Rect area, float radius, float selected, float hover) {
-        glow(ui, area, radius, GLOW_RADIUS * 0.58f,
-                selected * (0.65f + clamp(hover) * 0.35f), 0.60f);
-    }
-
-    /** A localized active-state light, normally placed behind an icon or state marker. */
-    public static void stateGlow(Renderer ui, Rect source, float radius, float active, float hover) {
-        glow(ui, source, radius, GLOW_RADIUS * 0.72f,
-                active * (0.72f + clamp(hover) * 0.28f), 0.72f);
+    /** A localized active-state light, normally behind an icon or state marker. */
+    public static void stateGlow(Renderer ui, Rect source, float radius, float active) {
+        glow(ui, source, radius, CONTROL_GLOW_RADIUS, active, 0.85f);
     }
 
     /** Tiny halo for keyboard focus; pointer hover deliberately does not trigger it. */
     public static void focusGlow(Renderer ui, Rect area, float radius, float focus) {
-        glow(ui, area, radius, GLOW_RADIUS * 0.46f, clamp(focus), 0.42f);
+        glow(ui, area, radius, CONTROL_GLOW_RADIUS, clamp(focus), 0.60f);
     }
 
-    /**
-     * One top-corner accent. On a pill this is exactly one quarter-circle from
-     * the top tangent to the side tangent, with no horizontal or vertical tail.
-     * The stroke stays inset inside the owning geometry.
-     */
-    public static void cornerAccent(Renderer ui, Rect area, float radius, boolean left,
-            float strength, int colour) {
-        float shown = clamp(strength);
-        if (shown <= 0.001f || !(area.width > 0f) || !(area.height > 0f)) {
-            return;
-        }
-        float outerRadius = Skin.radius(radius, area);
-        float inset = SIGNATURE_STROKE / 2f;
-        float top = Skin.snap(ui, area.y) + inset;
-        float side = left
-                ? Skin.snap(ui, area.x) + inset
-                : Skin.snap(ui, area.right()) - inset;
-        float curve = Math.max(0f, outerRadius - inset);
-        float tangent = left ? side + curve : side - curve;
-        float direction = left ? -1f : 1f;
-        float topCornerY = top + curve;
-        int ink = Skin.scaleAlpha(colour, shown);
-
-        if (ui instanceof FathomRenderer) {
-            FathomRenderer vector = (FathomRenderer) ui;
-            float handle = curve * 0.5522848f;
-            vector.beginPath();
-            vector.moveTo(tangent, top);
-            vector.bezierTo(tangent + direction * handle, top,
-                    side, topCornerY - handle, side, topCornerY);
-            vector.strokePath(SIGNATURE_STROKE, ink);
-            return;
-        }
-
-        float clipPad = SIGNATURE_STROKE;
-        float clipLeft = left ? area.x : tangent - clipPad;
-        float clipRight = left ? tangent + clipPad : area.right();
-        ui.clip(clipLeft, area.y, clipRight, topCornerY + clipPad);
-        ui.outline(area.x, area.y, area.right(), area.bottom(), outerRadius,
-                SIGNATURE_STROKE, ink);
-        ui.unclip();
+    /** Tight edge falloff for enabled, selected or focused components. */
+    public static void energyGlow(Renderer ui, Rect area, float radius, float energy) {
+        glow(ui, area, radius, GLOW_RADIUS, clamp(energy), 0.70f);
     }
 
-    /** A small square depth marker, used where a full bracket would crowd a circular control. */
-    public static void depthMarker(Renderer ui, float centreX, float centreY, float strength) {
-        float shown = clamp(strength);
+    /** A one-shot hairline ring for a meaningful enable/disable event; no bloom. */
+    public static void activationPulse(Renderer ui, Rect area, float radius,
+            float progress, boolean activating) {
+        float phase = clamp(progress);
+        if (phase >= 0.999f) {
+            return;
+        }
+        float remaining = 1f - phase;
+        float expansion = (1f - remaining * remaining) * 3f;
+        int colour = activating ? Skin.ACTIVE_RED : Skin.BASE_RED;
+        ui.outline(area.x - expansion, area.y - expansion,
+                area.right() + expansion, area.bottom() + expansion,
+                radius + expansion, 1f,
+                Skin.scaleAlpha(colour, remaining * (activating ? 0.80f : 0.45f)));
+    }
+
+    /** One thin inner red band just inside an energized perimeter. */
+    public static void innerEnergy(Renderer ui, Rect area, float radius, float energy) {
+        float shown = clamp(energy);
         if (shown <= 0.001f) {
             return;
         }
-        float size = 4f;
-        float left = Skin.snap(ui, centreX - size / 2f);
-        float top = Skin.snap(ui, centreY - size / 2f);
-        float right = left + size;
-        float bottom = top + size;
-        glow(ui, left, top, right, bottom, Skin.R_SMALL, GLOW_RADIUS * 0.72f,
-                shown * 0.72f, 0.72f);
-        ui.fill(left, top, right, bottom, Skin.scaleAlpha(Skin.ACCENT, shown));
-        ui.fill(left + 1f, top + 1f, right, bottom,
-                Skin.scaleAlpha(Skin.PANEL, shown * 0.72f));
+        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.radius(radius, area),
+                INNER_ENERGY_WIDTH, Skin.scaleAlpha(Skin.BASE_RED, shown * 0.14f));
     }
 
-    /** Directional material separation: nearly imperceptible light above, depth below. */
+    /** Small dark-red radial light contained by a component, behind an active icon. */
+    public static void energyWash(Renderer ui, Rect area, float radius,
+            float centreX, float centreY, float reach, float energy) {
+        float shown = clamp(energy);
+        if (shown <= 0.001f) {
+            return;
+        }
+        int centre = Skin.scaleAlpha(Skin.RED_GLOW, shown * 0.18f);
+        if (ui instanceof FathomRenderer) {
+            ((FathomRenderer) ui).rounded(area.x, area.y, area.right(), area.bottom(),
+                    Skin.radius(radius, area), ENERGY_PAINT.radial(centreX, centreY, 0f,
+                            Math.max(1f, reach), centre, 0x00841C24));
+        } else {
+            float end = Math.min(area.right(), area.x + Math.max(24f, reach));
+            ui.gradient(area.x, area.y, end, area.bottom(), Skin.radius(radius, area),
+                    centre, 0x00841C24);
+        }
+    }
+
+    /** Soft top/bottom mask for clipped scrolling content. */
+    public static void scrollEdgeFade(Renderer ui, Rect viewport, boolean top, boolean bottom) {
+        float depth = Math.min(18f, viewport.height * 0.12f);
+        int shade = Skin.scaleAlpha(Skin.BACKGROUND, 0.72f);
+        if (top) {
+            ui.gradient(viewport.x, viewport.y, viewport.right(), viewport.y + depth,
+                    0f, shade, 0x00050607);
+        }
+        if (bottom) {
+            ui.gradient(viewport.x, viewport.bottom() - depth, viewport.right(), viewport.bottom(),
+                    0f, 0x00050607, shade);
+        }
+    }
+
+    /** Flat dark material with a slight darkening toward the lower face; hover lifts one step. */
     public static void layeredSurface(Renderer ui, Rect area, float radius, int face, float hover) {
-        int top = Skin.mix(face, 0xFFFFFFFF, 0.018f + clamp(hover) * 0.012f);
-        int bottom = Skin.mix(face, 0xFF000000, SURFACE_DEPTH);
+        int top = Skin.mix(face, 0xFFFFFFFF, clamp(hover) * 0.025f);
+        int bottom = Skin.mix(top, 0xFF000000, SURFACE_DEPTH);
         ui.gradient(area.x, area.y, area.right(), area.bottom(), radius, top, bottom);
     }
 
-    /** Near-black environmental falloff for a large content plane. */
-    public static void pageDepth(Renderer ui, Rect area) {
-        int top = Skin.mix(Skin.PANEL, 0xFFFFFFFF, 0.010f);
-        int bottom = Skin.mix(Skin.PANEL, 0xFF000000, 0.052f);
-        ui.gradient(area.x, area.y, area.right(), area.bottom(), 0f, top, bottom);
-    }
-
-    /**
-     * Faint light from the top of a surface. The full-size path shares the
-     * surface radius, avoiding a mismatched inner strip at rounded corners.
-     */
-    public static void topLight(Renderer ui, float left, float top, float right, float bottom,
-            float radius, int face, float strength) {
-        float faceAlpha = ((face >>> 24) & 0xFF) / 255f;
-        float alpha = TOP_LIGHT_OPACITY * faceAlpha * clamp(strength);
-        if (alpha <= 0.001f) {
-            return;
+    /** The content plane: near-black charcoal, no coloured light. */
+    public static void pageDepth(Renderer ui, Rect area, float outerRadius) {
+        float corner = Skin.radius(outerRadius, area);
+        if (ui instanceof FathomRenderer) {
+            // This plane owns only the hub's bottom-right corner. A square fill
+            // here used to paint back over the rounded parent and leave a tiny
+            // dark protrusion at the outer corner.
+            ((FathomRenderer) ui).rounded(area.x, area.y, area.right(), area.bottom(),
+                    0f, 0f, corner, 0f,
+                    PAGE_PAINT.vertical(area.y, area.bottom(), Skin.RECESSED, Skin.BACKGROUND));
+        } else {
+            ui.gradient(area.x, area.y, area.right(), area.bottom(), corner,
+                    Skin.RECESSED, Skin.BACKGROUND);
+            // Restore the two inner seam corners without disturbing the outer
+            // rounded corner in the compatibility backend.
+            ui.gradient(area.x, area.y, area.x + corner, area.bottom(), 0f,
+                    Skin.RECESSED, Skin.BACKGROUND);
         }
-        ui.gradient(left, top, right, bottom, radius, Skin.argb(alpha, 0xFFFFFF), 0x00FFFFFF);
     }
 
-    /** Brighten an existing neutral or semantic colour by the shared hover amount. */
+    /** Brighten text, an icon or a border by the shared hover amount. */
     public static int hoverBrighten(int colour, float hover) {
         return Skin.mix(colour, 0xFFFFFFFF, clamp(hover) * HOVER_BRIGHTNESS);
     }
@@ -206,23 +213,16 @@ public final class VisualEffects {
 
     private static void glow(Renderer ui, Rect area, float radius, float feather,
             float strength, float opacityScale) {
-        glow(ui, area.x, area.y, area.right(), area.bottom(), radius, feather, strength, opacityScale);
-    }
-
-    private static void glow(Renderer ui, float left, float top, float right, float bottom,
-            float radius, float feather, float strength, float opacityScale) {
-        float alpha = GLOW_OPACITY * opacityScale * Math.min(1.45f, Math.max(0f, strength));
+        float alpha = GLOW_OPACITY * opacityScale * clamp(strength);
         if (alpha <= 0.001f) {
             return;
         }
-        int colour = Skin.scaleAlpha(Skin.ACCENT_DEEP, alpha);
+        int colour = Skin.scaleAlpha(Skin.RED_GLOW, alpha);
         if (ui instanceof FathomRenderer) {
-            ((FathomRenderer) ui).glow(left, top, right, bottom, radius, feather, colour);
+            ((FathomRenderer) ui).glow(area.x, area.y, area.right(), area.bottom(), radius, feather, colour);
         } else {
             // The compatibility renderer uses its one cached falloff atlas.
-            // This remains a single batched shadow primitive and creates no
-            // texture or CPU-rasterized asset at interaction time.
-            ui.shadow(left, top, right, bottom, radius, feather * 0.55f, colour);
+            ui.shadow(area.x, area.y, area.right(), area.bottom(), radius, feather * 0.55f, colour);
         }
     }
 

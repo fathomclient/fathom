@@ -269,7 +269,7 @@ final class MenuVideo {
                     ByteBuffer pixels = free.poll(100L, TimeUnit.MILLISECONDS);
                     if (pixels == null) continue;
                     long began = System.nanoTime();
-                    BufferedImage image = read(profile, index);
+                    BufferedImage image = decode(index);
                     if (!copy(image, pixels, profile)) {
                         free.offer(pixels);
                         fail(this, "missing or invalid " + profile.label + " frame " + index);
@@ -285,6 +285,63 @@ final class MenuVideo {
             } catch (IOException | RuntimeException broken) {
                 fail(this, broken.getMessage() == null
                         ? broken.getClass().getSimpleName() : broken.getMessage());
+            } finally {
+                if (reader != null) {
+                    reader.dispose();
+                }
+            }
+        }
+
+        /*
+         * One JPEG reader and one destination image for the whole session.
+         *
+         * `ImageIO.read` builds a new 1920x1080 BGR image for every frame: 6 MB
+         * a frame, 30 times a second, on this thread. On G1 each is a humongous
+         * allocation, and the soak benchmark counted 449 collections in 90 seconds
+         * on the main menu. Decoding into the same raster removes that entirely;
+         * the copy into the upload buffer below is unchanged.
+         */
+        private javax.imageio.ImageReader reader;
+        private BufferedImage destination;
+        private boolean reuseUnsupported;
+
+        private BufferedImage decode(int index) throws IOException {
+            if (reuseUnsupported) {
+                return read(profile, index);
+            }
+            String path = ROOT + profile.directory + "/"
+                    + String.format(Locale.ROOT, "frame_%03d.jpg", index);
+            try (InputStream stream = MenuVideo.class.getResourceAsStream(path)) {
+                if (stream == null) {
+                    return null;
+                }
+                javax.imageio.stream.ImageInputStream input = ImageIO.createImageInputStream(stream);
+                try {
+                    if (reader == null) {
+                        java.util.Iterator<javax.imageio.ImageReader> readers = ImageIO.getImageReaders(input);
+                        if (!readers.hasNext()) {
+                            return null;
+                        }
+                        reader = readers.next();
+                    }
+                    reader.setInput(input, true, true);
+                    javax.imageio.ImageReadParam param = reader.getDefaultReadParam();
+                    if (destination != null) {
+                        param.setDestination(destination);
+                    }
+                    BufferedImage decoded = reader.read(0, param);
+                    if (destination == null && decoded.getType() == BufferedImage.TYPE_3BYTE_BGR) {
+                        destination = decoded;
+                    }
+                    return decoded;
+                } catch (javax.imageio.IIOException incompatible) {
+                    // A reader that refuses the destination: fall back to a fresh
+                    // image per frame, which is what this did before.
+                    reuseUnsupported = true;
+                    return read(profile, index);
+                } finally {
+                    input.close();
+                }
             }
         }
     }

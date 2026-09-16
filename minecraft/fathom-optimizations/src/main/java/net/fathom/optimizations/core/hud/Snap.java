@@ -128,10 +128,23 @@ public final class Snap {
      * @param screenHeight scaled screen height
      */
     public static Result snap(Box dragged, List<Box> others, int screenWidth, int screenHeight) {
-        List<Guide> guides = new ArrayList<Guide>();
+        return snap(dragged, others, screenWidth, screenHeight, THRESHOLD);
+    }
 
-        Candidate horizontal = new Candidate();
-        Candidate vertical = new Candidate();
+    /**
+     * As above, with the editor's chosen snap strength.
+     *
+     * @param threshold how close, in scaled pixels, counts as aligned. Zero
+     *     turns snapping off and returns the box where the mouse put it.
+     */
+    public static Result snap(Box dragged, List<Box> others, int screenWidth, int screenHeight, int threshold) {
+        List<Guide> guides = new ArrayList<Guide>();
+        if (threshold <= 0) {
+            return new Result(dragged.x, dragged.y, guides);
+        }
+
+        Candidate horizontal = new Candidate(threshold);
+        Candidate vertical = new Candidate(threshold);
 
         // Screen edges and centre. A widget aligned to the middle of the screen is
         // a thing people do deliberately and cannot do by hand at one-pixel accuracy.
@@ -171,14 +184,19 @@ public final class Snap {
      * moves to the nearer one.
      */
     private static final class Candidate {
+        final int threshold;
         boolean found;
         int distance = Integer.MAX_VALUE;
         int delta;
         int line;
 
+        Candidate(int threshold) {
+            this.threshold = threshold;
+        }
+
         void offer(int gap, int shift, int guideLine) {
             int magnitude = Math.abs(gap);
-            if (magnitude <= THRESHOLD && magnitude < distance) {
+            if (magnitude <= threshold && magnitude < distance) {
                 found = true;
                 distance = magnitude;
                 delta = shift;
@@ -210,5 +228,69 @@ public final class Snap {
         int x = Math.max(0, Math.min(box.x, screenWidth - box.width));
         int y = Math.max(0, Math.min(box.y, screenHeight - box.height));
         return new Box(x, y, box.width, box.height);
+    }
+
+    /** Whether two boxes share any pixel. Touching edges do not overlap. */
+    public static boolean overlaps(Box a, Box b) {
+        return a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom();
+    }
+
+    /**
+     * Move a dropped box off the widgets it landed on, by the shortest way out.
+     *
+     * <p>Only applied when a drag ends, and only when the box actually overlaps
+     * something. Each candidate is the box pushed just clear of one neighbour
+     * on one side, and the nearest candidate that is on screen and overlaps
+     * nothing wins. When there is no such place — a crowded HUD on a small
+     * window — the box stays where it was dropped: moving it somewhere
+     * arbitrary would be worse than an overlap somebody can see and fix.
+     *
+     * @param gap space to leave between the box and the neighbour it moved off
+     */
+    public static Box separate(Box dropped, List<Box> others, int screenWidth, int screenHeight, int gap) {
+        boolean overlapping = false;
+        for (Box other : others) {
+            if (overlaps(dropped, other)) {
+                overlapping = true;
+                break;
+            }
+        }
+        if (!overlapping) {
+            return dropped;
+        }
+        Box best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (Box other : others) {
+            int[][] candidates = {
+                {other.x - gap - dropped.width, dropped.y},
+                {other.right() + gap, dropped.y},
+                {dropped.x, other.y - gap - dropped.height},
+                {dropped.x, other.bottom() + gap},
+            };
+            for (int[] candidate : candidates) {
+                Box moved = new Box(candidate[0], candidate[1], dropped.width, dropped.height);
+                if (moved.x < 0 || moved.y < 0 || moved.right() > screenWidth || moved.bottom() > screenHeight) {
+                    continue;
+                }
+                boolean clear = true;
+                for (Box check : others) {
+                    if (overlaps(moved, check)) {
+                        clear = false;
+                        break;
+                    }
+                }
+                if (!clear) {
+                    continue;
+                }
+                long dx = moved.x - dropped.x;
+                long dy = moved.y - dropped.y;
+                long distance = dx * dx + dy * dy;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = moved;
+                }
+            }
+        }
+        return best == null ? dropped : best;
     }
 }

@@ -239,11 +239,19 @@ public final class ProfileRuntime {
         live = captured;
     }
 
-    /** {@link #saveLive}, returning the failure rather than throwing, for a screen that is closing. */
+    /**
+     * {@link #saveLive} for a screen that is closing or an edit being committed:
+     * the snapshot and JSON are taken now, on the render thread, and the disk
+     * write happens on the store's writer thread so the frame does not wait for
+     * a sync. Returns a validation failure now, or an I/O failure from an
+     * earlier background write, rather than throwing.
+     */
     public String saveLiveQuietly() {
         try {
-            saveLive();
-            return null;
+            FathomProfile captured = ProfileSwitch.capture(live, hud, switches, optimizations, baseline);
+            store.saveInBackground(captured);
+            live = captured;
+            return store.takeBackgroundFailure();
         } catch (ProfileException failure) {
             return failure.getMessage();
         }

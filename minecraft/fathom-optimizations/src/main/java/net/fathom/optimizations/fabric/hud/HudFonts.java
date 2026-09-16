@@ -16,8 +16,18 @@ public final class HudFonts {
 
     /** Minecraft's own bitmap font, in its own units. */
     public static HudFont vanilla(TextRenderer font) {
-        return new Vanilla(font);
+        // Reused while the game keeps the same renderer, so the HUD does not
+        // allocate a wrapper every frame and per-frame size memos keyed on the
+        // font stay valid across the frame.
+        Vanilla cached = lastVanilla;
+        if (cached == null || cached.font != font) {
+            cached = new Vanilla(font);
+            lastVanilla = cached;
+        }
+        return cached;
     }
+
+    private static Vanilla lastVanilla;
 
     /**
      * Geist, rasterised at framebuffer resolution and measured back into
@@ -26,8 +36,16 @@ public final class HudFonts {
      * @param mcToLogical Fathom logical units per Minecraft scaled pixel
      */
     public static HudFont fathom(GlRenderer renderer, float mcToLogical) {
-        return new Fathom(renderer, mcToLogical);
+        Fathom cached = lastFathom;
+        if (cached == null || cached.renderer != renderer
+                || Float.floatToIntBits(cached.requestedScale) != Float.floatToIntBits(mcToLogical)) {
+            cached = new Fathom(renderer, mcToLogical);
+            lastFathom = cached;
+        }
+        return cached;
     }
+
+    private static Fathom lastFathom;
 
     private static final class Vanilla implements HudFont {
 
@@ -60,6 +78,18 @@ public final class HudFonts {
         public boolean fathom() {
             return false;
         }
+
+        @Override
+        public float capHeight() {
+            // Minecraft's glyphs are drawn from the top of an eight-pixel cell;
+            // capitals fill the top seven rows and the eighth is descender.
+            return 7f;
+        }
+
+        @Override
+        public float capTop() {
+            return 0f;
+        }
     }
 
     /**
@@ -91,11 +121,13 @@ public final class HudFonts {
         private static final float CELL = 8f;
 
         private final GlRenderer renderer;
+        private final float requestedScale;
         private final float mcToLogical;
         private final Type type;
 
         Fathom(GlRenderer renderer, float mcToLogical) {
             this.renderer = renderer;
+            this.requestedScale = mcToLogical;
             this.mcToLogical = Math.max(0.0001f, mcToLogical);
             this.type = Type.BODY_STRONG.at(
                     Math.max(6, Math.round(CELL * this.mcToLogical)));
@@ -135,6 +167,19 @@ public final class HudFonts {
         @Override
         public boolean fathom() {
             return true;
+        }
+
+        /** Geist's capitals are 0.71 of its em, which is the type size. */
+        private static final float CAP_RATIO = 0.71f;
+
+        @Override
+        public float capHeight() {
+            return type.size() * CAP_RATIO / mcToLogical;
+        }
+
+        @Override
+        public float capTop() {
+            return (renderer.ascent(type) - type.size() * CAP_RATIO) / mcToLogical;
         }
     }
 }

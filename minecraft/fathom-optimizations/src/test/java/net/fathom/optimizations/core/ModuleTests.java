@@ -12,6 +12,7 @@ import net.fathom.optimizations.core.input.KeybindCaptureState;
 import net.fathom.optimizations.core.module.Behaviour;
 import net.fathom.optimizations.core.module.Category;
 import net.fathom.optimizations.core.module.CrosshairPolicy;
+import net.fathom.optimizations.core.module.CrosshairPresets;
 import net.fathom.optimizations.core.module.FathomModule;
 import net.fathom.optimizations.core.module.HudStyle;
 import net.fathom.optimizations.core.module.Implementation;
@@ -77,6 +78,14 @@ public final class ModuleTests {
         keybindsReportConflictsWithoutForbiddingThem();
         keybindCaptureOwnsExactlyOneBindingAndNoSlider();
         mouseBindingsCoverEveryButtonConvention();
+        aBindingCanBeClearedWithoutBindingAnotherKey();
+
+        // -- settings that depend on each other -------------------------------
+        aCrosshairPresetWritesItsShapeAndEditsMakeItCustom();
+        zoomLimitsStayInOrderHoweverTheyAreEdited();
+        aRenamedOptionIsStillReadFromAnOlderProfile();
+        aLoadedModuleDescribesWhatItActuallyLoaded();
+        theSettingsRevisionMovesOnlyWhenAValueDoes();
 
         // -- the table -------------------------------------------------------
         theToggleValidationTable();
@@ -472,6 +481,185 @@ public final class ModuleTests {
         check(binding.isMouseButton() && binding.mouseButton() == 2, "middle click round-trips as button 2");
         check("Middle Click".equals(binding.keyName()), "middle click is named");
         pass("mouse bindings cover every Minecraft mouse-code direction");
+    }
+
+    /**
+     * Backspace and Delete unbind.
+     *
+     * <p>Without this there is no way to remove a binding at all: every key
+     * press binds that key, so a user who wants no key has to pick one they
+     * never press. Escape already means cancel, so it cannot also mean clear.
+     */
+    static void aBindingCanBeClearedWithoutBindingAnotherKey() {
+        KeybindCaptureState capture = new KeybindCaptureState();
+        Keybind binding = new Keybind("zoom", "Zoom", 46);
+
+        capture.begin(binding);
+        check(capture.keyboard(KeybindCaptureState.KEY_BACKSPACE, 1) == KeybindCaptureState.Outcome.CLEARED,
+                "Backspace clears");
+        check(!binding.isBound(), "and the binding is now none");
+        check("None".equals(binding.keyName()), "which is what the row says");
+
+        binding.set(46);
+        capture.begin(binding);
+        check(capture.keyboard(KeybindCaptureState.KEY_DELETE, 1) == KeybindCaptureState.Outcome.CLEARED,
+                "so does Delete");
+        check(!binding.isBound(), "the binding is none again");
+
+        binding.reset();
+        capture.begin(binding);
+        check(capture.keyboard(0, 1) == KeybindCaptureState.Outcome.NONE,
+                "a key LWJGL cannot name is not a binding");
+        check(capture.active(), "and capture keeps listening rather than silently failing");
+        check(binding.key() == 46, "the old key is untouched");
+        pass("a binding can be cleared without binding another key");
+    }
+
+    /**
+     * A preset is a shortcut to values, not a mode.
+     *
+     * <p>So choosing one has to write the values, and editing a value has to
+     * stop claiming the preset. Either half alone is worse than neither: a
+     * preset that does not write is decoration, and one that keeps its name
+     * after an edit describes a crosshair that is no longer on screen.
+     */
+    static void aCrosshairPresetWritesItsShapeAndEditsMakeItCustom() {
+        FathomModule crosshair = ModuleRegistry.standard().find("crosshair");
+        Setting preset = crosshair.setting(CrosshairPresets.PRESET);
+        check("Default".equals(((Setting.Choice) preset).get()), "a fresh profile is the default shape");
+
+        ((Setting.Choice) preset).set("Small");
+        crosshair.settingChanged(preset);
+        check(Math.round(crosshair.number(CrosshairPresets.LENGTH, 0)) == 2, "the preset wrote the length");
+        check(Math.round(crosshair.number(CrosshairPresets.GAP, 0)) == 1, "and the gap");
+        check("Small".equals(((Setting.Choice) preset).get()), "and the row still says Small");
+
+        Setting length = crosshair.setting(CrosshairPresets.LENGTH);
+        ((Setting.Whole) length).set(9);
+        crosshair.settingChanged(length);
+        check(CrosshairPresets.CUSTOM.equals(((Setting.Choice) preset).get()),
+                "editing the shape makes it custom");
+        check(Math.round(crosshair.number(CrosshairPresets.LENGTH, 0)) == 9,
+                "and the edit stands rather than being written back over");
+
+        // Colour is not part of a preset: somebody who picked their own green
+        // should be able to try every shape without losing it.
+        Setting colour = crosshair.setting("colour");
+        ((Setting.Colour) colour).set(0x33FF99);
+        ((Setting.Choice) preset).set("Classic");
+        crosshair.settingChanged(preset);
+        check(crosshair.colour("colour", 0) == 0x33FF99, "a preset leaves the colour alone");
+        pass("a crosshair preset writes its shape and edits make it custom");
+    }
+
+    /** A minimum above the maximum is not a state the interface can produce. */
+    static void zoomLimitsStayInOrderHoweverTheyAreEdited() {
+        FathomModule zoom = ModuleRegistry.standard().find("zoom");
+        Setting.Slider min = (Setting.Slider) zoom.setting("min");
+        Setting.Slider amount = (Setting.Slider) zoom.setting("amount");
+        Setting.Slider max = (Setting.Slider) zoom.setting("max");
+
+        min.set(8);
+        zoom.settingChanged(min);
+        check(amount.get() >= min.get(), "raising the minimum carries the amount with it");
+        check(max.get() >= min.get(), "and never leaves the maximum below it");
+
+        max.set(3);
+        zoom.settingChanged(max);
+        check(amount.get() <= max.get(), "lowering the maximum carries the amount down");
+        check(min.get() <= max.get(), "and the minimum with it");
+
+        amount.set(amount.maximum());
+        zoom.settingChanged(amount);
+        check(max.get() >= amount.get(), "and an amount past the maximum raises it");
+        pass("zoom limits stay in order however they are edited");
+    }
+
+    /**
+     * A renamed option still reads.
+     *
+     * <p>The FPS reading called "Off" is called "Raw" now, because Off read as
+     * "no FPS readout". A profile written by the older build says Off, and a
+     * choice that refused it would quietly reset somebody's setting on upgrade.
+     */
+    static void aRenamedOptionIsStillReadFromAnOlderProfile() {
+        FathomModule fps = ModuleRegistry.standard().find("fps");
+        Setting.Choice reading = (Setting.Choice) fps.setting("smoothing");
+        check(reading.parse("Off"), "the old spelling is accepted");
+        check("Raw".equals(reading.get()), "and read as its new name");
+        check(reading.parse("Smooth") && "Smooth".equals(reading.get()), "current names still work");
+        check(!reading.parse("Sideways"), "and an option that never existed is still refused");
+        pass("a renamed option is still read from an older profile");
+    }
+
+    /**
+     * A label derived from other settings has to describe what was loaded.
+     *
+     * <p>A stored preset and stored shape values can disagree — a file edited by
+     * hand, or written by a build whose preset meant something slightly
+     * different. The values are the truth, so after a load the label is
+     * re-derived from them rather than left claiming a shape that is not on
+     * screen.
+     */
+    static void aLoadedModuleDescribesWhatItActuallyLoaded() {
+        File directory = temporaryDirectory("modules-derived");
+        writeProperties(new File(directory, ModuleStore.RELATIVE_PATH),
+                "schema = 1\n"
+                        + "feature.crosshair.set.preset = Competitive\n"
+                        + "feature.crosshair.set.length = 9\n");
+
+        ModuleRegistry registry = ModuleRegistry.standard();
+        new ModuleStore().load(directory, registry);
+        FathomModule crosshair = registry.find("crosshair");
+        check(Math.round(crosshair.number(CrosshairPresets.LENGTH, 0)) == 9,
+                "the stored length was loaded");
+        check(CrosshairPresets.CUSTOM.equals(crosshair.choice(CrosshairPresets.PRESET, "")),
+                "and the preset row says what that actually is: "
+                        + crosshair.choice(CrosshairPresets.PRESET, ""));
+        pass("a loaded module describes what it actually loaded");
+    }
+
+    private static void writeProperties(File file, String contents) {
+        try {
+            File parent = file.getParentFile();
+            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+                throw new AssertionError("could not create " + parent);
+            }
+            java.io.Writer out = new java.io.OutputStreamWriter(
+                    new java.io.FileOutputStream(file), "UTF-8");
+            try {
+                out.write(contents);
+            } finally {
+                out.close();
+            }
+        } catch (java.io.IOException problem) {
+            throw new AssertionError("writing failed: " + problem);
+        }
+    }
+
+    /**
+     * The revision is what lets a widget cache what it derived from its
+     * settings for a whole frame instead of re-reading a dozen values.
+     */
+    static void theSettingsRevisionMovesOnlyWhenAValueDoes() {
+        Setting.Toggle toggle = new Setting.Toggle("t", "Toggle", "", false);
+        int before = Setting.revision();
+        check(Setting.revision() == before, "reading changes nothing");
+        toggle.set(false);
+        check(Setting.revision() == before, "and setting the same value changes nothing");
+        toggle.set(true);
+        check(Setting.revision() != before, "a real change moves it");
+
+        int afterSet = Setting.revision();
+        toggle.parse("true");
+        check(Setting.revision() == afterSet, "parsing the same value moves nothing");
+        toggle.parse("false");
+        check(Setting.revision() != afterSet, "parsing a different one does");
+
+        int afterParse = Setting.revision();
+        toggle.reset();
+        check(Setting.revision() == afterParse, "resetting to the value it already has moves nothing");
+        pass("the settings revision moves only when a value does");
     }
 
     /**

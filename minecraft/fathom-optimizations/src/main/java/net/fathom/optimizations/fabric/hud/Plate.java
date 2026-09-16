@@ -1,7 +1,5 @@
 package net.fathom.optimizations.fabric.hud;
 
-import net.minecraft.client.gui.DrawableHelper;
-
 /**
  * The plate behind a HUD widget.
  *
@@ -37,16 +35,107 @@ final class Plate {
         if (width <= 0 || height <= 0 || (argb >>> 24) == 0) {
             return;
         }
-        // Anything Fathom has queued goes out first. The plate draws through
-        // Minecraft's own Tessellator, and so does Fathom's renderer; starting
-        // one that is already started is an exception in the middle of a frame.
-        // Keystrokes is the widget that makes this necessary — it alternates
-        // plate, label, plate, label all the way down.
-        net.fathom.optimizations.fabric.gfx.GlRenderer active =
-                net.fathom.optimizations.fabric.gfx.Gfx.peek();
-        if (active != null && active.inFrame()) {
-            active.flush();
+        // A plate with a radius is up to seventeen spans; one draw, not seventeen.
+        // Opening the batch flushes anything Fathom's renderer queued first: the
+        // plate draws through Minecraft's own Tessellator, and so does Fathom's
+        // renderer, and starting one that is already started is an exception in
+        // the middle of a frame. Inside a caller's batch that flush already ran.
+        boolean batched = QuadBatch.isOpen();
+        if (!batched) {
+            QuadBatch.begin();
         }
+        try {
+            drawSpans(x, y, width, height, argb, radius, shadow);
+        } finally {
+            if (!batched) {
+                QuadBatch.end();
+            }
+        }
+    }
+
+    /**
+     * An outline following the plate's own rounded corners.
+     *
+     * <p>Drawn row by row as the difference between the plate and the plate
+     * inset by the border width, so the ring is exactly as round as the fill
+     * beside it, never overlaps itself (which would show as dark corners at
+     * anything under full opacity) and needs no texture.
+     */
+    static void border(int x, int y, int width, int height, int radius, int thickness, int argb) {
+        if (width <= 0 || height <= 0 || thickness <= 0 || (argb >>> 24) == 0) {
+            return;
+        }
+        boolean batched = QuadBatch.isOpen();
+        if (!batched) {
+            QuadBatch.begin();
+        }
+        try {
+            int t = Math.min(thickness, Math.min(width, height) / 2);
+            int r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+            if (r == 0) {
+                // The common case, and the one drawn per key by Keystrokes:
+                // four spans, not one per row. A square border rasterised row
+                // by row is thirty rectangles to draw four.
+                QuadBatch.rect(x, y, x + width, y + t, argb);
+                QuadBatch.rect(x, y + height - t, x + width, y + height, argb);
+                QuadBatch.rect(x, y + t, x + t, y + height - t, argb);
+                QuadBatch.rect(x + width - t, y + t, x + width, y + height - t, argb);
+                return;
+            }
+            // Rounded: the corner bands need a span per row, but the straight
+            // middle is two tall rectangles however tall the widget is.
+            int innerRadius = Math.max(0, r - t);
+            int innerHeight = height - t * 2;
+            // Rows that are inside a corner, or inside the top and bottom
+            // edges, are drawn one at a time; everything between them is two
+            // tall rectangles however tall the widget is.
+            int bandRows = Math.min(height / 2, Math.max(r, t));
+            for (int row = 0; row < bandRows; row++) {
+                band(x, y + row, width, row, height, r, t, innerRadius, innerHeight, argb);
+                band(x, y + height - 1 - row, width, height - 1 - row, height, r, t,
+                        innerRadius, innerHeight, argb);
+            }
+            if (height - bandRows * 2 > 0) {
+                QuadBatch.rect(x, y + bandRows, x + t, y + height - bandRows, argb);
+                QuadBatch.rect(x + width - t, y + bandRows, x + width, y + height - bandRows, argb);
+            }
+        } finally {
+            if (!batched) {
+                QuadBatch.end();
+            }
+        }
+    }
+
+    /** One row through a rounded corner: the ring between the outer and inner curves. */
+    private static void band(int x, int screenY, int width, int row, int height, int radius,
+            int thickness, int innerRadius, int innerHeight, int argb) {
+        int outer = inset(radius, row, height);
+        int innerRow = row - thickness;
+        if (innerRow < 0 || innerRow >= innerHeight || width - thickness * 2 <= 0) {
+            QuadBatch.rect(x + outer, screenY, x + width - outer, screenY + 1, argb);
+            return;
+        }
+        int inner = thickness + inset(innerRadius, innerRow, innerHeight);
+        if (inner > outer) {
+            QuadBatch.rect(x + outer, screenY, x + inner, screenY + 1, argb);
+            QuadBatch.rect(x + width - inner, screenY, x + width - outer, screenY + 1, argb);
+        }
+    }
+
+    /** How far in a rounded rectangle of this radius starts on a given row. */
+    private static int inset(int radius, int row, int height) {
+        if (radius <= 0) {
+            return 0;
+        }
+        int fromEdge = row < radius ? row : (row >= height - radius ? height - 1 - row : -1);
+        if (fromEdge < 0) {
+            return 0;
+        }
+        int dy = radius - fromEdge;
+        return radius - (int) Math.round(Math.sqrt((double) radius * radius - (double) dy * dy));
+    }
+
+    private static void drawSpans(int x, int y, int width, int height, int argb, int radius, boolean shadow) {
         int r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
 
         if (shadow) {
@@ -64,11 +153,11 @@ final class Plate {
 
     private static void rounded(int x, int y, int width, int height, int radius, int argb) {
         if (radius <= 0) {
-            DrawableHelper.fill(x, y, x + width, y + height, argb);
+            QuadBatch.rect(x, y, x + width, y + height, argb);
             return;
         }
         // The straight middle, full width.
-        DrawableHelper.fill(x, y + radius, x + width, y + height - radius, argb);
+        QuadBatch.rect(x, y + radius, x + width, y + height - radius, argb);
 
         // The two corner bands, one span per row. `inset` is how far in the fill
         // starts on that row: the horizontal distance from the circle's centre
@@ -76,8 +165,8 @@ final class Plate {
         for (int row = 0; row < radius; row++) {
             int dy = radius - row;
             int inset = radius - (int) Math.round(Math.sqrt((double) radius * radius - (double) dy * dy));
-            DrawableHelper.fill(x + inset, y + row, x + width - inset, y + row + 1, argb);
-            DrawableHelper.fill(
+            QuadBatch.rect(x + inset, y + row, x + width - inset, y + row + 1, argb);
+            QuadBatch.rect(
                     x + inset, y + height - row - 1, x + width - inset, y + height - row, argb);
         }
     }

@@ -51,8 +51,14 @@ public final class ConfigTests {
     }
 
     private static void anEmptyConfigLeavesTheDefaultsAlone() {
-        SwitchBoard board = LauncherConfig.empty().apply(OptimizationRegistry.standard());
-        check(board.enabled().isEmpty(), "no launcher config must mean registry defaults");
+        OptimizationRegistry registry = OptimizationRegistry.standard();
+        SwitchBoard board = LauncherConfig.empty().apply(registry);
+        // Exactly the registry's own defaults: on where an in-game measurement
+        // promoted a SAFE entry, off everywhere else.
+        for (net.fathom.optimizations.core.registry.Optimization entry : registry.all()) {
+            check(board.isEnabled(entry.id()) == entry.defaultEnabled(),
+                    "no launcher config must mean registry defaults: " + entry.id());
+        }
         pass("an empty config produces the registry defaults");
     }
 

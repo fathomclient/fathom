@@ -15,6 +15,7 @@ import net.minecraft.client.util.ScreenshotUtils;
 
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
+import net.fathom.optimizations.core.ui.anim.Spring;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.layout.Rect;
@@ -160,32 +161,14 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private static final float DOCK_DELAY_SECONDS = Timing.STAGGER * 3f;
 
     /**
-     * The launcher's glass, at the launcher's own opacities.
-     *
-     * <p>None of these are new numbers. {@code .launch} in
-     * {@code desktop/src/routes/Home.svelte} -- the slab the launcher's home
-     * page is built around -- is {@code rgba(12, 14, 19, 0.68)} with the strong
-     * edge, the strong sheen and a shadow under it. The small pills along its
-     * chrome are {@code --glass-fill}: the same family at 0.58, with the plain
-     * edge and the plain sheen. Fathom's tokens already carry both colours, so
-     * this is the launcher's material named in the launcher's own terms rather
-     * than a hand-matched approximation of it.
-     *
-     * <p>What cannot come across is the blur, and that is why the opacities
-     * here are lower than the launcher's rather than equal to them. The launcher
-     * backs its glass with {@code backdrop-filter}: the fill can afford to be
-     * heavy because the blur behind it is doing the work of looking like a
-     * material. This renderer draws over a video frame already on the
-     * framebuffer, and blurring it again would cost a pass over the whole window
-     * every frame to soften footage the source is already defocusing. Matching
-     * the launcher's 0.68 exactly was tried and read as a flat tint, because
-     * without the blur the only thing left saying "glass" is what you can see
-     * through it. So: the launcher's colours and its edge and sheen, at an
-     * opacity low enough that the footage is visibly behind the button.
+     * Dense title-screen glass built from the same depth ladder as the hub.
+     * It stays translucent enough for every resource-pack scene to remain
+     * visible, while its higher opacity supplies the contrast that a live
+     * background cannot provide with a low-alpha grey wash.
      */
-    private static final int MENU_GLASS = Skin.fade(Skin.GLASS_HOVER, 0.42f);
-    private static final int MENU_GLASS_HOVER = Skin.fade(Skin.GLASS_HOVER, 0.58f);
-    private static final int MENU_GLASS_PRESSED = Skin.fade(Skin.GLASS_PRESSED, 0.74f);
+    private static final int MENU_GLASS = Skin.fade(Skin.BACKGROUND, 0.90f);
+    private static final int MENU_GLASS_HOVER = Skin.fade(Skin.ELEVATED, 0.94f);
+    private static final int MENU_GLASS_PRESSED = Skin.fade(Skin.BACKGROUND, 0.96f);
 
     /**
      * The dock's pills, thinner again.
@@ -194,20 +177,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      * it against whatever the video is doing; the dock carries a 13-unit icon
      * and can afford to be barely there until the pointer arrives.
      */
-    private static final int DOCK_GLASS = Skin.fade(Skin.GLASS, 0.34f);
-    private static final int DOCK_GLASS_HOVER = Skin.fade(Skin.GLASS, 0.52f);
-    private static final int DOCK_GLASS_PRESSED = Skin.fade(Skin.GLASS_PRESSED, 0.68f);
-
-    /**
-     * The lit top edge.
-     *
-     * <p>{@code --glass-sheen} rather than the strong one the launcher's slab
-     * uses. The strong value is a 13% white line directly under a 1-pixel
-     * border, and measured off the framebuffer the two together came out as a
-     * 49 and a 42 on neighbouring rows -- a top edge twice the weight of the
-     * outline everywhere else on the same button, which is what made the ring
-     * look like it changed thickness as it went round.
-     */
+    private static final int DOCK_GLASS = Skin.fade(Skin.RECESSED, 0.68f);
+    private static final int DOCK_GLASS_HOVER = Skin.fade(Skin.SURFACE, 0.86f);
+    private static final int DOCK_GLASS_PRESSED = Skin.fade(Skin.BACKGROUND, 0.92f);
 
     /**
      * How far the shadow under a primary button reaches.
@@ -255,6 +227,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private final Pointer pointer = new Pointer();
     private Transition transition;
     private Motion dockOpening;
+    /** Shared dock marker; it glides between actions instead of blinking. */
+    private Spring dockMark;
     private Motion creditsFade;
     /** Whether the credits panel is up. While it is, nothing behind it answers. */
     private boolean creditsOpen;
@@ -302,6 +276,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             dockOpening = new Motion(0f, Timing.STANDARD);
             creditsFade = new Motion(0f, Timing.PANEL);
             scenesFade = new Motion(0f, Timing.PANEL);
+            dockMark = Spring.accent(0f);
         }
         transition.open(now);
         dockOpening.set(0f, now);
@@ -570,12 +545,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // the launcher draws everything of that shape -- its rail items, its
         // switches, its icon controls -- at `--r-pill`. Half the height is the
         // whole way round.
-        float round = Skin.pill(area);
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), round, Skin.GLASS);
+        float round = Skin.R_MEDIUM;
+        ui.shadow(area.x, area.y, area.right(), area.bottom(), round, 9f,
+                Skin.scaleAlpha(Skin.SHADOW, 0.54f));
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), round, Skin.fade(Skin.BACKGROUND, 0.82f));
         ui.outline(area.x, area.y, area.right(), area.bottom(), round,
-                Skin.HAIRLINE, Skin.GLASS_EDGE);
-        VisualEffects.topLight(ui, area.x, area.y, area.right(), area.bottom(),
-                round, Skin.GLASS, 0.72f);
+                Skin.HAIRLINE, Skin.EDGE_SURFACE);
     }
 
     private boolean chromeAction(Renderer ui, Rect area, String label) {
@@ -585,7 +560,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // inset from the cluster so its curve sits inside the cluster's own
         // rather than running along it.
         Rect pill = new Rect(area.x + 2f, area.y + 2f, area.width - 4f, area.height - 4f);
-        float round = Skin.pill(pill);
+        float round = Skin.innerRadius(Skin.R_MEDIUM, area, 2f);
         float press = tactilePress(state);
         float sink = Skin.snap(ui, press);
         // Drawn at rest, not only under the pointer. `--fill` is the launcher's
@@ -684,10 +659,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.pushAlpha(shown);
         ui.pushTransform(0f, (1f - arriving) * -6f);
         VisualEffects.overlayShadow(ui, box, Skin.R_CONTROL);
-        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_CONTROL, Skin.OVERLAY);
-        VisualEffects.topLight(ui, box.x, box.y, box.right(), box.bottom(),
-                Skin.R_CONTROL, Skin.OVERLAY, 1f);
-        ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_CONTROL, Skin.HAIRLINE, Skin.EDGE);
+        VisualEffects.layeredSurface(ui, box, Skin.R_CONTROL, Skin.FLOATING, 0f);
+        ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_CONTROL,
+                Skin.BORDER_STANDARD, Skin.EDGE_ELEVATED);
         ui.text(notice, box.x + Skin.S3, Controls.baseline(ui, box, Type.CAPTION), Type.CAPTION,
                 Skin.TEXT_MUTED);
         ui.popTransform();
@@ -705,14 +679,28 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private void branding(Renderer ui) {
         float centre = Math.round(column.centreX());
         float inset = (MARK_SIZE - MARK_INK) / 2f;
+        float now = Gfx.clock().seconds();
+        float markShown = Ease.sample(now, openedAt, 0f, 0.22f, Ease.Curve.STANDARD);
+        float wordShown = Ease.sample(now, openedAt, Timing.STAGGER, 0.20f, Ease.Curve.STANDARD);
+        // The mark stands on its own: no halo, no rings.
+
+        ui.pushAlpha(markShown);
+        ui.pushTransform(0f, (1f - markShown) * 5f,
+                0.955f + markShown * 0.045f, centre, lockupTop + MARK_INK / 2f);
         BrandMark.draw(ui, centre - MARK_SIZE / 2f, lockupTop - inset, MARK_SIZE,
-                Skin.TEXT, Skin.ACCENT);
+                Skin.TEXT, Skin.HOT_RED);
+        ui.popTransform();
+        ui.popAlpha();
 
         float baseline = lockupTop + MARK_INK + WORDMARK_GAP
                 + WORDMARK.size() * BrandMark.CAP_HEIGHT;
         float width = BrandMark.wordmarkWidth(ui, WORDMARK, BrandMark.WORDMARK_TRACKING);
+        ui.pushAlpha(wordShown);
+        ui.pushTransform(0f, (1f - wordShown) * 4f);
         BrandMark.wordmark(ui, centre - width / 2f, baseline, WORDMARK,
                 BrandMark.WORDMARK_TRACKING, Skin.TEXT);
+        ui.popTransform();
+        ui.popAlpha();
     }
 
     // -----------------------------------------------------------------------
@@ -765,6 +753,30 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         float dockWidth = DOCK_BUTTON * 7f + DOCK_GAP * 6f;
         float y = Skin.snap(ui, ui.height() - FOOTER_HEIGHT - DOCK_BUTTON - Skin.S3);
         float x = Skin.snap(ui, column.centreX() - dockWidth / 2f);
+        Rect deck = new Rect(x - Skin.S3, y - Skin.S2,
+                dockWidth + Skin.S6, DOCK_BUTTON + Skin.S4);
+        VisualEffects.overlayShadow(ui, deck, Skin.R_CARD);
+        ui.rounded(deck.x, deck.y, deck.right(), deck.bottom(), Skin.R_CARD, DOCK_GLASS);
+        ui.outline(deck.x, deck.y, deck.right(), deck.bottom(), Skin.R_CARD,
+                Skin.BORDER_STANDARD, Skin.EDGE_SURFACE);
+
+        int activeIndex = scenesFade.value(Gfx.clock().seconds()) > 0.01f ? 4
+                : creditsFade.value(Gfx.clock().seconds()) > 0.01f ? 5 : 0;
+        int targetIndex = activeIndex;
+        for (int index = 0; index < 7; index++) {
+            Rect hit = new Rect(x + index * (DOCK_BUTTON + DOCK_GAP), y,
+                    DOCK_BUTTON, DOCK_BUTTON);
+            if (hit.contains(pointer.x(), pointer.y())) {
+                targetIndex = index;
+                break;
+            }
+        }
+        float markerIndex = dockMark.update(targetIndex, controls.delta());
+        float markerX = x + markerIndex * (DOCK_BUTTON + DOCK_GAP) + DOCK_BUTTON / 2f;
+        Rect deckMarker = new Rect(markerX - 8f, deck.bottom() - 3f, 16f, 2f);
+        ui.rounded(deckMarker.x, deckMarker.y, deckMarker.right(), deckMarker.bottom(),
+                Skin.pill(deckMarker), Skin.ACTIVE_RED);
+
         if (dockAction(ui, "menu.fathom", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.GRID, "Fathom")) {
             openHub();
         }
@@ -857,45 +869,28 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         float press = tactilePress(state);
         int face = Skin.mix(Skin.mix(MENU_GLASS, MENU_GLASS_HOVER, state.hover),
                 MENU_GLASS_PRESSED, press);
-        int edge = Skin.mix(Skin.GLASS_EDGE, Skin.fade(Skin.ACCENT, 0.72f), emphasis);
-        edge = VisualEffects.hoverBrighten(edge, state.hover * 0.5f);
-        // `.launch` in the launcher rises a unit under the pointer and presses a
-        // unit into the surface: `translateY(-1px)` on hover, `translateY(1px)`
-        // on active, the second winning while a press is held. Both eased by
-        // `Controls`, on the launcher's own hover and press durations.
-        float lift = press * 1.35f - state.hover * 0.75f;
+        int edge = Skin.mix(Skin.EDGE_SURFACE, Skin.scaleAlpha(Skin.ACTIVE_RED, 0.85f), emphasis);
+        // Rises a step under the pointer and presses into the surface, the
+        // press winning while held. Motion carries the hover, not light.
+        float lift = press * 1.2f - state.hover * 1.5f * (1f - press);
         float inset = press * 0.70f;
         Rect visual = Skin.pixelAligned(ui, Rect.of(area.x + inset, area.y + lift + inset * 0.18f,
                 area.right() - inset, area.bottom() + lift - inset * 0.18f));
-        float radius = Skin.pill(visual);
-        // The launcher's slab casts a shadow, and loses it on the way down --
-        // a control that has moved toward the surface should not still be
-        // floating above it.
+        // Rounded, but a rounded rectangle rather than a capsule.
+        float radius = Skin.R_MEDIUM;
         ui.shadow(visual.x, visual.y, visual.right(), visual.bottom(), radius,
-                MENU_SHADOW_SPREAD * (1f - press * 0.5f),
-                Skin.scaleAlpha(Skin.SHADOW,
-                        VisualEffects.SHADOW_STRENGTH * (1f - press * 0.7f)));
-        VisualEffects.primaryButtonGlow(ui, visual, radius, emphasis);
-        VisualEffects.layeredSurface(ui, visual, radius, face, state.hover);
-        if (state.hover > 0.01f) {
-            // A wash, not a fill: the hovered button warms toward the accent
-            // and stays glass. Solid red is reserved for things that are on.
-            ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), radius,
-                    Skin.scaleAlpha(Skin.ACCENT_WASH, state.hover * 0.7f));
-        }
+                8f * (1f - press * 0.5f), Skin.scaleAlpha(Skin.SHADOW, 0.70f * (1f - press * 0.7f)));
+        ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), radius, face);
         ui.outline(visual.x, visual.y, visual.right(), visual.bottom(), radius,
-                Skin.HAIRLINE, edge);
-        VisualEffects.topLight(ui, visual.x, visual.y, visual.right(), visual.bottom(),
-                radius, face, 0.72f + state.hover * 0.28f);
-        // The top-right corner strengthens toward the pointer/focus instead of
-        // replacing the whole face with red. It remains visible at rest.
-        VisualEffects.cornerAccent(ui, visual, radius, false,
-                0.54f + emphasis * 0.46f, Skin.ACCENT_STRONG);
-        // The row title, not the caption size. These are the two destinations
-        // the screen exists for, on a 38-unit face; a 12px label on it reads as
-        // a disabled control rather than as the primary action.
-        ui.textCentred(label, visual.centreX(), Controls.baseline(ui, visual, Type.ROW_TITLE),
-                Type.ROW_TITLE, VisualEffects.hoverBrighten(Skin.TEXT_MUTED, emphasis));
+                Skin.BORDER_STANDARD, edge);
+        float chevron = 12f;
+        ui.icon(Icon.CHEVRON_RIGHT,
+                visual.right() - Skin.S4 - chevron - (1f - emphasis) * 6f,
+                visual.centreY() - chevron / 2f, chevron,
+                Skin.scaleAlpha(Skin.HOT_RED, emphasis));
+        ui.textCentred(label, visual.centreX() + emphasis * 2f,
+                Controls.baseline(ui, visual, Type.ROW_TITLE),
+                Type.ROW_TITLE, Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, emphasis));
         controls.focusRing(ui, state, area, radius);
         return activated(id, state);
     }
@@ -926,21 +921,19 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // No hover lift on these. The launcher's plain button does not rise
         // under the pointer either -- only its one big destination does -- and
         // five small things lifting in a row reads as the dock twitching.
-        VisualEffects.selectedButtonGlow(ui, visual, round, selected, state.hover);
+        VisualEffects.selectedButtonGlow(ui, visual, round, selected);
         ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), round, face);
-        int hoverEdge = fathom ? Skin.fade(Skin.ACCENT, 0.68f) : Skin.GLASS_EDGE_STRONG;
+        int hoverEdge = fathom ? Skin.fade(Skin.ACTIVE_RED, 0.78f) : Skin.EDGE_ELEVATED;
         int edge = Skin.mix(Skin.GLASS_EDGE, hoverEdge, state.hover);
-        edge = Skin.mix(edge, Skin.fade(Skin.ACCENT, 0.78f), Math.max(focus, selected * 0.72f));
-        ui.outline(visual.x, visual.y, visual.right(), visual.bottom(), round, Skin.HAIRLINE, edge);
-        VisualEffects.depthMarker(ui, visual.centreX(), visual.bottom() - 1.5f, selected);
-        VisualEffects.topLight(ui, visual.x, visual.y, visual.right(), visual.bottom(),
-                round, face, 0.72f + state.hover * 0.28f);
+        edge = Skin.mix(edge, Skin.fade(Skin.HOT_RED, 0.86f), Math.max(focus, selected * 0.72f));
+        ui.outline(visual.x, visual.y, visual.right(), visual.bottom(), round,
+                Skin.BORDER_STANDARD + selected * (Skin.BORDER_ENERGIZED - Skin.BORDER_STANDARD), edge);
         float iconSize = DOCK_ICON;
         // Muted rather than faint: faint is a hub value, tuned against a panel
         // two shades from black, and it disappears into a snowfield.
         float iconX = Skin.snap(ui, visual.centreX() - iconSize / 2f);
         float iconY = Skin.snap(ui, visual.centreY() - iconSize / 2f);
-        int iconTint = Skin.mix(Skin.TEXT_MUTED, Skin.ACCENT_STRONG, selected * 0.72f);
+        int iconTint = Skin.mix(Skin.TEXT_MUTED, Skin.HOT_RED, selected * 0.82f);
         ui.icon(icon, iconX, iconY, iconSize,
                 VisualEffects.hoverBrighten(iconTint, Math.max(state.hover, focus)));
         controls.focusRing(ui, state, area, Skin.pill(area));
@@ -1000,12 +993,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 Math.round((ui.height() - height) / 2f), width, height);
 
         VisualEffects.modalShadow(ui, panel, Skin.R_MEDIUM);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.PANEL);
-        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
-                Skin.R_MEDIUM, Skin.PANEL, 1f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE,
-                Skin.EDGE);
-        VisualEffects.cornerAccent(ui, panel, Skin.R_MEDIUM, false, shown, Skin.ACCENT_STRONG);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM,
+                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.BASE_RED, 0.45f));
 
         float x = panel.x + pad;
         float y = panel.y + pad;
@@ -1124,12 +1114,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 Math.round((ui.height() - height) / 2f), width, height);
 
         VisualEffects.modalShadow(ui, panel, Skin.R_CARD);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.PANEL);
-        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
-                Skin.R_CARD, Skin.PANEL, 1f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD, Skin.HAIRLINE,
-                Skin.EDGE);
-        VisualEffects.cornerAccent(ui, panel, Skin.R_CARD, false, shown, Skin.ACCENT_STRONG);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_CARD, Skin.FLOATING, 0f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD,
+                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.BASE_RED, 0.45f));
 
         float x = panel.x + pad;
         float y = panel.y + pad;
@@ -1223,7 +1210,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         String line = component.isEmpty()
                 ? "Fathom"
                 : "Fathom " + component;
-        String status = FabricLoader.getInstance().isDevelopmentEnvironment()
+        boolean development = FabricLoader.getInstance().isDevelopmentEnvironment();
+        String status = development
                 ? "Development"
                 : Runtime.bridge() != null
                         && Runtime.bridge().state()
@@ -1241,13 +1229,14 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         float dotX = bar.x + Skin.S3;
         Rect statusDot = Rect.of(dotX, bar.centreY() - dot / 2f,
                 dotX + dot, bar.centreY() + dot / 2f);
-        ui.rounded(statusDot.x, statusDot.y, statusDot.right(), statusDot.bottom(),
-                Skin.pill(statusDot), Skin.mix(Skin.ACCENT_DEEP, Skin.ACCENT, 0.32f));
+        // A still dot: no breathing glow.
+        ui.rounded(statusDot.x, statusDot.y, statusDot.right(), statusDot.bottom(), Skin.pill(statusDot),
+                development ? Skin.ACTIVE_RED : Skin.BASE_RED);
         float textX = dotX + dot + Skin.S2;
         ui.text(line, textX, baseline, Type.CAPTION, Skin.TEXT_MUTED);
         if (!status.isEmpty()) {
             ui.text(status, textX + lineWidth + Skin.S2, baseline, Type.CAPTION,
-                    Skin.TEXT_DISABLED);
+                    development ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
         }
     }
 
@@ -1410,5 +1399,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 && screen.getClass() == TitleScreen.class
                 && net.minecraft.client.MinecraftClient.getInstance() != null
                 && !net.minecraft.client.MinecraftClient.getInstance().isDemo();
+    }
+
+    private static float clamp(float value, float low, float high) {
+        return value < low ? low : (value > high ? high : value);
     }
 }

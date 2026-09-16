@@ -104,6 +104,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private boolean railPinned;
     private int captureFrames;
     private boolean captured;
+    private float qaReplayAt = -1f;
     private boolean openingMeasured;
     private long openedAtNs;
     private long closeStartedNs;
@@ -128,7 +129,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             sections.add(new DiagnosticsSection());
 
             float now = Gfx.clock().seconds();
-            transition = new Transition(Timing.SCREEN_ENTER, Timing.SCREEN_EXIT);
+            transition = new Transition(Timing.HUB_ENTER, Timing.HUB_EXIT);
             transition.open(now);
             openedAtNs = System.nanoTime();
             railMark = Spring.accent(0f);
@@ -275,10 +276,32 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                 || captureFrames < 90) {
             return;
         }
+        if (captureFrames == 90 && Boolean.getBoolean("fathom.qaFocusSearch")) {
+            controls.focus(SEARCH_ID);
+        }
+        // Settle on time, not only frames: at a high frame rate ninety frames is
+        // shorter than the staggered card entrance. Visual-QA replay restarts the
+        // page switch and card activation and photographs them this many seconds in.
+        String replay = System.getProperty("fathom.qaReplay", "");
+        float now = Gfx.clock().seconds();
+        if (qaReplayAt < 0f) {
+            qaReplayAt = now;
+            if (!replay.isEmpty()) {
+                previous = Math.max(0, current - 1);
+                pageSwap.set(0f, now);
+                pageSwap.to(1f, now);
+                sections.get(current).qaReplay(context);
+            }
+            return;
+        }
+        if (now - qaReplayAt < (replay.isEmpty() ? 0.75f : Float.parseFloat(replay))) {
+            return;
+        }
         captured = true;
         String quality = Runtime.highQualityUi() ? "hq" : "fast";
         String name = "fathom-" + target.toLowerCase(java.util.Locale.ROOT) + "-"
-                + quality + "-" + client.width + "x" + client.height + ".png";
+                + quality + (replay.isEmpty() ? "" : "-replay" + replay)
+                + "-" + client.width + "x" + client.height + ".png";
         ScreenshotUtils.saveScreenshot(client.runDirectory, name,
                 client.width, client.height, client.getFramebuffer());
         System.out.println("[Fathom] UI QA " + target + " " + quality + ": mean "
@@ -320,11 +343,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                 scale, panel.centreX(), panel.centreY());
 
         VisualEffects.panelShadow(ui, panel, Skin.R_PANEL);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_PANEL, Skin.PANEL);
-        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
-                Skin.R_PANEL, Skin.PANEL, 0.72f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_PANEL, Skin.HAIRLINE, Skin.EDGE_STRONG);
-        VisualEffects.cornerAccent(ui, panel, Skin.R_PANEL, false, 0.42f, Skin.ACCENT);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_PANEL, Skin.BACKGROUND, 0f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_PANEL,
+                Skin.BORDER_STANDARD, Skin.EDGE_SURFACE);
 
         Rect header = panel.top(Skin.HEADER_HEIGHT);
         Rect body = panel.belowTop(Skin.HEADER_HEIGHT);
@@ -332,7 +353,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         Rect content = body.rightOf(Skin.RAIL_WIDTH);
 
         chrome(ui, header, rail);
-        VisualEffects.pageDepth(ui, content);
+        VisualEffects.pageDepth(ui, content, Skin.R_PANEL);
         header(ui, header);
 
         // The tray is decided before the page draws and drawn after it. Decided
@@ -355,7 +376,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     /** The black frame: a header bar and a rail, with the panel's own corners. */
     private void chrome(Renderer ui, Rect header, Rect rail) {
-        int chrome = Skin.fade(Skin.CHROME, 0.92f);
+        int chrome = Skin.BACKGROUND;
         if (ui instanceof FathomRenderer) {
             ((FathomRenderer) ui).rounded(header.x, header.y, header.right(), header.bottom(),
                     Skin.R_PANEL, Skin.R_PANEL, 0f, 0f, chrome);
@@ -366,7 +387,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         }
         ui.fill(header.x, header.bottom(), header.right(), header.bottom() + Skin.HAIRLINE, Skin.CHROME_LINE_STRONG);
 
-        int railFill = Skin.fade(Skin.CHROME, 0.5f);
+        int railFill = Skin.RECESSED;
         if (ui instanceof FathomRenderer) {
             ((FathomRenderer) ui).rounded(rail.x, rail.y, rail.right(), rail.bottom(),
                     0f, 0f, 0f, Skin.R_PANEL, railFill);
@@ -395,26 +416,35 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
         // Header actions are laid out from the right. HUD Editor stays visible
         // at every supported width; session detail yields first on small UIs.
-        Rect close = inner.vcentreRight(0f, Controls.ICON_BUTTON, Controls.ICON_BUTTON);
+        Rect close = inner.vcentreRight(Skin.S1, Controls.ICON_BUTTON, Controls.ICON_BUTTON);
+        float rightOffset = Controls.ICON_BUTTON + Skin.S3 + Skin.S1;
+        float hudWidth = 112f;
+        Rect hudEditor = inner.vcentreRight(rightOffset, hudWidth, Skin.H_MD);
+        rightOffset += hudWidth + Skin.S3;
+        boolean searchable = sections.get(current).searchable();
+        float searchWidth = Math.min(280f, Math.max(156f, panel.width * 0.22f));
+        searchBox = searchable
+                ? inner.vcentreRight(rightOffset, searchWidth, Skin.H_MD)
+                : new Rect(0f, 0f, 0f, 0f);
+
+        // One toolbar, not three loose controls: a flat recessed tray holds them,
+        // its radius concentric with the controls inside.
+        float trayLeft = (searchable ? searchBox.x : hudEditor.x) - Skin.S1 - 1f;
+        Rect toolbar = Skin.pixelAligned(ui, Rect.of(trayLeft, hudEditor.y - Skin.S1 - 1f,
+                close.right() + Skin.S1 + 1f, hudEditor.bottom() + Skin.S1 + 1f));
+        float trayRadius = Skin.R_MEDIUM + Skin.S1 + 1f;
+        ui.rounded(toolbar.x, toolbar.y, toolbar.right(), toolbar.bottom(), trayRadius, Skin.RECESSED);
+        ui.outline(toolbar.x, toolbar.y, toolbar.right(), toolbar.bottom(), trayRadius,
+                Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
+
         if (controls.iconButton(ui, "hub.close", close, Icon.CLOSE, false, true)) {
             beginClose();
         }
-
-        float rightOffset = Controls.ICON_BUTTON + Skin.S3;
-        float hudWidth = 112f;
-        Rect hudEditor = inner.vcentreRight(rightOffset, hudWidth, Skin.H_MD);
         if (controls.secondary(ui, "hub.hud-editor", hudEditor, "HUD Editor", true)) {
             context.editHud();
         }
-        rightOffset += hudWidth + Skin.S3;
-
-        boolean searchable = sections.get(current).searchable();
         if (searchable) {
-            float searchWidth = Math.min(280f, Math.max(156f, panel.width * 0.22f));
-            searchBox = inner.vcentreRight(rightOffset, searchWidth, Skin.H_MD);
             search(ui);
-        } else {
-            searchBox = new Rect(0f, 0f, 0f, 0f);
         }
 
         float room = (searchable ? searchBox.x : hudEditor.x) - cursor - Skin.S5;
@@ -495,11 +525,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         boolean focused = controls.focused(SEARCH_ID);
         float focus = controls.towards(SEARCH_ID + "#focus", focused, Timing.STANDARD);
         float response = Math.max(s.hover, focus);
-        // `--r-md`, the radius of the launcher's own search field.
+        // Focus is a red border; no glow.
         ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MEDIUM,
-                Skin.mix(Skin.FILL_SUNKEN, Skin.FILL, s.hover * 0.40f + focus * 0.35f));
-        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE,
-                Skin.mix(Skin.mix(Skin.EDGE, Skin.EDGE_STRONG, s.hover), Skin.ACCENT, focus));
+                Skin.mix(Skin.RECESSED, Skin.SURFACE_HOVER, Math.max(s.hover * 0.6f, focus)));
+        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MEDIUM,
+                Skin.BORDER_STANDARD + focus * (Skin.BORDER_ENERGIZED - Skin.BORDER_STANDARD),
+                Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover), Skin.ACTIVE_RED, focus));
 
         float icon = 13f;
         ui.icon(Icon.SEARCH, searchBox.x + Skin.S3, searchBox.centreY() - icon / 2f, icon,
@@ -558,7 +589,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private void rail(Renderer ui, Rect rail, Rect tray) {
         float now = Gfx.clock().seconds();
         float openWidth = tray.width;
-        int trayFill = Skin.fade(Skin.CHROME, 0.97f);
+        int trayFill = Skin.RECESSED;
         // Only once it is over something: a shadow under the resting icon rail
         // would be a shadow cast onto the panel edge it is flush with.
         float lift = Math.max(0f, (openWidth - Skin.RAIL_WIDTH)
@@ -582,27 +613,13 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                 tray.bottom() - trailingRadius, Skin.CHROME_LINE_STRONG);
 
         float rowHeight = Math.min(Skin.RAIL_ROW, (rail.height - Skin.S4) / sections.size());
-        // A quiet measurement rail remains in place while its active marker
-        // travels between sections. The ticks are deliberately abstract: they
-        // imply precision and depth without becoming literal instrumentation.
-        float depthX = Skin.snap(ui, rail.x + 7.5f);
-        float depthTop = rail.y + Skin.S3 + rowHeight * 0.22f;
-        float depthBottom = rail.y + Skin.S3 + (sections.size() - 1) * rowHeight + rowHeight * 0.78f;
-        ui.fill(depthX, depthTop, depthX + Skin.HAIRLINE, depthBottom,
-                Skin.scaleAlpha(Skin.ACCENT_DEEP, 0.34f));
-        for (int index = 0; index < sections.size(); index++) {
-            float tickY = Skin.snap(ui, rail.y + Skin.S3 + index * rowHeight + rowHeight / 2f);
-            ui.fill(depthX - 1f, tickY, depthX + 3f, tickY + Skin.HAIRLINE,
-                    Skin.scaleAlpha(Skin.TEXT_DISABLED, 0.44f));
-        }
-
-        // The bright marker slides on that fixed rail instead of being replaced.
+        // The selection marker slides between sections instead of being replaced.
+        float markerX = Skin.snap(ui, rail.x + 5f);
         float markY = rail.y + Skin.S3 + railMark.update(current, context.delta()) * rowHeight;
-        Rect marker = Rect.of(depthX - 1f, markY + rowHeight * 0.25f,
-                depthX + 2f, markY + rowHeight * 0.75f);
+        Rect marker = Rect.of(markerX, markY + rowHeight * 0.28f,
+                markerX + 3f, markY + rowHeight * 0.72f);
         VisualEffects.navigationGlow(ui, marker, 1f);
-        ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker), Skin.ACCENT);
-        VisualEffects.depthMarker(ui, depthX + 0.5f, marker.centreY(), 0.78f);
+        ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker), Skin.HOT_RED);
 
         for (int index = 0; index < sections.size(); index++) {
             Section section = sections.get(index);
@@ -613,18 +630,22 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
             float on = controls.towards("rail." + index + "#on", active, Timing.NAVIGATION);
             if (s.hover > 0.01f || on > 0.01f) {
-                // A capsule, as the launcher's rail items are.
-                ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.pill(row),
-                        Skin.mix(Skin.scaleAlpha(Skin.FILL_HOVER, s.hover), Skin.FILL, on));
-            }
-            if (row.width > 96f) {
-                VisualEffects.cornerAccent(ui, row, Skin.pill(row), false, on * 0.72f, Skin.ACCENT);
+                // Selected: a stronger dark face, a red edge and a small light
+                // behind the icon. Hover: a surface step only.
+                ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.R_CONTROL,
+                        Skin.mix(Skin.scaleAlpha(Skin.SURFACE_HOVER, s.hover), Skin.ELEVATED, on));
+                if (on > 0.01f) {
+                    ui.outline(row.x, row.y, row.right(), row.bottom(), Skin.R_CONTROL,
+                            Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.BASE_RED, on));
+                    Rect light = new Rect(row.x + Skin.S3, row.centreY() - 8.5f, 17f, 17f);
+                    VisualEffects.stateGlow(ui, light, Skin.R_SMALL, on * 0.55f);
+                }
             }
 
             float iconSize = 17f;
             int tint = Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover), Skin.TEXT, on);
             ui.icon(section.icon(), row.x + Skin.S3, row.centreY() - iconSize / 2f, iconSize,
-                    VisualEffects.hoverBrighten(tint, s.hover));
+                    Skin.mix(VisualEffects.hoverBrighten(tint, s.hover), Skin.HOT_RED, on * 0.86f));
             // Faded in on the room there actually is for a word, not on how far
             // the tray has travelled. Keyed to travel, the first tenth of the
             // animation left about nine units beside each icon, which is enough
@@ -672,11 +693,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         // section change read as movement between pages rather than a redraw.
         float swap = pageSwap.value(Gfx.clock().seconds());
         float direction = current >= previous ? 1f : -1f;
-        float slide = (1f - swap) * 8f * direction;
+        float slide = (1f - swap) * 22f * direction;
 
         ui.clip(content.x, content.y, content.right(), content.bottom());
         ui.pushAlpha(swap);
-        ui.pushTransform(slide, 0f);
+        ui.pushTransform(slide, 0f, 0.994f + swap * 0.006f,
+                content.centreX(), content.centreY());
 
         Rect heading = inner.top(section.subtitle() == null ? 30f : 50f);
         ui.text(section.title(), heading.x, heading.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
@@ -735,9 +757,16 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             return true;
         }
         if (context.keybindCapture().active()) {
+            net.fathom.optimizations.core.module.Keybind target = context.keybindCapture().target();
             KeybindCaptureState.Outcome result =
                     context.keybindCapture().keyboard(keyCode, Keyboard.KEY_ESCAPE);
-            if (result == KeybindCaptureState.Outcome.BOUND) {
+            if (result == KeybindCaptureState.Outcome.CLEARED
+                    && Runtime.hud() != null && target == Runtime.hud().hubKey()) {
+                // The one key that cannot be unbound: with it cleared there is
+                // no way back into the Hub to bind it again.
+                target.reset();
+            }
+            if (result == KeybindCaptureState.Outcome.BOUND || result == KeybindCaptureState.Outcome.CLEARED) {
                 context.markDirty();
             }
             return true;

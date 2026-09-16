@@ -70,6 +70,26 @@ public abstract class Setting {
     private final String label;
     private final String description;
 
+    /**
+     * Bumped whenever any setting anywhere changes value.
+     *
+     * <p>For the code that reads settings at frame rate: a HUD widget can keep
+     * everything it derived from its settings (a formatter, a layout, a preset)
+     * and compare one integer per frame instead of re-reading a dozen values.
+     * Render thread only; the profile writer thread serialises but never sets.
+     */
+    private static int revision;
+
+    /** The current settings revision. Changes whenever any value changes. */
+    public static int revision() {
+        return revision;
+    }
+
+    /** Record that a value changed. Called by every mutator below. */
+    protected static void touched() {
+        revision++;
+    }
+
     Setting(String id, String label, String description) {
         this.id = require(id, "id");
         this.label = require(label, "label");
@@ -149,7 +169,10 @@ public abstract class Setting {
         }
 
         public void set(boolean next) {
-            value = next;
+            if (value != next) {
+                value = next;
+                touched();
+            }
         }
 
         @Override
@@ -169,11 +192,11 @@ public abstract class Setting {
             }
             String text = raw.trim().toLowerCase(Locale.ROOT);
             if ("true".equals(text) || "on".equals(text) || "yes".equals(text)) {
-                value = true;
+                set(true);
                 return true;
             }
             if ("false".equals(text) || "off".equals(text) || "no".equals(text)) {
-                value = false;
+                set(false);
                 return true;
             }
             return false;
@@ -181,7 +204,7 @@ public abstract class Setting {
 
         @Override
         public void reset() {
-            value = fallback;
+            set(fallback);
         }
 
         @Override
@@ -265,7 +288,11 @@ public abstract class Setting {
         }
 
         public void set(double next) {
-            value = clamp(next);
+            double clamped = clamp(next);
+            if (Double.compare(clamped, value) != 0) {
+                value = clamped;
+                touched();
+            }
         }
 
         /** Where the handle sits, 0 to 1. */
@@ -302,7 +329,11 @@ public abstract class Setting {
                 return false;
             }
             try {
-                set(Double.parseDouble(raw.trim()));
+                double parsed = Double.parseDouble(raw.trim());
+                if (Double.isNaN(parsed) || Double.isInfinite(parsed)) {
+                    return false;
+                }
+                set(parsed);
                 return true;
             } catch (NumberFormatException notANumber) {
                 return false;
@@ -311,7 +342,7 @@ public abstract class Setting {
 
         @Override
         public void reset() {
-            value = fallback;
+            set(fallback);
         }
 
         @Override
@@ -336,6 +367,7 @@ public abstract class Setting {
     public static final class Choice extends Setting {
         private final List<String> options;
         private final String fallback;
+        private final java.util.Map<String, String> aliases = new java.util.HashMap<String, String>(2);
         private String value;
 
         public Choice(String id, String label, String description, String fallback, String... options) {
@@ -364,14 +396,30 @@ public abstract class Setting {
         }
 
         public void set(String next) {
-            if (options.contains(next)) {
+            if (options.contains(next) && !next.equals(value)) {
                 value = next;
+                touched();
             }
+        }
+
+        /**
+         * Accept an option name an older build wrote.
+         *
+         * <p>For a renamed option: a profile that stored the old spelling reads
+         * back as the new one rather than falling back to the default, which
+         * would silently undo somebody's choice on the day the label improved.
+         */
+        public Choice alias(String legacy, String current) {
+            if (!options.contains(current)) {
+                throw new IllegalArgumentException(id() + ": alias target " + current + " is not an option");
+            }
+            aliases.put(legacy, current);
+            return this;
         }
 
         /** Step to the next option, wrapping. What clicking the row does. */
         public void advance() {
-            value = options.get((index() + 1) % options.size());
+            set(options.get((index() + 1) % options.size()));
         }
 
         @Override
@@ -386,16 +434,24 @@ public abstract class Setting {
 
         @Override
         public boolean parse(String raw) {
-            if (raw == null || !options.contains(raw.trim())) {
+            if (raw == null) {
                 return false;
             }
-            value = raw.trim();
+            String text = raw.trim();
+            String migrated = aliases.get(text);
+            if (migrated != null) {
+                text = migrated;
+            }
+            if (!options.contains(text)) {
+                return false;
+            }
+            set(text);
             return true;
         }
 
         @Override
         public void reset() {
-            value = fallback;
+            set(fallback);
         }
 
         @Override
@@ -442,7 +498,11 @@ public abstract class Setting {
         }
 
         public void set(int next) {
-            value = next & 0xFFFFFF;
+            int masked = next & 0xFFFFFF;
+            if (masked != value) {
+                value = masked;
+                touched();
+            }
         }
 
         @Override
@@ -468,7 +528,7 @@ public abstract class Setting {
                 return false;
             }
             try {
-                value = Integer.parseInt(text, 16) & 0xFFFFFF;
+                set(Integer.parseInt(text, 16));
                 return true;
             } catch (NumberFormatException notHex) {
                 return false;
@@ -477,7 +537,7 @@ public abstract class Setting {
 
         @Override
         public void reset() {
-            value = fallback;
+            set(fallback);
         }
 
         @Override
@@ -535,7 +595,11 @@ public abstract class Setting {
         }
 
         public void set(int next) {
-            value = clampTo(next);
+            int clamped = clampTo(next);
+            if (clamped != value) {
+                value = clamped;
+                touched();
+            }
         }
 
         /** Step up or down, staying inside the range. */
@@ -574,17 +638,29 @@ public abstract class Setting {
             if (raw == null) {
                 return false;
             }
+            String text = raw.trim();
             try {
-                set(Integer.parseInt(raw.trim()));
+                set(Integer.parseInt(text));
                 return true;
             } catch (NumberFormatException notANumber) {
-                return false;
+                // A value an older build stored as a decimal ("3.0") is still
+                // a number, and rounding it keeps somebody's choice.
+                try {
+                    double parsed = Double.parseDouble(text);
+                    if (Double.isNaN(parsed) || Double.isInfinite(parsed)) {
+                        return false;
+                    }
+                    set((int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, Math.round(parsed))));
+                    return true;
+                } catch (NumberFormatException stillNotANumber) {
+                    return false;
+                }
             }
         }
 
         @Override
         public void reset() {
-            value = fallback;
+            set(fallback);
         }
 
         @Override
@@ -630,7 +706,11 @@ public abstract class Setting {
         }
 
         public void set(String next) {
-            value = next == null ? "" : trim(next);
+            String trimmed = next == null ? "" : trim(next);
+            if (!trimmed.equals(value)) {
+                value = trimmed;
+                touched();
+            }
         }
 
         @Override
@@ -654,7 +734,7 @@ public abstract class Setting {
 
         @Override
         public void reset() {
-            value = fallback;
+            set(fallback);
         }
 
         @Override

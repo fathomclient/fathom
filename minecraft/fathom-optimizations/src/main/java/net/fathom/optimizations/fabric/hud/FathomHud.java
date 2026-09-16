@@ -89,6 +89,11 @@ public final class FathomHud {
         return features;
     }
 
+    /** Where this installation keeps its files. For the editor preferences. */
+    public java.io.File gameDirectory() {
+        return gameDirectory;
+    }
+
     /**
      * Attach the profile runtime. From here on the live profile is what gets
      * saved, not the old properties files.
@@ -192,7 +197,14 @@ public final class FathomHud {
      */
     public String saveAll() {
         if (profiles != null) {
-            return profiles.saveLiveQuietly();
+            long started = System.nanoTime();
+            String problem = profiles.saveLiveQuietly();
+            if (net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE) {
+                System.out.println(String.format(java.util.Locale.ROOT,
+                        "[Fathom] Bench: profile save on the render thread took %.2f ms",
+                        (System.nanoTime() - started) / 1_000_000.0));
+            }
+            return problem;
         }
         String problem = save();
         try {
@@ -309,6 +321,7 @@ public final class FathomHud {
         // neither module that reads it is on -- a switched-off module must cost
         // nothing, and polling the mouse is the one thing here that is not free.
         Widgets.frame();
+        WidgetProfile.frame();
         if (features.widgetAllowed("cps") || features.widgetAllowed("keystrokes")) {
             clicks.sample(Widgets.Cps.window());
         }
@@ -424,11 +437,21 @@ public final class FathomHud {
     private static boolean usesFathom(FathomModule module) {
         // Kept as a visual-QA override only. It is not a user preference and is
         // never persisted; normal runs use the owning module's profile setting.
-        String override = System.getProperty("fathom.hudFont");
-        if (override != null && !override.trim().isEmpty()) {
-            return "fathom".equalsIgnoreCase(override.trim());
+        // Read once at class load: this is asked per widget, per frame.
+        if (FONT_OVERRIDE != null) {
+            return FONT_OVERRIDE.booleanValue();
         }
         return HudStyle.fontIsFathom(module);
+    }
+
+    private static final Boolean FONT_OVERRIDE = fontOverride();
+
+    private static Boolean fontOverride() {
+        String override = System.getProperty("fathom.hudFont");
+        if (override == null || override.trim().isEmpty()) {
+            return null;
+        }
+        return Boolean.valueOf("fathom".equalsIgnoreCase(override.trim()));
     }
 
     /**
@@ -470,6 +493,7 @@ public final class FathomHud {
             int screenWidth,
             int screenHeight,
             boolean editing) {
+        long profiled = WidgetProfile.start();
         Snap.Box box = box(client, font, renderer, placement, screenWidth, screenHeight);
         float scale = placement.scale();
 
@@ -503,22 +527,47 @@ public final class FathomHud {
             // A widget that throws must not leave the matrix stack unbalanced: the
             // next thing to draw would be the rest of the game.
             GlStateManager.popMatrix();
+            WidgetProfile.stop(renderer.id(), profiled);
         }
     }
 
     private static void drawPlaceholder(HudFont font, HudWidget renderer, int alpha) {
-        String label = renderer.placeholder();
-        int width = (int) Math.ceil(font.width(label)) + 4;
-        int height = (int) Math.ceil(font.lineHeight()) + 4;
+        int width = placeholderWidth(font, renderer);
+        int height = placeholderHeight(font);
         net.minecraft.client.gui.DrawableHelper.fill(0, 0, width, height, (alpha * 30 / 100) << 24);
-        font.draw(label, 2f, 2f, (alpha << 24) | 0x00888888, true);
+        font.draw(renderer.placeholder(), 2f, 2f, (alpha << 24) | 0x00888888, true);
+    }
+
+    /** The placeholder's own size, so the box the editor grabs is the box it draws. */
+    private static int placeholderWidth(HudFont font, HudWidget renderer) {
+        return (int) Math.ceil(font.width(renderer.placeholder())) + 4;
+    }
+
+    private static int placeholderHeight(HudFont font) {
+        return (int) Math.ceil(font.lineHeight()) + 4;
     }
 
     // -----------------------------------------------------------------------
     // Geometry, for the editor
     // -----------------------------------------------------------------------
 
-    /** One widget's rectangle on screen, scale included. */
+    /**
+     * One widget's rectangle on screen, scale included.
+     *
+     * <p>Also where the widget is told which edge it belongs to, so a
+     * right-anchored readout can right-align its own text. The editor and the
+     * game both come through here, so what can be clicked is what is drawn.
+     *
+     * <h2>Why the box is kept on screen</h2>
+     *
+     * <p>An anchor and an inward offset survive a resize on their own — that is
+     * the point of storing them rather than a pixel position — but an offset
+     * chosen on a 2560-wide window can be larger than an 854-wide one, and a
+     * widget whose offset is wider than the screen would be drawn off the edge
+     * with no way to reach it. So a widget that fits at all is nudged back
+     * inside. The stored placement is untouched: make the window wide again and
+     * the widget is where it was left.
+     */
     public Snap.Box box(
             MinecraftClient client,
             HudFont font,
@@ -526,11 +575,29 @@ public final class FathomHud {
             Placement placement,
             int screenWidth,
             int screenHeight) {
+        renderer.align(placement.anchor().horizontal());
         float scale = placement.scale();
-        int width = Math.round(renderer.width(client, font) * scale);
-        int height = Math.round(renderer.height(client, font) * scale);
+        int width;
+        int height;
+        if (renderer.visible(client)) {
+            width = Math.round(renderer.width(client, font) * scale);
+            height = Math.round(renderer.height(client, font) * scale);
+        } else {
+            // A widget with nothing to say is only ever drawn by the editor, as
+            // its placeholder, and the box has to be the placeholder's -- an
+            // armour readout with no armour measures a few pixels wide, so its
+            // label would hang off the edge of its own hit box.
+            width = Math.round((placeholderWidth(font, renderer)) * scale);
+            height = Math.round((placeholderHeight(font)) * scale);
+        }
         int x = placement.anchor().x(screenWidth, width, placement.offsetX());
         int y = placement.anchor().y(screenHeight, height, placement.offsetY());
+        if (width <= screenWidth) {
+            x = Math.max(0, Math.min(x, screenWidth - width));
+        }
+        if (height <= screenHeight) {
+            y = Math.max(0, Math.min(y, screenHeight - height));
+        }
         return new Snap.Box(x, y, width, height);
     }
 

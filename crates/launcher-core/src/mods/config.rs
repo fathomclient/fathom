@@ -141,6 +141,14 @@ pub struct Origin {
     /// response body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<String>,
+    /// Other entries in this profile, by [`ModId`], that this one needs.
+    ///
+    /// Recorded by the mod browser from the required dependencies it resolved
+    /// at install time, so removing a library can be refused while something
+    /// still depends on it. Empty for a jar somebody added by hand, which means
+    /// "not known" rather than "needs nothing".
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub requires: BTreeSet<String>,
 }
 
 impl Origin {

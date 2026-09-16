@@ -30,6 +30,27 @@ public final class OptimizationId implements Comparable<OptimizationId> {
      *     a single segment with no namespace, or is too long
      */
     public static OptimizationId of(String raw) {
+        // Mixins ask by string on hot paths (`getStringWidth`, `getMaxFramerate`),
+        // and validating with a regex plus a new id on every call was 7% of the
+        // render thread's allocation. Validated ids are interned; the cache is
+        // bounded because a settings file may name ids that do not exist.
+        OptimizationId known = raw == null ? null : INTERNED.get(raw);
+        if (known != null) {
+            return known;
+        }
+        OptimizationId created = validated(raw);
+        if (INTERNED.size() < MAX_INTERNED) {
+            OptimizationId raced = INTERNED.putIfAbsent(raw, created);
+            return raced == null ? created : raced;
+        }
+        return created;
+    }
+
+    private static final int MAX_INTERNED = 1024;
+    private static final java.util.concurrent.ConcurrentHashMap<String, OptimizationId> INTERNED =
+            new java.util.concurrent.ConcurrentHashMap<String, OptimizationId>();
+
+    private static OptimizationId validated(String raw) {
         if (raw == null || raw.isEmpty()) {
             throw new IllegalArgumentException("an optimization id must not be empty");
         }

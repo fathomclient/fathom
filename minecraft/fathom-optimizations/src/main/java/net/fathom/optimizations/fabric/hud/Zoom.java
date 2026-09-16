@@ -2,90 +2,99 @@ package net.fathom.optimizations.fabric.hud;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.Display;
 
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.GameOptions;
 
+import net.fathom.optimizations.core.input.ZoomMath;
 import net.fathom.optimizations.core.module.FathomModule;
 import net.fathom.optimizations.core.module.Keybind;
-import net.fathom.optimizations.core.ui.anim.Clock;
-import net.fathom.optimizations.core.ui.anim.Motion;
-import net.fathom.optimizations.core.ui.anim.Timing;
 
 /**
  * Hold a key to narrow the field of view.
  *
- * <h2>Why the whole thing is here and not in the Mixin</h2>
+ * <h2>Nothing is written to the game's options</h2>
  *
- * <p>The Mixin is three lines: take vanilla's field of view and divide it. This
- * class is the part with state — how far in the animation is, and what the mouse
- * sensitivity was before the zoom touched it — and state in a Mixin is state on
- * a class Minecraft owns, which is where accidental leaks between worlds come
- * from.
+ * <p>An earlier version zoomed by writing {@code GameOptions.sensitivity} and
+ * {@code smoothCameraEnabled} and putting them back on release. That is state in
+ * a file Minecraft saves: anything that saved the options mid-zoom — or a crash —
+ * kept the zoomed sensitivity for good, and a change the player made while zoomed
+ * was silently overwritten. Now each of the three is changed where vanilla reads
+ * it, for that read only:
  *
- * <h2>Why the animation is driven from the render call</h2>
+ * <ul>
+ *   <li>the field of view in {@code getFov}, for the world and not the hand;
+ *   <li>the sensitivity where {@code GameRenderer} turns mouse travel into
+ *       camera rotation;
+ *   <li>the smooth camera where the same code decides whether to smooth.
+ * </ul>
  *
- * <p>{@link #factor} is asked once per rendered frame, and it advances by the
- * real time since it was last asked. That makes it independent of both the tick
- * rate and the number of times the renderer happens to ask: two calls in one
- * frame each advance by half the elapsed time, so the total is the same. A
- * counter incremented per call would zoom at twice the speed on any frame that
- * asked twice.
+ * <p>Releasing the key therefore restores exactly the original state, because the
+ * original state was never touched. The same is true when a screen opens, the
+ * window loses focus, the world changes, the player dies or the profile switches:
+ * each makes {@link #wanted} false and the zoom eases out.
  *
- * <h2>Sensitivity and the smooth camera</h2>
+ * <h2>Why the animation is driven by elapsed time</h2>
  *
- * <p>Both are vanilla options, and both are put back exactly as they were the
- * moment the key is released — including when the module is switched off mid
- * zoom, which is the case that leaves a client permanently at a tenth of its
- * mouse speed if nobody thought about it. The saved value is the one from before
- * the zoom, so a change made while zoomed is overwritten rather than compounded;
- * that is the lesser of the two wrongs, and the greater one is a sensitivity
- * that ratchets down every time you zoom.
+ * <p>{@link #factor} is asked more than once per frame (the world and the sky
+ * both project), and it advances by the real time since it was last asked. Two
+ * calls in one frame each advance by part of the elapsed time, so the animation
+ * runs at the same speed at 30 fps and 300.
  */
 public final class Zoom {
 
-    private static final Clock CLOCK = new Clock(System.nanoTime());
-    private static final Motion PROGRESS = new Motion(0f, Timing.STANDARD);
-    /** 0 is no zoom, 1 is fully zoomed. */
+    private static long lastNanos;
+    /** 0 is no zoom, 1 is fully zoomed. Linear; eased on read. */
     private static float progress;
-
-    private static boolean touchedOptions;
-    private static float savedSensitivity;
-    private static boolean savedSmoothCamera;
+    private static boolean wasWanted;
+    /** The divisor this zoom is heading for; NaN until the first press. */
+    private static double level = Double.NaN;
+    /** The divisor applied this frame, for sensitivity. */
+    private static double current = 1.0;
 
     private Zoom() {}
 
+    private static FathomModule module() {
+        return net.fathom.optimizations.fabric.Runtime.features() == null
+                ? null
+                : net.fathom.optimizations.fabric.Runtime.features().find("zoom");
+    }
+
     /**
-     * The divisor to apply to the field of view this frame.
+     * The divisor to apply to the world's field of view this frame.
      *
      * <p>1 means no zoom, and is the answer whenever the module is off, the key
      * is unbound, or the key is not held.
      */
     public static float factor() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        FathomModule module = net.fathom.optimizations.fabric.Runtime.features() == null
-                ? null
-                : net.fathom.optimizations.fabric.Runtime.features().find("zoom");
+        FathomModule module = module();
+        boolean wanted = wanted(module);
 
-        boolean wanted = module != null
+        if (wanted && !wasWanted && (Double.isNaN(level) || !"Remember".equals(module.choice("release", "Reset")))) {
+            level = module.number("amount", 4);
+        }
+        wasWanted = wanted;
+        advance(wanted, module);
+
+        if (progress <= 0f || Double.isNaN(level)) {
+            current = 1.0;
+            return 1f;
+        }
+        current = ZoomMath.divisor(level, eased(progress));
+        return (float) current;
+    }
+
+    private static boolean wanted(FathomModule module) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        return module != null
                 && module.enabled()
                 && module.switchable()
                 && client != null
                 && client.player != null
                 && client.currentScreen == null
+                && Display.isCreated()
+                && Display.isActive()
                 && held(module);
-
-        advance(wanted, module);
-        applyOptions(client, module, wanted);
-
-        if (progress <= 0.0001) {
-            return 1f;
-        }
-        double amount = module == null ? 4 : module.number("amount", 4);
-        // Interpolate the divisor rather than the angle: a linear walk from 1 to
-        // 4 spends most of its time near the wide end, which reads as a zoom
-        // that hesitates and then rushes.
-        return (float) (1.0 + (amount - 1.0) * progress);
     }
 
     /**
@@ -104,55 +113,100 @@ public final class Zoom {
                 int button = binding.mouseButton();
                 return Mouse.isCreated() && button < Mouse.getButtonCount() && Mouse.isButtonDown(button);
             }
-            return Keyboard.isKeyDown(binding.key());
+            return Keyboard.isCreated() && binding.key() > 0 && binding.key() < Keyboard.KEYBOARD_SIZE
+                    && Keyboard.isKeyDown(binding.key());
         }
         return false;
     }
 
     private static void advance(boolean wanted, FathomModule module) {
-        CLOCK.advance(System.nanoTime());
-        float now = CLOCK.seconds();
-
+        long now = System.nanoTime();
+        float elapsed = lastNanos == 0L ? 0f : Math.min(0.25f, (now - lastNanos) / 1_000_000_000f);
+        lastNanos = now;
+        float target = wanted ? 1f : 0f;
         boolean animate = module == null || module.toggle("animate", true);
         if (!animate) {
-            PROGRESS.set(wanted ? 1f : 0f, now);
-            progress = PROGRESS.opacity(now);
+            progress = target;
             return;
         }
-        PROGRESS.to(wanted ? 1f : 0f, now, Timing.STANDARD);
-        progress = PROGRESS.opacity(now);
+        float duration = (float) Math.max(0.01, (module == null ? 160 : module.number("speed", 160)) / 1000.0);
+        float step = elapsed / duration;
+        progress = target > progress ? Math.min(target, progress + step) : Math.max(target, progress - step);
     }
 
-    private static void applyOptions(MinecraftClient client, FathomModule module, boolean wanted) {
-        if (client == null || client.options == null) {
-            return;
-        }
-        GameOptions options = client.options;
+    /** Smoothstep: starts and ends gently, symmetric in and out. */
+    private static float eased(float t) {
+        return t * t * (3f - 2f * t);
+    }
 
-        if (wanted && !touchedOptions) {
-            savedSensitivity = options.sensitivity;
-            savedSmoothCamera = options.smoothCameraEnabled;
-            touchedOptions = true;
+    /** Whether any zoom is on screen, including the ease out. */
+    public static boolean active() {
+        return progress > 0f && current > 1.0001;
+    }
+
+    /**
+     * The sensitivity vanilla should turn the camera with this frame.
+     *
+     * <p>Scaled along vanilla's own curve by {@link ZoomMath#compensatedSensitivity},
+     * in step with the picture as it eases, so the mouse slows with the zoom
+     * rather than snapping at the key press.
+     */
+    public static float sensitivity(float original) {
+        if (!active()) {
+            return original;
         }
-        if (!touchedOptions) {
-            return;
+        FathomModule module = module();
+        if (module == null || !module.toggle("sensitivity", true)) {
+            return original;
         }
-        if (!wanted) {
-            options.sensitivity = savedSensitivity;
-            options.smoothCameraEnabled = savedSmoothCamera;
-            touchedOptions = false;
-            return;
+        return ZoomMath.compensatedSensitivity(original, current,
+                module.number("sensitivity.strength", 100) / 100.0);
+    }
+
+    /** Whether vanilla's smooth camera should run this frame. The player's own choice always stands. */
+    public static boolean smoothCamera(boolean original) {
+        if (original || !active()) {
+            return original;
         }
-        if (module != null && module.toggle("sensitivity", true)) {
-            double amount = module.number("amount", 4);
-            // In proportion to how far in the zoom actually is, so the mouse
-            // slows with the picture instead of snapping at the key press.
-            double scale = 1.0 / (1.0 + (amount - 1.0) * progress);
-            options.sensitivity = (float) (savedSensitivity * scale);
-        } else {
-            options.sensitivity = savedSensitivity;
+        FathomModule module = module();
+        return module != null && module.toggle("smooth", false);
+    }
+
+    /** Whether to skip drawing the hand this frame. */
+    public static boolean hideHand() {
+        if (!active()) {
+            return false;
         }
-        options.smoothCameraEnabled =
-                savedSmoothCamera || (module != null && module.toggle("smooth", false));
+        FathomModule module = module();
+        return module != null && module.toggle("hide-hand", false);
+    }
+
+    /**
+     * A mouse wheel movement, offered before it scrolls the hotbar.
+     *
+     * @return whether the zoom took it, in which case the hotbar must not move
+     */
+    public static boolean scroll(int wheel) {
+        if (wheel == 0 || !wasWanted || Double.isNaN(level)) {
+            return false;
+        }
+        FathomModule module = module();
+        if (module == null || !module.toggle("scroll", true) || !wanted(module)) {
+            return false;
+        }
+        level = ZoomMath.scroll(level, wheel > 0 ? 1 : -1, module.number("scroll.step", 1.25),
+                module.number("min", 1.5), module.number("max", 20));
+        return true;
+    }
+
+    /** A new world, player or connection: nothing zoomed carries over. */
+    public static void sessionChanged() {
+        progress = 0f;
+        current = 1.0;
+        wasWanted = false;
+        FathomModule module = module();
+        if (module == null || !"Remember".equals(module.choice("release", "Reset"))) {
+            level = Double.NaN;
+        }
     }
 }

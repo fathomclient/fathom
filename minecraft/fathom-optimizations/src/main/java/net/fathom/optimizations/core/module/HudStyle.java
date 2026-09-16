@@ -35,12 +35,16 @@ public final class HudStyle {
     public static final String PADDING = "padding";
     public static final String RADIUS = "radius";
     public static final String DROP_SHADOW = "shadow";
+    public static final String BORDER = "border";
+    public static final String BORDER_COLOUR = "border.colour";
+    public static final String BORDER_WIDTH = "border.width";
 
     private static final int DEFAULT_TEXT_COLOUR = 0xFFFFFF;
     private static final int DEFAULT_BACKGROUND_COLOUR = 0x000000;
     private static final int DEFAULT_OPACITY = 40;
     private static final int DEFAULT_PADDING = 3;
     private static final int DEFAULT_RADIUS = 0;
+    private static final int DEFAULT_BORDER_COLOUR = 0x5C6573;
 
     private HudStyle() {}
 
@@ -70,7 +74,10 @@ public final class HudStyle {
                 .setting(new Setting.Whole(PADDING, "Padding", "Space between the keys and the panel.",
                         DEFAULT_PADDING, 0, 10, 1, "px"))
                 .setting(new Setting.Whole(RADIUS, "Corner radius", "", DEFAULT_RADIUS, 0, 8, 1, "px"))
-                .setting(new Setting.Toggle(DROP_SHADOW, "Drop shadow", "A soft edge under the panel.", false));
+                .setting(new Setting.Toggle(DROP_SHADOW, "Drop shadow", "A soft edge under the panel.", false))
+                .setting(new Setting.Toggle(BORDER, "Panel border", "An outline around the panel.", false))
+                .setting(new Setting.Colour(BORDER_COLOUR, "Panel border colour", "", DEFAULT_BORDER_COLOUR))
+                .setting(new Setting.Whole(BORDER_WIDTH, "Panel border width", "", 1, 1, 3, 1, "px"));
     }
 
     private static FathomModule.Builder declare(
@@ -88,7 +95,10 @@ public final class HudStyle {
                 .setting(new Setting.Whole(PADDING, "Padding", "Space between the text and the plate.",
                         DEFAULT_PADDING, 0, 10, 1, "px"))
                 .setting(new Setting.Whole(RADIUS, "Corner radius", "", DEFAULT_RADIUS, 0, 8, 1, "px"))
-                .setting(new Setting.Toggle(DROP_SHADOW, "Drop shadow", "A soft edge under the plate.", false));
+                .setting(new Setting.Toggle(DROP_SHADOW, "Drop shadow", "A soft edge under the plate.", false))
+                .setting(new Setting.Toggle(BORDER, "Border", "An outline around the plate.", false))
+                .setting(new Setting.Colour(BORDER_COLOUR, "Border colour", "", DEFAULT_BORDER_COLOUR))
+                .setting(new Setting.Whole(BORDER_WIDTH, "Border width", "", 1, 1, 3, 1, "px"));
     }
 
     /** Whether a module was declared with the common settings. */
@@ -142,5 +152,18 @@ public final class HudStyle {
 
     public static boolean dropShadow(FathomModule module) {
         return module != null && module.toggle(DROP_SHADOW, false);
+    }
+
+    /** Whether an outline is drawn around the plate. Independent of the plate itself. */
+    public static boolean border(FathomModule module) {
+        return module != null && module.toggle(BORDER, false);
+    }
+
+    public static int borderColour(FathomModule module) {
+        return module == null ? DEFAULT_BORDER_COLOUR : module.colour(BORDER_COLOUR, DEFAULT_BORDER_COLOUR);
+    }
+
+    public static int borderWidth(FathomModule module) {
+        return module == null ? 1 : (int) Math.round(module.number(BORDER_WIDTH, 1));
     }
 }

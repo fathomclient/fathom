@@ -63,6 +63,7 @@ public final class FathomModule {
      * for the test that refuses an inert toggle.
      */
     private final String behaviour;
+    private final ChangeListener changeListener;
 
     private boolean enabled;
     private boolean favourite;
@@ -101,6 +102,19 @@ public final class FathomModule {
         SLIDERS
     }
 
+    /**
+     * Told when somebody changes one of a module's settings in the interface.
+     *
+     * <p>For settings that depend on each other: choosing a crosshair preset
+     * writes the size, gap and colour it stands for, and editing the size
+     * afterwards makes the preset read "Custom". Not called when a profile or
+     * a file is loaded — those restore every value at once, and a listener that
+     * rewrote siblings in the middle of that would depend on load order.
+     */
+    public interface ChangeListener {
+        void changed(FathomModule module, Setting setting);
+    }
+
     /** Lazily built by {@link #matches}; see {@code haystack()}. */
     private String haystack;
 
@@ -121,6 +135,7 @@ public final class FathomModule {
         this.implementation = builder.implementation;
         this.compatibility = builder.compatibility;
         this.behaviour = builder.behaviour;
+        this.changeListener = builder.changeListener;
         this.enabled = this.defaultEnabled;
     }
 
@@ -311,6 +326,22 @@ public final class FathomModule {
         return found instanceof Setting.Colour ? ((Setting.Colour) found).rgb() : fallback;
     }
 
+    /**
+     * Report an edit, so dependent settings follow.
+     *
+     * <p>The hub calls this after every value it changes, and the store and the
+     * profile switch call it with {@code null} once they have finished loading a
+     * module: values that arrive together are consistent by the time anything
+     * reads them, and a label derived from other values — the crosshair preset —
+     * describes what was actually loaded rather than what was stored beside it.
+     * Safe to call for any module; most have no listener.
+     */
+    public void settingChanged(Setting setting) {
+        if (changeListener != null) {
+            changeListener.changed(this, setting);
+        }
+    }
+
     /** Put every setting back the way it shipped, and the switch with them. */
     public void resetToDefaults() {
         for (Setting setting : settings.values()) {
@@ -399,6 +430,7 @@ public final class FathomModule {
         private Implementation implementation = Implementation.WORKING;
         private Compatibility compatibility = Compatibility.ALWAYS;
         private String behaviour = "";
+        private ChangeListener changeListener;
 
         Builder(String id) {
             if (id == null || !id.matches("[a-z0-9]+(?:[-.][a-z0-9]+)*")) {
@@ -495,6 +527,12 @@ public final class FathomModule {
             if (settings.put(setting.id(), setting) != null) {
                 throw new IllegalStateException(id + " declares " + setting.id() + " twice");
             }
+            return this;
+        }
+
+        /** Keep dependent settings consistent when one is edited. See {@link ChangeListener}. */
+        public Builder onChange(ChangeListener listener) {
+            this.changeListener = listener;
             return this;
         }
 

@@ -382,10 +382,24 @@ pub fn materialize(
             continue;
         }
 
-        std::fs::copy(&source, &target).map_err(|source_error| ModError::Io {
-            path: target.display().to_string(),
-            source: source_error,
-        })?;
+        // Copied under a name the game will not load, then renamed. A copy
+        // interrupted half way leaves a `.partial` rather than a truncated jar
+        // that the loader would try to open at the next launch.
+        let staging = crate::install::download::partial_path(&target);
+        let placed = std::fs::copy(&source, &staging).and_then(|_| {
+            #[cfg(windows)]
+            if target.exists() {
+                std::fs::remove_file(&target)?;
+            }
+            std::fs::rename(&staging, &target)
+        });
+        if let Err(source_error) = placed {
+            let _ = std::fs::remove_file(&staging);
+            return Err(ModError::Io {
+                path: target.display().to_string(),
+                source: source_error,
+            });
+        }
         outcome.placed.push(wanted.file_name.clone());
     }
 

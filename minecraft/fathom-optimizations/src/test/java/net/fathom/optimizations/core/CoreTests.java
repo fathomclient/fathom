@@ -162,20 +162,26 @@ public final class CoreTests {
         pass("every registry entry is complete and coherent");
     }
 
-    /** The milestone rule: benchmark before defaults. */
+    /**
+     * The milestone rule: benchmark before defaults.
+     *
+     * <p>This used to assert that no entry had an in-game measurement at all,
+     * which was true while the Fabric layer had never run. It now has, so the
+     * rule is narrowed to what must stay true: in-game evidence only on an entry
+     * a Mixin actually runs, and nothing on by default without it.
+     */
     static void nothingIsOnByDefaultUntilItIsMeasured() {
         OptimizationRegistry registry = OptimizationRegistry.standard();
         for (Optimization entry : registry.all()) {
-            check(
-                    !entry.measuredInGame(),
-                    entry.id() + " claims an in-game measurement, but the Fabric layer has never"
-                            + " been compiled and no scenario run exists");
-            check(
-                    !entry.defaultEnabled(),
-                    entry.id() + " is on by default without an in-game measurement");
+            if (entry.measuredInGame()) {
+                check(entry.runsInGame(),
+                        entry.id() + " claims an in-game measurement but nothing in the game runs it");
+            }
+            if (entry.defaultEnabled()) {
+                check(entry.measuredInGame(),
+                        entry.id() + " is on by default without an in-game measurement");
+            }
             if (entry.evidence() != null) {
-                check(entry.evidence().level() == Evidence.Level.ISOLATED,
-                        entry.id() + " carries evidence stronger than we have taken");
                 check(entry.implementedInCore(),
                         entry.id() + " has evidence but no implementation to have measured");
             }

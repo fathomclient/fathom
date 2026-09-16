@@ -45,7 +45,11 @@ public final class HudRegistry {
             }
         }
         this.byId = Collections.unmodifiableMap(map);
+        this.allWidgets = Collections.unmodifiableList(new ArrayList<Widget>(map.values()));
     }
+
+    /** The registry never changes after construction; the HUD reads this every frame. */
+    private final List<Widget> allWidgets;
 
     public static HudRegistry standard() {
         return new HudRegistry(Entries.all());
@@ -64,7 +68,7 @@ public final class HudRegistry {
     }
 
     public List<Widget> all() {
-        return Collections.unmodifiableList(new ArrayList<Widget>(byId.values()));
+        return allWidgets;
     }
 
     public List<Widget> matching(String query) {

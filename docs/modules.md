@@ -57,24 +57,26 @@ editor's "Hide" switches the module off rather than setting a flag beside it. A
 Position, anchor and scale are not settings for any HUD module: they are spatial,
 and they are set by dragging in the HUD editor. Every HUD module except the
 crosshair also carries the eight common style settings from `HudStyle` — text
-colour, text shadow, background, background colour, background opacity, padding,
-corner radius, drop shadow — declared in one call and read in one place
-(`TextWidget`), so they cannot drift apart.
+colour, text shadow, background, background colour, background opacity, border,
+border colour, border width, padding, corner radius, drop shadow — declared in
+one call and read in one place (`TextWidget`), so they cannot drift apart. The
+three widgets that are not text (Keystrokes, Armour HUD, Potion HUD) draw their
+plate through that same code.
 
 | Module | Category | State | Effect | Needs | On by default | Its own settings |
 | --- | --- | --- | --- | --- | --- | --- |
-| FPS | HUD | Working | `fps` widget | — | **yes** | Smoothing (Off/Light/Smooth), Format |
-| Coordinates | HUD | Working | `coordinates` widget | A world | **yes** | Show X/Y/Z, Axis labels, Decimal places, Direction, Biome |
-| Clock | HUD | Working | `clock` widget | — | no | Format (12/24 hour), Seconds, Time zone (System/UTC) |
-| Pack Display | HUD | Working | `pack-display` widget | — | no | Format |
-| Ping | HUD | Working | `ping` widget | A server | no | Format, Colour by quality |
-| CPS | PvP | Working | `cps` widget | — | no | Buttons (Both/Left/Right), Sample window, Label |
-| Keystrokes | PvP | Working | `keystrokes` widget | — | no | Movement keys, Mouse buttons, Space bar, Sneak key, CPS on buttons, Pressed colour, Unpressed colour |
-| Armour HUD | PvP | Working | `armour` widget | A world | no | Held item, Slot names, Style (Percent/Remaining) |
-| Potion HUD | PvP | Working | `potions` widget | A world | no | Level, Time left |
-| Sprint and sneak | Utility | Working | `toggle-sprint` widget | A world | no | Show sprinting, Show sneaking |
-| Zoom | Utility | Working | `zoom` behaviour | A world | no | Amount, Lower sensitivity, Smooth camera, Animate — plus its keybind |
-| Crosshair | Visual | Working | `crosshair` widget + `crosshair` behaviour | A world | no | Shape, Size, Gap, Outline, Hide vanilla crosshair, Colour |
+| FPS | HUD | Working | `fps` widget | — | **yes** | Reading (Raw/Light/Smooth/Average), Format, Custom prefix and suffix, Update every |
+| Coordinates | HUD | Working | `coordinates` widget | A world | **yes** | Layout, Format, Show X/Y/Z, Decimal places, Direction and its style, Biome, Dimension, Chunk |
+| Clock | HUD | Working | `clock` widget | — | no | Format (12/24 hour/Custom), Seconds, Date, Custom pattern, Time zone |
+| Pack Display | HUD | Working | `pack-display` widget | — | no | Pack icon, Format, Description, Packs shown |
+| Ping | HUD | Working | `ping` widget | A server | no | Display (Number/Bars/both), Format, Update every, Colour by quality, Good below, Poor above |
+| CPS | PvP | Working | `cps` widget | — | no | Buttons (Both/Left/Right/Combined), Button letters, Label, Sample window |
+| Keystrokes | PvP | Working | `keystrokes` widget | — | no | Movement keys, Mouse buttons, Space bar, Sneak key, CPS on buttons, Key size, Spacing, Key background and its two colours, Opacity, Two text colours, Border, its colour and width, Press fade |
+| Armour HUD | PvP | Working | `armour` widget | A world | no | Display, Durability, Label, Held item, Layout, Reverse order, Spacing, Durability bar, Colour by condition, Amber below, Red below |
+| Potion HUD | PvP | Working | `potions` widget | A world | no | Icons, Names, Level, Time left, Compact, Layout, Order, Spacing, Effect colour, Warn when ending |
+| Sprint and sneak | Utility | Working | `toggle-sprint` widget + `movement-toggle` behaviour | A world | no | Sprint key and Sneak key (Hold/Toggle), Show status, Show sprinting, Show sneaking, five labels, Toggled colour, Walking colour |
+| Zoom | Utility | Working | `zoom` behaviour | A world | no | Amount, Scroll to adjust, Scroll step, Minimum, Maximum, On release, Smooth zoom, Zoom duration, Sensitivity compensation and its strength, Cinematic camera, Hide hand — plus its keybind |
+| Crosshair | Visual | Working | `crosshair` widget + `crosshair` behaviour | A world | no | Preset, Shape, Length, Thickness, Gap, Centre dot and size, Outline and thickness, Colour, Outline colour, Opacity, Dynamic, Target colour, three hide rules |
 | Unfocused FPS limit | Performance | Working | `input.unfocused-fps-cap` | — | **yes** | Limit |
 
 Nothing is currently `UNAVAILABLE`. If something becomes so — a hook that a
@@ -88,27 +90,43 @@ inventing one would mean traffic the server did not ask for, to measure somethin
 it already tells us. In singleplayer the number is zero and useless, so the module
 declares `MULTIPLAYER` and its row says "Only on a multiplayer server".
 
-**CPS** counts presses the player made at the game. Clicks are ignored while a
-screen is open, while the window does not have focus, and before a player exists,
-so arranging the HUD or clicking back into the window does not inflate the
-number. The sample window is a setting; a longer window reports the same rate
-measured over more evidence, not a larger count.
+**CPS** counts presses the player made at the game, observed at
+`KeyBinding.onKeyPressed` — the call the tick's input loop makes for every press
+it processes — so a click shorter than a frame is still counted. Clicks are
+ignored while a screen is open, while the window does not have focus, and before
+a player exists, so arranging the HUD or clicking back into the window does not
+inflate the number. The sample window is a setting; a longer window reports the
+same rate measured over more evidence, not a larger count.
+
+**Sprint and sneak** redirects two `KeyBinding.isPressed` reads — the sprint key
+in `ClientPlayerEntity.tickMovement`, the sneak key in `KeyboardInput.tick` — to
+report a latched key as held. Everything downstream is vanilla's: hunger,
+blindness, using an item, walking forwards, the sneak slowdown. The latch is
+dropped on death, respawn, world change and disconnect, and is not applied while
+flying or riding, where sneak means descend or dismount.
 
 **Zoom** divides the field of view vanilla computed for this frame, at
-`GameRenderer.getFov(FZ)F`. It does not write `GameOptions.fov`, because that
-value is saved to disk — a client that crashed while zoomed would come back
-permanently at 25 degrees. Mouse sensitivity and the smooth camera are restored
-exactly as they were the moment the key is released.
+`GameRenderer.getFov(FZ)F`, and only for the world's projection rather than the
+hand's. It writes nothing to `GameOptions`: the field of view, the mouse
+sensitivity and the smooth camera are each changed where vanilla reads them, for
+that read only, so releasing the key has nothing to restore and a crash mid-zoom
+cannot leave a saved option behind. Sensitivity compensation inverts vanilla's
+own cubic response curve, so an *n*× zoom turns the camera exactly *n* times
+slower whatever the player's sensitivity is.
 
 **Crosshair** hides vanilla's by cancelling `InGameHud.showCrosshair()Z`, and the
 setting that does so can be switched off, because drawing both is a reasonable
-thing to want while deciding between them.
+thing to want while deciding between them. Its shape comes from
+`core/hud/CrosshairShape`, which rasterises the settings into whole-pixel
+rectangles; the preview in the settings drawer draws the same rectangles, so it
+cannot show a crosshair the game will not.
 
-**Pack Display** has no icon setting. 1.8.9 does not keep a decoded pack icon
-after the resource reload finishes, so drawing one means re-reading and uploading
-a texture from inside a HUD renderer. A setting that switched on an icon which
-never appeared is the exact defect this milestone removed, so the setting is
-absent rather than inert.
+**Pack Display** draws the pack's own icon through `ResourcePackLoader.Entry`,
+the same object and the same `bindIcon` call the resource pack screen uses:
+vanilla decodes the image once when the pack list is built and keeps it, and the
+first bind uploads it. Nothing is read from disk or re-uploaded by drawing the
+widget. (An earlier version of this document said 1.8.9 keeps no decoded icon.
+It does — the entry holds it — which is why the setting exists now.)
 
 ---
 
@@ -189,7 +207,14 @@ Conflicts are **shown, not forbidden**: the drawer writes *"This key is also use
 by Zoom."* under the control and lets the binding stand. Two modules on one key
 is usually a mistake and occasionally exactly what somebody meant; refusing it
 would be wrong in the second case with no way round, and saying nothing would be
-wrong in the first, which is the common one.
+wrong in the first, which is the common one. Minecraft's own bindings are
+included in that list, because Fathom consumes nothing and a shared key fires
+both actions.
+
+While a control is listening: **Escape cancels** and leaves the old key,
+**Backspace or Delete clears** the binding — the only way to have no key — and a
+mouse button binds as itself. The Hub key cannot be cleared; clearing it puts it
+back to Right Shift, because with no key there is no way back into the Hub.
 
 ---
 
@@ -199,6 +224,11 @@ wrong in the first, which is the common one.
 | --- | --- |
 | Module switches, setting values, keybinds | `config/fathom-features.properties` |
 | HUD layouts | `config/fathom-hud.properties` (and one file per named layout) |
+| HUD editor preferences (snap strength, grid, bounds) | `config/fathom-hud-editor.properties` |
+
+The editor's own preferences are deliberately outside the profile: they describe
+the tool, not the loadout, and a profile sent to somebody else should not change
+how their editor behaves.
 
 Both are written under the game directory the launcher hands the game, and the
 launcher gives each profile its own — `profiles/<id>/minecraft`, unless the user

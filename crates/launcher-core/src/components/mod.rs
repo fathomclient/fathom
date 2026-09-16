@@ -487,6 +487,7 @@ fn origin_of(
         project: Some(version.project_id.clone()),
         version_id: Some(version.version_id.clone()),
         page: component.supply.where_to_get().map(str::to_owned),
+        requires: std::collections::BTreeSet::default(),
     }
 }
 

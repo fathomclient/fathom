@@ -4,14 +4,23 @@
   "compatibilityLevel": "JAVA_8",
   "minVersion": "0.8",
   "client": [
+    "ChunkVisibilityDirectionsMixin",
+    "ClientChunkProviderMixin",
+    "ClientPlayerEntitySprintMixin",
     "GameRendererFovMixin",
     "GameMenuScreenMixin",
     "InGameHudCrosshairMixin",
     "InGameHudMixin",
+    "KeyBindingPressMixin",
+    "KeyboardInputSneakMixin",
     "MinecraftClientFrameCapMixin",
     "MinecraftClientFrameMixin",
     "MinecraftClientMenuMixin",
-    "TextRendererWidthMixin"
+    "MinecraftClientWorldGcMixin",
+    "MinecraftClientZoomScrollMixin",
+    "TextRendererWidthMixin",
+    "WorldDirectionsMixin",
+    "WorldRendererDirectionsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

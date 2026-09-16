@@ -100,6 +100,25 @@ public final class Skin {
     public static final int SHADOW = FathomTheme.COLOR_SHADOW;
 
     // -----------------------------------------------------------------------
+    // Fathom depth system
+    // -----------------------------------------------------------------------
+
+    /** The five material levels used by the in-game renderer, darkest first. */
+    public static final int BACKGROUND = 0xFF050607;
+    public static final int RECESSED = 0xFF08090B;
+    public static final int SURFACE = 0xFF0A0B0D;
+    public static final int ELEVATED = 0xFF101216;
+    public static final int FLOATING = 0xFA0E1013;
+
+    /** One step up from a surface: what hover does, and nothing more. */
+    public static final int SURFACE_HOVER = 0xFF13161A;
+    /** Muted charcoal borders. */
+    public static final int EDGE_RECESSED = 0x10FFFFFF;
+    public static final int EDGE_SURFACE = 0x1AFFFFFF;
+    public static final int EDGE_ELEVATED = 0x2CFFFFFF;
+    public static final int INNER_HIGHLIGHT = 0x0CFFFFFF;
+
+    // -----------------------------------------------------------------------
     // Control states
     // -----------------------------------------------------------------------
 
@@ -130,9 +149,19 @@ public final class Skin {
 
     /** The only hue in the product, which is what makes it mean something. */
     public static final int ACCENT = FathomTheme.COLOR_ACCENT;
-    public static final int ACCENT_STRONG = FathomTheme.COLOR_ACCENT_STRONG;
+    /** Kept to the dark brand red; the generated strong accent drifts pink. */
+    public static final int ACCENT_STRONG = 0xFFBE2F3A;
     public static final int ACCENT_DEEP = FathomTheme.COLOR_ACCENT_DEEP;
     public static final int ACCENT_WASH = FathomTheme.COLOR_ACCENT_WASH;
+
+    /**
+     * Red is energy, and stays dark: every member derives from #841C24 and
+     * brightens only as state intensity rises. No pink, no orange.
+     */
+    public static final int BASE_RED = 0xFF841C24;
+    public static final int ACTIVE_RED = 0xFFA0232D;
+    public static final int HOT_RED = 0xFFBE2F3A;
+    public static final int RED_GLOW = 0xFF841C24;
 
     public static final int GOOD = FathomTheme.COLOR_GOOD;
     public static final int WARN = FathomTheme.COLOR_WARN;
@@ -158,15 +187,15 @@ public final class Skin {
     // -----------------------------------------------------------------------
 
     /** Small inset shapes: swatches, tags and compact tooltips. */
-    public static final float R_SMALL = FathomTheme.DIM_R_XS;
+    public static final float R_SMALL = 6f;
     /** Ordinary buttons, fields and navigation rows. */
-    public static final float R_CONTROL = FathomTheme.DIM_R_SM;
-    /** Search, segmented controls, popovers and compact floating panels. */
-    public static final float R_MEDIUM = FathomTheme.DIM_R_MD;
+    public static final float R_CONTROL = 8f;
+    /** Search, top controls, icon containers, segmented controls and popovers. */
+    public static final float R_MEDIUM = 10f;
     /** Cards, drawers and substantial overlays. */
-    public static final float R_CARD = FathomTheme.DIM_R_LG;
-    /** The outer application panel and large destination controls. */
-    public static final float R_PANEL = FathomTheme.DIM_R_XL;
+    public static final float R_CARD = 12f;
+    /** The outer application panel. */
+    public static final float R_PANEL = 16f;
 
     /** A hovered card rises this far before press compression wins. */
     public static final float HOVER_ELEVATION = 1.25f;
@@ -196,6 +225,9 @@ public final class Skin {
 
     /** A hairline. One logical unit, which is one device pixel at 1×. */
     public static final float HAIRLINE = FathomTheme.DIM_HAIRLINE;
+    public static final float BORDER_STANDARD = 1f;
+    public static final float BORDER_ENERGIZED = 1.4f;
+    public static final float BORDER_SELECTED = 1.8f;
 
     /** The hub's own frame. */
     public static final float HEADER_HEIGHT = FathomTheme.DIM_HUB_HEADER_HEIGHT;

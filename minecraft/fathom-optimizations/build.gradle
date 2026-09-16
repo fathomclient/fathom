@@ -121,6 +121,16 @@ loom {
                     vmArg '-Dfathom.captureMenu=true'
                 }
             }
+            if (project.hasProperty('captureHudItems')) {
+                // Visual QA only: dresses the development player in armour and
+                // two effects so the armour and potion widgets have something
+                // to draw in an in-game HUD capture.
+                vmArg '-Dfathom.captureHudItems=true'
+            }
+            if (project.hasProperty('hudProfile')) {
+                // Development measurement: prints what each HUD widget costs.
+                vmArg '-Dfathom.hudProfile=true'
+            }
             if (project.hasProperty('railOpen')) {
                 vmArg '-Dfathom.captureRail=true'
             }
@@ -134,7 +144,41 @@ loom {
             }
             if (project.hasProperty('qaOpenSettings')) {
                 // Visual-only detail-state capture; never changes saved settings.
-                vmArg '-Dfathom.qaOpenSettings=true'
+                // The value may be a module id, to capture one drawer.
+                vmArg "-Dfathom.qaOpenSettings=${project.property('qaOpenSettings')}"
+            }
+            if (project.hasProperty('qaPointer')) {
+                // Visual-only: fixed pointer position (UI units, "x,y") for hover captures.
+                vmArg "-Dfathom.qaPointer=${project.property('qaPointer')}"
+            }
+            if (project.hasProperty('qaFocusSearch')) {
+                vmArg '-Dfathom.qaFocusSearch=true'
+            }
+            if (project.hasProperty('qaReplay')) {
+                // Visual-only: replay page switch + card activation, capture N seconds in.
+                vmArg "-Dfathom.qaReplay=${project.property('qaReplay')}"
+            }
+            if (project.hasProperty('perfBench')) {
+                // Development-only scripted benchmark: `world` (gameplay
+                // scenarios in the dev save) or `soak` (long-open screens).
+                // Results print as `[Fathom] Bench` lines and are written to
+                // run/fathom-bench/<label>-<scenario>.json.
+                vmArg "-Dfathom.perfBench=${project.property('perfBench')}"
+                vmArg "-Dfathom.perfBench.label=${project.findProperty('perfLabel') ?: 'run'}"
+                ['off', 'on', 'ab', 'window', 'joinSettle', 'abScenarios', 'abReverse'].each { key ->
+                    if (project.hasProperty("perf${key.capitalize()}")) {
+                        vmArg "-Dfathom.perfBench.${key}=${project.property("perf${key.capitalize()}")}"
+                    }
+                }
+                ['seconds', 'settle', 'soakSeconds'].each { key ->
+                    if (project.hasProperty("perf${key.capitalize()}")) {
+                        vmArg "-Dfathom.perfBench.${key}=${project.property("perf${key.capitalize()}")}"
+                    }
+                }
+            }
+            if (project.hasProperty('jfrFile')) {
+                // Sampling profile of a run, read with JDK 17's `jfr print`.
+                vmArg "-XX:StartFlightRecording=settings=profile,filename=${project.property('jfrFile')}"
             }
             if (project.hasProperty('transitionProbe')) {
                 vmArg '-Dfathom.transitionInstrumentation=true'

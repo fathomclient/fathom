@@ -64,14 +64,19 @@ public abstract class MinecraftClientFrameMixin {
         MinecraftClient client = (MinecraftClient) (Object) this;
         net.fathom.optimizations.fabric.gfx.FrameInput.poll(client);
         net.fathom.optimizations.fabric.gfx.FrameKeyboard.pollCurrent(client);
+        net.fathom.optimizations.fabric.input.GameSession.frame(client);
         fathom$frameStartNanos = System.nanoTime();
     }
 
     @Inject(method = "runGameLoop()V", at = @At("RETURN"))
     private void fathom$frameEnd(CallbackInfo info) {
         long start = fathom$frameStartNanos;
+        long frameNanos = start == 0L ? 0L : System.nanoTime() - start;
         if (start != 0L) {
-            Runtime.frame(System.nanoTime() - start);
+            Runtime.frame(frameNanos);
+        }
+        if (net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE) {
+            net.fathom.optimizations.fabric.bench.PerfBench.frame((MinecraftClient) (Object) this, frameNanos);
         }
     }
 }

@@ -9,45 +9,38 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawableHelper;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.client.option.KeyBinding;
 import net.minecraft.entity.player.ClientPlayerEntity;
-import net.minecraft.entity.effect.StatusEffect;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.biome.Biome;
 
 import net.fathom.optimizations.core.module.FathomModule;
-import net.fathom.optimizations.core.module.CrosshairPolicy;
-import net.fathom.optimizations.core.module.HudStyle;
+import net.fathom.optimizations.fabric.input.MovementToggles;
 
 /**
- * The widgets themselves.
+ * The text widgets.
  *
- * <p>Nested classes in one file rather than eleven files, because each is a dozen lines and
- * the interesting thing about the set is that it is a set. Anything with real logic —
- * click counting, snapping, layout — is in {@code core} where it has tests; what is left
- * here is "read a value off the client and format it", which is exactly the code that
- * cannot be tested without a running game and should therefore be as thin as possible.
+ * <p>The ones whose whole job is "read a value off the client and format it" are
+ * nested here, because the interesting thing about them is that they are a set
+ * and each is a dozen lines. The four that draw something other than text —
+ * Keystrokes, the crosshair, the armour list, the potion list, the ping bars —
+ * have files of their own, because a keyboard and an item renderer are not a
+ * string.
  *
  * <h2>Every setting here is read</h2>
  *
- * <p>That is the rule this file was rewritten to. A module declares a setting
- * only when something below consults it, and {@code ModuleTests} refuses a
- * {@code WORKING} module with no effect at all. The eight settings every HUD
- * module shares are read once, in {@link TextWidget}, rather than nine times
- * here.
+ * <p>That is the rule this file is written to. A module declares a setting only
+ * when something consults it, and {@code ModuleTests} refuses a {@code WORKING}
+ * module with no effect at all. The settings every HUD module shares are read
+ * once, in {@link TextWidget}, rather than once per widget.
  *
  * <h2>What none of these do</h2>
  *
- * <p>Read anything the player's own client does not already have on screen or in memory.
- * There is no packet inspection, no world scanning and no server query anywhere in this
- * file. The ping readout takes the number the tab list would show; the armour readout
- * takes the durability the inventory screen would show. That is the line between a HUD and
- * something a server is entitled to object to, and it is drawn here rather than argued
- * about later.
+ * <p>Read anything the player's own client does not already have on screen or in
+ * memory. There is no packet inspection, no world scanning and no server query
+ * anywhere in this file. The ping readout takes the number the tab list would
+ * show; the armour readout takes the durability the inventory screen would show.
+ * That is the line between a HUD and something a server is entitled to object
+ * to, and it is drawn here rather than argued about later.
  */
 public final class Widgets {
 
@@ -60,13 +53,13 @@ public final class Widgets {
         out.add(new Coordinates());
         out.add(new Clock());
         out.add(new Cps(clicks));
-        out.add(new Keystrokes(clicks));
+        out.add(new KeystrokesWidget(clicks));
         out.add(new SprintSneak());
-        out.add(new Ping());
-        out.add(new Armour());
-        out.add(new Potions());
-        out.add(new PackDisplay());
-        out.add(new Crosshair());
+        out.add(new PingWidget());
+        out.add(new ArmourWidget());
+        out.add(new PotionsWidget());
+        out.add(new PackDisplayWidget());
+        out.add(new CrosshairWidget());
         return out;
     }
 
@@ -75,12 +68,20 @@ public final class Widgets {
      *
      * <p>Called from {@link FathomHud#render}, which is the only place that
      * knows what a frame is. A widget cannot do this for itself: a widget's
-     * {@code lines} is asked four times a frame — to measure, to size, to test
+     * lines are asked four times a frame — to measure, to size, to test
      * visibility and to draw — so smoothing done there would advance four times
      * as fast as the frame rate and mean nothing.
      */
     static void frame() {
         FPS.sample();
+        frameNumber++;
+    }
+
+    private static long frameNumber;
+
+    /** Which HUD frame this is, for per-frame memoisation. */
+    static long frameNumber() {
+        return frameNumber;
     }
 
     /**
@@ -96,7 +97,9 @@ public final class Widgets {
      * inside a render loop.
      */
     static FathomModule module(String moduleId) {
-        return net.fathom.optimizations.fabric.Runtime.features().find(moduleId);
+        return net.fathom.optimizations.fabric.Runtime.features() == null
+                ? null
+                : net.fathom.optimizations.fabric.Runtime.features().find(moduleId);
     }
 
     static boolean option(String moduleId, String settingId, boolean fallback) {
@@ -119,6 +122,11 @@ public final class Widgets {
         return module == null ? fallback : module.colour(settingId, fallback);
     }
 
+    static String optionText(String moduleId, String settingId, String fallback) {
+        FathomModule module = module(moduleId);
+        return module == null ? fallback : module.text(settingId, fallback);
+    }
+
     // -----------------------------------------------------------------------
     // Performance
     // -----------------------------------------------------------------------
@@ -135,7 +143,9 @@ public final class Widgets {
      * frames. The two coefficients are chosen by what they feel like — Light
      * settles in about a fifth of a second, which removes the flicker without
      * lagging a real drop; Smooth takes about a second and a half, for somebody
-     * watching for a trend rather than a spike.
+     * watching for a trend rather than a spike. Average is neither: it is the
+     * honest count of frames drawn since the reading last changed, which is what
+     * somebody comparing settings wants.
      */
     private static final class FpsMeter {
         private static final double LIGHT = 0.10;
@@ -145,11 +155,14 @@ public final class Widgets {
         private double instant;
         private double light;
         private double smooth;
+        private int framesSinceRead;
+        private long readNanos;
 
         void sample() {
             long now = System.nanoTime();
             if (lastNanos == 0L) {
                 lastNanos = now;
+                readNanos = now;
                 return;
             }
             long elapsed = now - lastNanos;
@@ -160,28 +173,46 @@ public final class Widgets {
             // A stall -- a world load, a resource reload -- is not a frame rate.
             // Feeding it in would peg the average at one for the next second.
             if (elapsed > 500_000_000L) {
+                readNanos = now;
+                framesSinceRead = 0;
                 return;
             }
             instant = 1_000_000_000.0 / elapsed;
             light = light == 0 ? instant : light + (instant - light) * LIGHT;
             smooth = smooth == 0 ? instant : smooth + (instant - smooth) * SMOOTH;
+            framesSinceRead++;
         }
 
-        int read(String smoothing) {
-            if ("Off".equals(smoothing)) {
+        int read(String reading) {
+            if ("Raw".equals(reading)) {
                 return (int) Math.round(instant);
             }
-            return (int) Math.round("Smooth".equals(smoothing) ? smooth : light);
+            if ("Average".equals(reading)) {
+                return average();
+            }
+            return (int) Math.round("Smooth".equals(reading) ? smooth : light);
+        }
+
+        /** Frames drawn since this was last asked, over the time that took. */
+        private int average() {
+            long now = System.nanoTime();
+            long elapsed = now - readNanos;
+            int frames = framesSinceRead;
+            readNanos = now;
+            framesSinceRead = 0;
+            if (elapsed <= 0L || frames <= 0) {
+                return (int) Math.round(light);
+            }
+            return (int) Math.round(frames * 1_000_000_000.0 / elapsed);
         }
     }
 
     private static final FpsMeter FPS = new FpsMeter();
 
-    /** Frames per second, smoothed as much as the settings ask for. */
+    /** Frames per second, as raw, smoothed or averaged as the settings ask. */
     public static final class Fps extends TextWidget {
         private long nextTextRefreshNs;
-        private String cachedSmoothing = "";
-        private String cachedFormat = "";
+        private int settings = -1;
         private List<String> cachedLines = Collections.singletonList("0 FPS");
 
         public Fps() {
@@ -191,32 +222,41 @@ public final class Widgets {
         @Override
         protected List<String> lines(MinecraftClient client) {
             long now = System.nanoTime();
-            String smoothing = optionChoice("fps", "smoothing", "Light");
-            String format = optionChoice("fps", "format", "120 FPS");
-            if (now < nextTextRefreshNs
-                    && smoothing.equals(cachedSmoothing)
-                    && format.equals(cachedFormat)) {
+            int revision = net.fathom.optimizations.core.module.Setting.revision();
+            if (now < nextTextRefreshNs && revision == settings) {
                 return cachedLines;
             }
-            int fps = FPS.read(smoothing);
-            String text;
-            if ("120".equals(format)) {
-                text = String.valueOf(fps);
-            } else if ("FPS: 120".equals(format)) {
-                text = "FPS: " + fps;
-            } else {
-                text = fps + " FPS";
-            }
-            cachedLines = Collections.singletonList(text);
-            cachedSmoothing = smoothing;
-            cachedFormat = format;
+            settings = revision;
+            int fps = FPS.read(optionChoice("fps", "smoothing", "Light"));
+            cachedLines = Collections.singletonList(
+                    text(fps, optionChoice("fps", "format", "120 FPS")));
             nextTextRefreshNs = now + refreshNanos(optionChoice("fps", "refresh", "1 second"));
             return cachedLines;
         }
 
+        private static String text(int fps, String format) {
+            if ("120".equals(format)) {
+                return String.valueOf(fps);
+            }
+            if ("FPS: 120".equals(format)) {
+                return "FPS: " + fps;
+            }
+            if ("Custom".equals(format)) {
+                return optionText("fps", "prefix", "") + fps + optionText("fps", "suffix", " fps");
+            }
+            return fps + " FPS";
+        }
+
         private static long refreshNanos(String choice) {
-            if ("250 ms".equals(choice)) return 250_000_000L;
-            if ("500 ms".equals(choice)) return 500_000_000L;
+            if ("100 ms".equals(choice)) {
+                return 100_000_000L;
+            }
+            if ("250 ms".equals(choice)) {
+                return 250_000_000L;
+            }
+            if ("500 ms".equals(choice)) {
+                return 500_000_000L;
+            }
             return 1_000_000_000L;
         }
 
@@ -234,6 +274,11 @@ public final class Widgets {
     public static final class Coordinates extends TextWidget {
         private static final String[] COMPASS = {"South", "South West", "West", "North West",
                 "North", "North East", "East", "South East"};
+        private static final String[] SHORT = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
+        private static final String[] AXIS = {"+Z", "-X +Z", "-X", "-X -Z", "-Z", "+X -Z", "+X", "+X +Z"};
+
+        private final List<String> out = new ArrayList<String>(4);
+        private final StringBuilder line = new StringBuilder(48);
 
         public Coordinates() {
             super("coordinates", "-0000 / -00 / -0000");
@@ -245,49 +290,89 @@ public final class Widgets {
             if (player == null) {
                 return Collections.emptyList();
             }
-            List<String> out = new ArrayList<String>(3);
-
+            out.clear();
+            String layout = optionChoice("coordinates", "layout", "Single line");
+            boolean compact = "Compact".equals(layout);
+            boolean perLine = "Lines".equals(layout);
+            String format = optionChoice("coordinates", "format", "123 / 64 / -200");
+            boolean labels = format.startsWith("X:");
+            String separator = compact ? " " : (format.contains("/") ? " / " : (labels ? " " : ", "));
             int places = (int) optionNumber("coordinates", "precision", 0);
-            boolean labels = option("coordinates", "labels", false);
-            StringBuilder position = new StringBuilder(24);
+
+            line.setLength(0);
             if (option("coordinates", "axis.x", true)) {
-                append(position, labels ? "X " : "", player.x, places);
+                axis(perLine, labels ? "X: " : "", player.x, places, separator);
             }
             if (option("coordinates", "axis.y", true)) {
-                append(position, labels ? "Y " : "", player.y, places);
+                axis(perLine, labels ? "Y: " : "", player.y, places, separator);
             }
             if (option("coordinates", "axis.z", true)) {
-                append(position, labels ? "Z " : "", player.z, places);
+                axis(perLine, labels ? "Z: " : "", player.z, places, separator);
             }
-            if (position.length() > 0) {
-                out.add(position.toString());
+            if (line.length() > 0) {
+                out.add(line.toString());
+                line.setLength(0);
             }
 
             if (option("coordinates", "direction", true)) {
-                out.add(facing(player.yaw));
+                extra(facing(player.yaw, optionChoice("coordinates", "direction.style", "North")), compact);
+            }
+            if (option("coordinates", "chunk", false)) {
+                int chunkX = ((int) Math.floor(player.x)) >> 4;
+                int chunkZ = ((int) Math.floor(player.z)) >> 4;
+                extra((compact ? "C " : "Chunk ") + chunkX + ", " + chunkZ, compact);
+            }
+            if (option("coordinates", "dimension", false)) {
+                extra(dimension(client), compact);
             }
             if (option("coordinates", "biome", false)) {
                 String biome = biome(client);
                 if (biome != null) {
-                    out.add(biome);
+                    extra(biome, compact);
                 }
+            }
+            if (line.length() > 0) {
+                out.add(line.toString());
+                line.setLength(0);
             }
             return out;
         }
 
-        private static void append(StringBuilder into, String label, double value, int places) {
-            if (into.length() > 0) {
-                into.append(" / ");
+        /** One coordinate, either on its own line or appended to the current one. */
+        private void axis(boolean perLine, String label, double value, int places, String separator) {
+            if (perLine) {
+                out.add(label + number(value, places));
+                return;
             }
-            into.append(label);
+            if (line.length() > 0) {
+                line.append(separator);
+            }
+            line.append(label).append(number(value, places));
+        }
+
+        /** Direction, chunk, dimension and biome: their own lines, or appended when compact. */
+        private void extra(String text, boolean compact) {
+            if (text == null || text.isEmpty()) {
+                return;
+            }
+            if (!compact) {
+                out.add(text);
+                return;
+            }
+            if (line.length() > 0) {
+                line.append("  ");
+            }
+            line.append(text);
+        }
+
+        private static String number(double value, int places) {
             if (places <= 0) {
                 // Floor, not round: the block you are standing in is the one
                 // below you, and rounding puts you in the next one halfway
                 // across it.
-                into.append((int) Math.floor(value));
-            } else {
-                into.append(String.format(Locale.ROOT, "%." + places + "f", Double.valueOf(value)));
+                return String.valueOf((int) Math.floor(value));
             }
+            return String.format(Locale.ROOT, "%." + places + "f", Double.valueOf(value));
         }
 
         /**
@@ -308,18 +393,39 @@ public final class Widgets {
             }
         }
 
+        /** Whatever the world calls itself: Overworld, Nether, The End, or a mod's own. */
+        private static String dimension(MinecraftClient client) {
+            if (client.world == null || client.world.dimension == null) {
+                return "";
+            }
+            try {
+                return String.valueOf(client.world.dimension.getName());
+            } catch (RuntimeException unnamed) {
+                return "";
+            }
+        }
+
         /**
          * Vanilla's own convention: yaw 0 is south, and it grows clockwise. The +180 and
          * the wrap are what turn an unbounded float into one of eight names.
          */
-        private static String facing(float yaw) {
+        private static String facing(float yaw, String style) {
             int octant = (int) Math.floor(((yaw % 360f) + 360f) % 360f / 45f + 0.5f) % 8;
+            if ("N".equals(style)) {
+                return SHORT[octant];
+            }
+            if ("+Z".equals(style)) {
+                return AXIS[octant];
+            }
+            if ("North (+Z)".equals(style)) {
+                return COMPASS[octant] + " (" + AXIS[octant] + ")";
+            }
             return COMPASS[octant];
         }
 
         @Override
         public boolean visible(MinecraftClient client) {
-            return client.player != null && !lines(client).isEmpty();
+            return client.player != null && !currentLines(client).isEmpty();
         }
     }
 
@@ -327,15 +433,16 @@ public final class Widgets {
     // Status
     // -----------------------------------------------------------------------
 
-    /** The real-world time. */
+    /** The real-world time, and the date if it is asked for. */
     public static final class Clock extends TextWidget {
-        // Rebuilt only when the pattern or the zone changes: SimpleDateFormat is
-        // not cheap and this is asked at frame rate. Not shared between
-        // instances, because it is also not thread-safe -- and the client thread
-        // is the only one here.
+        // Rebuilt only when a setting changes: SimpleDateFormat is not cheap and
+        // this is asked at frame rate. Not shared between instances, because it
+        // is also not thread-safe -- and the client thread is the only one here.
         private SimpleDateFormat format;
-        private String pattern = "";
-        private String zone = "";
+        private int settings = -1;
+        /** The whole second the text was formatted for; it cannot change within one. */
+        private long formattedSecond = Long.MIN_VALUE;
+        private List<String> formatted = Collections.emptyList();
 
         public Clock() {
             super("clock", "00:00");
@@ -343,141 +450,81 @@ public final class Widgets {
 
         @Override
         protected List<String> lines(MinecraftClient client) {
-            boolean twelve = "12 hour".equals(optionChoice("clock", "format", "24 hour"));
-            boolean seconds = option("clock", "seconds", false);
-            String wanted = (twelve ? "h:mm" : "HH:mm") + (seconds ? ":ss" : "") + (twelve ? " a" : "");
-            String wantedZone = optionChoice("clock", "timezone", "System");
-
-            if (format == null || !wanted.equals(pattern) || !wantedZone.equals(zone)) {
-                format = new SimpleDateFormat(wanted, Locale.ROOT);
-                format.setTimeZone("UTC".equals(wantedZone)
-                        ? TimeZone.getTimeZone("UTC")
-                        : TimeZone.getDefault());
-                pattern = wanted;
-                zone = wantedZone;
+            int revision = net.fathom.optimizations.core.module.Setting.revision();
+            if (format == null || revision != settings) {
+                settings = revision;
+                format = build();
+                formattedSecond = Long.MIN_VALUE;
             }
-            return Collections.singletonList(format.format(new Date()));
+            // The shown text only changes on a second boundary, so format at
+            // most once a second instead of on every frame.
+            long second = Math.floorDiv(System.currentTimeMillis(), 1000L);
+            if (second != formattedSecond) {
+                formatted = Collections.singletonList(format.format(new Date(second * 1000L)));
+                formattedSecond = second;
+            }
+            return formatted;
+        }
+
+        /** The pattern the settings describe, or the custom one if it can be used. */
+        private SimpleDateFormat build() {
+            String chosen = optionChoice("clock", "format", "24 hour");
+            String pattern;
+            if ("Custom".equals(chosen)) {
+                pattern = custom();
+            } else {
+                boolean twelve = "12 hour".equals(chosen);
+                pattern = (twelve ? "h:mm" : "HH:mm")
+                        + (option("clock", "seconds", false) ? ":ss" : "")
+                        + (twelve ? " a" : "");
+                String date = optionChoice("clock", "date", "Off");
+                if (!"Off".equals(date)) {
+                    pattern = datePattern(date) + "  " + pattern;
+                }
+            }
+            SimpleDateFormat built = new SimpleDateFormat(pattern, Locale.ROOT);
+            built.setTimeZone("UTC".equals(optionChoice("clock", "timezone", "System"))
+                    ? TimeZone.getTimeZone("UTC")
+                    : TimeZone.getDefault());
+            return built;
+        }
+
+        /**
+         * The custom pattern, if Java can use it.
+         *
+         * <p>A pattern is typed by hand into a text field, so most of them are
+         * half-typed most of the time. An unusable one falls back to the plain
+         * clock rather than throwing out of a render call.
+         */
+        private String custom() {
+            String pattern = optionText("clock", "pattern", "EEE HH:mm");
+            try {
+                new SimpleDateFormat(pattern, Locale.ROOT).format(new Date());
+                return pattern;
+            } catch (RuntimeException unusable) {
+                return "HH:mm";
+            }
+        }
+
+        private static String datePattern(String choice) {
+            if ("Mon 14 Sep".equals(choice)) {
+                return "EEE d MMM";
+            }
+            if ("2026-09-14".equals(choice)) {
+                return "yyyy-MM-dd";
+            }
+            if ("14/09/2026".equals(choice)) {
+                return "dd/MM/yyyy";
+            }
+            if ("09/14/2026".equals(choice)) {
+                return "MM/dd/yyyy";
+            }
+            return "d MMM";
         }
 
         @Override
         public boolean visible(MinecraftClient client) {
             return true;
-        }
-    }
-
-    /** Latency, as the tab list reports it. */
-    public static final class Ping extends TextWidget {
-        public Ping() {
-            super("ping", "000 ms");
-        }
-
-        @Override
-        protected List<String> lines(MinecraftClient client) {
-            Integer latency = latency(client);
-            if (latency == null) {
-                return Collections.emptyList();
-            }
-            String format = optionChoice("ping", "format", "120 ms");
-            if ("120".equals(format)) {
-                return Collections.singletonList(String.valueOf(latency));
-            }
-            if ("Ping: 120 ms".equals(format)) {
-                return Collections.singletonList("Ping: " + latency + " ms");
-            }
-            return Collections.singletonList(latency + " ms");
-        }
-
-        /**
-         * Green, amber, red.
-         *
-         * <p>The thresholds are the ones the vanilla tab list already draws its
-         * signal bars at, so the colour agrees with the icon a player is used to
-         * rather than introducing a second opinion.
-         */
-        @Override
-        protected int colourFor(int index, String line, int textColour) {
-            if (!option("ping", "colour-by-quality", true)) {
-                return textColour;
-            }
-            Integer latency = latency(MinecraftClient.getInstance());
-            if (latency == null) {
-                return textColour;
-            }
-            int value = latency.intValue();
-            return value < 100 ? 0x5FD37A : (value <= 300 ? 0xE0B341 : 0xE0505C);
-        }
-
-        private static Integer latency(MinecraftClient client) {
-            if (client == null || client.player == null || client.getNetworkHandler() == null) {
-                return null;
-            }
-            PlayerListEntry entry = client.getNetworkHandler().getPlayerListEntry(client.player.getUuid());
-            return entry == null ? null : Integer.valueOf(entry.getLatency());
-        }
-
-        @Override
-        public boolean visible(MinecraftClient client) {
-            // Singleplayer has a network handler and a latency of zero, which is
-            // true and useless. Nothing to say is better than "0 ms", and the
-            // module declares MULTIPLAYER so its row says so too.
-            return !client.isInSingleplayer() && latency(client) != null;
-        }
-    }
-
-    /** Durability left on what you are wearing. */
-    public static final class Armour extends TextWidget {
-        private static final String[] NAMES = {"Boots", "Legs", "Chest", "Helmet"};
-
-        public Armour() {
-            super("armour", "Helmet 100%");
-        }
-
-        @Override
-        protected List<String> lines(MinecraftClient client) {
-            ClientPlayerEntity player = client.player;
-            if (player == null) {
-                return Collections.emptyList();
-            }
-            boolean names = option("armour", "names", true);
-            boolean remaining = "Remaining".equals(optionChoice("armour", "style", "Percent"));
-            List<String> out = new ArrayList<String>(5);
-
-            if (option("armour", "held", true)) {
-                ItemStack held = player.inventory.getMainHandStack();
-                if (held != null) {
-                    out.add(line(names ? "Held" : "", held, remaining));
-                }
-            }
-            ItemStack[] worn = player.inventory.armor;
-            // Drawn top-down the way it is worn, and the array is stored feet-first.
-            for (int slot = worn.length - 1; slot >= 0; slot--) {
-                ItemStack piece = worn[slot];
-                if (piece == null) {
-                    continue;
-                }
-                out.add(line(names ? NAMES[slot] : "", piece, remaining));
-            }
-            return out;
-        }
-
-        private static String line(String name, ItemStack stack, boolean remaining) {
-            String value = remaining
-                    ? String.valueOf(Math.max(0, stack.getMaxDamage() - stack.getDamage()))
-                    : percentLeft(stack) + "%";
-            return name.isEmpty() ? value : name + " " + value;
-        }
-
-        private static int percentLeft(ItemStack stack) {
-            int max = stack.getMaxDamage();
-            if (max <= 0) {
-                return 100;
-            }
-            return Math.max(0, Math.round((max - stack.getDamage()) * 100f / max));
-        }
-
-        @Override
-        public boolean visible(MinecraftClient client) {
-            return client.player != null && !lines(client).isEmpty();
         }
     }
 
@@ -502,13 +549,17 @@ public final class Widgets {
         @Override
         protected List<String> lines(MinecraftClient client) {
             String mode = optionChoice("cps", "mode", "Both");
+            boolean letters = option("cps", "letters", false);
             String value;
             if ("Left".equals(mode)) {
-                value = String.valueOf(clicks.left());
+                value = (letters ? "L " : "") + clicks.left();
             } else if ("Right".equals(mode)) {
-                value = String.valueOf(clicks.right());
+                value = (letters ? "R " : "") + clicks.right();
+            } else if ("Combined".equals(mode)) {
+                value = String.valueOf(clicks.left() + clicks.right());
             } else {
-                value = clicks.left() + " | " + clicks.right();
+                value = (letters ? "L " : "") + clicks.left()
+                        + " | " + (letters ? "R " : "") + clicks.right();
             }
             if (option("cps", "label", false)) {
                 value = value + " CPS";
@@ -522,8 +573,18 @@ public final class Widgets {
         }
     }
 
-    /** Whether you are sprinting or sneaking. */
+    /**
+     * Whether you are sprinting or sneaking, and whether a toggle is holding it.
+     *
+     * <p>The state comes from the player, not from the toggle: what is drawn is
+     * what the game is doing. The toggle only decides which of the two labels to
+     * use, so a latched sprint that vanilla has refused — no food, an obstacle,
+     * an item being eaten — reads as not sprinting, which is the truth.
+     */
     public static final class SprintSneak extends TextWidget {
+        private final List<String> out = new ArrayList<String>(2);
+        private final List<Boolean> latched = new ArrayList<Boolean>(2);
+
         public SprintSneak() {
             super("toggle-sprint", "Sprinting");
         }
@@ -531,365 +592,54 @@ public final class Widgets {
         @Override
         protected List<String> lines(MinecraftClient client) {
             ClientPlayerEntity player = client.player;
-            if (player == null) {
-                return Collections.emptyList();
+            out.clear();
+            latched.clear();
+            if (player == null || !option("toggle-sprint", "hud", true)) {
+                return out;
             }
-            List<String> out = new ArrayList<String>(2);
-            if (player.isSprinting() && option("toggle-sprint", "sprint", true)) {
-                out.add("Sprinting");
-            }
-            if (player.isSneaking() && option("toggle-sprint", "sneak", true)) {
-                out.add("Sneaking");
-            }
-            return out;
-        }
-    }
-
-    /** Active effects and how long each has left. */
-    public static final class Potions extends TextWidget {
-        public Potions() {
-            super("potions", "Speed II  1:30");
-        }
-
-        @Override
-        protected List<String> lines(MinecraftClient client) {
-            ClientPlayerEntity player = client.player;
-            if (player == null) {
-                return Collections.emptyList();
-            }
-            boolean level = option("potions", "level", true);
-            boolean duration = option("potions", "duration", true);
-            List<String> out = new ArrayList<String>();
-            for (StatusEffectInstance effect : player.getStatusEffectInstances()) {
-                StatusEffect type = StatusEffect.STATUS_EFFECTS[effect.getEffectId()];
-                if (type == null) {
-                    continue;
+            if (option("toggle-sprint", "sprint", true)) {
+                if (player.isSprinting()) {
+                    boolean toggled = MovementToggles.sprintLatched();
+                    add(optionText("toggle-sprint",
+                            toggled ? "label.sprint.toggled" : "label.sprinting",
+                            toggled ? "Sprinting (Toggled)" : "Sprinting"), toggled);
+                } else {
+                    add(optionText("toggle-sprint", "label.walking", ""), false);
                 }
-                StringBuilder line = new StringBuilder(
-                        net.minecraft.client.resource.language.I18n.translate(type.getTranslationKey()));
-                if (level && effect.getAmplifier() > 0) {
-                    line.append(' ').append(roman(effect.getAmplifier() + 1));
-                }
-                if (duration) {
-                    line.append("  ").append(duration(effect.getDuration()));
-                }
-                out.add(line.toString());
+            }
+            if (option("toggle-sprint", "sneak", true) && player.isSneaking()) {
+                boolean toggled = MovementToggles.sneakLatched();
+                add(optionText("toggle-sprint",
+                        toggled ? "label.sneak.toggled" : "label.sneaking",
+                        toggled ? "Sneaking (Toggled)" : "Sneaking"), toggled);
             }
             return out;
         }
 
-        /**
-         * Effect levels are Roman numerals in Minecraft, and only ever small.
-         *
-         * <p>Four entries rather than a general algorithm: vanilla caps
-         * amplifiers well below anything that needs one, and a general converter
-         * would be twenty lines to render a number nobody will see.
-         */
-        private static String roman(int level) {
-            switch (level) {
-                case 1:
-                    return "I";
-                case 2:
-                    return "II";
-                case 3:
-                    return "III";
-                case 4:
-                    return "IV";
-                default:
-                    return String.valueOf(level);
-            }
-        }
-
-        private static String duration(int ticks) {
-            int seconds = ticks / 20;
-            return seconds / 60 + ":" + (seconds % 60 < 10 ? "0" : "") + seconds % 60;
-        }
-
-        @Override
-        public boolean visible(MinecraftClient client) {
-            return client.player != null && !client.player.getStatusEffectInstances().isEmpty();
-        }
-    }
-
-    /** Which resource pack is on. */
-    public static final class PackDisplay extends TextWidget {
-        public PackDisplay() {
-            super("pack-display", "Default");
-        }
-
-        @Override
-        protected List<String> lines(MinecraftClient client) {
-            if (client.options == null) {
-                return Collections.emptyList();
-            }
-            String name = "Default";
-            List<String> packs = client.options.resourcePacks;
-            if (packs != null && !packs.isEmpty()) {
-                // The last one wins in Minecraft's stack, so the last one is the
-                // one somebody would name if you asked what pack they were using.
-                name = packs.get(packs.size() - 1).replace(".zip", "");
-            }
-            return Collections.singletonList(
-                    "Pack: Name".equals(optionChoice("pack-display", "format", "Name only"))
-                            ? "Pack: " + name
-                            : name);
-        }
-
-        @Override
-        public boolean visible(MinecraftClient client) {
-            return client.options != null;
-        }
-    }
-
-    /**
-     * A crosshair you choose.
-     *
-     * <p>Vanilla's is hidden by {@code InGameHudCrosshairMixin} when the
-     * "Hide vanilla crosshair" setting is on, which is the module's declared
-     * {@code crosshair} behaviour. With it off both are drawn, which is a
-     * legitimate thing to want while comparing them and a mess otherwise.
-     */
-    public static final class Crosshair implements HudWidget {
-        @Override
-        public String id() {
-            return "crosshair";
-        }
-
-        @Override
-        public String placeholder() {
-            return "+";
-        }
-
-        private static int size() {
-            return (int) optionNumber("crosshair", "size", 9);
-        }
-
-        @Override
-        public int width(MinecraftClient client, HudFont font) {
-            return size();
-        }
-
-        @Override
-        public int height(MinecraftClient client, HudFont font) {
-            return size();
-        }
-
-        @Override
-        public boolean visible(MinecraftClient client) {
-            return CrosshairPolicy.drawsCustom(module("crosshair"));
-        }
-
-        @Override
-        public void draw(MinecraftClient client, HudFont font, int x, int y, int alpha) {
-            if (!CrosshairPolicy.drawsCustom(module("crosshair"))) {
+        /** An empty label is how a state is hidden, so nothing is drawn for it. */
+        private void add(String text, boolean toggled) {
+            if (text == null || text.isEmpty()) {
                 return;
             }
-            int extent = size();
-            int gap = (int) optionNumber("crosshair", "gap", 2);
-            int colour = (alpha << 24) | optionColour("crosshair", "colour", 0xFFFFFF);
-            boolean outline = option("crosshair", "outline", true);
-            String shape = optionChoice("crosshair", "shape", "Cross");
-            int centreX = x + extent / 2;
-            int centreY = y + extent / 2;
-
-            if (outline) {
-                // A dark pass one pixel larger, so the shape reads against snow
-                // and against a dark cave without the user changing anything.
-                paint(shape, centreX, centreY, extent, gap, ((alpha * 2 / 3) << 24), true);
-            }
-            paint(shape, centreX, centreY, extent, gap, colour, false);
-        }
-
-        private static void paint(String shape, int cx, int cy, int extent, int gap, int colour, boolean grow) {
-            int arm = extent / 2;
-            int pad = grow ? 1 : 0;
-
-            if ("Dot".equals(shape)) {
-                fill(cx - 1 - pad, cy - 1 - pad, cx + 1 + pad, cy + 1 + pad, colour);
-                return;
-            }
-            if ("Circle".equals(shape)) {
-                for (int angle = 0; angle < 360; angle += 8) {
-                    int px = cx + (int) Math.round(Math.cos(Math.toRadians(angle)) * arm);
-                    int py = cy + (int) Math.round(Math.sin(Math.toRadians(angle)) * arm);
-                    fill(px - pad, py - pad, px + 1 + pad, py + 1 + pad, colour);
-                }
-                return;
-            }
-
-            // Cross and Tee share their arms; a Tee simply has no top one.
-            if (!"Tee".equals(shape)) {
-                fill(cx - pad, cy - arm - pad, cx + 1 + pad, cy - gap + pad, colour);
-            }
-            fill(cx - pad, cy + gap - pad, cx + 1 + pad, cy + arm + 1 + pad, colour);
-            fill(cx - arm - pad, cy - pad, cx - gap + pad, cy + 1 + pad, colour);
-            fill(cx + gap - pad, cy - pad, cx + arm + 1 + pad, cy + 1 + pad, colour);
-        }
-
-        private static void fill(int left, int top, int right, int bottom, int colour) {
-            DrawableHelper.fill(left, top, right, bottom, colour);
-        }
-    }
-
-    /**
-     * Movement keys, mouse buttons, space and sneak, lit while held.
-     *
-     * <p>The one widget that is not text on a plate, so it implements
-     * {@link HudWidget} directly rather than extending {@link TextWidget}. It
-     * still reads the common style settings — background colour and opacity,
-     * padding, radius, shadow — through {@link HudStyle}, because a key that
-     * ignored them would be the one widget whose settings did nothing.
-     *
-     * <p>The keys read are the player's own bindings, not the physical W A S D, so
-     * somebody on a Dvorak or ESDF layout sees their own keys light up.
-     */
-    public static final class Keystrokes implements HudWidget {
-        private static final int KEY = 16;
-        private static final int GAP = 2;
-        private static final int WIDE = KEY * 3 + GAP * 2;
-
-        private final ClickTracker clicks;
-
-        public Keystrokes(ClickTracker clicks) {
-            this.clicks = clicks;
+            out.add(text);
+            latched.add(Boolean.valueOf(toggled));
         }
 
         @Override
-        public String id() {
-            return "keystrokes";
-        }
-
-        @Override
-        public String placeholder() {
-            return "WASD";
-        }
-
-        private static int pad() {
-            return HudStyle.padding(module("keystrokes"));
-        }
-
-        @Override
-        public int width(MinecraftClient client, HudFont font) {
-            return WIDE + pad() * 2;
-        }
-
-        @Override
-        public int height(MinecraftClient client, HudFont font) {
-            int rows = 0;
-            if (option("keystrokes", "wasd", true)) {
-                rows += 2;
+        protected int colourFor(int index, String line, int textColour) {
+            if (index >= latched.size()) {
+                return textColour;
             }
-            if (option("keystrokes", "mouse", true)) {
-                rows++;
+            if (latched.get(index).booleanValue()) {
+                return optionColour("toggle-sprint", "toggled.colour", 0xFFFFFF);
             }
-            if (option("keystrokes", "space", true)) {
-                rows++;
+            // Walking is the one state that is not "something is happening", so
+            // it takes the quieter colour rather than the module's text colour.
+            String walking = optionText("toggle-sprint", "label.walking", "");
+            if (!walking.isEmpty() && walking.equals(line)) {
+                return optionColour("toggle-sprint", "walking.colour", 0xAAAAAA);
             }
-            if (option("keystrokes", "sneak", false)) {
-                rows++;
-            }
-            if (rows == 0) {
-                return 0;
-            }
-            return rows * (KEY + GAP) - GAP + pad() * 2;
-        }
-
-        @Override
-        public boolean visible(MinecraftClient client) {
-            return client.options != null && height(client, null) > 0;
-        }
-
-        @Override
-        public void draw(MinecraftClient client, HudFont font, int x, int y, int alpha) {
-            if (client.options == null) {
-                return;
-            }
-            FathomModule module = module("keystrokes");
-            int pad = HudStyle.padding(module);
-            if (HudStyle.background(module)) {
-                Plate.draw(x, y, width(client, font), height(client, font),
-                        ((HudStyle.backgroundAlpha(module) * alpha / 255) << 24)
-                                | (HudStyle.backgroundColour(module) & 0x00FFFFFF),
-                        HudStyle.radius(module), HudStyle.dropShadow(module));
-            }
-
-            int left = x + pad;
-            int row = y + pad;
-
-            if (option("keystrokes", "wasd", true)) {
-                key(font, left + KEY + GAP, row, KEY, "W", pressed(client.options.forwardKey), alpha);
-                row += KEY + GAP;
-                key(font, left, row, KEY, "A", pressed(client.options.leftKey), alpha);
-                key(font, left + KEY + GAP, row, KEY, "S", pressed(client.options.backKey), alpha);
-                key(font, left + (KEY + GAP) * 2, row, KEY, "D", pressed(client.options.rightKey), alpha);
-                row += KEY + GAP;
-            }
-            if (option("keystrokes", "mouse", true)) {
-                boolean numbers = option("keystrokes", "cps-on-keys", false);
-                int half = (WIDE - GAP) / 2;
-                wide(font, left, row, half, numbers ? String.valueOf(clicks.left()) : "LMB",
-                        clicks.leftDown(), alpha);
-                wide(font, left + half + GAP, row, WIDE - half - GAP,
-                        numbers ? String.valueOf(clicks.right()) : "RMB", clicks.rightDown(), alpha);
-                row += KEY + GAP;
-            }
-            if (option("keystrokes", "space", true)) {
-                wide(font, left, row, WIDE, "SPACE", pressed(client.options.jumpKey), alpha);
-                row += KEY + GAP;
-            }
-            if (option("keystrokes", "sneak", false)) {
-                wide(font, left, row, WIDE, "SHIFT", pressed(client.options.sneakKey), alpha);
-            }
-        }
-
-        /**
-         * {@code KeyBinding.isPressed()} rather than {@code wasPressed()}.
-         *
-         * <p>{@code wasPressed} consumes a queued press and returns true once, which is
-         * how vanilla triggers an action. Calling it from a renderer would eat the jump
-         * the player was trying to make.
-         */
-        private static boolean pressed(KeyBinding binding) {
-            return binding != null && binding.isPressed();
-        }
-
-        private static void key(
-                HudFont font, int x, int y, int size, String label, boolean down, int alpha) {
-            wide(font, x, y, size, label, down, alpha);
-        }
-
-        private static void wide(
-                HudFont font, int x, int y, int width, String label, boolean down, int alpha) {
-            FathomModule module = module("keystrokes");
-            int keyAlpha = alpha * (int) optionNumber("keystrokes", "key.opacity", 80) / 100;
-            int fill = down
-                    ? optionColour("keystrokes", "key.pressed.fill", 0x373B44)
-                    : optionColour("keystrokes", "key.unpressed.fill", 0x111318);
-            if (option("keystrokes", "key.background", true)) {
-                Plate.draw(x, y, width, KEY, (keyAlpha << 24) | (fill & 0x00FFFFFF),
-                        Math.min(HudStyle.radius(module), KEY / 2), false);
-            }
-            if (option("keystrokes", "key.border", true)) {
-                int border = (keyAlpha << 24)
-                        | (optionColour("keystrokes", "key.border.colour", 0x5C6573) & 0x00FFFFFF);
-                border(x, y, width, KEY, border);
-            }
-
-            int text = down
-                    ? optionColour("keystrokes", "key.pressed.text", 0xFFFFFF)
-                    : optionColour("keystrokes", "key.unpressed.text", 0xE7EAF0);
-            int colour = (keyAlpha << 24) | (text & 0x00FFFFFF);
-            float labelWidth = font.width(label);
-            float textX = x + (width - labelWidth) / 2f;
-            float textY = y + (KEY - font.lineHeight()) / 2f;
-            font.draw(label, textX, textY, colour, HudStyle.textShadow(module));
-        }
-
-        private static void border(int x, int y, int width, int height, int colour) {
-            DrawableHelper.fill(x, y, x + width, y + 1, colour);
-            DrawableHelper.fill(x, y + height - 1, x + width, y + height, colour);
-            DrawableHelper.fill(x, y + 1, x + 1, y + height - 1, colour);
-            DrawableHelper.fill(x + width - 1, y + 1, x + width, y + height - 1, colour);
+            return textColour;
         }
     }
 }

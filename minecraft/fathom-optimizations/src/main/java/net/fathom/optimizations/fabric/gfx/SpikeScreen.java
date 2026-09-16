@@ -137,8 +137,6 @@ public final class SpikeScreen extends Screen implements FathomScreen {
 
         VisualEffects.panelShadow(ui, frame, Skin.R_CARD);
         ui.rounded(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_CARD, Skin.PANEL);
-        VisualEffects.topLight(ui, frame.x, frame.y, frame.right(), frame.bottom(),
-                Skin.R_CARD, Skin.PANEL, 0.72f);
         ui.outline(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE_STRONG);
 
         Rect inner = frame.inset(Skin.S6, Skin.S6);

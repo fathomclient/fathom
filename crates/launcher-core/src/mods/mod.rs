@@ -42,6 +42,7 @@
 //!
 //! The pipeline is `configuration -> resolve -> materialize -> launch`.
 
+pub mod browse;
 pub mod catalog;
 pub mod config;
 pub mod definition;

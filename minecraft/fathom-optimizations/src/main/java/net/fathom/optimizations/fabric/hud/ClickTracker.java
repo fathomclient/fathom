@@ -10,105 +10,111 @@ import net.fathom.optimizations.core.hud.value.ClickCounter;
 /**
  * Counts mouse clicks for the CPS and keystroke widgets.
  *
- * <h2>Why this polls instead of hooking the event queue</h2>
+ * <h2>Presses are counted from the game's own input events</h2>
  *
- * <p>1.8.9 drains the LWJGL mouse queue inside {@code MinecraftClient.tick}, in a loop with
- * no method of its own — there is nothing named to inject into. The options were a Mixin
- * that rewrites part of the tick body, or an edge detector that samples the button state.
+ * <p>Minecraft drains LWJGL's mouse queue once per tick and hands every press
+ * to {@code KeyBinding.onKeyPressed}, which is how an attack or a use is
+ * registered. {@code KeyBindingPressMixin} observes that call — it reads the
+ * button and changes nothing — so the count is exactly the presses the game
+ * itself saw.
  *
- * <p>The edge detector wins, for a reason worth stating: sampling reads state and changes
- * nothing, so a bug here shows a wrong number. Rewriting the input loop could swallow a
- * click, and a client that occasionally does not register an attack is a far worse failure
- * than a counter that reads 11 instead of 12.
+ * <p>This replaced sampling the button once per rendered frame, which missed
+ * any press shorter than a frame: at 60 fps a quick 12 CPS burst lost clicks,
+ * and at a capped 30 fps it lost many. Events cannot be missed; the cost is
+ * that a press is timestamped when its tick processes it, up to 50 ms late,
+ * which moves a one-second window's edge by at most a twentieth of it.
  *
  * <h2>What counts as a click</h2>
  *
- * <p>A press the player made at the game. Three conditions, and all of them
- * exclude presses that are not the player clicking in the world:
+ * <p>A press the player made at the game:
  *
  * <ul>
- *   <li>the window has focus — clicking in another application does not count,
- *       and neither does the press that gives Minecraft focus back;
+ *   <li>the mouse is captured by the game — the press that gives Minecraft
+ *       focus back is not a click at the game, and neither is one elsewhere;
  *   <li>no screen is open — clicking a button in the hub, the inventory or the
  *       HUD editor is not clicking at the game;
  *   <li>a player exists — the title screen is not gameplay.
  * </ul>
  *
- * <p>Without these the counter climbed while somebody arranged their HUD, which
- * is a CPS readout measuring the wrong thing entirely. Held state
- * ({@link #leftDown}) is cleared at the same time, so the keystroke display does
- * not leave a mouse button lit after a screen opens.
+ * <h2>Held state is still sampled</h2>
  *
- * <h2>What it costs</h2>
+ * <p>Whether a button is down right now is read per rendered frame, because a
+ * keystroke display has to light on the frame the button goes down, not on the
+ * next tick.
  *
- * <p>Sampling happens once per rendered frame, so a click that goes down and back up
- * entirely between two frames is not seen. At 60 fps that needs a press shorter than 17 ms;
- * at 30 fps, 33 ms. Hands do not do that, and the ones that do are running something that
- * clicks for them. This is honest about the number it reports rather than accurate about a
- * number nobody produces.
+ * <h2>No state survives a world</h2>
  *
- * <p>The counting itself — the sliding window — is in {@link ClickCounter}, in
- * {@code core}, where it has tests.
+ * <p>{@link #reset} is called when the world or player changes, so a CPS
+ * reading from one server is not still decaying on the next.
  */
 public final class ClickTracker {
 
     private final ClickCounter left = new ClickCounter();
     private final ClickCounter right = new ClickCounter();
 
-    private boolean leftWasDown;
-    private boolean rightWasDown;
+    private boolean leftDown;
+    private boolean rightDown;
     private int leftPerSecond;
     private int rightPerSecond;
 
     /**
-     * Sample the buttons. Called once per frame.
+     * A press the game processed. Called from the input Mixin, on the client
+     * thread, for every key and button code; anything but the two mouse
+     * buttons is ignored.
      *
-     * <p>Both the edge detection and the readout are done here, so the widgets read two
-     * fields rather than each recomputing a window scan per frame.
+     * @param code Minecraft's key code: {@code -100} left, {@code -99} right
+     */
+    public void pressed(int code) {
+        if (code != -100 && code != -99) {
+            return;
+        }
+        if (!playing()) {
+            return;
+        }
+        long now = System.nanoTime();
+        if (code == -100) {
+            left.click(now);
+        } else {
+            right.click(now);
+        }
+    }
+
+    /**
+     * Refresh the readout and the held state. Called once per frame.
      *
      * @param window how many seconds the rate is averaged over, from the CPS
      *     module's own setting. Passed in rather than looked up, because this is
      *     the class that has no opinion about modules.
      */
     public void sample(int window) {
-        if (!Mouse.isCreated()) {
-            // Before the display exists, and after it is destroyed. Sampling a
-            // mouse that is not there throws; asking first does not.
-            return;
-        }
         long now = System.nanoTime();
-
-        if (!playing()) {
-            // Not a click at the game. The edge state is cleared rather than
-            // frozen, so the first press after closing a screen registers as a
-            // press and not as "already down".
-            leftWasDown = false;
-            rightWasDown = false;
-            leftPerSecond = left.perSecond(now, window);
-            rightPerSecond = right.perSecond(now, window);
-            return;
+        if (!Mouse.isCreated() || !playing()) {
+            // Not at the game: nothing is held, so the keystroke display does
+            // not leave a button lit behind a screen.
+            leftDown = false;
+            rightDown = false;
+        } else {
+            leftDown = Mouse.isButtonDown(0);
+            rightDown = Mouse.getButtonCount() > 1 && Mouse.isButtonDown(1);
         }
-
-        boolean leftDown = Mouse.isButtonDown(0);
-        if (leftDown && !leftWasDown) {
-            left.click(now);
-        }
-        leftWasDown = leftDown;
-
-        boolean rightDown = Mouse.isButtonDown(1);
-        if (rightDown && !rightWasDown) {
-            right.click(now);
-        }
-        rightWasDown = rightDown;
-
         leftPerSecond = left.perSecond(now, window);
         rightPerSecond = right.perSecond(now, window);
+    }
+
+    /** Forget every click, for a world, server or session change. */
+    public void reset() {
+        left.reset();
+        right.reset();
+        leftPerSecond = 0;
+        rightPerSecond = 0;
+        leftDown = false;
+        rightDown = false;
     }
 
     /** Whether the player is at the game, rather than at a screen or elsewhere. */
     private static boolean playing() {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null || client.player == null || client.currentScreen != null) {
+        if (client == null || client.player == null || client.currentScreen != null || !client.focused) {
             return false;
         }
         return Display.isCreated() && Display.isActive();
@@ -123,10 +129,10 @@ public final class ClickTracker {
     }
 
     public boolean leftDown() {
-        return leftWasDown;
+        return leftDown;
     }
 
     public boolean rightDown() {
-        return rightWasDown;
+        return rightDown;
     }
 }

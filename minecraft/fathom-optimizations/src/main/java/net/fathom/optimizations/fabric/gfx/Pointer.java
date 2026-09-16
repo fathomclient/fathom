@@ -37,6 +37,21 @@ public final class Pointer {
     /** LWJGL 2 reports conventional wheel detents in multiples of 120. */
     private static final int WHEEL_DELTA = 120;
 
+    /** {@code -Dfathom.qaPointer=x,y} in UI units; absent in ordinary runs. */
+    private static final float[] QA_POINTER = qaPointer(System.getProperty("fathom.qaPointer", ""));
+
+    private static float[] qaPointer(String value) {
+        String[] parts = value.split(",");
+        if (parts.length != 2) {
+            return null;
+        }
+        try {
+            return new float[] {Float.parseFloat(parts[0].trim()), Float.parseFloat(parts[1].trim())};
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
     private float x;
     private float y;
     private float previousX;
@@ -64,6 +79,12 @@ public final class Pointer {
         // LWJGL's origin is the bottom left of the window; ours is the top left.
         x = Mouse.getX() / scale;
         y = (client.height - Mouse.getY() - 1) / scale;
+        if (QA_POINTER != null) {
+            // Visual-QA only: a still of a hover state needs a pointer that is
+            // not wherever the desktop cursor happened to be.
+            x = QA_POINTER[0];
+            y = QA_POINTER[1];
+        }
         if (started && (x != previousX || y != previousY)) {
             pointerEventNs = System.nanoTime();
         }

@@ -90,4 +90,9 @@ public interface Section {
     default void opened(HubContext context) {
         // Most sections have nothing to reset.
     }
+
+    /** Visual QA only: restart this page's one-shot state animations. */
+    default void qaReplay(HubContext context) {
+        opened(context);
+    }
 }

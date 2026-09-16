@@ -486,7 +486,7 @@ public final class FeatureTests {
         written.find("cps").setEnabled(true);
         written.find("cps").setFavourite(true);
         ((Setting.Colour) written.find("fps").setting(HudStyle.TEXT_COLOUR)).set(0xE0505C);
-        ((Setting.Slider) written.find("crosshair").setting("size")).set(15);
+        ((Setting.Whole) written.find("crosshair").setting("length")).set(7);
         ((Setting.Choice) written.find("clock").setting("format")).set("12 hour");
         written.find("zoom").keybinds().get(0).set(46);
 
@@ -502,7 +502,7 @@ public final class FeatureTests {
         check(read.find("cps").enabled(), "the switch survived");
         check(read.find("cps").favourite(), "the pin survived");
         check(read.find("fps").colour(HudStyle.TEXT_COLOUR, 0) == 0xE0505C, "the colour survived");
-        check(read.find("crosshair").number("size", 0) == 15, "the slider survived");
+        check(read.find("crosshair").number("length", 0) == 7, "the stepper survived");
         check("12 hour".equals(read.find("clock").choice("format", "")), "the choice survived");
         check(read.find("zoom").keybinds().get(0).key() == 46, "the key survived");
         pass("settings survive being written and read back");

@@ -76,6 +76,7 @@ public final class ProfileStore {
      * @param complaints receives one line per document that would not load; may be null
      */
     public List<FathomProfile> list(List<String> complaints) {
+        awaitWrites();
         List<FathomProfile> out = new ArrayList<FathomProfile>();
         File[] files = directory.listFiles();
         if (files == null) {
@@ -112,6 +113,7 @@ public final class ProfileStore {
     }
 
     public FathomProfile load(String id) throws ProfileException {
+        awaitWrites();
         File file = fileFor(id);
         if (!file.isFile()) {
             throw new ProfileException("no profile called " + id);
@@ -142,6 +144,17 @@ public final class ProfileStore {
     // -----------------------------------------------------------------------
 
     public void save(FathomProfile profile) throws ProfileException {
+        String json = prepare(profile);
+        awaitWrites();
+        try {
+            atomicWrite(fileFor(profile.id()), json);
+        } catch (IOException failure) {
+            throw new ProfileException("could not save " + profile.name() + " (" + failure.getMessage() + ")", failure);
+        }
+    }
+
+    /** Validate, prune and serialize on the caller's thread. The profile is not touched after this. */
+    private static String prepare(FathomProfile profile) throws ProfileException {
         if (!FathomProfile.validId(profile.id())) {
             throw new ProfileException(profile.id() + " is not a usable profile id");
         }
@@ -151,11 +164,120 @@ public final class ProfileStore {
         }
         profile.prune();
         profile.touch();
-        try {
-            atomicWrite(fileFor(profile.id()), profile.toJson());
-        } catch (IOException failure) {
-            throw new ProfileException("could not save " + profile.name() + " (" + failure.getMessage() + ")", failure);
+        return profile.toJson();
+    }
+
+    // -----------------------------------------------------------------------
+    // Writing without blocking the caller
+    // -----------------------------------------------------------------------
+
+    /*
+     * A settings save happens on the render thread when a screen closes, and the
+     * atomic write syncs to disk: measured at 2-4 ms warm and 64 ms for the first
+     * write of a session, which is a visible hitch. `saveInBackground` does the
+     * part that must see a consistent profile -- validation, pruning, JSON -- on
+     * the caller's thread, and hands only the finished text to one writer thread.
+     *
+     * Ordering is kept by construction: repeated saves of one profile coalesce to
+     * the newest text, and every other method on this store waits for pending
+     * writes first, so nothing can read a profile older than one already saved.
+     */
+    private final Object writeLock = new Object();
+    private final Map<String, String> pendingWrites = new LinkedHashMap<String, String>();
+    private int writesInFlight;
+    private String backgroundFailure;
+    private java.util.concurrent.ExecutorService writer;
+
+    /**
+     * Save without blocking on the disk.
+     *
+     * @throws ProfileException for a profile that could not be saved at all; an
+     *     I/O failure happens later and is reported by {@link #takeBackgroundFailure}
+     */
+    public void saveInBackground(FathomProfile profile) throws ProfileException {
+        final String id = profile.id();
+        String json = prepare(profile);
+        synchronized (writeLock) {
+            boolean queued = pendingWrites.containsKey(id);
+            pendingWrites.put(id, json);
+            if (queued) {
+                return;
+            }
+            writesInFlight++;
+            writer().execute(new Runnable() {
+                @Override
+                public void run() {
+                    writeLatest(id);
+                }
+            });
         }
+    }
+
+    private void writeLatest(String id) {
+        String json;
+        synchronized (writeLock) {
+            json = pendingWrites.remove(id);
+        }
+        try {
+            if (json != null) {
+                atomicWrite(fileFor(id), json);
+            }
+        } catch (IOException failure) {
+            synchronized (writeLock) {
+                backgroundFailure = "could not save " + id + " (" + failure.getMessage() + ")";
+            }
+        } finally {
+            synchronized (writeLock) {
+                writesInFlight--;
+                writeLock.notifyAll();
+            }
+        }
+    }
+
+    /** Block until every background save has reached the disk. */
+    public void awaitWrites() {
+        synchronized (writeLock) {
+            while (writesInFlight > 0) {
+                try {
+                    writeLock.wait();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
+    /** The last background write failure, once, or null. */
+    public String takeBackgroundFailure() {
+        synchronized (writeLock) {
+            String failure = backgroundFailure;
+            backgroundFailure = null;
+            return failure;
+        }
+    }
+
+    private java.util.concurrent.ExecutorService writer() {
+        if (writer == null) {
+            writer = java.util.concurrent.Executors.newSingleThreadExecutor(
+                    new java.util.concurrent.ThreadFactory() {
+                        @Override
+                        public Thread newThread(Runnable task) {
+                            Thread thread = new Thread(task, "Fathom profile writer");
+                            thread.setDaemon(true);
+                            return thread;
+                        }
+                    });
+            // A daemon thread dies with the JVM; a save queued as the game quits
+            // must still land.
+            java.lang.Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    awaitWrites();
+                }
+            }, "Fathom profile writer flush"));
+        }
+        return writer;
     }
 
     public FathomProfile create(String name) throws ProfileException {
@@ -197,6 +319,7 @@ public final class ProfileStore {
      * to something that exists before it goes.
      */
     public void delete(String id) throws ProfileException {
+        awaitWrites();
         List<String> remaining = new ArrayList<String>(ids());
         remaining.remove(id);
         if (remaining.isEmpty()) {
@@ -229,6 +352,7 @@ public final class ProfileStore {
      * produces a second Default.
      */
     public FathomProfile resolveLive() throws ProfileException {
+        awaitWrites();
         List<FathomProfile> profiles = list(null);
         if (profiles.isEmpty()) {
             FathomProfile created = FathomProfile.defaultProfile();
@@ -260,18 +384,22 @@ public final class ProfileStore {
     // -----------------------------------------------------------------------
 
     public String lastProfileId() {
+        awaitWrites();
         return stateValue("lastProfileId");
     }
 
     public String migratedFrom() {
+        awaitWrites();
         return stateValue("migratedFrom");
     }
 
     public void setLastProfileId(String id) throws ProfileException {
+        awaitWrites();
         writeState(id, migratedFrom());
     }
 
     public void setMigratedFrom(String stamp) throws ProfileException {
+        awaitWrites();
         writeState(lastProfileId(), stamp);
     }
 
@@ -315,6 +443,7 @@ public final class ProfileStore {
     // -----------------------------------------------------------------------
 
     public String export(String id) throws ProfileException {
+        awaitWrites();
         return load(id).toJson();
     }
 
@@ -323,6 +452,7 @@ public final class ProfileStore {
      * honoured, so importing a friend's "default" cannot overwrite your own.
      */
     public FathomProfile importJson(String json) throws ProfileException {
+        awaitWrites();
         FathomProfile incoming = FathomProfile.fromJson(json, false);
         List<String> taken = ids();
         String id = idFromName(incoming.name(), taken);

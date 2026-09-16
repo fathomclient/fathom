@@ -48,4 +48,21 @@ public interface HudFont {
 
     /** True when this is Fathom's typeface rather than Minecraft's. */
     boolean fathom();
+
+    /**
+     * The height of a capital letter, in Minecraft's scaled pixels.
+     *
+     * <p>What to centre on. {@link #lineHeight} includes the space below the
+     * baseline and above the capitals, and centring a label in a key by it
+     * leaves the letters visibly high or low depending on the font.
+     */
+    float capHeight();
+
+    /** Distance from the {@code top} passed to {@link #draw} down to the top of a capital. */
+    float capTop();
+
+    /** The {@code top} that centres a capital letter in a box starting at {@code boxTop}. */
+    default float centredTop(float boxTop, float boxHeight) {
+        return boxTop + (boxHeight - capHeight()) / 2f - capTop();
+    }
 }

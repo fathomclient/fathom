@@ -15,8 +15,14 @@ public final class KeybindCaptureState {
     public enum Outcome {
         NONE,
         CANCELLED,
+        /** Backspace or Delete: the binding is now unbound. */
+        CLEARED,
         BOUND
     }
+
+    /** LWJGL's Backspace and Delete, which clear a binding rather than taking it. */
+    public static final int KEY_BACKSPACE = 14;
+    public static final int KEY_DELETE = 211;
 
     private Keybind target;
 
@@ -47,7 +53,9 @@ public final class KeybindCaptureState {
     }
 
     /**
-     * Consume a keyboard press. Escape cancels and leaves the old key intact.
+     * Consume a keyboard press. Escape cancels and leaves the old key intact;
+     * Backspace and Delete clear the binding, which is the only way to unbind a
+     * key without binding another one in its place.
      */
     public Outcome keyboard(int keyCode, int escapeKey) {
         if (target == null) {
@@ -56,6 +64,18 @@ public final class KeybindCaptureState {
         if (keyCode == escapeKey) {
             target = null;
             return Outcome.CANCELLED;
+        }
+        if (keyCode == KEY_BACKSPACE || keyCode == KEY_DELETE) {
+            Keybind binding = target;
+            target = null;
+            binding.clear();
+            return Outcome.CLEARED;
+        }
+        if (keyCode <= 0) {
+            // LWJGL reports characters it cannot name (some IME and layout
+            // keys) as KEY_NONE. Binding that would store "no key" while
+            // claiming to have bound one; keep listening instead.
+            return Outcome.NONE;
         }
         Keybind binding = target;
         target = null;

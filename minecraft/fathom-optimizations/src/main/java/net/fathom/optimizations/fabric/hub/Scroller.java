@@ -7,6 +7,7 @@ import net.fathom.optimizations.core.ui.anim.Spring;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.VisualEffects;
 
 /**
  * Scroll position for a list, and the rail that shows it.
@@ -145,12 +146,15 @@ public final class Scroller {
                 active ? Timing.HOVER_IN : Timing.HOVER_OUT);
         float alpha = visibility.opacity(now);
         float bright = emphasis.opacity(now);
+        width = 4f + bright * 2f;
+        x = viewport.right() - width;
         ui.rounded(x, trackTop, x + width, trackTop + trackHeight,
                 net.fathom.optimizations.core.ui.render.RoundedGeometry.pill(width, trackHeight),
                 Skin.argb(0.11f + alpha * 0.08f, 0x000000));
         ui.rounded(x, handleY, x + width, handleY + handle,
                 net.fathom.optimizations.core.ui.render.RoundedGeometry.pill(width, handle),
-                Skin.argb(0.16f + alpha * 0.18f + bright * 0.18f, 0xFFFFFF));
+                Skin.mix(Skin.argb(0.16f + alpha * 0.18f, 0xFFFFFF),
+                        Skin.HOT_RED, bright * (dragging ? 0.74f : 0.28f)));
     }
 
     /** Whether there is anything to scroll, for a caller that lays out around it. */

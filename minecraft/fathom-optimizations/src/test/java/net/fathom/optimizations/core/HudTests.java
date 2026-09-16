@@ -6,6 +6,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import net.fathom.optimizations.core.hud.Anchor;
+import net.fathom.optimizations.core.hud.CrosshairShape;
+import net.fathom.optimizations.core.hud.EditorPrefs;
 import net.fathom.optimizations.core.hud.HudLayout;
 import net.fathom.optimizations.core.hud.HudRegistry;
 import net.fathom.optimizations.core.hud.Placement;
@@ -14,6 +16,8 @@ import net.fathom.optimizations.core.hud.Snap;
 import net.fathom.optimizations.core.hud.Widget;
 import net.fathom.optimizations.core.hud.value.ClickCounter;
 import net.fathom.optimizations.core.input.InputGate;
+import net.fathom.optimizations.core.input.MovementToggle;
+import net.fathom.optimizations.core.input.ZoomMath;
 import net.fathom.optimizations.core.opt.frames.FrameCapPolicy;
 
 /**
@@ -60,6 +64,21 @@ public final class HudTests {
         theNearerOfTwoGuidesWins();
         somethingFarFromEverythingIsLeftAlone();
         clampingKeepsAWidgetReachable();
+        snapStrengthDecidesHowCloseCounts();
+        aDroppedWidgetIsMovedOffWhatItLandedOn();
+        editorPreferencesSurviveAndAreNotPartOfAProfile();
+
+        // -- the crosshair --------------------------------------------------
+        aCrosshairIsSymmetricAboutItsCentre();
+        aCrosshairOutlineNeverOverlapsItsOwnFill();
+        aGaplessCrossHasNoHoleAtTheAim();
+        crosshairInputsAreClampedRatherThanTrusted();
+
+        // -- zoom and movement toggles --------------------------------------
+        zoomCompensationSlowsTheCameraByExactlyTheZoom();
+        zoomScrollStaysInsideItsLimits();
+        aToggleLatchesOnAPressAndLetsGoOnTheNext();
+        aReleasedToggleNeedsAFreshPress();
 
         // -- clicks ---------------------------------------------------------
         clicksAreCountedOverASlidingSecondNotACalendarOne();
@@ -364,6 +383,211 @@ public final class HudTests {
         check(clamped.x == 0, "pulled back onto the screen horizontally");
         check(clamped.bottom() == 300, "and vertically");
         pass("clamping keeps a widget reachable");
+    }
+
+    static void snapStrengthDecidesHowCloseCounts() {
+        Snap.Box dragged = new Snap.Box(6, 50, 30, 10);
+        check(Snap.snap(dragged, new ArrayList<Snap.Box>(), 400, 300, 8).x == 0,
+                "strong snapping reaches six pixels");
+        check(Snap.snap(dragged, new ArrayList<Snap.Box>(), 400, 300, 2).x == 6,
+                "light snapping does not");
+        Snap.Result off = Snap.snap(dragged, new ArrayList<Snap.Box>(), 400, 300, 0);
+        check(off.x == 6 && !off.snapped(), "and off means off, with no guides");
+        pass("snap strength decides how close counts");
+    }
+
+    static void aDroppedWidgetIsMovedOffWhatItLandedOn() {
+        Snap.Box dropped = new Snap.Box(50, 50, 20, 10);
+        List<Snap.Box> others = Arrays.asList(new Snap.Box(55, 52, 20, 10));
+        Snap.Box moved = Snap.separate(dropped, others, 400, 300, 2);
+        check(!Snap.overlaps(moved, others.get(0)), "it no longer overlaps");
+        check(moved.width == dropped.width && moved.height == dropped.height, "and was not resized");
+
+        // Clear of everything already: untouched, and the same instance, so the
+        // editor can tell that nothing happened.
+        Snap.Box clear = new Snap.Box(200, 200, 20, 10);
+        check(Snap.separate(clear, others, 400, 300, 2) == clear, "a clear drop is left alone");
+
+        // Nowhere to go: left where it was dropped rather than thrown somewhere.
+        Snap.Box crowded = new Snap.Box(0, 0, 40, 30);
+        List<Snap.Box> everywhere = Arrays.asList(new Snap.Box(0, 0, 40, 30));
+        check(Snap.separate(crowded, everywhere, 40, 30, 2).x == 0,
+                "with nowhere clear it stays put");
+        pass("a dropped widget is moved off what it landed on");
+    }
+
+    static void editorPreferencesSurviveAndAreNotPartOfAProfile() {
+        File directory = temporaryDirectory("hud-editor-prefs");
+        EditorPrefs written = EditorPrefs.read(directory);
+        int before = written.snapPixels();
+        written.cycleSnap();
+        written.setGrid(true);
+        check(written.snapPixels() != before, "cycling changes the strength");
+        check(written.write(directory) == null, "they were written");
+
+        EditorPrefs read = EditorPrefs.read(directory);
+        check(read.snapChoice() == written.snapChoice(), "the strength survived");
+        check(read.grid(), "and so did the grid");
+        check(EditorPrefs.read(temporaryDirectory("hud-editor-empty")).snapPixels() > 0,
+                "a fresh install snaps by default");
+        pass("editor preferences survive and are not part of a profile");
+    }
+
+    // -----------------------------------------------------------------------
+    // The crosshair
+    // -----------------------------------------------------------------------
+
+    /** Every pixel of a built shape, as a set, for the assertions below. */
+    private static boolean[] mask(CrosshairShape shape, boolean outline) {
+        int size = shape.size();
+        boolean[] cells = new boolean[size * size];
+        int[] rects = outline ? shape.outline() : shape.fill();
+        int count = outline ? shape.outlineCount() : shape.fillCount();
+        for (int index = 0; index < count; index += 4) {
+            for (int y = rects[index + 1]; y < rects[index + 3]; y++) {
+                for (int x = rects[index]; x < rects[index + 2]; x++) {
+                    check(x >= 0 && y >= 0 && x < size && y < size, "a rectangle left the box");
+                    check(!cells[y * size + x], "a rectangle overlapped another");
+                    cells[y * size + x] = true;
+                }
+            }
+        }
+        return cells;
+    }
+
+    static void aCrosshairIsSymmetricAboutItsCentre() {
+        CrosshairShape shape = new CrosshairShape();
+        shape.build(CrosshairShape.Style.CROSS, 4, 1, 2, false, 1, 1);
+        int size = shape.size();
+        boolean[] cells = mask(shape, false);
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                check(cells[y * size + x] == cells[y * size + (size - 1 - x)],
+                        "left and right differ at " + x + "," + y);
+                check(cells[y * size + x] == cells[(size - 1 - y) * size + x],
+                        "top and bottom differ at " + x + "," + y);
+            }
+        }
+        check(size == 2 * (2 + 4 + 1) + 1, "the box is the arms, the gaps and the outline: " + size);
+        pass("a crosshair is symmetric about its centre");
+    }
+
+    static void aCrosshairOutlineNeverOverlapsItsOwnFill() {
+        CrosshairShape shape = new CrosshairShape();
+        // A circle with a dot: the case where naive outlining -- every
+        // rectangle one pixel larger -- overlaps itself dozens of times and
+        // shows as dark knots at anything under full opacity.
+        shape.build(CrosshairShape.Style.CIRCLE, 3, 2, 3, true, 2, 2);
+        boolean[] fill = mask(shape, false);
+        boolean[] outline = mask(shape, true);
+        for (int cell = 0; cell < fill.length; cell++) {
+            check(!(fill[cell] && outline[cell]), "the outline covered the fill at " + cell);
+        }
+        check(shape.outlineCount() > 0, "there is an outline to check");
+        pass("a crosshair outline never overlaps its own fill");
+    }
+
+    static void aGaplessCrossHasNoHoleAtTheAim() {
+        CrosshairShape shape = new CrosshairShape();
+        shape.build(CrosshairShape.Style.CROSS, 4, 1, 0, false, 1, 0);
+        boolean[] cells = mask(shape, false);
+        int centre = shape.centre();
+        check(cells[centre * shape.size() + centre], "the centre pixel is filled");
+        pass("a gapless cross has no hole at the aim");
+    }
+
+    static void crosshairInputsAreClampedRatherThanTrusted() {
+        CrosshairShape shape = new CrosshairShape();
+        // A hand-edited profile, or a newer build with wider ranges.
+        shape.build(CrosshairShape.Style.CROSS, 100000, 900, 100000, true, 500, 90);
+        check(shape.size() <= (CrosshairShape.MAX_LENGTH + CrosshairShape.MAX_GAP
+                + CrosshairShape.MAX_OUTLINE) * 2 + CrosshairShape.MAX_THICKNESS,
+                "the box stayed sane: " + shape.size());
+        check(shape.fillCount() > 0, "and it still drew something");
+        pass("crosshair inputs are clamped rather than trusted");
+    }
+
+    // -----------------------------------------------------------------------
+    // Zoom and movement toggles
+    // -----------------------------------------------------------------------
+
+    static void zoomCompensationSlowsTheCameraByExactlyTheZoom() {
+        // Vanilla turns by (s * 0.6 + 0.2) cubed, times eight. Compensation has
+        // to invert that curve, not divide the option: dividing the option at
+        // the default sensitivity slows the camera by about four times what was
+        // asked for, which is the sluggish zoom every naive implementation has.
+        float[] sensitivities = {0.05f, 0.5f, 1f};
+        double[] zooms = {2.0, 4.0, 10.0};
+        for (float sensitivity : sensitivities) {
+            for (double zoom : zooms) {
+                float compensated = ZoomMath.compensatedSensitivity(sensitivity, zoom, 1.0);
+                double ratio = ZoomMath.turnRate(sensitivity) / ZoomMath.turnRate(compensated);
+                check(Math.abs(ratio - zoom) < 0.001,
+                        "at " + sensitivity + " and " + zoom + "x the camera turned " + ratio + " times slower");
+            }
+        }
+        check(ZoomMath.compensatedSensitivity(0.5f, 4.0, 0.0) == 0.5f,
+                "zero strength changes nothing");
+        check(ZoomMath.compensatedSensitivity(0.5f, 1.0, 1.0) == 0.5f,
+                "and no zoom changes nothing");
+        pass("zoom compensation slows the camera by exactly the zoom");
+    }
+
+    static void zoomScrollStaysInsideItsLimits() {
+        double zoomed = ZoomMath.scroll(4.0, 1, 1.25, 1.5, 20.0);
+        check(Math.abs(zoomed - 5.0) < 1e-9, "one notch in is one step: " + zoomed);
+        check(ZoomMath.scroll(1.6, -1, 1.25, 1.5, 20.0) == 1.5, "it stops at the minimum");
+        check(ZoomMath.scroll(19.0, 1, 1.25, 1.5, 20.0) == 20.0, "and at the maximum");
+        check(ZoomMath.scroll(4.0, 1, 1.25, 20.0, 1.5) == 5.0,
+                "limits given the wrong way round are still limits");
+        check(ZoomMath.divisor(8.0, 0.0) == 1.0, "no progress is no zoom");
+        check(Math.abs(ZoomMath.divisor(8.0, 1.0) - 8.0) < 1e-9, "full progress is the whole zoom");
+        check(Math.abs(ZoomMath.divisor(8.0, 0.5) - Math.sqrt(8.0)) < 1e-9,
+                "and half way in is half the ratio, not half the number");
+        pass("zoom scrolling stays inside its limits");
+    }
+
+    static void aToggleLatchesOnAPressAndLetsGoOnTheNext() {
+        MovementToggle toggle = new MovementToggle();
+        toggle.tick(true, true, true);
+        check(toggle.latched(), "the press latched it");
+        check(toggle.held(true, false, true), "and the game is told the key is held");
+        toggle.tick(true, false, true);
+        check(toggle.latched(), "releasing the key does not let go");
+        toggle.tick(true, true, true);
+        check(!toggle.latched(), "the next press does");
+
+        // Hold mode is vanilla: the latch cannot exist at all.
+        toggle.tick(true, false, true);
+        toggle.tick(true, true, true);
+        check(toggle.latched(), "latched again");
+        toggle.tick(false, false, true);
+        check(!toggle.latched(), "switching to Hold drops the latch");
+        check(!toggle.held(false, false, true), "and Hold reports exactly the key");
+        check(toggle.held(false, true, true), "in both directions");
+        pass("a toggle latches on a press and lets go on the next");
+    }
+
+    static void aReleasedToggleNeedsAFreshPress() {
+        MovementToggle toggle = new MovementToggle();
+        toggle.tick(true, true, true);
+        check(toggle.latched(), "latched");
+        toggle.release();
+        check(!toggle.latched(), "death, a respawn or a world change lets go");
+        // The key was still held through the respawn: that must not re-latch.
+        toggle.tick(true, true, true);
+        check(!toggle.latched(), "a key held across the release is not a new press");
+        toggle.tick(true, false, true);
+        toggle.tick(true, true, true);
+        check(toggle.latched(), "releasing and pressing again is");
+
+        // A press that is not allowed to count -- sneak while flying -- is not
+        // swallowed into a latch that appears the moment the player lands.
+        MovementToggle sneak = new MovementToggle();
+        sneak.tick(true, true, false);
+        check(!sneak.latched(), "a press while flying does not latch");
+        check(sneak.held(true, true, false), "but the key still works as a key");
+        pass("a released toggle needs a fresh press");
     }
 
     // -----------------------------------------------------------------------

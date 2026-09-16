@@ -51,7 +51,8 @@ public abstract class MinecraftClientFrameCapMixin {
                         vanilla,
                         client.options == null ? vanilla : client.options.maxFramerate,
                         Display.isActive(),
-                        Runtime.enabled(FrameCapPolicy.UNFOCUSED_ID),
+                        Runtime.switches().isEnabled(Runtime.UNFOCUSED_CAP)
+                                && !net.fathom.optimizations.fabric.bench.PerfBench.suppressUnfocusedCap(),
                         Runtime.unfocusedFrameCap(),
                         client.world != null,
                         client.world == null && currentScreen instanceof FathomScreen);

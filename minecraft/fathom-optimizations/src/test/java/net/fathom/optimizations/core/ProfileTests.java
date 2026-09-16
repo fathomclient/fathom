@@ -39,6 +39,7 @@ public final class ProfileTests {
         aRenameKeepsTheIdSoThePointerSurvives();
         anImportNeverOverwritesAProfileThatIsThere();
         duplicatingTwiceNumbersRatherThanCollides();
+        aBackgroundSaveIsNeverReadStale();
 
         // -- the document -------------------------------------------------------
         aProfileRoundTripsUnchanged();
@@ -113,6 +114,27 @@ public final class ProfileTests {
         store.delete(bedwars.id());
         check(defaults.id().equals(store.lastProfileId()), "the pointer moved to Default");
         pass("deleting the live profile moves the pointer somewhere real");
+    }
+
+    /**
+     * The render thread saves in the background. Many saves coalesce to the last
+     * one, and any read that follows sees what was saved last, never an older
+     * document that happened to still be on disk.
+     */
+    static void aBackgroundSaveIsNeverReadStale() throws Exception {
+        ProfileStore store = store();
+        FathomProfile profile = store.create("Before");
+        for (int index = 0; index < 50; index++) {
+            profile.setName("Name " + index);
+            store.saveInBackground(profile);
+        }
+        FathomProfile read = store.load(profile.id());
+        check("Name 49".equals(read.name()), "a load after background saves sees the last one: " + read.name());
+        check(store.takeBackgroundFailure() == null, "and no write failed");
+        profile.setName("Renamed");
+        store.saveInBackground(profile);
+        check(store.list(null).get(0).name().equals("Renamed"), "listing waits for the pending write too");
+        pass("a background save is never read stale");
     }
 
     static void oneCorruptDocumentDoesNotHideTheOthers() throws Exception {

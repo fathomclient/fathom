@@ -279,7 +279,10 @@
   }
 
   function onAction(command: string) {
-    if (command === 'play') {
+    /* `play` owns the complete prepare -> verify -> repair -> launch pipeline.
+       Accept the older stage names too so a WebView that was already open when
+       the backend updated cannot turn its primary button into a dead end. */
+    if (['play', 'install', 'verify', 'repair'].includes(command)) {
       void startLaunch();
       return;
     }

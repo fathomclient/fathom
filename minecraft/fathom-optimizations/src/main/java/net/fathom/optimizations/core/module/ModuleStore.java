@@ -156,6 +156,10 @@ public final class ModuleStore {
                     complaints.add(feature.id() + "." + keybind.id() + ": " + raw + " is not a key code");
                 }
             }
+
+            // Everything this module stores has arrived; let it settle whatever
+            // it derives from the values it just read.
+            feature.settingChanged(null);
         }
 
         // A key stored for a feature nothing registered is worth saying out

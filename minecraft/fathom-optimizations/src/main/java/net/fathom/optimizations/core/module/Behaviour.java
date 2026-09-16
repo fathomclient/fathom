@@ -34,8 +34,14 @@ public final class Behaviour {
      */
     public static final String MAIN_MENU = "main-menu";
 
+    /**
+     * Toggle Sprint and Toggle Sneak. Implemented by the player-input Mixins,
+     * which report a latched key to vanilla as held and change nothing else.
+     */
+    public static final String MOVEMENT_TOGGLE = "movement-toggle";
+
     /** Every behaviour the client implements. */
-    public static final String[] ALL = {ZOOM, CROSSHAIR, MAIN_MENU};
+    public static final String[] ALL = {ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE};
 
     private Behaviour() {}
 

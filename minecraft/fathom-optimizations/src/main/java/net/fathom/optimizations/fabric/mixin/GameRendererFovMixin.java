@@ -3,15 +3,18 @@ package net.fathom.optimizations.fabric.mixin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.render.GameRenderer;
 
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.hud.Zoom;
 
 /**
- * The Zoom module's field of view.
+ * The Zoom module, where vanilla reads what it changes.
  *
  * <h2>Why {@code getFov} and not the option</h2>
  *
@@ -19,27 +22,27 @@ import net.fathom.optimizations.fabric.hud.Zoom;
  * player's own field of view to disk the next time anything saved the options —
  * so a client that crashed while zoomed would come back permanently at 25
  * degrees. This changes the value vanilla computed for this frame and nothing
- * else, which is why {@code getFov} is the hook even though it is private.
+ * else. The target is {@code getFov(FZ)F}, confirmed against the 1.8.9 bytecode,
+ * injected at {@code RETURN} so vanilla's own movement and status-effect
+ * adjustments are already in the number being divided.
  *
- * <p>Private is not an obstacle to a Mixin, but it is a reason to be explicit:
- * the target is {@code getFov(FZ)F}, confirmed against the 1.8.9 bytecode rather
- * than assumed from a newer mapping, and it is injected at {@code RETURN} so
- * vanilla's own movement and status-effect adjustments are already in the number
- * being divided.
+ * <p>Only when {@code changingFov} is true: that is the world's projection.
+ * The hand is projected with {@code false}, and dividing its field of view too
+ * made the arm fill the screen while zoomed.
  *
- * <h2>Why a divisor</h2>
+ * <h2>Sensitivity and smooth camera, the same way</h2>
  *
- * <p>A zoom is "the same picture, less of it", which is a ratio, not a
- * subtraction. Dividing keeps the relationship between the setting and the
- * result the same at every field of view, so somebody playing at 110 and
- * somebody playing at 70 get the same 4× when they ask for 4×.
+ * <p>Both are read from {@code GameOptions} by {@code render} (mouse to camera)
+ * and {@code tick} (the smoothing filter). Redirecting those reads gives the
+ * zoomed values to exactly the code that turns the camera, and leaves the
+ * options — which Minecraft saves — untouched.
  */
 @Mixin(GameRenderer.class)
 public abstract class GameRendererFovMixin {
 
     @Inject(method = "getFov(FZ)F", at = @At("RETURN"), cancellable = true)
     private void fathom$zoom(float tickDelta, boolean changingFov, CallbackInfoReturnable<Float> info) {
-        if (Runtime.hud() == null) {
+        if (!changingFov || Runtime.hud() == null) {
             return;
         }
         float factor = Zoom.factor();
@@ -47,5 +50,26 @@ public abstract class GameRendererFovMixin {
             return;
         }
         info.setReturnValue(Float.valueOf(info.getReturnValueF() / factor));
+    }
+
+    @Redirect(method = {"render(FJ)V", "tick()V"},
+            at = @At(value = "FIELD", target = "Lnet/minecraft/client/option/GameOptions;sensitivity:F",
+                    opcode = org.objectweb.asm.Opcodes.GETFIELD))
+    private float fathom$zoomSensitivity(GameOptions options) {
+        return Zoom.sensitivity(options.sensitivity);
+    }
+
+    @Redirect(method = {"render(FJ)V", "tick()V"},
+            at = @At(value = "FIELD", target = "Lnet/minecraft/client/option/GameOptions;smoothCameraEnabled:Z",
+                    opcode = org.objectweb.asm.Opcodes.GETFIELD))
+    private boolean fathom$zoomSmoothCamera(GameOptions options) {
+        return Zoom.smoothCamera(options.smoothCameraEnabled);
+    }
+
+    @Inject(method = "renderHand(FI)V", at = @At("HEAD"), cancellable = true)
+    private void fathom$hideHandWhileZoomed(float tickDelta, int anaglyphFilter, CallbackInfo info) {
+        if (Zoom.hideHand()) {
+            info.cancel();
+        }
     }
 }

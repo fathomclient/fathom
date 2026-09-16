@@ -245,13 +245,13 @@ fn launch_action(blockers: &[Blocker], identity_warning: Option<&str>) -> Launch
         Some(Blocker::NeedsInstall(snapshot))
             if snapshot.state == launcher_core::install::InstallationState::Corrupted =>
         {
-            ("REPAIR REQUIRED", "Some game files are damaged", "repair")
+            ("REPAIR REQUIRED", "Some game files are damaged", "play")
         }
         Some(Blocker::NeedsInstall(_)) => {
-            ("PREPARE GAME", "Download the game files", "install")
+            ("PREPARE GAME", "Download the game files", "play")
         }
         Some(Blocker::InstallNotChecked) => {
-            ("PREPARE GAME", "Check the game files first", "verify")
+            ("PREPARE GAME", "Check the game files first", "play")
         }
         Some(Blocker::NoJava { .. } | Blocker::WrongJava { .. }) => {
             ("JAVA REQUIRED", "Minecraft 1.8.9 needs Java 8", "java")
@@ -354,5 +354,31 @@ mod tests {
         assert_eq!(action.label, "PLAY");
         assert!(action.ready);
         assert!(action.developer_note.is_none());
+    }
+
+    /// Preparing, verifying and repairing are all stages of the launch
+    /// supervisor. The home action must start that supervisor rather than emit
+    /// command names the shell does not implement.
+    #[test]
+    fn installation_blockers_start_the_launch_pipeline() {
+        let missing = launcher_core::InstallSnapshot {
+            state: launcher_core::install::InstallationState::RepairRequired,
+            outstanding: 1,
+            bytes: 32,
+            natives_extracted: false,
+        };
+        let corrupted = launcher_core::InstallSnapshot {
+            state: launcher_core::install::InstallationState::Corrupted,
+            ..missing
+        };
+
+        for blocker in [
+            Blocker::NeedsInstall(missing),
+            Blocker::NeedsInstall(corrupted),
+            Blocker::InstallNotChecked,
+        ] {
+            let action = launch_action(&[blocker], None);
+            assert_eq!(action.command.as_deref(), Some("play"));
+        }
     }
 }

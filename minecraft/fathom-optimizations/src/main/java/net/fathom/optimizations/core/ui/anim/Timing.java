@@ -30,10 +30,18 @@ public final class Timing {
     public static final float SCREEN_ENTER = FathomTheme.MOTION_HUB;
     /** A full Fathom screen leaving; intentionally faster than entry. */
     public static final float SCREEN_EXIT = FathomTheme.MOTION_HUB_CLOSE;
+    /** The richer in-game hub powers on in one compact, readable sequence. */
+    public static final float HUB_ENTER = 0.285f;
+    /** Hub energy retracts faster than its structural arrival. */
+    public static final float HUB_EXIT = 0.145f;
     /** Tooltip opacity after its dwell delay has elapsed. */
     public static final float TOOLTIP = 0.120f;
     /** Delay between adjacent rows in a deliberately staggered entrance. */
     public static final float STAGGER = FathomTheme.MOTION_STAGGER;
+    /** Module-card arrival after a category switch. */
+    public static final float CARD_ENTER = 0.150f;
+    /** Tight card-grid stagger; fourteen cards still finish in under 0.4 seconds. */
+    public static final float CARD_STAGGER = 0.018f;
 
     private Timing() {}
 }

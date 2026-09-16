@@ -82,6 +82,20 @@ pub enum ServiceError {
     LaunchDenied(#[from] LaunchDenied),
     #[error(transparent)]
     Entitlement(#[from] crate::auth::entitlement::EntitlementError),
+    /// A structured failure from the mod browser. Kept structured, rather
+    /// than flattened into [`ServiceError::Failed`], so the interface can tell
+    /// "rate limited" from "not configured" from "incompatible".
+    #[error(transparent)]
+    Browse(crate::mods::browse::BrowseError),
+}
+
+impl From<crate::mods::browse::BrowseError> for ServiceError {
+    fn from(error: crate::mods::browse::BrowseError) -> Self {
+        match error {
+            crate::mods::browse::BrowseError::Cancelled => ServiceError::Cancelled,
+            other => ServiceError::Browse(other),
+        }
+    }
 }
 
 /// Cancellation is not a failure, and the interface treats it differently, so
@@ -358,6 +372,10 @@ pub struct Launcher {
     auth: AuthSession,
     java: Vec<JavaInstallation>,
     running: RunningGames,
+    /// The mod browser. Held rather than built per call because its caches
+    /// and in-flight state are the point of it; it shares `http`, so a change
+    /// to Privacy settings reaches it immediately.
+    mod_catalog: crate::mods::browse::ModCatalog,
 }
 
 impl std::fmt::Debug for Launcher {
@@ -452,17 +470,34 @@ impl Launcher {
             }
         }
 
-        // Select the shipped profile, but only if nothing is selected. A user
-        // who already has a choice keeps it.
+        // Select a usable default, but only if nothing is selected. A user who
+        // already has a choice keeps it. `seeded` is empty after the first run,
+        // so upgraded installations also need to find the existing Fathom
+        // profile; otherwise the alphabetically first custom profile silently
+        // becomes current even though the installed game belongs to Fathom.
         let mut settings = settings;
         if settings.selected_profile.is_none() {
-            if let Some(first) = seeded.first() {
-                settings.selected_profile = Some(first.clone());
+            let default = seeded.first().cloned().or_else(|| {
+                let available = profiles.list();
+                available
+                    .iter()
+                    .find(|profile| profile.kind == crate::profiles::ProfileKind::Fathom)
+                    .or_else(|| available.first())
+                    .map(|profile| profile.id.clone())
+            });
+            if let Some(default) = default {
+                settings.selected_profile = Some(default);
                 if let Err(error) = settings.save(&paths) {
                     tracing::warn!(%error, "could not record the selected profile");
                 }
             }
         }
+
+        let mod_catalog = crate::mods::browse::ModCatalog::new(
+            http.clone(),
+            paths.clone(),
+            crate::mods::browse::CurseForgeConfig::discover(&paths),
+        );
 
         Ok(Self {
             paths,
@@ -474,6 +509,7 @@ impl Launcher {
             auth: AuthSession::new(),
             java: Vec::new(),
             running: RunningGames::new(),
+            mod_catalog,
         })
     }
 
@@ -1311,6 +1347,202 @@ impl Launcher {
             .map_err(|error| ServiceError::Failed(error.to_string()))
     }
 
+    // -- the mod browser ------------------------------------------------------
+    //
+    // Every method below blocks on network or disk and must run on a worker
+    // thread. Each takes a `Cancel` so the worker can be stopped, and each mints
+    // its own per-action grant from the user action that led here.
+
+    /// The mod browser, for a worker thread to hold. Clones share caches.
+    pub fn mod_catalog(&self) -> crate::mods::browse::ModCatalog {
+        self.mod_catalog.clone()
+    }
+
+    fn catalog_ready(&self) -> Result<(), ServiceError> {
+        match self.browsing_blocked() {
+            Some(reason) => Err(ServiceError::Browse(
+                crate::mods::browse::BrowseError::Blocked {
+                    reason: reason.to_owned(),
+                },
+            )),
+            None => Ok(()),
+        }
+    }
+
+    /// Search Modrinth and `CurseForge` for mods for this profile.
+    ///
+    /// The query's target should be `Target::of(profile)`; results are
+    /// compatible with it unless the query asks otherwise.
+    pub fn search_mod_catalog(
+        &self,
+        profile: &Profile,
+        query: &crate::mods::browse::SearchQuery,
+        cancel: &Cancel,
+    ) -> Result<crate::mods::browse::CatalogPage, ServiceError> {
+        self.catalog_ready()?;
+        let grant = PerActionGrant::user_requested(if query.text.trim().is_empty() {
+            "browsing mods for a profile".to_owned()
+        } else {
+            "searching mods".to_owned()
+        });
+        let installed: Vec<ProfileMod> = profile.mods.iter().cloned().collect();
+        Ok(self.mod_catalog.search(
+            profile.id.as_str(),
+            query,
+            &installed,
+            &grant,
+            cancel,
+        )?)
+    }
+
+    /// One project's detail page for this profile, with its compatible builds.
+    pub fn mod_catalog_entry(
+        &self,
+        profile: &Profile,
+        reference: &crate::mods::browse::ProjectRef,
+        cancel: &Cancel,
+    ) -> Result<
+        (
+            crate::mods::browse::CatalogEntry,
+            Vec<crate::mods::browse::ModFile>,
+        ),
+        ServiceError,
+    > {
+        self.catalog_ready()?;
+        let grant = PerActionGrant::user_requested(format!("viewing {reference}"));
+        let installed: Vec<ProfileMod> = profile.mods.iter().cloned().collect();
+        Ok(self.mod_catalog.entry(
+            profile.id.as_str(),
+            reference,
+            &crate::mods::browse::Target::of(profile),
+            &installed,
+            &grant,
+            cancel,
+        )?)
+    }
+
+    /// Plan installing a project: what will be fetched, and what stops it.
+    pub fn plan_mod_install(
+        &self,
+        profile: &Profile,
+        reference: &crate::mods::browse::ProjectRef,
+        version_id: Option<&str>,
+        chosen_optional: &[crate::mods::browse::ProjectRef],
+        cancel: &Cancel,
+    ) -> Result<crate::mods::browse::InstallPlan, ServiceError> {
+        self.catalog_ready()?;
+        let grant = PerActionGrant::user_requested(format!("planning to install {reference}"));
+        let installed: Vec<ProfileMod> = profile.mods.iter().cloned().collect();
+        Ok(self.mod_catalog.plan_install(
+            reference,
+            version_id,
+            &crate::mods::browse::Target::of(profile),
+            &installed,
+            chosen_optional,
+            &grant,
+            cancel,
+        )?)
+    }
+
+    /// Plan updating one installed mod. `None` when it is already current.
+    pub fn plan_mod_update(
+        &self,
+        profile: &Profile,
+        id: &ModId,
+        cancel: &Cancel,
+    ) -> Result<Option<crate::mods::browse::InstallPlan>, ServiceError> {
+        self.catalog_ready()?;
+        let grant = PerActionGrant::user_requested(format!("checking {id} for an update"));
+        let installed: Vec<ProfileMod> = profile.mods.iter().cloned().collect();
+        Ok(self.mod_catalog.plan_update(
+            id,
+            &crate::mods::browse::Target::of(profile),
+            &installed,
+            &grant,
+            cancel,
+        )?)
+    }
+
+    /// Which browser-installed mods in this profile have newer builds.
+    pub fn mod_catalog_updates(
+        &self,
+        profile: &Profile,
+        cancel: &Cancel,
+    ) -> Result<Vec<crate::mods::browse::UpdateCandidate>, ServiceError> {
+        self.catalog_ready()?;
+        let grant = PerActionGrant::user_requested("checking mods for updates".to_owned());
+        let installed: Vec<ProfileMod> = profile.mods.iter().cloned().collect();
+        Ok(self.mod_catalog.updates(
+            &crate::mods::browse::Target::of(profile),
+            &installed,
+            &grant,
+            cancel,
+        )?)
+    }
+
+    /// Carry out an install or update plan and save the profile.
+    ///
+    /// The plan is re-checked against the profile as it is now. If saving the
+    /// profile fails, the in-memory change is rolled back so the profile the
+    /// caller holds still matches the one on disk.
+    pub fn install_mod_plan(
+        &self,
+        profile: &mut Profile,
+        plan: &crate::mods::browse::InstallPlan,
+        options: crate::mods::browse::InstallOptions,
+        cancel: &Cancel,
+        progress: &mut dyn FnMut(&crate::mods::browse::InstallProgress),
+    ) -> Result<crate::mods::browse::InstallReport, ServiceError> {
+        self.catalog_ready()?;
+        let grant = PerActionGrant::user_requested(format!(
+            "installing {}",
+            plan.root.project.name
+        ));
+        let target = crate::mods::browse::Target::of(profile);
+        let report = self.mod_catalog.install(
+            profile.id.as_str(),
+            plan,
+            &target,
+            &mut profile.mods,
+            options,
+            &grant,
+            cancel,
+            progress,
+        )?;
+        if let Err(error) = self.profiles.save(profile) {
+            crate::mods::browse::install::rollback(&report, &mut profile.mods);
+            return Err(error.into());
+        }
+        Ok(report)
+    }
+
+    /// What removing a mod would do, including what still needs it.
+    pub fn plan_mod_uninstall(
+        &self,
+        profile: &Profile,
+        id: &ModId,
+    ) -> Result<crate::mods::browse::UninstallPlan, ServiceError> {
+        Ok(self.mod_catalog.plan_uninstall(&profile.mods, id)?)
+    }
+
+    /// Remove a mod, refusing while another installed mod depends on it, and
+    /// delete its bytes if no profile refers to them any more.
+    ///
+    /// Works offline: nothing here needs a provider.
+    pub fn uninstall_mod(
+        &self,
+        profile: &mut Profile,
+        id: &ModId,
+    ) -> Result<(ProfileMod, bool), ServiceError> {
+        let mut next = profile.mods.clone();
+        let removed = self
+            .mod_catalog
+            .uninstall(profile.id.as_str(), &mut next, id)?;
+        // Validated; now the ordinary removal path, which saves and collects.
+        let (_, deleted) = self.remove_mod_and_collect(profile, &removed.id)?;
+        Ok((removed, deleted))
+    }
+
     /// Install a specific project into a profile, newest compatible build.
     ///
     /// Everything that makes this safe happens elsewhere and is worth naming:
@@ -1322,51 +1554,45 @@ impl Launcher {
         profile: &mut Profile,
         project: &str,
     ) -> Result<ProfileMod, ServiceError> {
-        if let Some(reason) = self.browsing_blocked() {
-            return Err(ServiceError::NotImplemented(reason));
-        }
-        let loader = profile.loader_kind();
-        if !loader.supports_mods() {
-            return Err(ServiceError::NotImplemented(
-                "this profile has no mod loader, so a mod would never be read",
-            ));
-        }
-
-        let modrinth = self.modrinth();
-        let grant = PerActionGrant::user_requested(format!("installing {project}"));
-        let version = modrinth
-            .newest(project, loader, &profile.version_id, &grant)
-            .map_err(|error| ServiceError::Failed(error.to_string()))?
-            .ok_or(ServiceError::NotImplemented(
-                "that mod has no build for this profile's Minecraft version and loader",
-            ))?;
-
-        let engine = self.mod_engine();
-        let stored = modrinth
-            .download(&version, engine.store(), &grant)
-            .map_err(|error| ServiceError::Failed(error.to_string()))?;
-
-        let id = crate::mods::id_from_file_name(&version.file_name)?;
-        let previous = profile.mods.get(&id).cloned();
-        let mut entry = ProfileMod::new(id, &stored.sha1, version.file_name.clone())
-            .from_source(crate::mods::ModSource::Managed)
-            .with_origin(crate::mods::Origin {
-                name: None,
-                summary: None,
-                license: None,
-                minecraft: version.game_versions.clone(),
-                loaders: version.loaders.clone(),
-                repository: Some("modrinth".to_owned()),
-                project: Some(version.project_id.clone()),
-                version_id: Some(version.version_id.clone()),
-                page: None,
-            });
-        entry.version = Some(version.version());
-        // Upgrading must not switch back on something that was switched off.
-        entry.enabled = previous.as_ref().is_none_or(|previous| previous.enabled);
-        profile.mods.upsert(entry.clone());
-        self.profiles.save(profile)?;
-        Ok(entry)
+        // Routed through the mod browser's planner and installer, so this older
+        // entry point gets the same guarantees: compatibility re-checked at
+        // install, required dependencies resolved, duplicates refused, and an
+        // update that replaces its entry instead of adding a second one.
+        let reference =
+            crate::mods::browse::ProjectRef::new(crate::mods::browse::Provider::Modrinth, project);
+        let cancel = Cancel::new();
+        let existing = profile
+            .mods
+            .iter()
+            .find(|entry| {
+                entry.origin.repository.as_deref() == Some("modrinth")
+                    && entry.origin.project.as_deref() == Some(project)
+            })
+            .map(|entry| entry.id.clone());
+        let plan = match &existing {
+            Some(id) => match self.plan_mod_update(profile, id, &cancel)? {
+                Some(plan) => plan,
+                // Already the newest compatible build.
+                None => {
+                    return profile.mods.get(id).cloned().ok_or(ServiceError::Failed(
+                        "that mod is no longer installed".to_owned(),
+                    ))
+                }
+            },
+            None => self.plan_mod_install(profile, &reference, None, &[], &cancel)?,
+        };
+        let report = self.install_mod_plan(
+            profile,
+            &plan,
+            crate::mods::browse::InstallOptions::default(),
+            &cancel,
+            &mut |_| {},
+        )?;
+        report
+            .added
+            .last()
+            .cloned()
+            .ok_or_else(|| ServiceError::Failed("nothing was installed".to_owned()))
     }
 
     /// Install a first-party component the user asked for.

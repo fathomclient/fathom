@@ -42,6 +42,45 @@ public final class Runtime {
         registry = newRegistry;
         switches = newSwitches;
         guard = newGuard;
+        refreshHotSwitches();
+    }
+
+    // -----------------------------------------------------------------------
+    // Switches read on hot paths
+    // -----------------------------------------------------------------------
+
+    public static final net.fathom.optimizations.core.registry.OptimizationId FONT_METRICS_CACHE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.font.metrics-cache");
+    public static final net.fathom.optimizations.core.registry.OptimizationId CHUNK_LOOKUP_CACHE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("world.chunk.lookup-cache");
+    public static final net.fathom.optimizations.core.registry.OptimizationId HOT_PATH_ALLOCATION =
+            net.fathom.optimizations.core.registry.OptimizationId.of("cpu.allocation.hot-path-reduction");
+    public static final net.fathom.optimizations.core.registry.OptimizationId WORLD_CHANGE_GC =
+            net.fathom.optimizations.core.registry.OptimizationId.of("memory.world-change-gc");
+    public static final net.fathom.optimizations.core.registry.OptimizationId UNFOCUSED_CAP =
+            net.fathom.optimizations.core.registry.OptimizationId.of(FrameCapPolicy.UNFOCUSED_ID);
+
+    /**
+     * Switch positions for hooks that run per block, per chunk lookup or per
+     * glyph measurement. Refreshed once per frame rather than looked up per
+     * call: a map lookup there costs more than some of the work it guards. A
+     * change made in the Hub takes effect on the next frame. Plain statics,
+     * written and read on the client thread; a worker thread that reads a stale
+     * value only chooses between two exactly equivalent code paths.
+     */
+    public static boolean fontMetricsCache;
+    public static boolean chunkLookupCache;
+    public static boolean hotPathAllocation;
+
+    /** Re-read the hot switches from the board. Cheap: a handful of map lookups. */
+    public static void refreshHotSwitches() {
+        SwitchBoard current = switches;
+        if (current == null) {
+            return;
+        }
+        fontMetricsCache = current.isEnabled(FONT_METRICS_CACHE);
+        chunkLookupCache = current.isEnabled(CHUNK_LOOKUP_CACHE);
+        hotPathAllocation = current.isEnabled(HOT_PATH_ALLOCATION);
     }
 
     /**
@@ -76,8 +115,14 @@ public final class Runtime {
     }
 
     /** Whether antialiased framebuffer-sized Fathom geometry is enabled. */
+    // Command-line overrides are fixed for the life of the process; read them
+    // once rather than through the synchronized property table every frame.
+    private static final String HIGH_QUALITY_OVERRIDE = System.getProperty("fathom.highQualityUi");
+    private static final String MENU_BACKGROUND_OVERRIDE = System.getProperty("fathom.menuBackgroundQuality");
+    private static final String HUD_FONT_OVERRIDE = System.getProperty("fathom.hudFont");
+
     public static boolean highQualityUi() {
-        String override = System.getProperty("fathom.highQualityUi");
+        String override = HIGH_QUALITY_OVERRIDE;
         if (override != null) {
             return Boolean.parseBoolean(override);
         }
@@ -87,7 +132,7 @@ public final class Runtime {
 
     /** High, Auto, Low or Off. Independent from native-resolution UI quality. */
     public static String menuBackgroundQuality() {
-        String override = System.getProperty("fathom.menuBackgroundQuality");
+        String override = MENU_BACKGROUND_OVERRIDE;
         if (override != null) {
             return override.trim();
         }
@@ -104,7 +149,7 @@ public final class Runtime {
      * that left the developer's preferences changed afterwards.
      */
     public static boolean hudFontIsFathom() {
-        String override = System.getProperty("fathom.hudFont");
+        String override = HUD_FONT_OVERRIDE;
         if (override != null) {
             return !"minecraft".equalsIgnoreCase(override.trim());
         }
@@ -126,12 +171,12 @@ public final class Runtime {
         if (feature == null) {
             return fallback;
         }
-        for (Setting setting : feature.settings()) {
-            if (settingId.equals(setting.id()) && setting instanceof Setting.Choice) {
-                return FrameCapPolicy.capFor(((Setting.Choice) setting).get());
-            }
-        }
-        return fallback;
+        // A direct lookup. This runs from `getMaxFramerate`, every frame, and
+        // `settings()` builds a fresh list for callers that want a copy.
+        Setting setting = feature.setting(settingId);
+        return setting instanceof Setting.Choice
+                ? FrameCapPolicy.capFor(((Setting.Choice) setting).get())
+                : fallback;
     }
 
     public static FathomHud hud() {
@@ -211,7 +256,16 @@ public final class Runtime {
      * more confusing than replacing it.
      */
     public static Session beginSession(String label) {
-        Session started = new Session(label);
+        return start(new Session(label));
+    }
+
+    /** Start measuring with an explicit warm-up, for a scripted run that settles on its own. */
+    public static Session beginSessionFor(String label, int warmupFrames) {
+        return start(new Session(label, warmupFrames,
+                net.fathom.optimizations.core.instrument.FrameLog.DEFAULT_CAPACITY));
+    }
+
+    private static Session start(Session started) {
         started.start();
         session = started;
         return started;
@@ -231,6 +285,7 @@ public final class Runtime {
      * benchmark is running, which is the common case.
      */
     public static void frame(long frameNanos) {
+        refreshHotSwitches();
         // The probe first: it rolls the per-frame section totals into the
         // worst-frame figure, and a session that ended mid-frame should still
         // see the frame it was in.

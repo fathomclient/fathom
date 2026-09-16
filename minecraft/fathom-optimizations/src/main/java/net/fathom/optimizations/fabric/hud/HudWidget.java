@@ -67,4 +67,14 @@ public interface HudWidget {
 
     /** What the editor draws when {@link #visible} is false, so it can still be arranged. */
     String placeholder();
+
+    /**
+     * Where the widget sits across the screen, before it is measured and drawn.
+     *
+     * <p>0 for a left anchor, 0.5 centred, 1 for a right anchor. Text widgets
+     * align their lines to it, so a right-anchored readout grows leftwards from
+     * the screen edge instead of leaving a ragged gap as its numbers change.
+     */
+    default void align(float horizontal) {
+    }
 }

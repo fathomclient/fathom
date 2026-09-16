@@ -17,15 +17,15 @@ import net.fathom.optimizations.core.registry.Optimization.Surface;
  * show a user what is available, what it would cost them, and what it conflicts with, and
  * that conversation is worth having before any Mixin is written.
  *
- * <p><strong>Nothing here is on.</strong> Every entry is
- * {@code defaultEnabled() == false}. Several now carry {@link Evidence}, but all of it is
- * {@link Evidence.Level#ISOLATED} — microbenchmarks and draw-call counts, which establish
- * that an implementation works and is not slower than what it replaces, and do not
- * establish that the game got faster. Only an in-game run under
- * {@code docs/performance/benchmark-methodology.md} promotes anything, and none has been
- * possible yet: the Fabric layer has never been compiled. A test asserts all of this, so a
- * future change that promotes something on the strength of a microbenchmark fails rather
- * than shipping.
+ * <p><strong>Only what was measured in the game is on.</strong> Most entries carry
+ * no evidence or {@link Evidence.Level#ISOLATED} evidence — microbenchmarks and draw-call
+ * counts, which establish that an implementation works and is not slower than what it
+ * replaces, and do not establish that the game got faster. Only an in-game run promotes
+ * anything; the first two promoted entries, {@code cpu.allocation.hot-path-reduction} and
+ * {@code world.chunk.lookup-cache}, cite the interleaved A/B runs in
+ * {@code docs/performance/gameplay-optimization-2026-09.md}. A test asserts that in-game
+ * evidence only appears on entries a Mixin runs, so a microbenchmark cannot promote
+ * anything.
  */
 public final class OptimizationRegistry {
 
@@ -300,17 +300,52 @@ public final class OptimizationRegistry {
             out.add(Optimization.builder("cpu.allocation.hot-path-reduction")
                     .name("Reduce allocation on hot paths")
                     .description(
-                            "Vanilla allocates short-lived objects in per-frame and per-tick"
-                                    + " paths. Removing them reduces GC pressure without changing"
-                                    + " behaviour.")
+                            "Vanilla clones the six-direction array at the top of loops in"
+                                    + " per-block light queries, light updates and the per-frame"
+                                    + " chunk visibility search. Those loops only read it, so they"
+                                    + " share one copy instead. Output-identical.")
                     .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
                     .expectedBenefit(
-                            "Expected to reduce allocation rate and therefore GC frequency."
-                                    + " Unmeasured; the instrumentation to measure it is what this"
-                                    + " milestone builds.")
+                            "The clones were 22% of the render thread's allocation in a sampled"
+                                    + " run. Together with the chunk lookup cache, an interleaved"
+                                    + " in-game A/B cut allocation 55% while panning and 35% while"
+                                    + " moving, with 5-8% lower mean frame time in those scenes.")
                     .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "perf-2026-09-14-ab",
+                            "Interleaved ABBA run in the development world, switches toggled"
+                                    + " within one session: pan 51.8 -> 23.4 MB/s allocated and 6 -> 3"
+                                    + " collections; moving 203 -> 132 MB/s. Profiler: the six-direction"
+                                    + " clones fell from 1890 MB to 91 MB over the run."))
                     .reference("docs/research/performance.md §3.2")
+                    .reference("docs/performance/gameplay-optimization-2026-09.md")
+                    .build());
+
+            out.add(Optimization.builder("world.chunk.lookup-cache")
+                    .name("Chunk lookup cache")
+                    .description(
+                            "Every light query resolves its chunk through a hash lookup, and"
+                                    + " particles ask for light every frame. The client thread"
+                                    + " remembers the last few chunks it looked up; the cache is"
+                                    + " cleared whenever a chunk loads or unloads, so it always"
+                                    + " returns what the lookup would.")
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
+                    .expectedBenefit(
+                            "The hash lookup was the hottest method on the render thread (28% of"
+                                    + " CPU samples) in a scene with torches. Largest where"
+                                    + " particles and entities are drawn.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "perf-2026-09-14-ab",
+                            "Toggled alone, four consecutive interleaved blocks standing still in"
+                                    + " alternating ABBA/BAAB order: mean frame time 6.5-9.9% lower"
+                                    + " in every block, p99 lower in every block. Profiler: chunk"
+                                    + " lookups fell from 14.3% to 5.1% of render-thread samples."))
+                    .reference("docs/performance/gameplay-optimization-2026-09.md")
                     .build());
 
             // -- memory -----------------------------------------------------
@@ -328,8 +363,11 @@ public final class OptimizationRegistry {
                                     + " without a mod, and the launcher already passes it; this"
                                     + " covers the case where it was not passed.")
                     .defaultOnWhenMeasured()
-                    .implementedInCore()
+                    .runsInGame()
                     .evidence(Evidence.isolated(
+                            // Isolated, not in-game: the dev world's heap is small, so
+                            // the in-game stall measured (three full collections, 22-24
+                            // ms each, while joining) says little about a real server.
                             "bench-2026-08-26-explicit-gc",
                             "A forced full collection under a synthetic 512 MB live set costs a"
                                     + " median 226 ms with G1 and 926 ms with ParallelGC, the"

@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.util.ScreenshotUtils;
 
 import net.fathom.optimizations.core.hud.Anchor;
+import net.fathom.optimizations.core.hud.EditorPrefs;
 import net.fathom.optimizations.core.hud.Placement;
 import net.fathom.optimizations.core.hud.Snap;
 import net.fathom.optimizations.core.hud.Widget;
@@ -114,8 +115,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private int resizeStartX;
     private List<Snap.Guide> guides = new ArrayList<Snap.Guide>();
 
-    private boolean showGrid;
-    private boolean showBounds = true;
+    private final EditorPrefs prefs;
+    /** Where the dragged widget is, drawn beside it while it moves. */
+    private String readout = "";
     private String problem;
     private String note = "";
     private int captureFrames;
@@ -130,6 +132,19 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
     public HudEditorScreen(FathomHud hud) {
         this.hud = hud;
+        this.prefs = EditorPrefs.read(hud.gameDirectory());
+    }
+
+    /**
+     * Whether the modifier that turns every aid off is held.
+     *
+     * <p>Alt, which is what every design tool uses for "I mean exactly here".
+     * While it is down nothing snaps, nothing is pushed off its neighbours and
+     * the grid does not round — so a widget can be put one pixel from another on
+     * purpose, which is impossible while the editor is helping.
+     */
+    private static boolean freehand() {
+        return Keyboard.isKeyDown(Keyboard.KEY_LMENU) || Keyboard.isKeyDown(Keyboard.KEY_RMENU);
     }
 
     @Override
@@ -206,10 +221,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             // without hiding what the HUD has to sit over.
             ui.fill(0f, 0f, ui.width(), ui.height(), Skin.argb(0.22f, 0x000000));
 
-            if (showGrid) {
+            if (prefs.grid()) {
                 grid(ui);
             }
-            if (showBounds) {
+            if (prefs.bounds()) {
                 safeBounds(ui);
             }
             drawGuides(ui);
@@ -368,6 +383,16 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 float handle = toLogical(HANDLE);
                 ui.rounded(r - handle, b - handle, r + handle, b + handle, handle, Skin.ACCENT_STRONG);
             }
+            if (active && !readout.isEmpty()
+                    && positioned.widget.id().equals(dragging == null ? resizing : dragging)) {
+                // Beside the widget, and below it when it is near the top, so
+                // the numbers stay on screen while it is dragged into a corner.
+                float labelWidth = ui.measure(readout, Type.CAPTION) + Skin.S3;
+                float labelTop = t - 24f < 0f ? b + 6f : t - 24f;
+                ui.rounded(l - 2f, labelTop, l - 2f + labelWidth, labelTop + 18f,
+                        Skin.R_SMALL, Skin.OVERLAY);
+                ui.text(readout, l + 4f, labelTop + 13f, Type.CAPTION, Skin.TEXT);
+            }
             if (hovered && dragging == null && resizing == null) {
                 float labelWidth = ui.measure(positioned.widget.name(), Type.CAPTION) + Skin.S3;
                 ui.rounded(l - 2f, t - 24f, l - 2f + labelWidth, t - 6f, Skin.R_SMALL, Skin.OVERLAY);
@@ -393,17 +418,29 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             close();
         }
         cursor += 96f + Skin.S3;
-        if (controls.secondary(ui, "edit.grid", new Rect(cursor, row.y, 100f, row.height),
-                showGrid ? "Grid on" : "Grid", true)) {
-            showGrid = !showGrid;
+        if (controls.secondary(ui, "edit.grid", new Rect(cursor, row.y, 92f, row.height),
+                prefs.grid() ? "Grid on" : "Grid", true)) {
+            prefs.setGrid(!prefs.grid());
         }
-        cursor += 100f + Skin.S2;
-        if (controls.secondary(ui, "edit.bounds", new Rect(cursor, row.y, 120f, row.height),
-                showBounds ? "Bounds on" : "Bounds", true)) {
-            showBounds = !showBounds;
+        cursor += 92f + Skin.S2;
+        if (controls.secondary(ui, "edit.bounds", new Rect(cursor, row.y, 110f, row.height),
+                prefs.bounds() ? "Bounds on" : "Bounds", true)) {
+            prefs.setBounds(!prefs.bounds());
         }
-        cursor += 120f + Skin.S2;
-        if (controls.secondary(ui, "edit.dup", new Rect(cursor, row.y, 112f, row.height), "Duplicate",
+        cursor += 110f + Skin.S2;
+        // Snapping strength, as one cycling button rather than four: it has an
+        // order, exactly one value is in force, and a dropdown for four words
+        // would be the largest control on the bar.
+        if (controls.secondary(ui, "edit.snap", new Rect(cursor, row.y, 116f, row.height),
+                "Snap: " + prefs.snapLabel(), true)) {
+            prefs.cycleSnap();
+            note = prefs.snapPixels() == 0
+                    ? "Snapping off. A widget lands exactly where it is dropped."
+                    : "Snapping " + prefs.snapLabel().toLowerCase(java.util.Locale.ROOT)
+                            + ". Hold Alt to place freely.";
+        }
+        cursor += 116f + Skin.S2;
+        if (controls.secondary(ui, "edit.dup", new Rect(cursor, row.y, 100f, row.height), "Duplicate",
                 hud.profiles() != null)) {
             // A copy of the whole loadout, made live, so the dragging that follows
             // changes the copy. The HUD belongs to a profile now; it has no names
@@ -418,14 +455,14 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 problem = failure.getMessage();
             }
         }
-        cursor += 112f + Skin.S2;
-        if (controls.danger(ui, "edit.reset", new Rect(cursor, row.y, 116f, row.height), "Reset all", true)) {
+        cursor += 100f + Skin.S2;
+        if (controls.danger(ui, "edit.reset", new Rect(cursor, row.y, 104f, row.height), "Reset all", true)) {
             hud.resetLayout();
             selected = null;
             note = "Every widget is back where it started.";
             problem = hud.save();
         }
-        cursor += 116f + Skin.S4;
+        cursor += 104f + Skin.S4;
 
         // The profile picker, at the right where a document's name goes. The
         // layout being edited is the live profile's, so choosing another profile
@@ -456,8 +493,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
         String hint = selected == null
                 ? "Drag to move, corner to resize, scroll to fade, Shift-scroll to scale. "
-                        + "Edges and centres snap; Bounds shows what vanilla owns."
-                : selected + " selected — Delete switches it off, arrows nudge it";
+                        + "Edges and centres snap; hold Alt to place freely."
+                : selected + " selected — arrows nudge, Shift-arrows by ten, Delete switches it off";
         float room = picker.x - cursor - Skin.S4;
         if (room > 80f) {
             ui.text(Text.fit(ui, note.isEmpty() ? hint : note, Type.BODY, room), cursor,
@@ -488,10 +525,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
         ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.RAISED);
-        VisualEffects.topLight(ui, panel.x, panel.y, panel.right(), panel.bottom(),
-                Skin.R_MEDIUM, Skin.RAISED, 1f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
-        VisualEffects.cornerAccent(ui, panel, Skin.R_MEDIUM, false, 0.82f, Skin.ACCENT);
 
         Rect inner = panel.inset(Skin.S4, Skin.S4);
         ui.text(Text.fit(ui, widget.name(), Type.ROW_TITLE, inner.width), inner.x,
@@ -593,8 +627,12 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         }
 
         if (pointer.released(0) && (dragging != null || resizing != null)) {
+            if (dragging != null && prefs.separate() && !freehand()) {
+                separate(dragging);
+            }
             dragging = null;
             resizing = null;
+            readout = "";
             guides = new ArrayList<Snap.Guide>();
             // Saved on release rather than on every mouse-move: one file write
             // per drag instead of one per frame.
@@ -658,10 +696,16 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         int wantedX = mouseX - grabOffsetX;
         int wantedY = mouseY - grabOffsetY;
 
+        if (freehand()) {
+            guides = new ArrayList<Snap.Guide>();
+            place(target, wantedX, wantedY);
+            return;
+        }
+
         // The grid takes precedence when it is on: somebody who turned it on
         // wants columns, and snapping to a neighbour's edge instead would be the
         // editor overruling the tool they just picked.
-        if (showGrid) {
+        if (prefs.grid()) {
             wantedX = Math.round(wantedX / (float) GRID) * GRID;
             wantedY = Math.round(wantedY / (float) GRID) * GRID;
             guides = new ArrayList<Snap.Guide>();
@@ -677,9 +721,36 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             }
         }
 
-        Snap.Result snapped = Snap.snap(wanted, others, screenWidth, screenHeight);
+        Snap.Result snapped = Snap.snap(wanted, others, screenWidth, screenHeight, prefs.snapPixels());
         guides = snapped.guides();
         place(target, snapped.x, snapped.y);
+    }
+
+    /**
+     * Move a just-dropped widget off anything it landed on.
+     *
+     * <p>Only on release, only when it actually overlaps, and never while Alt is
+     * held. Overlapping widgets are legitimate — a label over a bar, a crosshair
+     * over anything — so this is a nudge out of an accident rather than a rule:
+     * {@code Snap.separate} leaves the widget alone when there is nowhere clear
+     * to put it.
+     */
+    private void separate(String widgetId) {
+        FathomHud.Positioned target = find(widgetId);
+        if (target == null) {
+            return;
+        }
+        List<Snap.Box> others = new ArrayList<Snap.Box>();
+        for (FathomHud.Positioned other : hud.boxes(client, screenWidth, screenHeight)) {
+            if (!other.widget.id().equals(widgetId)) {
+                others.add(other.box);
+            }
+        }
+        Snap.Box moved = Snap.separate(target.box, others, screenWidth, screenHeight, 2);
+        if (moved != target.box) {
+            place(target, moved.x, moved.y);
+            note = target.widget.name() + " moved clear of its neighbour.";
+        }
     }
 
     private void place(FathomHud.Positioned target, int x, int y) {
@@ -695,6 +766,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         hud.place(
                 target.widget.id(),
                 hud.placement(target.widget.id()).withAnchor(anchor).withOffset(offsetX, offsetY));
+        readout = anchor.label() + "  " + offsetX + ", " + offsetY
+                + "  " + placed.width + "x" + placed.height;
     }
 
     /**
@@ -715,6 +788,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         int travel = mouseX - resizeStartX;
         float scale = resizeStartScale + travel / 60f;
         hud.place(resizing, hud.placement(resizing).withScale(scale));
+        readout = Math.round(hud.placement(resizing).scale() * 100) + "%";
     }
 
     /**
@@ -792,10 +866,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 close();
                 return true;
             case Keyboard.KEY_G:
-                showGrid = !showGrid;
+                prefs.setGrid(!prefs.grid());
                 return true;
             case Keyboard.KEY_B:
-                showBounds = !showBounds;
+                prefs.setBounds(!prefs.bounds());
                 return true;
             case Keyboard.KEY_DELETE:
                 hideSelected();
@@ -804,7 +878,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 break;
         }
         // Arrow keys nudge by one pixel, which is the only way to place
-        // something exactly when snapping keeps helping.
+        // something exactly while snapping keeps helping; with Shift by ten, for
+        // crossing the screen without the mouse.
         if (selected != null && nudge(keyCode)) {
             return true;
         }
@@ -817,8 +892,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     private boolean nudge(int keyCode) {
-        int dx = keyCode == Keyboard.KEY_LEFT ? -1 : (keyCode == Keyboard.KEY_RIGHT ? 1 : 0);
-        int dy = keyCode == Keyboard.KEY_UP ? -1 : (keyCode == Keyboard.KEY_DOWN ? 1 : 0);
+        int step = hasShiftDown() ? 10 : 1;
+        int dx = keyCode == Keyboard.KEY_LEFT ? -step : (keyCode == Keyboard.KEY_RIGHT ? step : 0);
+        int dy = keyCode == Keyboard.KEY_UP ? -step : (keyCode == Keyboard.KEY_DOWN ? step : 0);
         if (dx == 0 && dy == 0) {
             return false;
         }
@@ -866,6 +942,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         if (closing) {
             return;
         }
+        // The editor's own preferences, which belong to no profile.
+        prefs.write(hud.gameDirectory());
         problem = hud.saveAll();
         if (problem == null) {
             closing = true;

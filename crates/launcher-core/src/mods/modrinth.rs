@@ -8,13 +8,13 @@
 //! here parses a web page, and nothing here constructs a URL out of a string
 //! somebody typed.
 //!
-//! `CurseForge` is deliberately absent. Its API is usable, but each project
-//! carries a third-party-distribution flag that can forbid automated delivery
-//! regardless of the software licence, and honouring that properly means
-//! reading a per-project field the launcher would then have to obey. Adding a
-//! source we would have to refuse for half its catalogue is worse than not
-//! adding it: the research file says to link to the official page instead, and
-//! that is what [`crate::mods::catalog`] already does.
+//! `CurseForge` lives beside this one now, in
+//! [`crate::mods::browse::curseforge`], and the reason it took longer is in its
+//! own module note: each project carries a third-party-distribution flag that
+//! can forbid automated delivery regardless of the software licence, so the
+//! provider has to read that field and obey it. This module is unchanged by
+//! that: it is the Modrinth wire client, and
+//! [`crate::mods::browse`] is where the two are made to look the same.
 //!
 //! # The four rules every request here obeys
 //!
@@ -104,6 +104,17 @@ pub struct Hit {
     /// SPDX id as Modrinth reports it, when it reports one.
     pub license: Option<String>,
     pub categories: Vec<String>,
+    /// The publishing account, which Modrinth includes with a search hit but
+    /// not with a project document.
+    pub author: Option<String>,
+    /// Absolute URL of the project icon. Untrusted, like every URL here.
+    pub icon_url: Option<String>,
+    /// Minecraft versions the project claims across all its files.
+    pub game_versions: Vec<String>,
+    /// Loader names, taken from the facet categories Modrinth indexes by.
+    pub loaders: Vec<String>,
+    /// When the project last changed, as Modrinth formats it.
+    pub updated: Option<String>,
 }
 
 impl Hit {
@@ -179,6 +190,70 @@ pub struct Version {
     /// Absolute URL, straight from the API, validated before it is ever used.
     pub url: String,
     pub hash: ArtifactHash,
+    /// What this build says it needs, and what it says it conflicts with.
+    pub dependencies: Vec<VersionDependency>,
+    /// When this build was published, as Modrinth formats it.
+    pub published: Option<String>,
+}
+
+/// How one version relates to another project.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DependencyType {
+    Required,
+    Optional,
+    Incompatible,
+    Embedded,
+}
+
+impl DependencyType {
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "required" => Some(DependencyType::Required),
+            "optional" => Some(DependencyType::Optional),
+            "incompatible" => Some(DependencyType::Incompatible),
+            "embedded" => Some(DependencyType::Embedded),
+            // An unknown relationship is not assumed to be a harmless one: it
+            // is dropped, and the install proceeds without inventing a
+            // requirement or a conflict nobody stated.
+            _ => None,
+        }
+    }
+}
+
+/// One declared relationship on a version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VersionDependency {
+    pub project_id: Option<String>,
+    pub version_id: Option<String>,
+    pub kind: DependencyType,
+}
+
+/// A project document: everything the project page shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Project {
+    pub id: String,
+    pub slug: String,
+    pub title: String,
+    pub summary: String,
+    /// The long description, as Markdown.
+    pub body: String,
+    pub categories: Vec<String>,
+    pub loaders: Vec<String>,
+    pub game_versions: Vec<String>,
+    pub icon_url: Option<String>,
+    pub gallery: Vec<GalleryImage>,
+    pub source_url: Option<String>,
+    pub issues_url: Option<String>,
+    pub license: Option<String>,
+    pub downloads: u64,
+    pub updated: Option<String>,
+}
+
+/// One screenshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GalleryImage {
+    pub url: String,
+    pub title: Option<String>,
 }
 
 impl Version {
@@ -196,10 +271,33 @@ impl Version {
 // Errors
 // ---------------------------------------------------------------------------
 
+/// Everything a search can vary.
+///
+/// A struct rather than eight arguments: the browser varies most of them and a
+/// call with four booleans and three strings in a row is a call somebody will
+/// eventually get out of order.
+#[derive(Debug, Clone)]
+pub struct SearchOptions<'a> {
+    pub query: &'a str,
+    pub loader: Loader,
+    pub minecraft: &'a str,
+    pub offset: usize,
+    pub limit: usize,
+    /// One Modrinth category facet, e.g. `optimization`.
+    pub category: Option<&'a str>,
+    /// Modrinth's own sort index: `relevance`, `downloads`, `follows`,
+    /// `newest`, `updated`.
+    pub index: &'static str,
+    /// Whether to restrict the query to this loader and Minecraft version.
+    pub compatible_only: bool,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ModrinthError {
     #[error(transparent)]
     Network(#[from] NetworkError),
+    #[error("Modrinth returned HTTP {status}")]
+    Status { status: u16 },
     #[error("Modrinth returned something this launcher could not read: {0}")]
     Malformed(String),
     #[error("{0} is not on the download allowlist, so this file will not be fetched")]
@@ -225,6 +323,43 @@ impl Modrinth {
         Self { http }
     }
 
+    /// One GET, parsed, with every failure mapped the same way.
+    ///
+    /// Written once so that a new endpoint cannot accidentally skip the status
+    /// check, which is the mistake that turns an error page into a parse error
+    /// and a parse error into "Modrinth is broken".
+    fn get_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        purpose: Purpose,
+        grant: &PerActionGrant,
+    ) -> Result<T, ModrinthError> {
+        let request = RequestDescriptor::new(
+            Destination::ModrinthApi,
+            purpose,
+            Feature::ModBrowse,
+            path.to_owned(),
+        );
+        let response = self
+            .http
+            .send(
+                &request,
+                Some(grant),
+                crate::network::Method::Get,
+                crate::network::Body::Empty,
+                &[],
+            )
+            .map_err(ModrinthError::Network)?;
+        if !response.is_success() {
+            return Err(ModrinthError::Status {
+                status: response.status,
+            });
+        }
+        response
+            .json(Destination::ModrinthApi.host())
+            .map_err(ModrinthError::Network)
+    }
+
     /// Search for mods compatible with a loader and version.
     ///
     /// `grant` is the user's explicit action. There is no overload without one.
@@ -236,6 +371,120 @@ impl Modrinth {
         offset: usize,
         grant: &PerActionGrant,
     ) -> Result<Search, ModrinthError> {
+        self.search_with(
+            &SearchOptions {
+                query,
+                loader,
+                minecraft,
+                offset,
+                limit: PAGE,
+                category: None,
+                index: "relevance",
+                compatible_only: true,
+            },
+            grant,
+        )
+    }
+
+    /// One project document, with its description and gallery.
+    pub fn project(&self, id: &str, grant: &PerActionGrant) -> Result<Project, ModrinthError> {
+        let path = format!("{API}/project/{}", encode_segment(id));
+        let raw: RawProject = self.get_json(&path, Purpose::ResolveModMetadata, grant)?;
+        Ok(raw.into_project())
+    }
+
+    /// The usernames on a project's team, in the order Modrinth lists them.
+    ///
+    /// A separate request because Modrinth keeps authorship on the team rather
+    /// than on the project. Called only for a detail view, never for a search
+    /// result, so browsing a page of forty mods does not make forty requests.
+    pub fn members(&self, id: &str, grant: &PerActionGrant) -> Result<Vec<String>, ModrinthError> {
+        let path = format!("{API}/project/{}/members", encode_segment(id));
+        let raw: Vec<RawMember> = self.get_json(&path, Purpose::ResolveModMetadata, grant)?;
+        Ok(raw
+            .into_iter()
+            .map(|member| member.user.username)
+            .filter(|name| !name.is_empty())
+            .collect())
+    }
+
+    /// One specific build, by Modrinth's version id.
+    ///
+    /// Not filtered by loader or version: the caller asked for this exact
+    /// build, usually because an author pinned a dependency to it or because a
+    /// profile records it as installed. Whether it is compatible is then the
+    /// caller's check, and it is one the installer makes.
+    pub fn version_by_id(
+        &self,
+        version_id: &str,
+        grant: &PerActionGrant,
+    ) -> Result<Version, ModrinthError> {
+        let path = format!("{API}/version/{}", encode_segment(version_id));
+        let raw: RawVersion = self.get_json(&path, Purpose::ResolveModMetadata, grant)?;
+        raw.into_version().ok_or_else(|| {
+            ModrinthError::Malformed("that version has no file with a published hash".to_owned())
+        })
+    }
+
+    /// Which build, if any, has these exact bytes.
+    ///
+    /// This is how a jar somebody installed by hand acquires a name, a project
+    /// and an update path. The hash is the one Fathom computed from the file on
+    /// disk, so a match is proof rather than a claim.
+    pub fn by_hash(
+        &self,
+        sha1: &str,
+        grant: &PerActionGrant,
+    ) -> Result<Option<Version>, ModrinthError> {
+        if sha1.len() != 40 || !sha1.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Ok(None);
+        }
+        let path = format!(
+            "{API}/version_file/{}?algorithm=sha1",
+            encode_segment(&sha1.to_ascii_lowercase())
+        );
+        let request = RequestDescriptor::new(
+            Destination::ModrinthApi,
+            Purpose::ResolveModMetadata,
+            Feature::ModBrowse,
+            path,
+        );
+        let response = self
+            .http
+            .send(
+                &request,
+                Some(grant),
+                crate::network::Method::Get,
+                crate::network::Body::Empty,
+                &[],
+            )
+            .map_err(ModrinthError::Network)?;
+        // A hash nobody has indexed is the ordinary case for a mod that is not
+        // on Modrinth, so it is an answer rather than an error.
+        if response.status == 404 {
+            return Ok(None);
+        }
+        if !response.is_success() {
+            return Err(ModrinthError::Status {
+                status: response.status,
+            });
+        }
+        let raw: RawVersion = response
+            .json(Destination::ModrinthApi.host())
+            .map_err(ModrinthError::Network)?;
+        Ok(raw.into_version())
+    }
+
+    /// The search above, with everything the browser can vary.
+    pub fn search_with(
+        &self,
+        options: &SearchOptions<'_>,
+        grant: &PerActionGrant,
+    ) -> Result<Search, ModrinthError> {
+        let query = options.query;
+        let loader = options.loader;
+        let minecraft = options.minecraft;
+        let offset = options.offset;
         let Some(facet) = loader_facet(loader) else {
             // Vanilla loads no mods, so there is nothing a search could
             // usefully return. An empty result is the honest answer, and it
@@ -250,10 +499,24 @@ impl Modrinth {
         // Facets are AND across the outer list, OR within each inner one.
         // Every clause here is a hard compatibility requirement, so they are
         // all separate outer entries.
-        let facets =
-            format!(r#"[["versions:{minecraft}"],["categories:{facet}"],["project_type:mod"]]"#);
+        //
+        // `compatible_only` is what the Browse tab always uses. Turning it off
+        // is for a user who deliberately asked to see everything, and it
+        // narrows nothing but the project type: the installer refuses an
+        // incompatible file either way.
+        let mut clauses: Vec<String> = vec![r#"["project_type:mod"]"#.to_owned()];
+        if options.compatible_only {
+            clauses.push(format!(r#"["versions:{minecraft}"]"#));
+            clauses.push(format!(r#"["categories:{facet}"]"#));
+        }
+        if let Some(category) = options.category.filter(|category| !category.is_empty()) {
+            clauses.push(format!(r#"["categories:{}"]"#, escape_facet(category)));
+        }
+        let facets = format!("[{}]", clauses.join(","));
+        let limit = options.limit.clamp(1, 100);
+        let index = options.index;
         let path = format!(
-            "{API}/search?query={}&facets={}&limit={PAGE}&offset={offset}&index=relevance",
+            "{API}/search?query={}&facets={}&limit={limit}&offset={offset}&index={index}",
             encode(query),
             encode(&facets)
         );
@@ -275,10 +538,9 @@ impl Modrinth {
             )
             .map_err(ModrinthError::Network)?;
         if !response.is_success() {
-            return Err(ModrinthError::Malformed(format!(
-                "search returned HTTP {}",
-                response.status
-            )));
+            return Err(ModrinthError::Status {
+                status: response.status,
+            });
         }
 
         let raw: RawSearch = response
@@ -331,10 +593,9 @@ impl Modrinth {
             )
             .map_err(ModrinthError::Network)?;
         if !response.is_success() {
-            return Err(ModrinthError::Malformed(format!(
-                "version list returned HTTP {}",
-                response.status
-            )));
+            return Err(ModrinthError::Status {
+                status: response.status,
+            });
         }
 
         let raw: Vec<RawVersion> = response
@@ -438,6 +699,21 @@ fn encode(value: &str) -> String {
     out
 }
 
+/// Keep a facet value to characters a Modrinth facet can contain.
+///
+/// The value is interpolated into a JSON document that is then percent-encoded,
+/// so a quote or a bracket would change the query's structure rather than its
+/// content. Categories are lowercase words and hyphens; anything else is
+/// dropped rather than escaped, because there is no legitimate category that
+/// needs escaping.
+fn escape_facet(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .take(64)
+        .collect()
+}
+
 /// Encode a value that becomes a path segment.
 ///
 /// Same rule. Separate function because the reason is different: a slash here
@@ -475,10 +751,24 @@ struct RawHit {
     license: Option<String>,
     #[serde(default)]
     categories: Vec<String>,
+    #[serde(default)]
+    author: Option<String>,
+    #[serde(default)]
+    icon_url: Option<String>,
+    #[serde(default)]
+    versions: Vec<String>,
+    #[serde(default)]
+    date_modified: Option<String>,
 }
 
 impl RawHit {
     fn into_hit(self) -> Hit {
+        // Modrinth indexes loaders as categories, so the two arrive in one
+        // list. Splitting them here means the browser never has to know that.
+        let (loaders, categories): (Vec<String>, Vec<String>) = self
+            .categories
+            .into_iter()
+            .partition(|category| LOADER_CATEGORIES.contains(&category.as_str()));
         Hit {
             project_id: self.project_id,
             slug: self.slug,
@@ -486,10 +776,29 @@ impl RawHit {
             summary: self.description,
             downloads: self.downloads,
             license: self.license,
-            categories: self.categories,
+            categories,
+            author: self.author.filter(|author| !author.is_empty()),
+            icon_url: self.icon_url.filter(|url| !url.is_empty()),
+            game_versions: self.versions,
+            loaders,
+            updated: self.date_modified.filter(|when| !when.is_empty()),
         }
     }
 }
+
+/// Category names that are really loaders.
+///
+/// Modrinth has no separate loader field on a search hit: `legacy-fabric` and
+/// `forge` arrive in `categories` beside `optimization` and `utility`. The list
+/// is short and fixed because only these three can matter to a 1.8.9 launcher.
+const LOADER_CATEGORIES: [&str; 6] = [
+    "legacy-fabric",
+    "fabric",
+    "forge",
+    "neoforge",
+    "quilt",
+    "liteloader",
+];
 
 #[derive(Debug, Deserialize)]
 struct RawVersion {
@@ -509,6 +818,110 @@ struct RawVersion {
     game_versions: Vec<String>,
     #[serde(default)]
     files: Vec<RawFile>,
+    #[serde(default)]
+    dependencies: Vec<RawDependency>,
+    #[serde(default)]
+    date_published: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawDependency {
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default)]
+    version_id: Option<String>,
+    #[serde(default)]
+    dependency_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawProject {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    slug: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    categories: Vec<String>,
+    #[serde(default)]
+    loaders: Vec<String>,
+    #[serde(default)]
+    game_versions: Vec<String>,
+    #[serde(default)]
+    icon_url: Option<String>,
+    #[serde(default)]
+    gallery: Vec<RawGallery>,
+    #[serde(default)]
+    source_url: Option<String>,
+    #[serde(default)]
+    issues_url: Option<String>,
+    #[serde(default)]
+    license: Option<RawLicense>,
+    #[serde(default)]
+    downloads: u64,
+    #[serde(default)]
+    updated: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawGallery {
+    #[serde(default)]
+    url: String,
+    #[serde(default)]
+    title: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawLicense {
+    #[serde(default)]
+    id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawMember {
+    #[serde(default)]
+    user: RawUser,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawUser {
+    #[serde(default)]
+    username: String,
+}
+
+impl RawProject {
+    fn into_project(self) -> Project {
+        Project {
+            id: self.id,
+            slug: self.slug,
+            title: self.title,
+            summary: self.description,
+            body: self.body,
+            categories: self.categories,
+            loaders: self.loaders,
+            game_versions: self.game_versions,
+            icon_url: self.icon_url.filter(|url| !url.is_empty()),
+            gallery: self
+                .gallery
+                .into_iter()
+                .filter(|image| !image.url.is_empty())
+                .map(|image| GalleryImage {
+                    url: image.url,
+                    title: image.title.filter(|title| !title.is_empty()),
+                })
+                .collect(),
+            source_url: self.source_url.filter(|url| !url.is_empty()),
+            issues_url: self.issues_url.filter(|url| !url.is_empty()),
+            license: self.license.and_then(|license| license.id),
+            downloads: self.downloads,
+            updated: self.updated.filter(|when| !when.is_empty()),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -548,6 +961,18 @@ impl RawVersion {
         if file.url.is_empty() || file.filename.is_empty() {
             return None;
         }
+        let dependencies = self
+            .dependencies
+            .into_iter()
+            .filter_map(|dependency| {
+                DependencyType::parse(&dependency.dependency_type).map(|kind| VersionDependency {
+                    project_id: dependency.project_id.filter(|id| !id.is_empty()),
+                    version_id: dependency.version_id.filter(|id| !id.is_empty()),
+                    kind,
+                })
+            })
+            .collect();
+        let published = self.date_published.filter(|when| !when.is_empty());
         Some(Version {
             project_id: self.project_id,
             version_id: self.id,
@@ -563,6 +988,8 @@ impl RawVersion {
             file_name: file.filename.clone(),
             url: file.url.clone(),
             hash,
+            dependencies,
+            published,
         })
     }
 }
@@ -695,6 +1122,11 @@ mod tests {
             downloads: 1,
             license: Some("Apache-2.0".into()),
             categories: Vec::new(),
+            author: None,
+            icon_url: None,
+            game_versions: Vec::new(),
+            loaders: Vec::new(),
+            updated: None,
         };
         assert_eq!(hit.project_url(), "https://modrinth.com/mod/legacy-fabric-api");
     }
@@ -712,6 +1144,11 @@ mod tests {
             downloads: 0,
             license: id.map(str::to_owned),
             categories: Vec::new(),
+            author: None,
+            icon_url: None,
+            game_versions: Vec::new(),
+            loaders: Vec::new(),
+            updated: None,
         };
         assert_eq!(
             with(Some("Apache-2.0")).licence(),

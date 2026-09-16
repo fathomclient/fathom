@@ -65,7 +65,34 @@ public final class ModuleRegistry {
             return false;
         }
         byId.put(feature.id(), feature);
+        widgetOwners = null;
         return true;
+    }
+
+    /**
+     * Widget id to the first feature that declares it, built on first use.
+     *
+     * <p>The HUD asks who owns each widget several times a frame. Scanning
+     * every feature's widget list for each question was the HUD's single
+     * largest fixed cost with nothing enabled. A feature's widget list is
+     * immutable, so the map only changes when a feature is registered.
+     */
+    private Map<String, FathomModule> widgetOwners;
+
+    private Map<String, FathomModule> widgetOwners() {
+        Map<String, FathomModule> owners = widgetOwners;
+        if (owners == null) {
+            owners = new java.util.HashMap<String, FathomModule>();
+            for (FathomModule feature : byId.values()) {
+                for (String widget : feature.widgets()) {
+                    if (!owners.containsKey(widget)) {
+                        owners.put(widget, feature);
+                    }
+                }
+            }
+            widgetOwners = owners;
+        }
+        return owners;
     }
 
     /** Stop accepting registrations. Called once, before the first render. */
@@ -152,12 +179,7 @@ public final class ModuleRegistry {
 
     /** Which feature owns a HUD widget, or null when nothing does. */
     public FathomModule owningWidget(String widgetId) {
-        for (FathomModule feature : byId.values()) {
-            if (feature.widgets().contains(widgetId)) {
-                return feature;
-            }
-        }
-        return null;
+        return widgetOwners().get(widgetId);
     }
 
     /**
