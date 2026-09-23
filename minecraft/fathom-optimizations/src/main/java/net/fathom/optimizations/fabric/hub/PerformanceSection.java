@@ -3,6 +3,9 @@ package net.fathom.optimizations.fabric.hub;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.fathom.optimizations.core.module.FathomModule;
+import net.fathom.optimizations.core.module.PerformanceLayer;
+import net.fathom.optimizations.core.module.Setting;
 import net.fathom.optimizations.core.registry.Optimization;
 import net.fathom.optimizations.core.registry.Preset;
 import net.fathom.optimizations.core.registry.SwitchBoard;
@@ -15,6 +18,7 @@ import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.perf.PerfLayer;
 import net.fathom.optimizations.fabric.ui.Skin;
 
 /**
@@ -45,8 +49,10 @@ final class PerformanceSection implements Section {
 
     private static final float ROW = 54f;
     private static final float METER = 68f;
+    private static final float GROUP = 34f;
 
     private final Scroller scroller = new Scroller();
+    private List<Row> rows;
 
     @Override
     public String title() {
@@ -111,12 +117,33 @@ final class PerformanceSection implements Section {
         Rect body = new Rect(area.x, cursor, area.width,
                 Math.max(0f, area.bottom() - cursor));
         List<Optimization> entries = Runtime.registry().all();
-        float contentHeight = entries.size() * ROW;
+        List<Row> layerRows = layerRows();
+        float layerHeight = 0f;
+        for (int index = 0; index < layerRows.size(); index++) {
+            layerHeight += layerRows.get(index).height();
+        }
+        float contentHeight = layerHeight + GROUP + entries.size() * ROW;
         float offset = scroller.offset(context.delta(), contentHeight, body.height);
 
         ui.clip(body.x, body.y, body.right(), body.bottom());
+        float y = body.y - offset;
+        FathomModule module = PerfLayer.module();
+        for (int index = 0; index < layerRows.size(); index++) {
+            Row each = layerRows.get(index);
+            Rect row = new Rect(body.x, y, body.width - Skin.S3, each.height());
+            y += each.height();
+            if (row.bottom() < body.y || row.y > body.bottom()) {
+                continue;
+            }
+            each.draw(context, module, row);
+        }
+        Rect engineHeader = new Rect(body.x, y, body.width - Skin.S3, GROUP);
+        y += GROUP;
+        if (engineHeader.bottom() >= body.y && engineHeader.y <= body.bottom()) {
+            Controls.label(ui, "Engine optimizations", engineHeader.x, engineHeader.y + Skin.S3);
+        }
         for (int index = 0; index < entries.size(); index++) {
-            Rect row = new Rect(body.x, body.y + index * ROW - offset, body.width - Skin.S3, ROW);
+            Rect row = new Rect(body.x, y + index * ROW, body.width - Skin.S3, ROW);
             if (row.bottom() < body.y || row.y > body.bottom()) {
                 continue;
             }
@@ -124,6 +151,146 @@ final class PerformanceSection implements Section {
         }
         ui.unclip();
         scroller.rail(ui, body, context.pointer(), context.now());
+    }
+
+    // -----------------------------------------------------------------------
+    // Fathom's own performance layer
+    // -----------------------------------------------------------------------
+
+    /**
+     * The layer's settings, grouped the way a player thinks about them: what is
+     * being limited, then how far.
+     *
+     * <p>These are the module's own settings, drawn here rather than copied: the
+     * same objects the Mods page shows and the settings file stores, so there is
+     * one place a distance can be changed and one place it is kept.
+     */
+    private List<Row> layerRows() {
+        if (rows == null) {
+            List<Row> out = new ArrayList<Row>();
+            out.add(Row.group("Entity rendering"));
+            out.add(Row.setting(PerformanceLayer.ENTITY_PRESET));
+            out.add(Row.setting(PerformanceLayer.PLAYER_DISTANCE));
+            out.add(Row.setting(PerformanceLayer.MOB_DISTANCE));
+            out.add(Row.setting(PerformanceLayer.ITEM_DISTANCE));
+            out.add(Row.setting(PerformanceLayer.MISC_DISTANCE));
+            out.add(Row.group("Nametags"));
+            out.add(Row.setting(PerformanceLayer.FAST_NAMETAGS));
+            out.add(Row.group("Tile entities"));
+            out.add(Row.setting(PerformanceLayer.TILE_PRESET));
+            out.add(Row.setting(PerformanceLayer.TILE_DISTANCE));
+            out.add(Row.group("HUD"));
+            out.add(Row.setting(PerformanceLayer.HUD_CACHE));
+            out.add(Row.group("Advanced"));
+            out.add(Row.setting(PerformanceLayer.STATS));
+            rows = out;
+        }
+        return rows;
+    }
+
+    /** One line of the performance-layer block: a group heading, or a setting. */
+    private static final class Row {
+        private static final float HEADING = 34f;
+        private static final float CONTROL = 46f;
+
+        private final String heading;
+        private final String settingId;
+
+        private Row(String heading, String settingId) {
+            this.heading = heading;
+            this.settingId = settingId;
+        }
+
+        static Row group(String heading) {
+            return new Row(heading, null);
+        }
+
+        static Row setting(String settingId) {
+            return new Row(null, settingId);
+        }
+
+        float height() {
+            return heading != null ? HEADING : CONTROL;
+        }
+
+        void draw(HubContext context, FathomModule module, Rect area) {
+            Renderer ui = context.ui();
+            if (heading != null) {
+                Controls.label(ui, heading, area.x, area.y + Skin.S3);
+                return;
+            }
+            if (module == null) {
+                return;
+            }
+            Setting setting = module.setting(settingId);
+            if (setting == null) {
+                return;
+            }
+            Controls controls = context.controls();
+            Rect row = area.inset(0f, 2f);
+            boolean hovered = row.contains(context.pointer().x(), context.pointer().y());
+            controls.rowBackground(ui, "perf.layer.row." + settingId, row, hovered, false);
+
+            float controlWidth = setting.kind() == Setting.Kind.TOGGLE
+                    ? Controls.TOGGLE_WIDTH
+                    : Math.min(240f, Math.max(150f, row.width * 0.32f));
+            float controlHeight = setting.kind() == Setting.Kind.TOGGLE
+                    ? Controls.TOGGLE_HEIGHT : Skin.H_MD;
+            Rect control = row.vcentreRight(Skin.S3, controlWidth, controlHeight);
+
+            float room = control.x - row.x - Skin.S5;
+            float top = row.centreY() - (ui.lineHeight(Type.ROW_TITLE) + ui.lineHeight(Type.SMALL)) / 2f;
+            ui.text(Text.fit(ui, setting.label(), Type.ROW_TITLE, room), row.x + Skin.S3,
+                    top + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
+            ui.text(Text.fit(ui, setting.description(), Type.SMALL, room), row.x + Skin.S3,
+                    top + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.SMALL), Type.SMALL,
+                    Skin.TEXT_DISABLED);
+
+            String id = "perf.layer." + settingId;
+            switch (setting.kind()) {
+                case TOGGLE: {
+                    Setting.Toggle toggle = (Setting.Toggle) setting;
+                    if (controls.toggle(ui, id, control, toggle.get(), true)) {
+                        toggle.set(!toggle.get());
+                        edited(context, module, setting);
+                    }
+                    break;
+                }
+                case CHOICE: {
+                    Setting.Choice choice = (Setting.Choice) setting;
+                    String[] options = choice.options().toArray(new String[0]);
+                    int chosen = controls.dropdown(ui, id, control, options, choice.index());
+                    if (chosen != choice.index() && chosen >= 0 && chosen < options.length) {
+                        choice.set(options[chosen]);
+                        edited(context, module, setting);
+                    }
+                    break;
+                }
+                case INTEGER: {
+                    // A slider, not the stepper the Mods page uses: these are
+                    // distances with a wide range, and somebody setting one is
+                    // choosing roughly how far, not counting blocks.
+                    Setting.Whole whole = (Setting.Whole) setting;
+                    double span = Math.max(1, whole.maximum() - whole.minimum());
+                    double fraction = (whole.get() - whole.minimum()) / span;
+                    double next = controls.slider(ui, id, control, fraction, true);
+                    if (Math.abs(next - fraction) > 0.0001d) {
+                        whole.set((int) Math.round(whole.minimum() + next * span));
+                        edited(context, module, setting);
+                    }
+                    ui.textRight(whole.display(), control.x - Skin.S3,
+                            Controls.baseline(ui, row, Type.CAPTION), Type.CAPTION, Skin.TEXT_FAINT);
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        private static void edited(HubContext context, FathomModule module, Setting setting) {
+            module.settingChanged(setting);
+            context.markDirty();
+        }
     }
 
     private void qualityRow(HubContext context, Rect area) {

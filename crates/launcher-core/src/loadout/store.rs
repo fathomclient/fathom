@@ -126,7 +126,8 @@ impl ProfileStore {
                 Err(reason) => out.complaints.push(Complaint { path, reason }),
             }
         }
-        out.profiles.sort_by_key(|profile| profile.name.to_lowercase());
+        out.profiles
+            .sort_by_key(|profile| profile.name.to_lowercase());
         out
     }
 
@@ -148,13 +149,15 @@ impl ProfileStore {
 
     fn read_file(path: &Path) -> Result<FathomProfile, String> {
         let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-        let profile: FathomProfile =
-            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let profile: FathomProfile = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         profile.validate().map_err(|e| e.to_string())?;
         // The filename is the identity. A document whose `id` disagrees with the
         // file it is in was renamed by hand, and trusting the field would give
         // two profiles the same id the moment one of them was saved.
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
         if profile.id.as_str() != stem {
             return Err(format!(
                 "the document says its id is {} but it is stored as {stem}.json",
@@ -179,15 +182,11 @@ impl ProfileStore {
         document.prune();
         document.touch();
         let path = self.path_for(&profile.id);
-        let json = serde_json::to_vec_pretty(&document)
-            .map_err(|source| StoreError::Parse {
-                path: path.clone(),
-                source,
-            })?;
-        fs_safety::atomic_write(&path, &json).map_err(|source| StoreError::Write {
-            path,
+        let json = serde_json::to_vec_pretty(&document).map_err(|source| StoreError::Parse {
+            path: path.clone(),
             source,
-        })
+        })?;
+        fs_safety::atomic_write(&path, &json).map_err(|source| StoreError::Write { path, source })
     }
 
     /// Create a profile under a name, choosing a free id.
@@ -232,7 +231,8 @@ impl ProfileStore {
     /// — which is exactly the "redundant default" this model exists to stop. So
     /// the last profile is kept instead.
     pub fn delete(&self, id: &ProfileId) -> Result<(), StoreError> {
-        let remaining: Vec<ProfileId> = self.ids().into_iter().filter(|other| other != id).collect();
+        let remaining: Vec<ProfileId> =
+            self.ids().into_iter().filter(|other| other != id).collect();
         if remaining.is_empty() {
             return Err(StoreError::LastProfile);
         }
@@ -488,7 +488,12 @@ mod tests {
         let listing = store.list();
         assert_eq!(listing.profiles.len(), 2);
         assert_eq!(listing.complaints.len(), 1);
-        assert!(listing.complaints.first().unwrap().path.ends_with("broken.json"));
+        assert!(listing
+            .complaints
+            .first()
+            .unwrap()
+            .path
+            .ends_with("broken.json"));
     }
 
     #[test]
@@ -538,7 +543,9 @@ mod tests {
             ModuleState {
                 enabled: Some(true),
                 favourite: true,
-                settings: [("window".to_owned(), "1000".to_owned())].into_iter().collect(),
+                settings: [("window".to_owned(), "1000".to_owned())]
+                    .into_iter()
+                    .collect(),
                 keys: BTreeMap::new(),
             },
         );

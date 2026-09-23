@@ -36,6 +36,7 @@ fn identity(kind: IdentityKind, valid_for: Duration) -> MinecraftIdentity {
         profile: AccountProfile {
             id: "986dec87b7ec47ff89ff033fdb95c4b5".into(),
             name: "Steve".into(),
+            ..AccountProfile::default()
         },
         access_token: Secret::new("mc-access-token-value"),
         kind,
@@ -645,4 +646,79 @@ fn readiness_reports_the_gate_rather_than_its_own_opinion() {
             .any(|b| matches!(b, launcher_core::Blocker::SignedOut)),
         "being signed out must be reported as a blocker"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The account record: public profile persisted, secrets not
+// ---------------------------------------------------------------------------
+
+fn signed_in(head: Option<Vec<u8>>) -> launcher_core::SignedIn {
+    let mut identity = identity(IdentityKind::Microsoft, Duration::from_secs(86_400));
+    identity.expires_at = SystemTime::now() + Duration::from_secs(86_400);
+    identity.profile.skins = vec![launcher_core::auth::ProfileTexture {
+        id: "skin".into(),
+        state: "ACTIVE".into(),
+        url: "http://textures.minecraft.net/texture/0123abcd".into(),
+        variant: Some("SLIM".into()),
+        alias: None,
+    }];
+    launcher_core::SignedIn {
+        session: launcher_core::auth::Session {
+            identity,
+            entitlement: proof(Ownership::JavaEdition, true),
+        },
+        refresh_token: Secret::new("the-refresh-token-value"),
+        head,
+    }
+}
+
+#[test]
+fn signing_in_records_the_public_profile_and_signing_out_removes_it() {
+    let (tmp, mut core) = launcher();
+    let head = b"\x89PNG\r\n\x1a\n pretend head".to_vec();
+    core.adopt_session(signed_in(Some(head.clone()))).expect("adopted");
+
+    let account = core.account().expect("an account to show");
+    assert!(account.signed_in);
+    assert_eq!(account.name, "Steve");
+    assert_eq!(account.id, "986dec87b7ec47ff89ff033fdb95c4b5");
+    assert_eq!(account.head.as_deref(), Some(head.as_slice()));
+    assert_eq!(account.skin_variant.as_deref(), Some("SLIM"));
+
+    // Nothing written to the data directory holds a token.
+    let mut stack = vec![tmp.path().to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Ok(bytes) = std::fs::read(&path) {
+                let text = String::from_utf8_lossy(&bytes);
+                for secret in ["the-refresh-token-value", "mc-access-token-value"] {
+                    assert!(!text.contains(secret), "{} contains a token", path.display());
+                }
+            }
+        }
+    }
+
+    // A restart shows the remembered account, not signed in, until restored.
+    let store: Arc<dyn CredentialStore> = Arc::new(EphemeralCredentialStore::default());
+    let reopened = Launcher::new(DataPaths::rooted_at(tmp.path()), store).expect("reopened");
+    let remembered = reopened.account().expect("remembered");
+    assert!(!remembered.signed_in);
+    assert_eq!(remembered.name, "Steve");
+
+    core.sign_out().expect("signed out");
+    assert!(core.account().is_none());
+    assert!(!tmp.path().join("accounts").join("986dec87b7ec47ff89ff033fdb95c4b5.json").exists());
+}
+
+#[test]
+fn a_session_close_to_expiry_asks_to_be_refreshed() {
+    let (_tmp, mut core) = launcher();
+    let mut near = signed_in(None);
+    near.session.identity.expires_at = SystemTime::now() + Duration::from_secs(60);
+    core.adopt_session(near).expect("adopted");
+    assert!(core.session_needs_refresh(Duration::from_secs(600)));
+    assert!(!core.session_needs_refresh(Duration::from_secs(10)));
 }

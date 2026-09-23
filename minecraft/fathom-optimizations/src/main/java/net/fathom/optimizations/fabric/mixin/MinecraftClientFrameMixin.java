@@ -58,20 +58,50 @@ public abstract class MinecraftClientFrameMixin {
      * plain long is correct and costs nothing.
      */
     private long fathom$frameStartNanos;
+    private long fathom$gameLoopProbe;
 
     @Inject(method = "runGameLoop()V", at = @At("HEAD"))
     private void fathom$frameStart(CallbackInfo info) {
-        MinecraftClient client = (MinecraftClient) (Object) this;
-        net.fathom.optimizations.fabric.gfx.FrameInput.poll(client);
-        net.fathom.optimizations.fabric.gfx.FrameKeyboard.pollCurrent(client);
-        net.fathom.optimizations.fabric.input.GameSession.frame(client);
         fathom$frameStartNanos = System.nanoTime();
+        fathom$gameLoopProbe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.GAME_LOOP);
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        long callback = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        MinecraftClient client = (MinecraftClient) (Object) this;
+        if (net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
+            long dispatch = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_DISPATCH);
+            net.fathom.optimizations.fabric.gfx.FrameInput.poll(client);
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_LISTENER);
+            net.fathom.optimizations.fabric.gfx.FrameKeyboard.pollCurrent(client);
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_LISTENER);
+            net.fathom.optimizations.fabric.input.GameSession.frame(client);
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_LISTENER);
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.EVENT_DISPATCH, dispatch);
+        }
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, callback);
     }
 
     @Inject(method = "runGameLoop()V", at = @At("RETURN"))
     private void fathom$frameEnd(CallbackInfo info) {
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        long callback = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                net.fathom.optimizations.core.instrument.Probe.Section.GAME_LOOP,
+                fathom$gameLoopProbe);
         long start = fathom$frameStartNanos;
         long frameNanos = start == 0L ? 0L : System.nanoTime() - start;
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, callback);
         if (start != 0L) {
             Runtime.frame(frameNanos);
         }

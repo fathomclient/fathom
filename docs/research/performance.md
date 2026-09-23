@@ -363,6 +363,17 @@ HotSpot refuses to JIT-compile methods above a bytecode-size limit (`HugeMethodL
 Minecraft has several methods above it, which therefore **run interpreted forever**. Disabling the
 limit lets them compile.
 
+> **Correction, 2026-09-17 — this is not true of 1.8.9.** The claim above was
+> taken from flag guidance written for later versions and was never checked
+> against this one. It has now been measured: every method in
+> `minecraft-client.jar` and `minecraft-merged.jar` was read for its `Code`
+> attribute length, which is the size the limit is compared against, and
+> **exactly one** exceeds 8000 bytes — `RecipeDispatcher.<init>` at 8296, which
+> registers crafting recipes once during startup and is never on a render path.
+> There is nothing hot for the flag to unblock. The rest of this section's
+> reasoning about code-cache pressure still follows, but it is now a cost with
+> no corresponding benefit on 1.8.9. See `docs/performance/benchmark-methodology.md` §3.
+
 The cost is real: more code-cache pressure and more compilation work, which is why it is usually
 paired with a raised `-XX:ReservedCodeCacheSize` (400M in the benchmarked flag set). Other flags in
 that set -- `-XX:+AlwaysPreTouch`, `-XX:AllocatePrefetchStyle=3` -- have narrower and more

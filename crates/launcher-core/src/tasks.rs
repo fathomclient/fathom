@@ -88,6 +88,10 @@ impl Cancel {
 pub struct SignedIn {
     pub session: Session,
     pub refresh_token: Secret,
+    /// The player's head, rendered from their skin, when it was (re)fetched
+    /// on this sign-in. `None` means "keep whatever is cached": the skin had
+    /// not changed, the account wears a default skin, or the download failed.
+    pub head: Option<Vec<u8>>,
 }
 
 /// Cheap, shareable handle to everything the blocking operations need.
@@ -181,11 +185,45 @@ impl Tasks {
                     let session = self
                         .auth
                         .establish_session(&access_token, Feature::AccountSignIn)?;
+                    let head = self.fetch_head(&session.identity.profile, Feature::AccountSignIn);
                     return Ok(SignedIn {
                         session,
                         refresh_token,
+                        head,
                     });
                 }
+            }
+        }
+    }
+
+    /// Download the account's skin and cut out its head, if the cached one is
+    /// missing or out of date.
+    ///
+    /// Never fails the sign-in: a face is a nicety, and an account that could
+    /// not have its skin fetched is still signed in. The interface keeps the
+    /// initial it shows today.
+    fn fetch_head(
+        &self,
+        profile: &crate::auth::AccountProfile,
+        feature: Feature,
+    ) -> Option<Vec<u8>> {
+        let cache = crate::auth::account::AccountCache::new(&self.paths);
+        if !cache.needs_skin(profile, std::time::SystemTime::now()) {
+            return None;
+        }
+        let url = profile.active_skin()?.url.clone();
+        let skin = match self.auth.fetch_skin(&url, feature) {
+            Ok(skin) => skin,
+            Err(error) => {
+                tracing::info!(%error, "could not download the account's skin");
+                return None;
+            }
+        };
+        match crate::auth::account::head_from_skin(&skin) {
+            Ok(head) => Some(head),
+            Err(error) => {
+                tracing::info!(%error, "could not read the account's skin");
+                None
             }
         }
     }
@@ -205,9 +243,11 @@ impl Tasks {
                 let session = self
                     .auth
                     .establish_session(&access_token, Feature::SessionRefresh)?;
+                let head = self.fetch_head(&session.identity.profile, Feature::SessionRefresh);
                 Ok(Some(SignedIn {
                     session,
                     refresh_token,
+                    head,
                 }))
             }
             _ => Ok(None),

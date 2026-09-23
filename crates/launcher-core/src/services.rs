@@ -214,7 +214,9 @@ fn launch_log_path(dirs: &ProfileDirs) -> PathBuf {
 pub enum JavaOutcome {
     Ready(JavaInstallation),
     /// Nothing suitable, and the policy permits downloading one.
-    NeedsInstall { required_major: u32 },
+    NeedsInstall {
+        required_major: u32,
+    },
     /// Nothing suitable, and fetching is not on the table.
     Missing {
         required_major: u32,
@@ -268,6 +270,8 @@ pub enum Blocker {
     LoaderNotImplemented(Loader),
     /// Signed in, but the Minecraft access token has expired.
     SessionExpired,
+    /// A Fathom profile whose client module this build cannot supply.
+    FathomClient(String),
 }
 
 impl Blocker {
@@ -300,6 +304,7 @@ impl Blocker {
             Blocker::SessionExpired => {
                 "Your session expired. Sign in again to keep playing.".to_owned()
             }
+            Blocker::FathomClient(reason) => reason.clone(),
         }
     }
 }
@@ -387,6 +392,21 @@ impl std::fmt::Debug for Launcher {
             .field("running", &self.running.all().len())
             .finish_non_exhaustive()
     }
+}
+
+/// The account as the interface and the game show it. Public data only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountView {
+    /// The Minecraft UUID, 32 hex characters.
+    pub id: String,
+    pub name: String,
+    /// PNG of the player's head, when there is one.
+    pub head: Option<Vec<u8>>,
+    pub skin_variant: Option<String>,
+    pub cape: Option<String>,
+    /// False for a remembered account whose session is not restored yet.
+    pub signed_in: bool,
+    pub development: bool,
 }
 
 /// A managed mod with a newer build available.
@@ -722,7 +742,9 @@ impl Launcher {
         let SignedIn {
             session,
             refresh_token,
+            head,
         } = signed_in;
+        let public_profile = session.identity.profile.clone();
 
         let account_id = session.identity.profile.id.clone();
         let account_name = session.identity.profile.name.clone();
@@ -769,6 +791,16 @@ impl Launcher {
             .store(&account_id, &refresh_token)
             .map_err(AuthError::from)?;
 
+        // The public half: username, UUID, skin address and head. Not fatal —
+        // the account is signed in whether or not its face could be written.
+        if let Err(error) = crate::auth::account::AccountCache::new(&self.paths).record(
+            &public_profile,
+            head.as_deref(),
+            SystemTime::now(),
+        ) {
+            tracing::warn!(%error, "could not cache the account profile");
+        }
+
         let mut settings = self.settings.clone();
         settings.last_account_id = Some(account_id);
         settings.last_account_name = Some(account_name);
@@ -776,14 +808,97 @@ impl Launcher {
         Ok(())
     }
 
+    /// The account to show: the signed-in one, or failing that the remembered
+    /// one whose session has not been restored yet.
+    ///
+    /// Public data only. The head is PNG bytes of the player's face, cached
+    /// from their skin; `None` when they wear a default skin or it could not be
+    /// fetched, and the interface shows their initial instead.
+    pub fn account(&self) -> Option<AccountView> {
+        let cache = crate::auth::account::AccountCache::new(&self.paths);
+        if let Some(identity) = self.auth.identity() {
+            let record = cache.load(&identity.profile.id);
+            let id = crate::auth::account::normalise_uuid(&identity.profile.id)
+                .unwrap_or_else(|| identity.profile.id.clone());
+            return Some(AccountView {
+                head: cache.head(&id),
+                name: identity.profile.name.clone(),
+                skin_variant: record.as_ref().and_then(|r| r.skin_variant.clone()),
+                cape: record.as_ref().and_then(|r| r.cape.clone()),
+                id,
+                signed_in: true,
+                development: !identity.kind.is_production(),
+            });
+        }
+        let id = self.settings.last_account_id.clone()?;
+        let record = cache.load(&id);
+        let name = record
+            .as_ref()
+            .map(|r| r.name.clone())
+            .or_else(|| self.settings.last_account_name.clone())?;
+        Some(AccountView {
+            head: cache.head(&id),
+            id: crate::auth::account::normalise_uuid(&id).unwrap_or(id),
+            name,
+            skin_variant: record.as_ref().and_then(|r| r.skin_variant.clone()),
+            cape: record.and_then(|r| r.cape),
+            signed_in: false,
+            development: false,
+        })
+    }
+
+    /// All remembered Microsoft accounts, with the active one first.
+    ///
+    /// These are public Minecraft profiles from the account cache. Tokens stay
+    /// in the credential store and never cross this boundary.
+    pub fn accounts(&self) -> Vec<AccountView> {
+        let cache = crate::auth::account::AccountCache::new(&self.paths);
+        let active_id = self.auth.identity().and_then(|identity| {
+            identity
+                .kind
+                .is_production()
+                .then(|| crate::auth::account::normalise_uuid(&identity.profile.id))
+                .flatten()
+        });
+        let mut accounts: Vec<AccountView> = cache
+            .list()
+            .into_iter()
+            .map(|record| {
+                let signed_in = active_id.as_deref() == Some(record.id.as_str());
+                AccountView {
+                    head: cache.head(&record.id),
+                    id: record.id,
+                    name: record.name,
+                    skin_variant: record.skin_variant,
+                    cape: record.cape,
+                    signed_in,
+                    development: false,
+                }
+            })
+            .collect();
+        accounts.sort_by_key(|account| !account.signed_in);
+        accounts
+    }
+
+    /// Whether the signed-in session should be refreshed before it is used:
+    /// its Minecraft token has expired or will within `margin`, and there is a
+    /// stored refresh token to do it with.
+    pub fn session_needs_refresh(&self, margin: std::time::Duration) -> bool {
+        self.settings.last_account_id.is_some()
+            && self.auth.identity().is_some_and(|identity| {
+                identity.kind.is_production() && identity.expires_within(SystemTime::now(), margin)
+            })
+    }
+
     /// Blocking sign-in, for the CLI and for tests. The desktop app uses
     /// [`Launcher::tasks`] instead so the window stays responsive.
     pub fn sign_in_blocking(&mut self, cancel: &Cancel) -> Result<(), ServiceError> {
         let signed_in = self.tasks().sign_in(cancel, |prompt| {
-            tracing::info!(
-                code = %prompt.user_code,
-                url = %prompt.verification_uri,
-                "enter this code to sign in"
+            // To the terminal, not the log: the code is only useful to the
+            // person at the keyboard, and a log is kept.
+            eprintln!(
+                "To sign in, open {} and enter the code {}",
+                prompt.verification_uri, prompt.user_code
             );
         })?;
         self.adopt_session(signed_in)
@@ -809,12 +924,46 @@ impl Launcher {
     pub fn sign_out(&mut self) -> Result<(), ServiceError> {
         if let Some(id) = self.settings.last_account_id.clone() {
             self.credentials.delete(&id).map_err(AuthError::from)?;
+            crate::auth::account::AccountCache::new(&self.paths).forget(&id);
         }
         self.auth.sign_out();
         let mut settings = self.settings.clone();
         settings.last_account_id = None;
         settings.last_account_name = None;
         self.update_settings(settings)
+    }
+
+    /// Forget one remembered account without disturbing a different active
+    /// account. Forgetting the active account also ends its in-memory session.
+    pub fn forget_account(&mut self, id: &str) -> Result<(), ServiceError> {
+        let id = crate::auth::account::normalise_uuid(id)
+            .ok_or_else(|| ServiceError::Failed("invalid account id".to_owned()))?;
+        self.credentials.delete(&id).map_err(AuthError::from)?;
+        crate::auth::account::AccountCache::new(&self.paths).forget(&id);
+
+        let active = self
+            .auth
+            .identity()
+            .and_then(|identity| crate::auth::account::normalise_uuid(&identity.profile.id))
+            .as_deref()
+            == Some(id.as_str());
+        let selected = self
+            .settings
+            .last_account_id
+            .as_deref()
+            .and_then(crate::auth::account::normalise_uuid)
+            .as_deref()
+            == Some(id.as_str());
+        if active {
+            self.auth.sign_out();
+        }
+        if selected {
+            let mut settings = self.settings.clone();
+            settings.last_account_id = None;
+            settings.last_account_name = None;
+            self.update_settings(settings)?;
+        }
+        Ok(())
     }
 
     // -- profiles ---------------------------------------------------------
@@ -919,9 +1068,10 @@ impl Launcher {
                         reason = %error,
                         "a chosen component was not installed during setup"
                     );
-                    report
-                        .unavailable
-                        .push((component.id, "Not downloaded yet. You can install it from Mods."));
+                    report.unavailable.push((
+                        component.id,
+                        "Not downloaded yet. You can install it from Mods.",
+                    ));
                 }
             }
         }
@@ -947,6 +1097,184 @@ impl Launcher {
     /// after creation and again before every launch, so a component that was
     /// removed -- or a build that ships a newer one -- is put right without
     /// anybody asking.
+    /// Which jar this build supplies as Fathom's client module. See
+    /// [`crate::components::bundled_jar`].
+    pub fn fathom_jar_lookup(&self) -> crate::components::JarLookup {
+        crate::components::bundled_jar(&self.paths, crate::components::FATHOM_JAR_PREFIX)
+    }
+
+    /// What a profile would launch with, as far as Fathom's client goes.
+    ///
+    /// Judged against the profile as given; [`Launcher::launch`] asks after
+    /// bringing components up to date.
+    pub fn fathom_client(&self, profile: &Profile) -> crate::fathom_client::FathomClient {
+        crate::fathom_client::FathomClient::decide(profile, &self.fathom_jar_lookup())
+    }
+
+    /// Everything a launch of this profile would select, in words, without
+    /// launching and without needing anyone signed in.
+    ///
+    /// Logged on every launch and printed by `fathom-cli report`, so "which
+    /// Minecraft did Play start" has an answer that does not depend on memory.
+    /// Paths only; no token, account or session detail.
+    pub fn launch_report(&self, profile: &Profile) -> Vec<(&'static str, String)> {
+        let mut lines: Vec<(&'static str, String)> = Vec::new();
+        lines.push((
+            "launcher",
+            format!("{} {}", crate::PRODUCT_NAME, crate::PRODUCT_VERSION),
+        ));
+        lines.push(("data directory", self.paths.root().display().to_string()));
+        lines.push((
+            "build kind",
+            match self.paths.development_checkout() {
+                Some(checkout) => format!("development, checkout {}", checkout.display()),
+                None => "release".to_owned(),
+            },
+        ));
+        for other in crate::fathom_client::virtualised_data_directories() {
+            lines.push((
+                "other data directory",
+                format!(
+                    "{} (a packaged app's virtual file system; a Fathom started from inside that \
+                     app uses it instead of this one)",
+                    other.display()
+                ),
+            ));
+        }
+
+        let resolved = self
+            .resolve_profile(profile)
+            .unwrap_or_else(|_| profile.clone());
+        let dirs = self.dirs_for(&resolved);
+        lines.push((
+            "profile",
+            format!(
+                "{} ({}), kind {:?}",
+                resolved.display_name, resolved.id, resolved.kind
+            ),
+        ));
+        lines.push((
+            "instance directory",
+            format!(
+                "{} ({})",
+                dirs.minecraft_dir().display(),
+                if resolved.game_directory.is_launcher_owned() {
+                    "managed by Fathom"
+                } else {
+                    "chosen by you"
+                }
+            ),
+        ));
+        if crate::fathom_client::is_official_minecraft_dir(&dirs.minecraft_dir()) {
+            lines.push((
+                "isolation",
+                "REFUSED: this is your normal Minecraft folder".to_owned(),
+            ));
+        }
+        lines.push(("minecraft version", resolved.version_id.clone()));
+        let cache = self.install_service();
+        for (label, path) in [
+            (
+                "version json",
+                cache.cache().version_json(&resolved.version_id),
+            ),
+            ("client jar", cache.cache().client_jar(&resolved.version_id)),
+        ] {
+            lines.push((
+                label,
+                match path {
+                    Ok(path) => format!(
+                        "{}{}",
+                        path.display(),
+                        if path.is_file() { "" } else { " (MISSING)" }
+                    ),
+                    Err(error) => format!("unresolvable: {error}"),
+                },
+            ));
+        }
+        let loader = resolved.loader_kind();
+        lines.push((
+            "loader",
+            match (&resolved.loader.version, loader) {
+                (_, Loader::Vanilla) => "none (vanilla)".to_owned(),
+                (Some(version), _) => format!("{} {version}", loader.label()),
+                (None, _) => format!("{} (build chosen at first launch)", loader.label()),
+            },
+        ));
+        lines.push((
+            "main class",
+            match loader {
+                Loader::Vanilla => "net.minecraft.client.main.Main".to_owned(),
+                Loader::LegacyFabric => {
+                    "net.fabricmc.loader.impl.launch.knot.KnotClient".to_owned()
+                }
+                Loader::Forge => "(not implemented)".to_owned(),
+            },
+        ));
+        let required_major = self
+            .cached_version(&resolved.version_id)
+            .map_or(8, |version| version.required_java_major());
+        lines.push((
+            "java",
+            match self.resolve_java(&resolved, required_major) {
+                JavaOutcome::Ready(java) => format!(
+                    "{} (Java {}, {})",
+                    java.path.display(),
+                    java.major,
+                    java.version_string
+                ),
+                JavaOutcome::NeedsInstall { required_major } => {
+                    format!("none yet; Java {required_major} will be downloaded")
+                }
+                JavaOutcome::Missing { reason, .. } => format!("MISSING: {reason}"),
+            },
+        ));
+
+        let lookup = self.fathom_jar_lookup();
+        lines.push((
+            "client module source",
+            match &lookup {
+                crate::components::JarLookup::Found(jar) => {
+                    format!("{} ({})", jar.path.display(), jar.origin.label())
+                }
+                other => format!("UNAVAILABLE: {}", other.problem().unwrap_or_default()),
+            },
+        ));
+        lines.push((
+            "fathom client",
+            crate::fathom_client::FathomClient::decide(&resolved, &lookup).describe(),
+        ));
+        let placed: Vec<String> = std::fs::read_dir(dirs.mods_dir())
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .filter_map(|entry| entry.file_name().to_str().map(str::to_owned))
+                    .filter(|name| name.to_ascii_lowercase().ends_with(".jar"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        lines.push((
+            "mods directory now",
+            if placed.is_empty() {
+                "empty".to_owned()
+            } else {
+                placed.join(", ")
+            },
+        ));
+        lines
+    }
+
+    /// The SHA-1 of the Fathom client a running game of this profile should
+    /// report having loaded, or `None` when it is not expected to have one.
+    pub fn expected_client_sha1(&self, profile: &Profile) -> Option<String> {
+        let resolved = self
+            .resolve_profile(profile)
+            .unwrap_or_else(|_| profile.clone());
+        self.fathom_client(&resolved)
+            .expected_entry()
+            .map(|entry| entry.sha1.clone())
+    }
+
     pub fn ensure_components(
         &self,
         profile: &mut Profile,
@@ -1386,13 +1714,9 @@ impl Launcher {
             "searching mods".to_owned()
         });
         let installed: Vec<ProfileMod> = profile.mods.iter().cloned().collect();
-        Ok(self.mod_catalog.search(
-            profile.id.as_str(),
-            query,
-            &installed,
-            &grant,
-            cancel,
-        )?)
+        Ok(self
+            .mod_catalog
+            .search(profile.id.as_str(), query, &installed, &grant, cancel)?)
     }
 
     /// One project's detail page for this profile, with its compatible builds.
@@ -1494,10 +1818,8 @@ impl Launcher {
         progress: &mut dyn FnMut(&crate::mods::browse::InstallProgress),
     ) -> Result<crate::mods::browse::InstallReport, ServiceError> {
         self.catalog_ready()?;
-        let grant = PerActionGrant::user_requested(format!(
-            "installing {}",
-            plan.root.project.name
-        ));
+        let grant =
+            PerActionGrant::user_requested(format!("installing {}", plan.root.project.name));
         let target = crate::mods::browse::Target::of(profile);
         let report = self.mod_catalog.install(
             profile.id.as_str(),
@@ -1642,9 +1964,10 @@ impl Launcher {
         let mut out = Vec::new();
 
         for entry in profile.mods.iter() {
-            let (Some(project), Some(installed)) =
-                (entry.origin.project.clone(), entry.origin.version_id.clone())
-            else {
+            let (Some(project), Some(installed)) = (
+                entry.origin.project.clone(),
+                entry.origin.version_id.clone(),
+            ) else {
                 continue;
             };
             let grant = PerActionGrant::user_requested(format!("checking {project} for updates"));
@@ -1756,13 +2079,11 @@ impl Launcher {
                     crate::components::newest_jar(&paths, jar_prefix).is_some()
                 }
                 crate::components::Supply::PartOf { component } => {
-                    crate::components::find(component).is_some_and(|owner| {
-                        match owner.supply {
-                            crate::components::Supply::Bundled { jar_prefix } => {
-                                crate::components::newest_jar(&paths, jar_prefix).is_some()
-                            }
-                            _ => false,
+                    crate::components::find(component).is_some_and(|owner| match owner.supply {
+                        crate::components::Supply::Bundled { jar_prefix } => {
+                            crate::components::newest_jar(&paths, jar_prefix).is_some()
                         }
+                        _ => false,
                     })
                 }
                 _ => false,
@@ -1874,6 +2195,12 @@ impl Launcher {
             blockers.push(Blocker::LoaderNotImplemented(profile.loader_kind()));
         }
 
+        if let Some(reason) =
+            crate::fathom_client::FathomClient::preflight(profile, &self.fathom_jar_lookup())
+        {
+            blockers.push(Blocker::FathomClient(reason));
+        }
+
         let required_major = version.map_or(8, VersionDetail::required_java_major);
         let selected = self.select_java(profile, required_major);
         match &selected {
@@ -1957,9 +2284,7 @@ impl Launcher {
         }
 
         if policy.may_use_managed() {
-            if let Some(managed) =
-                java_runtime::managed::installed(&self.paths, required_major)
-            {
+            if let Some(managed) = java_runtime::managed::installed(&self.paths, required_major) {
                 return JavaOutcome::Ready(managed);
             }
         }
@@ -2075,6 +2400,23 @@ impl Launcher {
         let dirs = self.profiles.dirs(&profile.id);
         dirs.ensure()
             .map_err(|e| LaunchRefusal::InvalidProfile(e.to_string()))?;
+        // A component that cannot work alone, without the thing it needs. This
+        // is checked before the process starts rather than after, because the
+        // alternative is a class-transformation crash the player cannot read.
+        // See `components::missing_bridge`.
+        if let Some((component, bridge)) = crate::components::missing_bridge(profile) {
+            return Err(LaunchRefusal::MissingBridge {
+                component: component.name,
+                bridge: bridge.name,
+                loader: profile.loader_kind().label(),
+            });
+        }
+        // A game directory that has never been played has no `options.txt`, and
+        // the one 1.8.9 would write for itself is capped at 120 fps with VSync
+        // on. Writing ours first is the only moment it can be done without
+        // touching a file that has become the player's. Never overwrites, and
+        // never fails a launch -- see `profiles::game_options`.
+        crate::profiles::game_options::seed(&dirs);
 
         // 3. Java: present, right major, and still on disk. The last check
         //    matters because a runtime found at start-up can be uninstalled
@@ -2175,7 +2517,9 @@ impl Launcher {
         // jar first would load vanilla's classes and leave the loader sitting
         // behind them doing nothing. It would also fail silently -- the game
         // starts, and no mod loads.
-        let mut classpath = loader.map(LoaderInstallation::classpath_additions).unwrap_or_default();
+        let mut classpath = loader
+            .map(LoaderInstallation::classpath_additions)
+            .unwrap_or_default();
         classpath.extend(resolved.classpath());
         let natives = pre.dirs.natives_dir();
 
@@ -2270,7 +2614,10 @@ impl Launcher {
     /// profile**, which makes the choice sticky. A launcher that silently picked
     /// a different loader each time you played would be unreproducible in
     /// exactly the way that makes "it worked yesterday" impossible to debug.
-    fn ensure_loader(&self, profile: &Profile) -> Result<Option<LoaderInstallation>, LaunchRefusal> {
+    fn ensure_loader(
+        &self,
+        profile: &Profile,
+    ) -> Result<Option<LoaderInstallation>, LaunchRefusal> {
         let kind = profile.loader_kind();
         if kind == Loader::Vanilla {
             return Ok(None);
@@ -2394,6 +2741,21 @@ impl Launcher {
         }
         let profile = &profile;
 
+        // Never the user's own Minecraft folder. Fathom's instance is its own.
+        let game_directory = self.dirs_for(profile).minecraft_dir();
+        if crate::fathom_client::is_official_minecraft_dir(&game_directory) {
+            return Err(LaunchRefusal::SharedMinecraftDirectory(game_directory));
+        }
+
+        // A Fathom profile launches with Fathom's client or not at all. This is
+        // the check whose absence launched vanilla: a missing jar used to be a
+        // line in a report and the game started anyway.
+        let fathom = self.fathom_client(profile);
+        tracing::info!(profile = %profile.id, client = %fathom.describe(), "fathom client");
+        if let Some(reason) = fathom.refusal() {
+            return Err(LaunchRefusal::FathomClientUnavailable(reason.to_owned()));
+        }
+
         let pre = self.preflight(profile, version)?;
         let resolved = self
             .resolve_install(version, Feature::Play)
@@ -2424,12 +2786,28 @@ impl Launcher {
         // the inside exactly like a loader that is not loading them.
         if profile.loader_kind().supports_mods() {
             let mut copy = profile.clone();
-            if let Err(error) = self.materialize_mods(&mut copy) {
-                // Not fatal. A mod that could not be placed is worth saying so
-                // about, and it is still much better to start the game.
-                tracing::warn!(%error, "could not lay out the mods directory");
+            match self.materialize_mods(&mut copy) {
+                Ok(outcome) => {
+                    tracing::info!(profile = %profile.id, summary = %outcome.summary(), "mods directory laid out");
+                }
+                // Fatal for a Fathom profile, whose client is one of those mods;
+                // a warning for anything else, which was only ever asking for
+                // what the user chose.
+                Err(error) if fathom.expected_entry().is_some() => {
+                    return Err(LaunchRefusal::FathomClientUnavailable(format!(
+                        "The mods directory could not be laid out, so Fathom's client could not be \
+                         placed: {error}"
+                    )));
+                }
+                Err(error) => tracing::warn!(%error, "could not lay out the mods directory"),
             }
         }
+        if let Some(entry) = fathom.expected_entry() {
+            crate::fathom_client::verify_placed(&pre.dirs.mods_dir(), entry)
+                .map_err(LaunchRefusal::FathomClientUnavailable)?;
+        }
+        // Whatever the previous session wrote no longer describes this one.
+        crate::fathom_client::clear_marker(&pre.dirs.minecraft_dir());
 
         // The optimization module reads its settings from a file in the game
         // directory, written fresh on every launch so a previous session's
@@ -2471,6 +2849,9 @@ impl Launcher {
         }
 
         let plan = self.assemble(profile, version, &resolved, &pre, loader.as_ref())?;
+        for (label, value) in self.launch_report(profile) {
+            tracing::info!(profile = %profile.id, "launch report: {label}: {value}");
+        }
         let process = process::spawn(&plan)?;
 
         tracing::info!(

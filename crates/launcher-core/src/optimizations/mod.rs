@@ -40,7 +40,7 @@ pub mod conflicts;
 
 use std::collections::BTreeMap;
 
-use crate::profiles::OptimizationPreset;
+use crate::profiles::{OptimizationPreset, Profile};
 
 /// Where an optimization sits on the risk scale, mirroring Java's `Category`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -240,10 +240,10 @@ pub const JAVA: &[Optimization] = &[
         "jvm.compile-huge-methods",
         "Compile oversized methods",
         Memory, Optional, Java, Active, Working,
-        None,
-        "Several Minecraft methods exceed HotSpot's 8000-byte inlining limit and run \
-         interpreted forever. Lifting the limit lets them be compiled, at the cost of a \
-         larger code cache."
+        Some("Measured on 1.8.9: exactly one method in the game exceeds the 8000-byte limit -- RecipeDispatcher.<init> at 8296 bytes, which registers crafting recipes once during startup. No render-path method is near the limit, so there is no frame-time effect to gain."),
+        "On this version, nothing. HotSpot will not compile methods over 8000 bytes, and \
+         1.8.9 has one -- a startup recipe constructor. Lifting the limit compiles that one \
+         method and reserves a larger code cache for it. Left switchable for other versions."
     ),
 ];
 
@@ -310,6 +310,49 @@ pub fn find(id: &str) -> Option<Optimization> {
 }
 
 /// How many optimizations are doing something right now.
+/// Whether an optimization is on for a profile.
+///
+/// # Why the stored map does not simply win
+///
+/// A profile records a materialised switch map *and* the preset it was chosen
+/// from. Those two can disagree, and when they did the stored map won — which
+/// quietly broke the property [`OptimizationPreset::includes`] is written to
+/// have: "a preset gains entries automatically as they become `Active`".
+///
+/// What happened in practice: an entry that was not yet implemented was written
+/// into the map as `false`, because at that moment `Balanced` genuinely did not
+/// include it. The entry was later finished, measured and promoted, so
+/// `Balanced` began including it — but every profile created before that kept
+/// its explicit `false` for ever. A user on Balanced was silently held at the
+/// set of optimizations that existed the day their profile was made.
+///
+/// So a named preset is the source of truth, and only `Custom` reads the map.
+/// Choosing "Balanced" means "keep me on what Balanced means", not "freeze me
+/// at what Balanced meant once".
+///
+/// # Why this is shared rather than written twice
+///
+/// Because it already was written twice, and the two copies disagreed. The
+/// Performance page fell back to the preset for an id the map did not mention;
+/// the bridge that tells the game what to run fell back to `false`. An
+/// optimization missing from the map therefore rendered as **on** in the
+/// launcher and ran as **off** in the game, which is the worst of both — a page
+/// reporting a configuration the client was not in.
+pub fn enabled_for(profile: &Profile, optimization: &Optimization) -> bool {
+    if profile.optimizations.preset != OptimizationPreset::Custom {
+        return profile.optimizations.preset.includes(optimization);
+    }
+    profile
+        .optimizations
+        .rendering
+        .get(optimization.id)
+        .copied()
+        // An entry a Custom profile has never expressed an opinion about is
+        // off: Custom means the user curated this list, and switching something
+        // on because it was added later is not curation.
+        .unwrap_or(false)
+}
+
 pub fn active_count() -> usize {
     all().iter().filter(|o| o.is_actionable()).count()
 }
@@ -412,6 +455,109 @@ mod tests {
     /// thing that must never silently drift is which entries exist. Reads the
     /// Java source directly: if someone adds an optimization there and not
     /// here, the launcher would quietly never show it.
+    fn profile_with(preset: OptimizationPreset) -> Profile {
+        use crate::profiles::ProfileId;
+        let mut profile = Profile::new(ProfileId::new("p").unwrap(), "P");
+        profile.optimizations.preset = preset;
+        profile
+    }
+
+    /// The regression this resolver exists for.
+    ///
+    /// A profile made before an optimization was implemented has an explicit
+    /// `false` for it. Once the entry is finished and promoted, `Balanced`
+    /// includes it -- and the profile must follow, or a user on Balanced is
+    /// frozen at whatever Balanced meant the day they made the profile.
+    #[test]
+    fn a_named_preset_outranks_a_stale_stored_false() {
+        let measured = all()
+            .iter()
+            .find(|o| {
+                o.is_actionable() && o.category == Category::Safe && o.evidence.is_some()
+            })
+            .copied()
+            .expect("at least one measured, safe, active optimization");
+
+        let mut profile = profile_with(OptimizationPreset::Balanced);
+        profile
+            .optimizations
+            .rendering
+            .insert(measured.id.to_owned(), false);
+
+        assert!(
+            enabled_for(&profile, &measured),
+            "{} is in Balanced, so a stale stored false must not hold it off",
+            measured.id
+        );
+    }
+
+    /// And the other half: Custom means the user curated the list, so the
+    /// stored answer is the answer.
+    #[test]
+    fn custom_honours_what_was_stored() {
+        let entry = all()
+            .iter()
+            .find(|o| o.is_actionable())
+            .copied()
+            .expect("an actionable optimization");
+
+        let mut profile = profile_with(OptimizationPreset::Custom);
+        profile
+            .optimizations
+            .rendering
+            .insert(entry.id.to_owned(), true);
+        assert!(enabled_for(&profile, &entry));
+
+        profile
+            .optimizations
+            .rendering
+            .insert(entry.id.to_owned(), false);
+        assert!(!enabled_for(&profile, &entry));
+    }
+
+    /// An entry a Custom profile has never seen stays off rather than switching
+    /// itself on because the catalogue grew.
+    #[test]
+    fn custom_leaves_an_unmentioned_entry_off() {
+        let entry = all()
+            .iter()
+            .find(|o| o.is_actionable())
+            .copied()
+            .expect("an actionable optimization");
+        let profile = profile_with(OptimizationPreset::Custom);
+
+        assert!(!enabled_for(&profile, &entry));
+    }
+
+    /// The divergence that made this one function instead of two.
+    ///
+    /// The game is told what to run by `bridge::Settings`; the Performance page
+    /// draws from `enabled_for`. If those two can disagree, the launcher is
+    /// reporting a configuration the client is not in.
+    #[test]
+    fn the_game_is_told_exactly_what_the_page_shows() {
+        for preset in [
+            OptimizationPreset::Balanced,
+            OptimizationPreset::Competitive,
+            OptimizationPreset::MaximumFps,
+            OptimizationPreset::Custom,
+        ] {
+            let profile = profile_with(preset);
+            let settings = bridge::Settings::from_profile(&profile);
+            for optimization in GAME {
+                // Conflict stand-downs are the one legitimate difference, and
+                // this profile has no mods, so there are none here.
+                let told = settings.switches.get(optimization.id).copied();
+                assert_eq!(
+                    told,
+                    Some(enabled_for(&profile, optimization)),
+                    "{} disagrees between the page and the game under {preset:?}",
+                    optimization.id
+                );
+            }
+        }
+    }
+
     #[test]
     fn the_catalogue_matches_the_java_registry() {
         let source = concat!(
@@ -582,7 +728,10 @@ mod tests {
             }
         }
         assert!(
-            OptimizationPreset::Balanced.switches().values().any(|on| *on),
+            OptimizationPreset::Balanced
+                .switches()
+                .values()
+                .any(|on| *on),
             "Safe defaults enables nothing at all"
         );
     }
@@ -594,7 +743,11 @@ mod tests {
         let switches = OptimizationPreset::Balanced.switches();
         assert_eq!(switches.len(), all().len());
         for optimization in all() {
-            assert!(switches.contains_key(optimization.id), "{}", optimization.id);
+            assert!(
+                switches.contains_key(optimization.id),
+                "{}",
+                optimization.id
+            );
         }
     }
 

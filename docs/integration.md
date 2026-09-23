@@ -12,7 +12,9 @@ direction, and what deliberately does not.
 | `fathom/session.json` | launcher → game | **no** | What this launch is: profile, version, loader, preset, component version |
 | `config/fathom-performance.properties` | launcher → game | no | Which optimizations are on, and which were stood down for another mod |
 | `config/fathom-features.properties` | game ↔ itself | no | Module switches, settings, keybinds. The launcher never reads or writes it |
-| `fathom/bridge.json` + loopback socket | game → launcher | **yes** | Four verbs: ping, focus, diagnostics, next-profile, restart-into |
+| `fathom/bridge.json` + loopback socket | game → launcher | **yes** | Verbs: ping, focus, diagnostics, sign-in, account, next-profile, restart-into |
+| `<data root>/launcher/fathom/bridge.json` | game → launcher | **yes** | The same bridge, for as long as the launcher is open, for games Fathom did not start |
+| `<data root>/accounts/<uuid>-head.png` | launcher → game | no | The signed-in player's head, cut from their skin |
 
 The split between the first and the last is the point. The bridge exists to let
 the game *do* something to the launcher, so it is authenticated and its command
@@ -59,10 +61,31 @@ renderer and the same `Controls` as the Hub.
   **External Session**, never "Unknown Profile"; see `SessionName`.
 - **Buttons**: Singleplayer, Multiplayer and Options hand off to Minecraft's own
   screens. Fathom opens the Hub. Quit stops the game.
-- **No accounts button.** The game process holds a session it was handed at
-  launch and has no way to sign in or out. A button that turned out to mean
-  "open the launcher" would be a decorative control, in the one place where the
-  subject is somebody's Microsoft login.
+- **Account button** (top right): the player's head and username.
+  - When Fathom started the game, that is the session it was launched with,
+    and pressing it brings the launcher forward.
+  - When something else started it (a development run's `Player123`), the
+    button reads **Sign in**. Pressing it asks the launcher, over the bridge, to
+    run its own Microsoft sign-in (`LauncherAccount`); the launcher opens
+    Microsoft's page in the browser, starting the launcher first if it is
+    closed. The button then follows the sign-in through `account` until it
+    shows the signed-in username and head.
+  - No second authentication implementation exists in the game. It never
+    receives a password, a code or a token — only the public username and
+    UUID.
+
+### 1.2 Account data
+
+The launcher fetches `GET /minecraft/profile` as part of every sign-in and
+session restore, and keeps the public part — UUID, username, skin address,
+cape name — in `accounts/<uuid>.json`, with a 64×64 PNG of the head cut out of
+the skin beside it (`auth::account`). The skin is downloaded from
+`textures.minecraft.net` only when it changed, the head is missing, or a day has
+passed. Signing out deletes both files along with the stored refresh token.
+
+The refresh token is only ever in the OS credential store; the Minecraft access
+token only in memory. A launch within ten minutes of the access token expiring
+refreshes it first.
 
 ### 2.1 Why the Fathom button exists
 

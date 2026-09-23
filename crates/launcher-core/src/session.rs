@@ -338,7 +338,11 @@ mod tests {
         use crate::mods::{ModId, ModSource, ProfileMod};
 
         let mut profile = profile();
-        assert_eq!(component_version(&profile), None, "nothing installed, nothing claimed");
+        assert_eq!(
+            component_version(&profile),
+            None,
+            "nothing installed, nothing claimed"
+        );
 
         profile.mods.upsert(
             ProfileMod::new(

@@ -5,14 +5,15 @@ bottom-right corner with a smaller plane suspended below and behind it. The gap
 between the two planes is the mark. It was chosen from the six studies in
 [`concepts/`](concepts/), which stay in the tree as the record of that decision.
 
-Application icons are the two-tone treatment on the product's own black.
+Application icons are the two-tone treatment on a transparent ground, so the
+operating system does not draw a black square around the mark.
 
 | File | What it is |
 | --- | --- |
 | `logo.svg` | The mark for dark backgrounds — light frame, accent plane, transparent ground |
 | `logo-on-light.svg` | The same mark for light backgrounds |
 | `logo-mono.svg` | Single colour throughout, `currentColor`, for inline use and anywhere one ink is available |
-| `app-icon.svg` | Icon artwork: the mark on a full-bleed black tile. Master for every raster below |
+| `app-icon.svg` | Icon artwork: the mark on transparent ground. Master for every raster below |
 | `small/mark-16.svg`, `-20`, `-24` | The mark redrawn on its own pixel grid for small UI sizes |
 | `png/fathom-icon-*.png` | 16, 20, 24, 32, 40, 48, 64, 128, 256, 512 — for installers, store listings, web |
 | `wordmark.svg` | FATHOM, treatment A, outlined — for dark backgrounds |
@@ -50,8 +51,8 @@ Every shape is an axis-aligned rectangle on integer coordinates, which is why
 the build needs no SVG renderer and no image library: it fills rectangles into
 a buffer and writes the PNG and ICO containers itself.
 
-Colours are the theme's, not new ones: tile `#080b11` (`--midnight-mid`), frame
-`#f4f6f9` (`--text`), plane `#c4303c` (`--accent`). No gradient anywhere. The
+Colours are the theme's, not new ones: frame `#f4f6f9` (`--text`), plane
+`#c4303c` (`--accent`). The ground is transparent. No gradient anywhere. The
 mark reads flattened to a single colour, which is what `logo-mono.svg` is for.
 
 `icon.ico` carries 16, 20, 24, 32, 40, 48, 64, 128 and 256. Everything up to

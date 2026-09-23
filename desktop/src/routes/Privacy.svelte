@@ -24,10 +24,24 @@
 
   import Page from '../lib/ui/Page.svelte';
   import Section from '../lib/ui/Section.svelte';
+  import Row from '../lib/ui/Row.svelte';
+  import Switch from '../lib/ui/Switch.svelte';
   import { EASE, NORMAL, STAGGER } from '../lib/motion';
-  import { privacyView, type PrivacyView } from '../lib/api';
+  import {
+    privacyView,
+    setSetting,
+    settingsView,
+    type PrivacyView,
+    type SettingsView,
+    type ToggleRow,
+  } from '../lib/api';
+
+  export let onChanged: () => void = () => {};
 
   let view: PrivacyView | null = null;
+  let settings: SettingsView | null = null;
+  let busy = false;
+  let error = '';
   let guaranteesOpen = false;
   let hostsOpen = false;
   let activityOpen = false;
@@ -35,8 +49,38 @@
   onMount(() => {
     void (async () => {
       view = await privacyView();
+      settings = await settingsView();
     })();
   });
+
+  /* The settings this page is about.
+
+     They are the same rows Settings > Network draws, read from the same place
+     and written through the same command -- not a second copy that could
+     disagree with it. They are *here* because this is the page that tells you
+     what Fathom may contact, and being told that a repository is blocked while
+     the switch that blocks it lives on another page is how somebody ends up
+     pressing Install and watching nothing happen. */
+  $: privacyToggles = (settings?.toggles ?? []).filter(
+    (toggle) => toggle.section === 'network',
+  );
+
+  async function flip(row: ToggleRow, value: boolean) {
+    if (busy) return;
+    busy = true;
+    error = '';
+    try {
+      settings = await setSetting(row.id, value);
+      /* The host list and the session log are both derived from these, so the
+         board above has to be re-read or it would still show the old policy. */
+      view = await privacyView();
+      onChanged();
+    } catch (cause) {
+      error = String(cause);
+    } finally {
+      busy = false;
+    }
+  }
 
   /**
    * The headline facts.
@@ -74,6 +118,30 @@
         </div>
       {/each}
     </div>
+
+    {#if error}
+      <p class="failed">{error}</p>
+    {/if}
+
+    <Section label="What Fathom may do" summary="{privacyToggles.length} settings">
+      {#each privacyToggles as row (row.id)}
+        <Row
+          title={row.label}
+          detail={row.detail}
+          badge={row.overriddenBy ?? ''}
+          dimmed={Boolean(row.overriddenBy)}
+        >
+          <svelte:fragment slot="control">
+            <Switch
+              checked={row.value}
+              disabled={busy || Boolean(row.overriddenBy)}
+              label={row.label}
+              onChange={(value) => void flip(row, value)}
+            />
+          </svelte:fragment>
+        </Row>
+      {/each}
+    </Section>
 
     <Section
       label="What Fathom does"
@@ -144,6 +212,15 @@
 {/if}
 
 <style>
+  .failed {
+    margin: 0 0 var(--s-3);
+    padding: var(--s-3);
+    border: 1px solid color-mix(in srgb, var(--danger, var(--warn)) 40%, transparent);
+    border-radius: var(--r-2, 8px);
+    font-size: var(--t-body);
+    color: var(--warn);
+  }
+
   .facts {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

@@ -31,8 +31,8 @@ pub mod privacy;
 pub mod profiles;
 pub mod recovery;
 pub mod settings;
-pub mod supplied;
 pub mod setup;
+pub mod supplied;
 
 use serde::Serialize;
 
@@ -120,6 +120,97 @@ pub struct AccountSummary {
     pub signed_in: bool,
     /// True for the fake local identity, so the shell can say so permanently.
     pub development: bool,
+    /// The Minecraft UUID, dashed. Public: every server the player joins sees it.
+    pub uuid: Option<String>,
+    /// The player's head as a `data:image/png` URL, cut from their skin. `None`
+    /// for a default skin or while it has not been fetched; the shell then
+    /// shows the initial it always has.
+    pub avatar: Option<String>,
+    /// This account is remembered and its session is being restored right now.
+    ///
+    /// Distinct from `signed_in`, and never true at the same time. Restoring a
+    /// session is three or four round trips to Microsoft, Xbox and Mojang, so
+    /// it takes a few seconds — and for those seconds the shell used to be told
+    /// nothing at all and drew "Sign in", which is what somebody who had just
+    /// signed in reads as "it forgot me".
+    ///
+    /// So the name and face are sent, with this flag saying what they are: who
+    /// is coming back, not who is here. The shell shows them subdued, and never
+    /// claims the account is usable — a launch in this state is still refused
+    /// by the auth gate, which is the check that actually matters.
+    pub remembered: bool,
+}
+
+impl AccountSummary {
+    pub fn from_core(core: &Launcher) -> Self {
+        // Only a signed-in account is shown. A remembered one whose session has
+        // not been restored is not "signed in", and showing its name as if it
+        // were would be the placeholder problem in a different shape.
+        // A remembered account is shown, and shown as remembered. The rule this
+        // replaces -- "only a signed-in account is shown" -- was guarding
+        // against displaying a name as though it were signed in, which is still
+        // guarded: `signed_in` stays false and `remembered` says which state
+        // this is. What it also did, unintentionally, was blank the shell for
+        // the several seconds a token refresh takes.
+        match core.account() {
+            Some(account) => Self::from_view(account),
+            None => Self {
+                name: None,
+                signed_in: false,
+                development: false,
+                uuid: None,
+                avatar: None,
+                remembered: false,
+            },
+        }
+    }
+
+    pub fn from_view(account: launcher_core::services::AccountView) -> Self {
+        Self {
+            name: Some(account.name),
+            signed_in: account.signed_in,
+            development: account.development,
+            uuid: Some(dashed_uuid(&account.id)),
+            avatar: account.head.as_deref().map(avatar_url),
+            // The two are exclusive by construction: an account the core hands
+            // back is either the live session or the remembered one.
+            remembered: !account.signed_in,
+        }
+    }
+}
+
+/// Public profiles available to the account switcher. No credential material
+/// is represented by this type or returned to the WebView.
+pub fn accounts_view(core: &Launcher) -> Vec<AccountSummary> {
+    core.accounts()
+        .into_iter()
+        .map(AccountSummary::from_view)
+        .collect()
+}
+
+fn dashed_uuid(id: &str) -> String {
+    match (
+        id.get(0..8),
+        id.get(8..12),
+        id.get(12..16),
+        id.get(16..20),
+        id.get(20..32),
+    ) {
+        (Some(a), Some(b), Some(c), Some(d), Some(e)) if id.len() == 32 => {
+            format!("{a}-{b}-{c}-{d}-{e}")
+        }
+        _ => id.to_owned(),
+    }
+}
+
+/// A PNG as a data URL. The CSP already allows `data:` images, and a data URL
+/// keeps the file path of the cache out of the WebView entirely.
+pub fn avatar_url(png: &[u8]) -> String {
+    use base64::Engine as _;
+    format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(png)
+    )
 }
 
 /// The profile every screen is talking about.
@@ -142,17 +233,14 @@ pub fn current_profile(core: &Launcher) -> Option<Profile> {
 pub fn home_view(core: &Launcher) -> HomeView {
     let profile = current_profile(core);
 
-    let identity = core.identity();
-    let account = AccountSummary {
-        name: identity.as_ref().map(|i| i.profile.name.clone()),
-        signed_in: identity.is_some(),
-        development: identity.as_ref().is_some_and(|i| !i.kind.is_production()),
-    };
+    let account = AccountSummary::from_core(core);
 
     let action = match profile.as_ref() {
         Some(profile) => {
             let version = core.cached_version(&profile.version_id);
-            let snapshot = version.as_ref().and_then(|version| install_snapshot(core, profile, version));
+            let snapshot = version
+                .as_ref()
+                .and_then(|version| install_snapshot(core, profile, version));
             let readiness = core.readiness(profile, version.as_ref(), snapshot.as_ref());
             launch_action(&readiness.blockers, core.identity_warning())
         }
@@ -193,7 +281,9 @@ fn install_snapshot(
         .ok()?;
     let natives = core.dirs_for(profile).natives_dir();
     let report = core.install_service().quick_check(&resolved, &natives);
-    Some(launcher_core::InstallSnapshot::from_report(&report, &resolved))
+    Some(launcher_core::InstallSnapshot::from_report(
+        &report, &resolved,
+    ))
 }
 
 /// Turn the first blocker into a button.
@@ -220,48 +310,54 @@ fn launch_action(blockers: &[Blocker], identity_warning: Option<&str>) -> Launch
     // front of the screen can fix. It reads as "sign in required" like any
     // other signed-out state, and the real reason moves to the developer note.
     let developer_note = identity_warning.map(str::to_owned).or_else(|| {
-        blockers
-            .iter()
-            .find_map(|blocker| match blocker {
-                Blocker::NoClientId => Some(
-                    "This build has no Microsoft application id, so sign-in is disabled. \
+        blockers.iter().find_map(|blocker| match blocker {
+            Blocker::NoClientId => Some(
+                "This build has no Microsoft application id, so sign-in is disabled. \
                      Set FATHOM_AZURE_CLIENT_ID to use your own registration."
-                        .to_owned(),
-                ),
-                _ => None,
-            })
+                    .to_owned(),
+            ),
+            Blocker::FathomClient(reason) => Some(reason.clone()),
+            _ => None,
+        })
     });
 
     // The *first* blocker becomes the button. Matched directly rather than
     // searched, because every variant maps to an action -- there is no such
     // thing as a blocker with nothing to press.
     let (label, detail, command) = match blockers.first() {
-        Some(Blocker::SignedOut | Blocker::SessionExpired | Blocker::NoClientId) => {
-            ("SIGN IN REQUIRED", "Sign in with Microsoft to play", "sign-in")
-        }
-        Some(Blocker::NotEntitled(_)) => {
-            ("ACCOUNT ISSUE", "This account does not own Minecraft", "account")
-        }
+        Some(Blocker::SignedOut | Blocker::SessionExpired | Blocker::NoClientId) => (
+            "SIGN IN REQUIRED",
+            "Sign in with Microsoft to play",
+            "sign-in",
+        ),
+        Some(Blocker::NotEntitled(_)) => (
+            "ACCOUNT ISSUE",
+            "This account does not own Minecraft",
+            "account",
+        ),
         Some(Blocker::NeedsInstall(snapshot))
             if snapshot.state == launcher_core::install::InstallationState::Corrupted =>
         {
             ("REPAIR REQUIRED", "Some game files are damaged", "play")
         }
-        Some(Blocker::NeedsInstall(_)) => {
-            ("PREPARE GAME", "Download the game files", "play")
-        }
-        Some(Blocker::InstallNotChecked) => {
-            ("PREPARE GAME", "Check the game files first", "play")
-        }
+        Some(Blocker::NeedsInstall(_)) => ("PREPARE GAME", "Download the game files", "play"),
+        Some(Blocker::InstallNotChecked) => ("PREPARE GAME", "Check the game files first", "play"),
         Some(Blocker::NoJava { .. } | Blocker::WrongJava { .. }) => {
             ("JAVA REQUIRED", "Minecraft 1.8.9 needs Java 8", "java")
         }
-        Some(Blocker::LoaderNotImplemented(_)) => {
-            ("LOADER UNAVAILABLE", "This loader is not ready yet", "profiles")
-        }
+        Some(Blocker::LoaderNotImplemented(_)) => (
+            "LOADER UNAVAILABLE",
+            "This loader is not ready yet",
+            "profiles",
+        ),
         Some(Blocker::OfflineWithWorkOutstanding) => {
             ("OFFLINE", "Offline mode blocks downloads", "settings")
         }
+        Some(Blocker::FathomClient(_)) => (
+            "FATHOM CLIENT MISSING",
+            "This build cannot start Fathom",
+            "recovery",
+        ),
         None => ("NEEDS ATTENTION", "Open Recovery to see why", "recovery"),
     };
 

@@ -2,17 +2,24 @@
 //!
 //! # What this is for
 //!
-//! Four things, all of them small: bring the launcher to the front, choose which
-//! profile launches next, ask it to relaunch into one, and say hello. That is
-//! the whole protocol, and it is the whole protocol on purpose — see below.
+//! A handful of small things: bring the launcher to the front, choose which
+//! profile launches next, ask it to relaunch into one, start a Microsoft
+//! sign-in, ask who is signed in, and say hello. That is the whole protocol,
+//! and it is the whole protocol on purpose — see below.
 //!
 //! # What never crosses it
 //!
-//! **No account token, no refresh token, no Microsoft identity, no username, no
-//! session id, in either direction.** The game module has no reason to know any
-//! of it and this type gives it no way to ask: [`Command`] is a closed enum with
-//! four variants, and a reply is one line of text the launcher composes. There
-//! is no "get" verb and no field the game can name.
+//! **No access token, no refresh token, no Xbox or XSTS token, no device or
+//! authorization code, no session id, no Microsoft email, in either
+//! direction.** [`Command`] is a closed enum and a reply is one line of text the
+//! launcher composes.
+//!
+//! The one piece of identity that does cross is the *public* Minecraft profile
+//! — a username and a UUID — in answer to [`Command::Account`]. It is what
+//! every server the player joins already sees, and the game already holds it
+//! for its own session; the verb exists so the menu of a game that was not
+//! given a real session can show the account the launcher has signed in, and
+//! offer to sign in through the launcher when it has none.
 //!
 //! That is a stronger guarantee than a policy, and it is the reason the
 //! protocol is an enum rather than a general RPC.
@@ -83,6 +90,16 @@ pub enum Command {
     /// the window forward and selects that page; it reads nothing back, because
     /// a reply is one line and this protocol has no "get".
     Diagnostics,
+    /// Start the launcher's Microsoft sign-in, the same flow its own Sign In
+    /// button starts, and bring its window forward. When an account is already
+    /// signed in, only shows it.
+    SignIn,
+    /// Who is signed in: the public profile, or the state of the sign-in.
+    Account,
+    /// Public profiles remembered by the launcher, for the in-game picker.
+    Accounts,
+    /// Make a remembered account active for the next launch.
+    SwitchAccount(String),
     /// Select a profile and ask to relaunch into it.
     ///
     /// The launcher decides whether to act. The module never terminates the
@@ -110,11 +127,21 @@ impl Command {
             "ping" => Some(Command::Ping),
             "focus" => Some(Command::Focus),
             "diagnostics" => Some(Command::Diagnostics),
+            "sign-in" if rest.is_empty() => Some(Command::SignIn),
+            "account" if rest.is_empty() => Some(Command::Account),
+            "accounts" if rest.is_empty() => Some(Command::Accounts),
+            "switch-account" if is_account_id(rest) => {
+                Some(Command::SwitchAccount(rest.to_owned()))
+            }
             "next-profile" if is_id(rest) => Some(Command::NextProfile(rest.to_owned())),
             "restart-into" if is_id(rest) => Some(Command::RestartInto(rest.to_owned())),
             _ => None,
         }
     }
+}
+
+fn is_account_id(value: &str) -> bool {
+    value.len() == 32 && value.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// Whether something is shaped like a profile id.
@@ -341,11 +368,13 @@ fn random_token() -> String {
     if bytes == [0u8; 32] {
         return String::new();
     }
-    bytes.iter().fold(String::with_capacity(64), |mut out, byte| {
-        // `write!` into a String cannot fail, so the result is discarded.
-        let _ = write!(out, "{byte:02x}");
-        out
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(64), |mut out, byte| {
+            // `write!` into a String cannot fail, so the result is discarded.
+            let _ = write!(out, "{byte:02x}");
+            out
+        })
 }
 
 /// Write the handshake the module reads.
@@ -446,17 +475,19 @@ mod tests {
 
     /// Speak to a bridge the way the module does: token, command, one reply.
     fn ask(port: u16, token: &str, command: &str) -> String {
-        let mut stream = TcpStream::connect(SocketAddr::V4(SocketAddrV4::new(
-            Ipv4Addr::LOCALHOST,
-            port,
-        )))
-        .expect("the bridge is listening");
-        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut stream =
+            TcpStream::connect(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)))
+                .expect("the bridge is listening");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         stream
             .write_all(format!("{token}\n{command}\n").as_bytes())
             .expect("the request is sent");
         let mut reply = String::new();
-        BufReader::new(stream).read_line(&mut reply).expect("a reply");
+        BufReader::new(stream)
+            .read_line(&mut reply)
+            .expect("a reply");
         reply.trim().to_owned()
     }
 
@@ -471,7 +502,19 @@ mod tests {
     }
 
     #[test]
-    fn only_the_four_commands_parse() {
+    fn only_the_known_commands_parse() {
+        assert_eq!(Command::parse("sign-in"), Some(Command::SignIn));
+        assert_eq!(Command::parse("account"), Some(Command::Account));
+        assert_eq!(Command::parse("accounts"), Some(Command::Accounts));
+        assert_eq!(
+            Command::parse("switch-account 0123456789abcdef0123456789abcdef"),
+            Some(Command::SwitchAccount(
+                "0123456789abcdef0123456789abcdef".to_owned()
+            ))
+        );
+        // Neither takes an argument, so nothing can be asked *about*.
+        assert_eq!(Command::parse("account token"), None);
+        assert_eq!(Command::parse("sign-in someone@example.com"), None);
         assert_eq!(Command::parse("ping"), Some(Command::Ping));
         assert_eq!(Command::parse("focus"), Some(Command::Focus));
         assert_eq!(
@@ -494,10 +537,17 @@ mod tests {
             "next-profile with space",
             "exec",
         ] {
-            assert_eq!(Command::parse(hostile), None, "{hostile:?} should be refused");
+            assert_eq!(
+                Command::parse(hostile),
+                None,
+                "{hostile:?} should be refused"
+            );
         }
         // And an argument that is too long is not an id however it is spelled.
-        assert_eq!(Command::parse(&format!("next-profile {}", "a".repeat(200))), None);
+        assert_eq!(
+            Command::parse(&format!("next-profile {}", "a".repeat(200))),
+            None
+        );
     }
 
     #[test]
@@ -525,7 +575,13 @@ mod tests {
 
         // The guarantee the whole module rests on, checked against the bytes
         // rather than asserted in a comment.
-        for forbidden in ["access_token", "refresh", "Bearer", "minecraft_token", "uuid"] {
+        for forbidden in [
+            "access_token",
+            "refresh",
+            "Bearer",
+            "minecraft_token",
+            "uuid",
+        ] {
             assert!(
                 !text.to_lowercase().contains(&forbidden.to_lowercase()),
                 "the handshake mentions {forbidden}"
@@ -595,7 +651,11 @@ mod tests {
 
         let token = token_from(tmp.path());
         assert_eq!(ask(bridge.port(), &token, "sudo"), "no unknown command");
-        assert_eq!(seen.load(Ordering::SeqCst), 0, "it must not reach the handler");
+        assert_eq!(
+            seen.load(Ordering::SeqCst),
+            0,
+            "it must not reach the handler"
+        );
     }
 
     #[test]

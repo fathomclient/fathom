@@ -61,6 +61,25 @@ pub enum LaunchRefusal {
     #[error("this profile is not usable: {0}")]
     InvalidProfile(String),
 
+    /// A component is installed that cannot work on its own under this loader,
+    /// and the thing it needs is not there.
+    ///
+    /// This exists for OptiFine. Dropping its jar into a Legacy Fabric profile
+    /// produces one of two outcomes without this check: the loader ignores it
+    /// entirely and the player is left wondering why nothing changed, or -- if
+    /// something does pick it up -- Minecraft dies during class transformation
+    /// with a stack trace nobody outside this project can read. Refusing before
+    /// the process starts, and naming the missing piece, is the only version of
+    /// this that a player can act on.
+    #[error(
+        "{component} needs {bridge} to run under {loader}, and {bridge} is not installed.          Add it from the Mods page, or remove {component}."
+    )]
+    MissingBridge {
+        component: &'static str,
+        bridge: &'static str,
+        loader: &'static str,
+    },
+
     /// No Java at all.
     #[error("no Java {required_major} runtime was found")]
     NoJava { required_major: u32 },
@@ -103,6 +122,20 @@ pub enum LaunchRefusal {
     /// The process would not start.
     #[error(transparent)]
     Process(#[from] ProcessError),
+
+    /// A Fathom profile whose client module cannot be supplied, placed or
+    /// verified. Refused rather than launched, because launched it is vanilla.
+    #[error("{0}")]
+    FathomClientUnavailable(String),
+
+    /// The profile's game directory is the user's own Minecraft folder.
+    #[error(
+        "this profile's game directory is your normal Minecraft folder ({}). Fathom launches \
+         its own isolated instance and does not modify that folder; choose another directory \
+         or use the managed one",
+        .0.display()
+    )]
+    SharedMinecraftDirectory(std::path::PathBuf),
 }
 
 impl LaunchRefusal {
@@ -132,6 +165,7 @@ impl LaunchRefusal {
             LaunchRefusal::LoaderNotImplemented(_) => "loader-not-implemented",
             LaunchRefusal::LoaderUnavailable(_) => "loader-unavailable",
             LaunchRefusal::InvalidProfile(_) => "invalid-profile",
+            LaunchRefusal::MissingBridge { .. } => "missing-bridge",
             LaunchRefusal::NoJava { .. } => "no-java",
             LaunchRefusal::IncompatibleJava { .. } => "incompatible-java",
             LaunchRefusal::JavaMissing(_) => "java-missing",
@@ -141,6 +175,8 @@ impl LaunchRefusal {
             LaunchRefusal::AlreadyRunning { .. } => "already-running",
             LaunchRefusal::Build(_) => "plan-build-failed",
             LaunchRefusal::Process(_) => "spawn-failed",
+            LaunchRefusal::FathomClientUnavailable(_) => "fathom-client-unavailable",
+            LaunchRefusal::SharedMinecraftDirectory(_) => "shared-minecraft-directory",
         }
     }
 }

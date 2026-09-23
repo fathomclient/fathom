@@ -67,12 +67,11 @@ impl Settings {
     pub fn from_profile(profile: &Profile) -> Self {
         let mut switches = BTreeMap::new();
         for optimization in super::GAME {
-            let enabled = profile
-                .optimizations
-                .rendering
-                .get(optimization.id)
-                .copied()
-                .unwrap_or(false);
+            // Through the shared resolver, not the stored map. The map and the
+            // preset can disagree, and reading it directly here is what made the
+            // game run a different set of optimizations from the ones the
+            // Performance page was showing. See `optimizations::enabled_for`.
+            let enabled = super::enabled_for(profile, optimization);
             switches.insert(optimization.id.to_owned(), enabled);
         }
         // Anything another mod is already doing is turned off here rather
@@ -162,13 +161,33 @@ mod tests {
         Profile::new(ProfileId::new("test").unwrap(), "Test")
     }
 
+    /// A default profile is on `Balanced`, so the file says on for exactly the
+    /// entries Balanced includes -- the ones that are implemented, classified
+    /// Safe and actually measured -- and off for everything else.
+    ///
+    /// This used to assert that *everything* was off, from when no game-side
+    /// optimization was implemented and Balanced was therefore empty. It stayed
+    /// passing by accident after the first entries were promoted, because the
+    /// bridge read the stored switch map instead of the preset -- which is the
+    /// same defect that left users on Balanced running nothing.
     #[test]
-    fn a_default_profile_writes_every_game_switch_off() {
-        let settings = Settings::from_profile(&profile());
+    fn a_default_profile_writes_the_balanced_set() {
+        let profile = profile();
+        let settings = Settings::from_profile(&profile);
         assert_eq!(settings.switches.len(), super::super::GAME.len());
+
+        for optimization in super::super::GAME {
+            let on = settings.switches.get(optimization.id).copied().unwrap();
+            assert_eq!(
+                on,
+                OptimizationPreset::Balanced.includes(optimization),
+                "{} does not match what Balanced includes",
+                optimization.id
+            );
+        }
         assert!(
-            settings.switches.values().all(|on| !on),
-            "nothing is enabled by default, and the file must say so explicitly"
+            settings.switches.values().any(|on| *on),
+            "Balanced has measured entries in it, so the file cannot be all off"
         );
     }
 
@@ -182,9 +201,16 @@ mod tests {
         }
     }
 
+    /// Under `Custom`, and only under Custom, the stored map is the truth.
+    ///
+    /// A named preset deliberately outranks it (see
+    /// `optimizations::enabled_for`), and toggling any single entry moves a
+    /// profile to Custom anyway -- so this is the state a hand-picked switch
+    /// actually lives in.
     #[test]
     fn switches_round_trip_through_the_file_format() {
         let mut p = profile();
+        p.optimizations.preset = OptimizationPreset::Custom;
         p.optimizations
             .rendering
             .insert("render.font.batching".to_owned(), true);
@@ -266,12 +292,16 @@ mod tests {
         p.optimizations
             .rendering
             .insert("render.font.batching".to_owned(), true);
-        Settings::from_profile(&p).write_to(directory.path()).unwrap();
+        Settings::from_profile(&p)
+            .write_to(directory.path())
+            .unwrap();
 
         p.optimizations
             .rendering
             .insert("render.font.batching".to_owned(), false);
-        let written = Settings::from_profile(&p).write_to(directory.path()).unwrap();
+        let written = Settings::from_profile(&p)
+            .write_to(directory.path())
+            .unwrap();
 
         let text = std::fs::read_to_string(&written).expect("read back");
         assert!(text.contains("opt.render.font.batching = false"));

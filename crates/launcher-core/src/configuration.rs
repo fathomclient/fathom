@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::fs_safety::{self, FsError};
 use crate::network::NetworkPolicy;
-use crate::profiles::JavaPolicy;
 use crate::paths::DataPaths;
+use crate::profiles::JavaPolicy;
 use crate::profiles::ProfileId;
 
 #[derive(Debug, thiserror::Error)]

@@ -1319,6 +1319,12 @@ fn prepared(
 > {
     let mut core = open()?;
     core.refresh_java();
+    // The desktop restores the remembered account during start-up. Do the
+    // same for headless launches so an unattended diagnostic run can use the
+    // already-authorized account without opening a second sign-in flow.
+    if core.identity().is_none() && core.restore_session()? {
+        println!("restored the remembered account");
+    }
     ensure_identity(&mut core)?;
 
     let profile = pick_profile(&core, version)?;

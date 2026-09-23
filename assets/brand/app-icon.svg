@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Fathom">
   <title>Fathom</title>
-  <rect width="64" height="64" fill="#080b11"/>
   <rect fill="#f4f6f9" x="8" y="8" width="48" height="10"/>
   <rect fill="#f4f6f9" x="8" y="18" width="10" height="38"/>
   <rect fill="#f4f6f9" x="18" y="46" width="22" height="10"/>

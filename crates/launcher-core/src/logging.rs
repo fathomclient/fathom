@@ -120,7 +120,7 @@ fn filter(verbose: bool) -> EnvFilter {
     let ours = if verbose { "debug" } else { "info" };
     // `EnvFilter::new` parses a full directive *list*, which is what this is.
     EnvFilter::new(format!(
-        "warn,launcher_core={ours},launcher_ui={ours},fathom={ours},fathom_cli={ours}"
+        "warn,launcher_core={ours},launcher_desktop={ours},launcher_ui={ours},fathom={ours},fathom_cli={ours}"
     ))
 }
 
@@ -243,6 +243,13 @@ const FIELD_MARKERS: &[&str] = &[
     "device_code",
     "RpsTicket",
     "accessToken",
+    // Xbox Live and XSTS responses carry their token as `"Token"`, and the
+    // Minecraft login sends it back as `XBL3.0 x=<hash>;<token>`.
+    "Token",
+    "XBL3.0",
+    // A device sign-in's user code, and Microsoft's link page carrying it.
+    "user_code",
+    "otc",
     // Session credentials. We persist no cookie jar and enable no cookie
     // feature, but a proxy log or a pasted capture can still contain one.
     "Set-Cookie",
@@ -276,6 +283,32 @@ pub fn scrub(line: &str) -> String {
     for marker in FIELD_MARKERS {
         out = scrub_after(&out, marker, false);
     }
+    scrub_jwts(&out)
+}
+
+/// Replace anything shaped like a JWT or JWE -- `eyJ` then dot-separated
+/// base64url -- wherever it appears, whatever it is labelled. Xbox, XSTS and
+/// Minecraft tokens all have that shape, so a token that reaches a log line
+/// without a marker in front of it is still caught.
+fn scrub_jwts(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("eyJ") {
+        let (before, candidate) = rest.split_at(at);
+        let length = candidate
+            .char_indices()
+            .find(|(_, c)| !(c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')))
+            .map_or(candidate.len(), |(i, _)| i);
+        let token = candidate.get(..length).unwrap_or_default();
+        out.push_str(before);
+        if token.len() >= 20 && token.contains('.') {
+            out.push_str("<redacted>");
+        } else {
+            out.push_str(token);
+        }
+        rest = candidate.get(length..).unwrap_or_default();
+    }
+    out.push_str(rest);
     out
 }
 
@@ -343,6 +376,24 @@ fn scrub_after(text: &str, marker: &str, token_only: bool) -> String {
     clippy::panic
 )]
 mod tests {
+    #[test]
+    fn xbox_tokens_codes_and_bare_jwts_are_scrubbed() {
+        let xbox = r#"{"IssueInstant":"x","Token":"eyJlbmMiOiJBMTI4Q0JDK0hTMjU2IiwiYWxnIjoiUlNBLU9BRVAifQ.abc.def","DisplayClaims":{}}"#;
+        assert!(
+            !super::scrub(xbox).contains("eyJlbmMi"),
+            "{}",
+            super::scrub(xbox)
+        );
+        let identity = "XBL3.0 x=1234567890;eyJhbGciOiJSUzI1NiJ9.payloadpart.sig";
+        assert!(!super::scrub(identity).contains("payloadpart"));
+        let bare = "unexpected value eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln in response";
+        let scrubbed = super::scrub(bare);
+        assert!(!scrubbed.contains("eyJzdWIi"), "{scrubbed}");
+        assert!(scrubbed.contains("in response"));
+        assert!(!super::scrub("user_code=ABCD1234").contains("ABCD1234"));
+        assert!(!super::scrub("https://www.microsoft.com/link?otc=ABCD1234").contains("ABCD1234"));
+    }
+
     use super::*;
 
     #[test]
@@ -515,6 +566,7 @@ mod tests {
     fn verbose_raises_our_crates_and_not_everyone_elses() {
         let rendered = filter(true).to_string();
         assert!(rendered.contains("launcher_core=debug"), "{rendered}");
+        assert!(rendered.contains("launcher_desktop=debug"), "{rendered}");
         assert!(
             !rendered.contains("winit"),
             "verbose is about our code, not a dependency's: {rendered}"

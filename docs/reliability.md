@@ -14,9 +14,12 @@ wrong.
 cargo run -p launcher-ui
 ```
 
-Keeps the console. `windows_subsystem = "windows"` is `cfg_attr`-gated on
-`not(debug_assertions)`, so a debug build still prints to the terminal — useful
-developer output is not something to hide.
+This compatibility command starts the canonical Tauri/Svelte launcher and
+embeds the current `desktop/dist`, just like a packaged build. For hot reload,
+run `tools/dev.ps1`. It asks Windows for an available ephemeral loopback port,
+starts Vite with strict port ownership, and lets Tauri wait for an HTTP
+readiness response before creating WebView2. Ordinary Cargo runs use embedded
+assets and therefore cannot show a localhost error.
 
 ### The release executable
 
@@ -28,7 +31,8 @@ Produces, in `target/release/`:
 
 | File | What it is |
 |---|---|
-| **`fathom.exe`** | **The launcher.** The thing a user runs. |
+| **`fathom-desktop.exe`** | The canonical launcher binary; packaging copies it as `fathom.exe`. |
+| `fathom-ui.exe` | Compatibility binary built from the same canonical application. |
 | `fathom-cli.exe` | Headless companion: `doctor`, `recover`, `diagnostics`. |
 | `fathom-release.exe` | Offline release signing. Never shipped to users. |
 
@@ -42,27 +46,26 @@ $pe = [BitConverter]::ToInt32($b, 0x3C)
 [BitConverter]::ToUInt16($b, $pe + 0x5C)   # 2 = GUI, 3 = console
 ```
 
-### A portable build
+### The Windows installer
 
-```bash
-cargo build --workspace --release
-mkdir Fathom
-copy target\release\fathom.exe Fathom\
+```powershell
+pwsh tools/build-installer.ps1
 ```
 
-That is the whole packaging story for now, deliberately. The brief's rule —
-`Launcher.exe`, not `start-launcher.bat` — is met by the executable being a real
-windowed binary, so there is nothing to wrap it in. An installer can come later
-and will wrap this same artifact.
+This is the sole distributable release pipeline. It installs locked frontend
+dependencies on the build machine, builds the current frontend and Minecraft
+client, embeds the frontend into the Tauri executable, bundles the current
+client jar, and creates a per-user NSIS installer in `dist/installer`.
 
-`tools/package-portable.ps1` does the copy for a developer. **It is not how
-anyone launches the launcher**; it produces the directory that contains the
-thing they launch.
+The installer registers a normal uninstall entry, creates a Start Menu
+shortcut, and bootstraps WebView2 when Windows does not already provide it. It
+does not require elevation. `tools/package-portable.ps1` remains a developer
+diagnostic artifact and is not the distribution format.
 
 ### What a user needs installed
 
-Nothing. No Rust, no Cargo, no JDK to *run the launcher* — Java is only needed to
-run Minecraft, and the launcher finds or (later) fetches it. No Visual C++
+Nothing. No Rust, Cargo, Node, npm, Gradle, or source checkout. Java is only
+needed to run Minecraft, and the launcher finds or fetches it. No Visual C++
 redistributable: the MSVC runtime is statically linked by default for this
 target.
 
@@ -77,7 +80,7 @@ absolute per-user directory and everything hangs off that.
 
 | Concept | Windows | Deletable? |
 |---|---|---|
-| Install directory | wherever the `.exe` is | Not ours — nothing writes here |
+| Install directory | `%LOCALAPPDATA%\Fathom Client` | Replaced by update/uninstall |
 | **Application data** | `%LOCALAPPDATA%\Fathom\data` | **No** |
 | Profiles | `…\data\profiles\<id>` | No — worlds live here |
 | Shared artifacts | `…\data\shared` | Re-downloadable, expensive |
@@ -87,15 +90,18 @@ absolute per-user directory and everything hangs off that.
 | **Temporary** | `…\data\tmp` | **Yes** |
 | Logs | `…\data\logs` | Yes, at a cost to diagnosis |
 
+The different `Fathom Client` and `Fathom` roots are intentional: Tauri removes
+the former during uninstall, while worlds, profiles, accounts, and downloads in
+the latter survive updates and uninstall.
+
 The distinction that earns its keep is **shared artifacts vs cache**. Both are
 re-downloadable, so an early version had them as one thing — but deleting
 `shared/` costs 139 MB and several minutes, and deleting `cache/` costs nothing.
 Conflating them is how a launcher ends up with a "clear cache" button that
 re-downloads the game.
 
-`install_dir()` exists so that nothing writes there. A portable build sits where
-the user unzipped it; an installed one may sit in `Program Files`, which needs
-elevation. State goes in application data either way.
+`install_dir()` exists so that nothing writes there. Installed files are
+read-only application resources; state goes in application data.
 
 ### Logs
 

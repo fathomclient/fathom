@@ -28,11 +28,9 @@ const REPO = path.resolve(BRAND, '..', '..');
 const APP_ICONS = path.join(REPO, 'crates', 'launcher-desktop', 'icons');
 
 /* -- colour ------------------------------------------------------------- *
- * The tile is the product's own black -- `--midnight-mid` from theme.css --
- * rather than #000000, so the icon and the window it opens are the same
- * colour. The frame is `--text`, the plane is `--accent`. Three values, no
- * gradient, which is the whole point of the mark. */
-const TILE = [0x08, 0x0b, 0x11];
+ * The application mark has a transparent ground. Windows supplies the tile in
+ * task switchers and title bars; baking a second black tile into the artwork
+ * produces the visible square outline this generator is meant to avoid. */
 const FRAME = [0xf4, 0xf6, 0xf9];
 const ACCENT = [0xc4, 0x30, 0x3c];
 
@@ -107,13 +105,9 @@ function geometry(size) {
 
 function render(size) {
   const g = geometry(size);
+  // Buffer.alloc gives the ground alpha 0. Only the two pieces of the mark are
+  // made opaque below.
   const px = Buffer.alloc(size * size * 4);
-  for (let i = 0; i < size * size; i++) {
-    px[i * 4] = TILE[0];
-    px[i * 4 + 1] = TILE[1];
-    px[i * 4 + 2] = TILE[2];
-    px[i * 4 + 3] = 255;
-  }
   const fill = (rects, c) => {
     for (const [x, y, w, h] of rects) {
       for (let row = y; row < y + h; row++) {
@@ -181,7 +175,8 @@ function png(size, px) {
  * everything below 256 is what shells, installers and file dialogs actually
  * reach for -- so those stay in the format nothing has ever argued with. 256
  * is PNG because that is the convention and because uncompressed it would be
- * 264KB on its own. The mark is fully opaque, so the AND mask is all zeroes. */
+ * 264KB on its own. The AND mask mirrors transparent pixels for older shell
+ * paths that do not honour the 32-bit alpha channel. */
 
 const PNG_ENTRY_ABOVE = 128;
 
@@ -203,6 +198,14 @@ function bmpEntry(size, px) {
   }
   const maskRow = Math.ceil(size / 32) * 4;
   const mask = Buffer.alloc(maskRow * size);
+  for (let y = 0; y < size; y++) {
+    const srcY = size - 1 - y;
+    for (let x = 0; x < size; x++) {
+      if (px[(srcY * size + x) * 4 + 3] === 0) {
+        mask[y * maskRow + (x >> 3)] |= 0x80 >> (x & 7);
+      }
+    }
+  }
   header.writeUInt32LE(xor.length + mask.length, 20);
   return Buffer.concat([header, xor, mask]);
 }
@@ -278,7 +281,7 @@ write(path.join(BRAND, 'logo-mono.svg'), svg({
   size: 64, title: 'Fathom', base: 'currentColor', accent: 'currentColor',
 }));
 write(path.join(BRAND, 'app-icon.svg'), svg({
-  size: 64, title: 'Fathom', tile: true, base: FRAME_HEX, accent: ACCENT_HEX,
+  size: 64, title: 'Fathom', base: FRAME_HEX, accent: ACCENT_HEX,
 }));
 
 console.log('small-size masters, drawn on their own pixel grid');

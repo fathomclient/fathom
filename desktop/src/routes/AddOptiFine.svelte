@@ -33,6 +33,7 @@
   import Row from '../lib/ui/Row.svelte';
   import {
     addSuppliedJar,
+    installComponent,
     openPage,
     supplyDroppedJar,
     supplyJar,
@@ -130,6 +131,29 @@
     }
   }
 
+  /* Install the compatibility bridge into a profile.
+
+     Separate from addTo() on purpose. Adding OptiFine and installing OptiFabric
+     are two different things going into the profile, from two different places
+     and under two different licences: OptiFine is the file the user brought,
+     OptiFabric is fetched from Modrinth and needs their say-so. Collapsing them
+     into one button would mean a download happening because somebody dropped a
+     local file in. */
+  async function addBridge(profileId: string) {
+    if (busy || !jar?.bridge) return;
+    busy = true;
+    error = '';
+    try {
+      await installComponent(jar.bridge.id, profileId);
+      jar = await suppliedJar();
+      onChanged();
+    } catch (problem) {
+      error = String(problem);
+    } finally {
+      busy = false;
+    }
+  }
+
   function megabytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
@@ -176,8 +200,27 @@
   {#if jar}
     <Section label="What arrived">
       <Row title={jar.name} detail={jar.description} compact />
-      <Row title="Minecraft" detail={jar.minecraft ?? 'Not stated in the filename'} compact />
-      <Row title="Version" detail={jar.version?.replace(/_/g, ' ') ?? 'Not stated in the filename'} compact />
+      <Row
+        title="Minecraft"
+        detail={jar.minecraft ?? (jar.verified ? 'Not declared by the jar' : 'Not stated in the filename')}
+        compact
+      />
+      <Row
+        title="Version"
+        detail={jar.version?.replace(/_/g, ' ') ??
+          (jar.verified ? 'Not declared by the jar' : 'Not stated in the filename')}
+        compact
+      />
+      {#if jar.verified}
+        <!-- Worth saying out loud. Everything above was read out of the jar's
+             own bytecode, so it holds even if the file has been renamed, and a
+             jar merely *named* like OptiFine could not have produced it. -->
+        <Row
+          title="Identified"
+          detail="Read from the jar itself, not its filename."
+          compact
+        />
+      {/if}
       <Row title="Source" detail={jar.source} compact />
       <Row title="SHA-1" detail={jar.hash} compact />
       {#if !jar.recognised}
@@ -189,13 +232,35 @@
       {/if}
     </Section>
 
+    {#if jar.bridge}
+      <!-- Shown before the profile list, because it changes what "Add to
+           profile" means. Adding OptiFine to a Legacy Fabric profile without
+           this is the exact configuration that used to start the game and then
+           fail inside class transformation. -->
+      <Section label="Also needed">
+        <Row title={jar.bridge.name} detail={jar.bridge.reason} compact />
+        <Row title="Licence" detail={jar.bridge.summary} compact />
+      </Section>
+    {/if}
+
     <Section label="Add to installation" summary={`${usable.length} of ${jar.profiles.length} can take it`}>
       {#each usable as fit (fit.id)}
         <div class="fit">
           <div class="fit-text">
             <span class="fit-name">{fit.name}</span>
             {#if fit.note}<span class="quiet">{fit.note}</span>{/if}
+            {#if fit.needsBridge && jar.bridge}
+              <span class="needs">
+                <TriangleAlert size={12} strokeWidth={2} />
+                Needs {jar.bridge.name}, which this profile does not have yet.
+              </span>
+            {/if}
           </div>
+          {#if fit.needsBridge && jar.bridge}
+            <Button variant="normal" disabled={busy} onClick={() => void addBridge(fit.id)}>
+              Install {jar.bridge.name}
+            </Button>
+          {/if}
           <Button variant="primary" disabled={busy} onClick={() => void addTo(fit.id)}>
             Add to profile
           </Button>
@@ -309,6 +374,14 @@
     gap: var(--s3);
     padding: var(--s2) 0;
     border-bottom: 1px solid var(--chrome-line);
+  }
+
+  .needs {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--t-body);
+    color: var(--warn);
   }
 
   .fit-text {

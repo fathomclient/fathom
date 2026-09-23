@@ -1,8 +1,5 @@
 package net.fathom.optimizations.core.opt.text;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 /**
  * Remembers widths the game has already computed.
  *
@@ -33,9 +30,17 @@ import java.util.Map;
  *       caller is responsible for calling it at exactly those points. Everything else
  *       here is safe by construction; this is the one obligation.
  *   <li><strong>Unbounded growth.</strong> Chat is adversarial: a server can emit a
- *       distinct string every tick forever. Fixed-capacity LRU, so the worst case is a
+ *       distinct string every tick forever. Fixed capacity, so the worst case is a
  *       cache that never hits rather than a client that runs out of heap.
  * </ul>
+ *
+ * <h2>Storage</h2>
+ *
+ * <p>A {@link StringTable}: open-addressed, generational, nothing allocated on a hit.
+ * It replaced an access-ordered {@code LinkedHashMap} that relinked an entry on every
+ * lookup and boxed every width it stored. Widths are boxed once, on insert, and the
+ * same {@code Integer} is handed back on every hit, so a caller returning it through a
+ * Mixin callback allocates nothing either.
  *
  * <p>Deliberately unsynchronised. 1.8.9 lays out text on the render thread and nowhere
  * else, and synchronising would add back the cost this exists to remove.
@@ -51,7 +56,7 @@ public final class WidthMemo {
      */
     public static final int DEFAULT_CAPACITY = 4096;
 
-    private final Map<String, Integer> widths;
+    private final StringTable<Integer> widths;
 
     private long hits;
     private long misses;
@@ -61,21 +66,11 @@ public final class WidthMemo {
         this(DEFAULT_CAPACITY);
     }
 
-    public WidthMemo(final int capacity) {
+    public WidthMemo(int capacity) {
         if (capacity < 1) {
             throw new IllegalArgumentException("capacity must be positive: " + capacity);
         }
-        // Access-ordered LinkedHashMap: the JDK's own LRU, which is the one piece of
-        // caching machinery there is no reason to write again.
-        this.widths =
-                new LinkedHashMap<String, Integer>(capacity * 4 / 3 + 1, 0.75f, true) {
-                    private static final long serialVersionUID = 1L;
-
-                    @Override
-                    protected boolean removeEldestEntry(Map.Entry<String, Integer> eldest) {
-                        return size() > capacity;
-                    }
-                };
+        this.widths = new StringTable<Integer>(capacity);
     }
 
     /**
@@ -118,7 +113,7 @@ public final class WidthMemo {
      * class can produce a wrong answer.
      */
     public void invalidate() {
-        if (!widths.isEmpty()) {
+        if (widths.size() > 0) {
             invalidations++;
         }
         widths.clear();

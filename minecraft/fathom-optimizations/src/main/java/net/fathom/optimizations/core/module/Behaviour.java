@@ -40,8 +40,17 @@ public final class Behaviour {
      */
     public static final String MOVEMENT_TOGGLE = "movement-toggle";
 
+    /**
+     * Fathom's own performance layer: the entity and tile entity distance
+     * limits, the nametag fast path and the cached HUD layer. Implemented in
+     * {@code fabric.perf} and read by the render hooks there.
+     */
+    public static final String PERFORMANCE_LAYER = "performance-layer";
+
     /** Every behaviour the client implements. */
-    public static final String[] ALL = {ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE};
+    public static final String[] ALL = {
+        ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE, PERFORMANCE_LAYER
+    };
 
     private Behaviour() {}
 

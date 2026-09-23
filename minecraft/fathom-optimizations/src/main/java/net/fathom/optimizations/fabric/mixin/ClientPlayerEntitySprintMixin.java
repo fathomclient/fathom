@@ -28,6 +28,11 @@ public abstract class ClientPlayerEntitySprintMixin {
 
     @Inject(method = "tickMovement()V", at = @At("HEAD"))
     private void fathom$advanceToggles(CallbackInfo info) {
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
+            return;
+        }
         MovementToggles.tick((ClientPlayerEntity) (Object) this);
     }
 
@@ -35,6 +40,11 @@ public abstract class ClientPlayerEntitySprintMixin {
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/option/KeyBinding;isPressed()Z"))
     private boolean fathom$sprintKey(KeyBinding binding) {
         boolean pressed = binding.isPressed();
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
+            return pressed;
+        }
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.options == null || binding != client.options.sprintKey) {
             return pressed;

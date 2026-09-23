@@ -25,6 +25,11 @@ public abstract class KeyboardInputSneakMixin {
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/option/KeyBinding;isPressed()Z"))
     private boolean fathom$sneakKey(KeyBinding binding) {
         boolean pressed = binding.isPressed();
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
+            return pressed;
+        }
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.options == null || binding != client.options.sneakKey) {
             return pressed;

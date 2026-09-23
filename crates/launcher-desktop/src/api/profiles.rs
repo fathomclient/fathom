@@ -94,7 +94,8 @@ pub fn list(core: &Launcher) -> Vec<ProfileRow> {
             // Resolved only for profiles that have a parent, so the common case
             // costs nothing.
             let effective = if profile.is_derived() {
-                core.resolve_profile(&profile).unwrap_or_else(|_| profile.clone())
+                core.resolve_profile(&profile)
+                    .unwrap_or_else(|_| profile.clone())
             } else {
                 profile.clone()
             };
@@ -163,7 +164,6 @@ pub struct LoaderOption {
     pub label: String,
     pub available: bool,
 }
-
 
 /// One line of a profile's identity: a label and what it is set to.
 ///
@@ -364,8 +364,7 @@ pub fn art(core: &Launcher, id: &str) -> Option<String> {
 /// arithmetic that cannot change. Every dependency in the shell is one more
 /// thing shipping inside a launcher that makes a point of its supply chain.
 fn encode_base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
 
     for chunk in bytes.chunks(3) {

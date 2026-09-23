@@ -624,7 +624,10 @@ impl Modrinth {
         minecraft: &str,
         grant: &PerActionGrant,
     ) -> Result<Option<Version>, ModrinthError> {
-        Ok(self.versions(project, loader, minecraft, grant)?.into_iter().next())
+        Ok(self
+            .versions(project, loader, minecraft, grant)?
+            .into_iter()
+            .next())
     }
 
     /// Download a version into the mod store, verifying its published hash.
@@ -647,17 +650,12 @@ impl Modrinth {
             });
         }
 
-        let request = descriptor_from_url(
-            &version.url,
-            Purpose::DownloadMod,
-            Feature::ModBrowse,
-        )
-        .map_err(|_| ModrinthError::UntrustedHost(version.url.clone()))?;
+        let request = descriptor_from_url(&version.url, Purpose::DownloadMod, Feature::ModBrowse)
+            .map_err(|_| ModrinthError::UntrustedHost(version.url.clone()))?;
 
-        let limit = version
-            .hash
-            .size
-            .map_or(MAX_MOD_BYTES, |size| size.saturating_add(4096).min(MAX_MOD_BYTES));
+        let limit = version.hash.size.map_or(MAX_MOD_BYTES, |size| {
+            size.saturating_add(4096).min(MAX_MOD_BYTES)
+        });
 
         let mut bytes: Vec<u8> = Vec::new();
         self.http
@@ -1128,7 +1126,10 @@ mod tests {
             loaders: Vec::new(),
             updated: None,
         };
-        assert_eq!(hit.project_url(), "https://modrinth.com/mod/legacy-fabric-api");
+        assert_eq!(
+            hit.project_url(),
+            "https://modrinth.com/mod/legacy-fabric-api"
+        );
     }
 
     /// A `LicenseRef-` identifier is a custom licence with no SPDX meaning.
@@ -1156,7 +1157,10 @@ mod tests {
                 id: "Apache-2.0".into()
             }
         );
-        assert_eq!(with(Some("LicenseRef-Custom-1.0")).licence(), License::Unknown);
+        assert_eq!(
+            with(Some("LicenseRef-Custom-1.0")).licence(),
+            License::Unknown
+        );
         assert_eq!(with(None).licence(), License::Unknown);
         assert_eq!(with(Some("")).licence(), License::Unknown);
     }

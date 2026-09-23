@@ -31,7 +31,13 @@
   import Switch from '../lib/ui/Switch.svelte';
   import Segmented from '../lib/ui/Segmented.svelte';
   import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
-  import { performanceView, setOptimization, setPreset, type PerformanceView } from '../lib/api';
+  import {
+    performanceView,
+    setOptimization,
+    setPreset,
+    unlockFrameRate,
+    type PerformanceView,
+  } from '../lib/api';
 
   export let onChanged: () => void = () => {};
 
@@ -55,6 +61,25 @@
       view = loaded;
     })();
   });
+
+  /**
+   * Raise the frame limit and turn VSync off for this profile.
+   *
+   * Only reachable from the notice, which only appears when the profile is
+   * actually limited. Nothing here happens on its own: options.txt belongs to
+   * whoever has been playing, and somebody who capped their frame rate on
+   * purpose should keep it until they say otherwise.
+   */
+  async function unlockFrames() {
+    if (busy) return;
+    busy = true;
+    try {
+      view = await unlockFrameRate();
+      onChanged();
+    } finally {
+      busy = false;
+    }
+  }
 
   async function choosePreset(id: string) {
     if (busy) return;
@@ -85,6 +110,29 @@
 
 {#if view}
   <Page title="Performance" summary="{view.profileName} · {view.summary}">
+    <!-- FRAME LIMIT NOTICE -->
+    {#if view.videoLimits}
+      <!-- Shown only for a profile whose own saved video settings hold the
+           frame rate down. Minecraft 1.8.9 ships with maxFps 120 and VSync on,
+           so every profile created before Fathom seeded its own defaults has
+           them, and no amount of optimization work is visible through a 120 fps
+           limiter. -->
+      <div class="notice" transition:fade={{ duration: FAST, easing: EASE }}>
+        <CircleAlert size={18} />
+        <div class="notice-text">
+          <strong>{view.videoLimits.summary}</strong>
+          <span>
+            These are Minecraft's own defaults, not a Fathom setting. Measured on this
+            machine, lifting them took a test scene from 120 to 384 fps. Your other video
+            settings are left alone.
+          </span>
+        </div>
+        <button class="unlock" disabled={busy} on:click={unlockFrames}>
+          Remove the limit
+        </button>
+      </div>
+    {/if}
+
     <!-- PRESET -->
     <Section label="Preset">
       <div class="preset">
@@ -268,6 +316,60 @@
 {/if}
 
 <style>
+  /* Deliberately not a Row: this is a one-off condition with an action, not a
+     setting, and it should stop reading like one the moment it is dealt with.
+     It removes itself when `videoLimits` comes back null. */
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s-3);
+    padding: var(--s-3);
+    margin-bottom: var(--s-4);
+    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+    border-radius: var(--r-2, 8px);
+    background: color-mix(in srgb, var(--warn) 8%, transparent);
+    color: var(--warn);
+  }
+
+  .notice-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .notice-text strong {
+    font-size: var(--t-body);
+    color: var(--text);
+  }
+
+  .notice-text span {
+    font-size: var(--t-body);
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .unlock {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-1, 6px);
+    background: var(--surface, transparent);
+    color: var(--text);
+    font-size: var(--t-body);
+    cursor: pointer;
+  }
+
+  .unlock:hover:not(:disabled) {
+    border-color: var(--warn);
+  }
+
+  .unlock:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
   .preset {
     display: flex;
     flex-direction: column;

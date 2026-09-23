@@ -116,6 +116,12 @@ public final class ProfileLocation {
         return new Resolved(new File(new File(gameDirectory, "fathom"), ProfileStore.DIRECTORY), Source.STANDALONE);
     }
 
+    /** The launcher's data root on this platform, from this JVM's environment. */
+    public static File platformRoot() {
+        return platformRoot(System.getProperty("os.name", ""), System.getenv("LOCALAPPDATA"),
+                System.getProperty("user.home"), System.getenv("XDG_DATA_HOME"));
+    }
+
     /**
      * The launcher's data root on this platform, or null when the environment does
      * not say enough to know.

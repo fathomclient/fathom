@@ -241,7 +241,17 @@ impl Validator for SelfCheckValidator {
     fn validate(&self, _component: ComponentId, path: &Path) -> Result<(), String> {
         use std::process::{Command, Stdio};
 
-        let mut child = Command::new(path)
+        let mut command = Command::new(path);
+        // The candidate is a console-subsystem binary being run for its exit
+        // code alone, so a window for it would be a terminal flashing up during
+        // an update with nothing in it worth reading.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt as _;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+        let mut child = command
             .arg(&self.argument)
             .stdin(Stdio::null())
             .stdout(Stdio::null())

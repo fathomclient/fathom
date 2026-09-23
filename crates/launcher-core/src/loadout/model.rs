@@ -136,7 +136,9 @@ impl ProfileId {
         if slug.is_empty() {
             return None;
         }
-        let base = Self::new(&slug).ok().or_else(|| Self::new(&format!("{slug}-1")).ok())?;
+        let base = Self::new(&slug)
+            .ok()
+            .or_else(|| Self::new(&format!("{slug}-1")).ok())?;
         if !taken.contains(&base) {
             return Some(base);
         }
@@ -476,7 +478,9 @@ mod tests {
     fn a_name_becomes_an_id_and_then_a_free_one() {
         let taken = vec![ProfileId::new("bedwars").unwrap()];
         assert_eq!(
-            ProfileId::from_display_name("Bedwars", &[]).unwrap().as_str(),
+            ProfileId::from_display_name("Bedwars", &[])
+                .unwrap()
+                .as_str(),
             "bedwars"
         );
         // Duplicating twice gives 2 then 3, not two hex strings.
@@ -499,7 +503,9 @@ mod tests {
     #[test]
     fn only_what_differs_is_written() {
         let mut profile = FathomProfile::default_profile();
-        profile.modules.insert("fps".to_owned(), ModuleState::default());
+        profile
+            .modules
+            .insert("fps".to_owned(), ModuleState::default());
         profile.modules.insert(
             "cps".to_owned(),
             ModuleState {
@@ -508,7 +514,10 @@ mod tests {
             },
         );
         profile.prune();
-        assert!(!profile.modules.contains_key("fps"), "a silent module is dropped");
+        assert!(
+            !profile.modules.contains_key("fps"),
+            "a silent module is dropped"
+        );
         assert!(profile.modules.contains_key("cps"));
 
         let json = serde_json::to_string(&profile).unwrap();
@@ -521,7 +530,10 @@ mod tests {
         let mut profile = FathomProfile::default_profile();
         assert!(profile.validate().is_ok());
         profile.schema = SCHEMA + 1;
-        assert!(matches!(profile.validate(), Err(ValidationError::Schema(_))));
+        assert!(matches!(
+            profile.validate(),
+            Err(ValidationError::Schema(_))
+        ));
     }
 
     #[test]
@@ -559,8 +571,16 @@ mod tests {
         let profile = FathomProfile::default_profile();
         let json = serde_json::to_string(&profile).unwrap().to_lowercase();
         for forbidden in [
-            "version", "loader", "java", "memory", "jvm", "directory", "account", "token",
-            "username", "uuid",
+            "version",
+            "loader",
+            "java",
+            "memory",
+            "jvm",
+            "directory",
+            "account",
+            "token",
+            "username",
+            "uuid",
         ] {
             assert!(
                 !json.contains(forbidden),

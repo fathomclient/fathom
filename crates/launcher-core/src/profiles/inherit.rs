@@ -235,7 +235,11 @@ mod tests {
     }
 
     fn a_mod(name: &str) -> ProfileMod {
-        ProfileMod::new(ModId::new(name).unwrap(), "0".repeat(40), format!("{name}.jar"))
+        ProfileMod::new(
+            ModId::new(name).unwrap(),
+            "0".repeat(40),
+            format!("{name}.jar"),
+        )
     }
 
     #[test]
@@ -258,7 +262,10 @@ mod tests {
         // Inherited.
         assert_eq!(resolved.version_id, parent.version_id);
         assert_eq!(resolved.loader, parent.loader);
-        assert_eq!(resolved.optimizations.preset, OptimizationPreset::Competitive);
+        assert_eq!(
+            resolved.optimizations.preset,
+            OptimizationPreset::Competitive
+        );
         assert_eq!(resolved.memory.heap_mb, 3072);
         assert_eq!(resolved.kind, ProfileKind::Fathom);
 
@@ -330,7 +337,10 @@ mod tests {
         let leaf = derive(&middle, id("leaf"), "Leaf");
 
         let resolved = resolve(&leaf, store(vec![root, middle])).unwrap();
-        assert_eq!(resolved.optimizations.preset, OptimizationPreset::Competitive);
+        assert_eq!(
+            resolved.optimizations.preset,
+            OptimizationPreset::Competitive
+        );
         // The middle generation's override survives to the leaf.
         assert_eq!(resolved.presentation.theme.as_deref(), Some("bg_3"));
         assert_eq!(resolved.display_name, "Leaf");

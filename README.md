@@ -17,21 +17,25 @@ Not affiliated with, endorsed by, or associated with Mojang or Microsoft.
 
 ## Build
 
-Needs Rust and Node.js. Run the interface dev server, then the app:
+Needs Rust and Node.js. An ordinary Cargo run uses the already-built embedded
+frontend and never connects WebView2 to localhost:
 
 ```bash
 npm --prefix desktop install
 ```
 
 ```bash
-npm --prefix desktop run dev
+npm --prefix desktop run build
 ```
 
 ```bash
 cargo run -p launcher-desktop
 ```
 
-`tools/package-portable.ps1` builds a portable release.
+For frontend hot reload, use `tools/dev.ps1`; it owns a Vite server on an
+ephemeral loopback port and waits until it is ready. `tools/build-installer.ps1`
+is the canonical release command and produces a normal per-user Windows NSIS
+installer in `dist/installer`.
 
 ### Signing in
 
@@ -62,6 +66,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 | [NETWORK.md](NETWORK.md) | Every reachable host, and how the allowlist is enforced |
 | [THREAT_MODEL.md](THREAT_MODEL.md) | Threats, mitigations, and what is still open |
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Creator credits and third-party assets |
+| [windows-distribution.md](docs/windows-distribution.md) | Installer, WebView transport, and on-disk layout |
 
 ## Licence
 

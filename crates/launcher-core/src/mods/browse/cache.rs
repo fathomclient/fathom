@@ -495,12 +495,16 @@ mod tests {
         cache.store_project(&project);
         cache.store_files(Provider::Modrinth, "abc", "1.8.9|legacy", &[]);
         assert!(cache.project(Provider::Modrinth, "abc").is_some());
-        assert!(cache.files(Provider::Modrinth, "abc", "1.8.9|legacy").is_some());
+        assert!(cache
+            .files(Provider::Modrinth, "abc", "1.8.9|legacy")
+            .is_some());
 
         cache.invalidate_project(Provider::Modrinth, "abc");
         assert!(cache.project(Provider::Modrinth, "abc").is_none());
         assert!(
-            cache.files(Provider::Modrinth, "abc", "1.8.9|legacy").is_none(),
+            cache
+                .files(Provider::Modrinth, "abc", "1.8.9|legacy")
+                .is_none(),
             "an install changes the version list as well as the project"
         );
     }
@@ -513,7 +517,9 @@ mod tests {
         let path = images.path_for(hostile);
         assert!(path.starts_with(images.root()));
         let name = path.file_name().unwrap().to_string_lossy().to_string();
-        assert!(std::path::Path::new(&name).extension().is_some_and(|e| e == "img"));
+        assert!(std::path::Path::new(&name)
+            .extension()
+            .is_some_and(|e| e == "img"));
         assert_eq!(name.len(), 44, "forty hex characters and an extension");
         assert!(name
             .trim_end_matches(".img")
@@ -543,6 +549,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cache = CatalogCache::new(DataPaths::rooted_at(tmp.path()));
         assert_eq!(cache.sizes(), (0, 0, 0));
-        assert!(cache.images().cached("https://cdn.modrinth.com/x.png").is_none());
+        assert!(cache
+            .images()
+            .cached("https://cdn.modrinth.com/x.png")
+            .is_none());
     }
 }

@@ -127,7 +127,7 @@ final class LauncherSection implements Section {
             y += 22f;
         }
         y += Skin.S3;
-        ui.text("No account or token ever crosses it.", below.x, y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_MUTED);
+        ui.text("No token or password ever crosses it.", below.x, y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_MUTED);
         y += 22f;
         ui.text(Text.fit(ui, "Loopback only, with a key that dies with this session.", Type.SMALL, below.width),
                 below.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_DISABLED);

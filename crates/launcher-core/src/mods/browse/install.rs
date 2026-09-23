@@ -116,10 +116,12 @@ fn describe(blocker: &Blocker) -> String {
         Blocker::Incompatible { detail, .. } | Blocker::AlreadyInstalled { detail, .. } => {
             detail.clone()
         }
-        Blocker::NotDownloadable { project, .. } => format!(
-            "{project} cannot be downloaded by Fathom; its author distributes it elsewhere"
-        ),
-        Blocker::Unresolved { dependency, detail, .. } => {
+        Blocker::NotDownloadable { project, .. } => {
+            format!("{project} cannot be downloaded by Fathom; its author distributes it elsewhere")
+        }
+        Blocker::Unresolved {
+            dependency, detail, ..
+        } => {
             format!("a required dependency ({dependency}) could not be resolved: {detail}")
         }
         Blocker::UnnamedDependency { .. } => {
@@ -298,10 +300,12 @@ impl Installer {
             match &file.download {
                 FileDownload::Url { url } => {
                     descriptor_from_url(url, Purpose::DownloadMod, Feature::ModBrowse).map_err(
-                        |_| BrowseError::Refused(format!(
-                            "{} would be downloaded from a host Fathom does not allow",
-                            planned.project.name
-                        )),
+                        |_| {
+                            BrowseError::Refused(format!(
+                                "{} would be downloaded from a host Fathom does not allow",
+                                planned.project.name
+                            ))
+                        },
                     )?;
                 }
                 FileDownload::Withheld { .. } => {
@@ -376,19 +380,22 @@ impl Installer {
             });
             let provider = planned.project.reference.provider;
             let file = &planned.file;
-            let path = self
-                .store
-                .path_for(&file.hash.sha1)
-                .map_err(|_| BrowseError::Refused("the index published an invalid hash".to_owned()))?;
+            let path = self.store.path_for(&file.hash.sha1).map_err(|_| {
+                BrowseError::Refused("the index published an invalid hash".to_owned())
+            })?;
 
             if verify_file(&path, &file.hash.sha1) {
                 reused += 1;
             } else {
                 let FileDownload::Url { url } = &file.download else {
-                    return Err(BrowseError::Refused("that file is not downloadable".to_owned()));
+                    return Err(BrowseError::Refused(
+                        "that file is not downloadable".to_owned(),
+                    ));
                 };
                 let request = descriptor_from_url(url, Purpose::DownloadMod, Feature::ModBrowse)
-                    .map_err(|_| BrowseError::Refused("that download host is not allowed".to_owned()))?;
+                    .map_err(|_| {
+                        BrowseError::Refused("that download host is not allowed".to_owned())
+                    })?;
                 self.downloads
                     .fetch(
                         &DownloadRequest {
@@ -463,11 +470,12 @@ impl Installer {
                                 other.project.reference == *reference
                                     || plan.dependencies.iter().any(|d| {
                                         d.project.reference == *reference
-                                            && same_project(&d.project, &other.project)
-                                                .is_certain()
+                                            && same_project(&d.project, &other.project).is_certain()
                                     })
                             })
-                            .and_then(|other| ids.get(&other.project.reference.qualified()).cloned())
+                            .and_then(|other| {
+                                ids.get(&other.project.reference.qualified()).cloned()
+                            })
                     })
                 })
                 .filter(|required| required != id.as_str())
@@ -479,7 +487,8 @@ impl Installer {
                 .from_source(ModSource::Managed)
                 .with_origin(Origin {
                     name: Some(clip(&project.name, limits::NAME)),
-                    summary: Some(clip(&project.summary, limits::SUMMARY)).filter(|s| !s.is_empty()),
+                    summary: Some(clip(&project.summary, limits::SUMMARY))
+                        .filter(|s| !s.is_empty()),
                     license: Some(project.license.describe()),
                     minecraft: file.game_versions.clone(),
                     loaders: file.loaders.clone(),
@@ -606,7 +615,12 @@ pub fn uninstall(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 mod tests {
     use super::*;
     use crate::install::download::sha1_hex;
@@ -641,7 +655,11 @@ mod tests {
     /// A file whose bytes are already in the store, so executing needs no
     /// network.
     fn stored(fixture: &Fixture, mut file: ModFile) -> ModFile {
-        let bytes = format!("PK\u{3}\u{4}{}{}", file.project.qualified(), file.version_id);
+        let bytes = format!(
+            "PK\u{3}\u{4}{}{}",
+            file.project.qualified(),
+            file.version_id
+        );
         let sha1 = sha1_hex(bytes.as_bytes());
         fixture
             .installer
@@ -662,9 +680,15 @@ mod tests {
         mods: &mut ProfileModConfiguration,
         options: InstallOptions,
     ) -> Result<InstallReport, BrowseError> {
-        fixture
-            .installer
-            .execute(plan, &target(), mods, options, &grant(), &Cancel::new(), &mut |_| {})
+        fixture.installer.execute(
+            plan,
+            &target(),
+            mods,
+            options,
+            &grant(),
+            &Cancel::new(),
+            &mut |_| {},
+        )
     }
 
     fn with_library(fixture: &Fixture) -> (FakeIndex, ModFile) {
@@ -675,7 +699,10 @@ mod tests {
             project(Provider::Modrinth, "lib", "library"),
             vec![stored(fixture, file(&lib, "1", vec![]))],
         );
-        let root_file = stored(fixture, file(&root, "1", vec![needs(DependencyKind::Required, &lib)]));
+        let root_file = stored(
+            fixture,
+            file(&root, "1", vec![needs(DependencyKind::Required, &lib)]),
+        );
         (index, root_file)
     }
 
@@ -739,7 +766,14 @@ mod tests {
         let (index, _) = with_library(&fixture);
         // Not in the store, and the client is offline: the fetch fails.
         let root = ProjectRef::new(Provider::Modrinth, "root");
-        let missing = file(&root, "2", vec![needs(DependencyKind::Required, &ProjectRef::new(Provider::Modrinth, "lib"))]);
+        let missing = file(
+            &root,
+            "2",
+            vec![needs(
+                DependencyKind::Required,
+                &ProjectRef::new(Provider::Modrinth, "lib"),
+            )],
+        );
         let planned = plan(
             &index,
             &target(),
@@ -752,7 +786,10 @@ mod tests {
         .unwrap();
         let mut mods = ProfileModConfiguration::default();
         assert!(run(&fixture, &planned, &mut mods, InstallOptions::default()).is_err());
-        assert!(mods.is_empty(), "the library that did verify is not recorded alone");
+        assert!(
+            mods.is_empty(),
+            "the library that did verify is not recorded alone"
+        );
         // No partial file anywhere in the store.
         let partials = walk(&fixture.installer.store().root())
             .into_iter()
@@ -781,13 +818,17 @@ mod tests {
         let fixture = fixture();
         let reference = ProjectRef::new(Provider::CurseForge, "1234");
         let root_file = stored(&fixture, file(&reference, "1", vec![]));
-        let mut existing = ProfileMod::new(ModId::new("sodium").unwrap(), "e".repeat(40), "sodium-0.jar")
-            .with_origin(Origin {
-                name: Some("Sodium".into()),
-                repository: Some("modrinth".into()),
-                project: Some("abcd".into()),
-                ..Origin::default()
-            });
+        let mut existing = ProfileMod::new(
+            ModId::new("sodium").unwrap(),
+            "e".repeat(40),
+            "sodium-0.jar",
+        )
+        .with_origin(Origin {
+            name: Some("Sodium".into()),
+            repository: Some("modrinth".into()),
+            project: Some("abcd".into()),
+            ..Origin::default()
+        });
         existing.source = ModSource::Managed;
         let mut mods = ProfileModConfiguration::default();
         mods.upsert(existing.clone());
@@ -860,7 +901,10 @@ mod tests {
         assert_eq!(mods.len(), 1, "never both versions");
         let now = mods.get(&id).unwrap();
         assert_eq!(now.sha1, new_file.hash.sha1);
-        assert!(!now.enabled, "a disabled mod stays disabled through an update");
+        assert!(
+            !now.enabled,
+            "a disabled mod stays disabled through an update"
+        );
         assert!(
             fixture.installer.store().contains(&old_file.hash.sha1),
             "the old bytes remain until garbage collection"
@@ -898,7 +942,10 @@ mod tests {
         let removal = plan_uninstall(&mods, &root).unwrap();
         assert_eq!(removal.unused_dependencies, vec!["library".to_owned()]);
         uninstall(&mut mods, &root).unwrap();
-        assert!(mods.contains(&library), "a dependency is offered, never removed silently");
+        assert!(
+            mods.contains(&library),
+            "a dependency is offered, never removed silently"
+        );
         uninstall(&mut mods, &library).unwrap();
         assert!(mods.is_empty());
     }

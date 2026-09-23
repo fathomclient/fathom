@@ -40,6 +40,16 @@ export interface AccountSummary {
   name: string | null;
   signedIn: boolean;
   development: boolean;
+  /** The Minecraft UUID, dashed. Public. */
+  uuid: string | null;
+  /** The player's head as a `data:image/png` URL, or null to show the initial. */
+  avatar: string | null;
+  /**
+   * Remembered, with its session being restored right now. Never true at the
+   * same time as `signedIn`: the name and face are who is coming back, not who
+   * is here.
+   */
+  remembered: boolean;
 }
 
 export interface HomeView {
@@ -321,6 +331,20 @@ export interface PerformanceView {
   /** Null until somebody runs a benchmark in game. */
   benchmark: BenchmarkSummary | null;
   benchmarkCount: number;
+  /**
+   * Set only when this profile's own options.txt is holding the frame rate
+   * down. Null is the normal state and the page shows nothing for it.
+   */
+  videoLimits: VideoLimits | null;
+}
+
+/** A profile capped by its own saved video settings. */
+export interface VideoLimits {
+  /** The saved maxFps. 260 is Minecraft's "Unlimited" and is not a cap. */
+  maxFps: number | null;
+  vsync: boolean | null;
+  /** One line naming what is limiting this profile. */
+  summary: string;
 }
 
 /* -- settings ------------------------------------------------------------ */
@@ -543,8 +567,12 @@ export interface AuthProgress {
    * typing it themselves, which is why showing it is the point.
    */
   userCode: string | null;
-  /** The page to type it on. Shown as text; Fathom never opens it for you. */
+  /** The page to type it on. Opened in the default browser for you, and shown too. */
   verificationUri: string | null;
+  /** Whether Fathom opened the page in the browser. */
+  browserOpened: boolean;
+  /** Whether Fathom copied the device code before opening the page. */
+  codeCopied: boolean;
   active: boolean;
   failure: string | null;
 }
@@ -644,7 +672,14 @@ const FIXTURE_HOME: HomeView = {
     developerNote:
       'This build has no Microsoft application id, so sign-in is disabled. Set FATHOM_AZURE_CLIENT_ID to use your own registration.',
   },
-  account: { name: null, signedIn: false, development: false },
+  account: {
+    name: null,
+    signedIn: false,
+    development: false,
+    uuid: null,
+    avatar: null,
+    remembered: false,
+  },
 };
 
 const FIXTURE_STATUS: ShellStatus = {
@@ -715,6 +750,7 @@ const FIXTURE_PERFORMANCE: PerformanceView = {
   summary: '3 of 20 running',
   benchmark: null,
   benchmarkCount: 0,
+  videoLimits: null,
 };
 
 const FIXTURE_SETTINGS: SettingsView = {
@@ -939,6 +975,11 @@ export async function setPreset(preset: string, profile?: string): Promise<Perfo
   return invoke<PerformanceView>('set_preset', { preset, profile: profile ?? null });
 }
 
+export async function unlockFrameRate(profile?: string): Promise<PerformanceView> {
+  if (!inTauri) return FIXTURE_PERFORMANCE;
+  return invoke<PerformanceView>('unlock_frame_rate', { profile: profile ?? null });
+}
+
 export async function setOptimization(
   id: string,
   enabled: boolean,
@@ -1067,6 +1108,8 @@ export const NO_AUTH: AuthProgress = {
   detail: '',
   userCode: null,
   verificationUri: null,
+  browserOpened: false,
+  codeCopied: false,
   active: false,
   failure: null,
 };
@@ -1093,6 +1136,12 @@ export async function cancelSignIn(): Promise<AuthProgress> {
   return invoke<AuthProgress>('cancel_sign_in');
 }
 
+/** Open Microsoft's sign-in page again for the code on screen. */
+export async function reopenSignInPage(): Promise<AuthProgress> {
+  if (!inTauri) return NO_AUTH;
+  return invoke<AuthProgress>('reopen_sign_in_page');
+}
+
 export async function signInProgress(): Promise<AuthProgress> {
   if (!inTauri) return NO_AUTH;
   return invoke<AuthProgress>('sign_in_progress');
@@ -1101,6 +1150,43 @@ export async function signInProgress(): Promise<AuthProgress> {
 export async function signOut(): Promise<AuthProgress> {
   if (!inTauri) return NO_AUTH;
   return invoke<AuthProgress>('sign_out');
+}
+
+export async function accountsView(): Promise<AccountSummary[]> {
+  if (!inTauri) return [];
+  return invoke<AccountSummary[]>('accounts_view');
+}
+
+export async function switchAccount(id: string): Promise<AuthProgress> {
+  if (!inTauri) return NO_AUTH;
+  return invoke<AuthProgress>('switch_account', { id });
+}
+
+export async function forgetAccount(id: string): Promise<AuthProgress> {
+  if (!inTauri) return NO_AUTH;
+  return invoke<AuthProgress>('forget_account', { id });
+}
+
+export async function windowShow(): Promise<void> {
+  if (inTauri) await invoke('window_show');
+}
+
+export async function windowMinimize(): Promise<void> {
+  if (inTauri) await invoke('window_minimize');
+}
+
+export async function windowToggleMaximize(): Promise<void> {
+  if (inTauri) await invoke('window_toggle_maximize');
+}
+
+/** Toggle the launcher between windowed and fullscreen. Returns the new state. */
+export async function windowToggleFullscreen(): Promise<boolean> {
+  if (!inTauri) return false;
+  return invoke<boolean>('window_toggle_fullscreen');
+}
+
+export async function windowClose(): Promise<void> {
+  if (inTauri) await invoke('window_close');
 }
 
 /* -- setting a profile up ------------------------------------------------ */
@@ -1241,7 +1327,21 @@ export type SuppliedJar = {
   source: string;
   recognised: boolean;
   isOptifine: boolean;
+  /** True when the jar was identified from its bytecode, not its filename. */
+  verified: boolean;
+  /** Set when this jar cannot run without another component. */
+  bridge: SuppliedBridge | null;
   profiles: SuppliedProfileFit[];
+};
+
+/** A component the supplied jar depends on. */
+export type SuppliedBridge = {
+  /** Component id, for installComponent(). */
+  id: string;
+  name: string;
+  summary: string;
+  /** One sentence explaining why it is needed. */
+  reason: string;
 };
 
 export type SuppliedProfileFit = {
@@ -1250,6 +1350,8 @@ export type SuppliedProfileFit = {
   compatible: boolean;
   alreadyPresent: boolean;
   note: string;
+  /** This profile would still be missing the bridge the jar needs. */
+  needsBridge: boolean;
 };
 
 export type SuppliedAdded = {
@@ -1272,6 +1374,8 @@ const NO_JAR: SuppliedJar = {
   source: '',
   recognised: false,
   isOptifine: false,
+  verified: false,
+  bridge: null,
   profiles: [],
 };
 

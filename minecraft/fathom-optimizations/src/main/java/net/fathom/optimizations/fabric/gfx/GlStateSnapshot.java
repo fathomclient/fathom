@@ -18,6 +18,12 @@ final class GlStateSnapshot {
     /** GL_FRAMEBUFFER_BINDING; shared by the core, ARB and EXT variants. */
     private static final int FRAMEBUFFER_BINDING = 0x8CA6;
 
+    /**
+     * Driver queries one capture makes. Counted by hand against the body of
+     * {@link #captureInto}; it is a diagnostic figure, not a contract.
+     */
+    private static final int QUERIES = 24;
+
     /** Reused query storage. Every capture runs on Minecraft's render thread. */
     private static final IntBuffer INT_QUERY = BufferUtils.createIntBuffer(16);
     private static final FloatBuffer FLOAT_QUERY = BufferUtils.createFloatBuffer(16);
@@ -60,11 +66,16 @@ final class GlStateSnapshot {
 
     /** Capture into this owner again, without allocating a snapshot or query buffers. */
     GlStateSnapshot captureInto() {
+        long fathom$probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.GL_WRAPPER);
         if (captured && !restored) {
             throw new IllegalStateException("GL state snapshot is already live");
         }
         restored = false;
         captured = true;
+        net.fathom.optimizations.fabric.diag.GlSync.captured(QUERIES);
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.GL_STATE_CAPTURE);
         framebufferSupported = GLX.supportsFbo();
         framebuffer = framebufferSupported ? GL11.glGetInteger(FRAMEBUFFER_BINDING) : 0;
         readInts(GL11.GL_VIEWPORT, viewport);
@@ -112,6 +123,8 @@ final class GlStateSnapshot {
         GlStateManager.matrixMode(GL11.GL_TEXTURE);
         GlStateManager.pushMatrix();
         GlStateManager.matrixMode(matrixMode);
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                net.fathom.optimizations.core.instrument.Probe.Section.GL_WRAPPERS, fathom$probe);
         return this;
     }
 
@@ -119,6 +132,9 @@ final class GlStateSnapshot {
         if (restored || !captured) {
             return;
         }
+        long fathom$probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.GL_WRAPPER);
         restored = true;
 
         if (framebufferSupported) {
@@ -162,6 +178,8 @@ final class GlStateSnapshot {
         setCull(cull);
         GlStateManager.cullFace(cullFace);
         GlStateManager.color(colour[0], colour[1], colour[2], colour[3]);
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                net.fathom.optimizations.core.instrument.Probe.Section.GL_WRAPPERS, fathom$probe);
     }
 
     private static void setTexture(boolean enabled) {

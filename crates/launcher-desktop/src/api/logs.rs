@@ -99,7 +99,11 @@ fn read(path: &std::path::Path, redact: bool) -> Vec<LogLine> {
         .iter()
         .map(|line| LogLine {
             level: level_of(line),
-            text: if redact { scrub(line) } else { (*line).to_owned() },
+            text: if redact {
+                scrub(line)
+            } else {
+                (*line).to_owned()
+            },
         })
         .collect()
 }
@@ -134,7 +138,10 @@ pub fn view(core: &Launcher) -> Vec<LogSource> {
 
     // -- the launcher's own log -------------------------------------------
     let launcher = launcher_core::logging::log_file_path().map(std::path::Path::to_path_buf);
-    let lines = launcher.as_deref().map(|path| read(path, false)).unwrap_or_default();
+    let lines = launcher
+        .as_deref()
+        .map(|path| read(path, false))
+        .unwrap_or_default();
     sources.push(LogSource {
         id: "launcher".to_owned(),
         label: "Launcher".to_owned(),
@@ -150,7 +157,10 @@ pub fn view(core: &Launcher) -> Vec<LogSource> {
 
     let newest = newest_game_log(core);
 
-    let lines = newest.as_deref().map(|path| read(path, true)).unwrap_or_default();
+    let lines = newest
+        .as_deref()
+        .map(|path| read(path, true))
+        .unwrap_or_default();
     sources.push(LogSource {
         id: "game".to_owned(),
         label: "Game".to_owned(),
@@ -166,7 +176,6 @@ pub fn view(core: &Launcher) -> Vec<LogSource> {
 
     sources
 }
-
 
 // ---------------------------------------------------------------------------
 // The console window
@@ -209,7 +218,10 @@ pub fn console(core: &Launcher) -> ConsoleView {
         .filter(|path| path.is_file())
         .or_else(|| newest_game_log(core));
 
-    let lines = path.as_deref().map(|path| read(path, true)).unwrap_or_default();
+    let lines = path
+        .as_deref()
+        .map(|path| read(path, true))
+        .unwrap_or_default();
 
     let (profile, state, running) = match session.as_ref() {
         Some(status) if status.is_running() => (

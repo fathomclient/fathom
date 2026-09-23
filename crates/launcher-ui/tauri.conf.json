@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fathom",
+  "version": "0.1.0",
+  "identifier": "net.fathom.launcher.compat",
+  "build": {
+    "frontendDist": "../../desktop/dist"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": [
+      "../launcher-desktop/icons/icon.png",
+      "../launcher-desktop/icons/icon.ico"
+    ]
+  }
+}

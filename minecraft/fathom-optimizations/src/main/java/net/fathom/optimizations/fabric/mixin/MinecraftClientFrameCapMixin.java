@@ -40,6 +40,11 @@ public abstract class MinecraftClientFrameCapMixin {
 
     @Inject(method = "getMaxFramerate()I", at = @At("RETURN"), cancellable = true)
     private void fathom$capFramerate(CallbackInfoReturnable<Integer> callback) {
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowCoreHooks()) {
+            return;
+        }
         if (!Runtime.ready()) {
             return;
         }

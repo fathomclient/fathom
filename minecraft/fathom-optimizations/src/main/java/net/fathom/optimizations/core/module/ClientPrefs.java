@@ -34,10 +34,15 @@ public final class ClientPrefs {
      * percentages multiply that, for people who want it a little larger or a
      * little smaller than the automatic answer.
      */
-    public static final String[] SCALE_CHOICES = {"Auto", "90%", "100%", "110%", "125%"};
+    public static final String[] SCALE_CHOICES = {
+        "Auto", "75%", "85%", "100%", "115%", "125%"
+    };
     public static final String[] MENU_BACKGROUND_CHOICES = {"High", "Auto", "Low", "Off"};
 
-    private static final float[] SCALE_VALUES = {1f, 0.9f, 1f, 1.1f, 1.25f};
+    // The ends are UiScale.MIN_PREFERENCE and MAX_PREFERENCE. Offering a choice
+    // the renderer would clamp away would be a control that lies about what it
+    // does, so the two are kept in step by a test rather than by memory.
+    private static final float[] SCALE_VALUES = {1f, 0.75f, 0.85f, 1f, 1.15f, 1.25f};
 
     private static final int DEFAULT_SCALE = 0;
 

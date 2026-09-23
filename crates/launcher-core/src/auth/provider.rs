@@ -298,6 +298,7 @@ mod tests {
             profile: AccountProfile {
                 id: "0".into(),
                 name: "x".into(),
+                ..AccountProfile::default()
             },
             access_token: Secret::new("not-a-token"),
             kind: IdentityKind::Development,
@@ -337,6 +338,7 @@ mod tests {
             profile: AccountProfile {
                 id: "0".into(),
                 name: "x".into(),
+                ..AccountProfile::default()
             },
             access_token: Secret::new("t"),
             kind: IdentityKind::Microsoft,

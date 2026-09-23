@@ -418,9 +418,23 @@ pub fn build_jvm_args(profile: &Profile, java_major: u32, natives_dir: &str) -> 
     }
 
     if profile.optimizations.jvm.compile_huge_methods {
-        // Lets HotSpot JIT the Minecraft methods that exceed the 8000-byte
-        // HugeMethodLimit and otherwise run interpreted forever. Paired with a
-        // larger code cache because it increases compilation pressure.
+        // Kept switchable, but it buys nothing on 1.8.9 and defaults off.
+        //
+        // The claim this used to carry -- that Minecraft has hot methods over
+        // HotSpot's 8000-byte HugeMethodLimit which "otherwise run interpreted
+        // forever" -- is true of later versions and false of this one. Every
+        // method in `minecraft-client.jar` and `minecraft-merged.jar` was
+        // measured (the Code attribute length, which is what the limit is
+        // compared against): exactly **one** exceeds 8000 bytes, at 8296 --
+        // `RecipeDispatcher.<init>`, which registers the crafting recipes once
+        // during startup and is never on a render path.
+        //
+        // So the flag changes the compilation of a single constructor that runs
+        // before the main menu, and `ReservedCodeCacheSize=400M` reserves 400 MB
+        // of address space for it. Neither is harmful; neither is an
+        // optimization. It stays because a profile that was written with it on
+        // must keep meaning what it said, and because the 1.8.9 fact does not
+        // hold for a future version target.
         args.push("-XX:-DontCompileHugeMethods".to_owned());
         args.push("-XX:ReservedCodeCacheSize=400M".to_owned());
     }

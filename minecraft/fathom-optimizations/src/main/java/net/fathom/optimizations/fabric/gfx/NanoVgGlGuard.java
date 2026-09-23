@@ -119,8 +119,21 @@ public final class NanoVgGlGuard {
 
     /** Take the state. Pair with {@link #close}, in a {@code finally}. */
     public static NanoVgGlGuard open(int framebufferWidth, int framebufferHeight) {
+        net.fathom.optimizations.fabric.diag.GlSync.captured(QUERIES);
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.NANOVG_BEGIN);
         return SHARED.take(framebufferWidth, framebufferHeight);
     }
+
+    /**
+     * Driver queries {@code take} makes beyond the snapshot's own.
+     *
+     * <p>Three explicit {@code glGet}s, and the snapshot it wraps counts its
+     * twenty-four separately. The two {@code glPushAttrib} calls are not counted
+     * here at all even though they are the most expensive thing in the method on
+     * a modern driver -- they are not queries, and a counter that quietly folded
+     * them in would be reporting something other than its own name.
+     */
+    private static final int QUERIES = 3;
 
     /** Put everything back. Safe to call twice. */
     public void close() {
@@ -128,6 +141,7 @@ public final class NanoVgGlGuard {
             return;
         }
         closed = true;
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.NANOVG_END);
         try {
             if (buffers) {
                 GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, arrayBuffer);

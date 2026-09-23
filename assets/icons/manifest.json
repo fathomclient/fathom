@@ -3,7 +3,7 @@
   "package": "@lucide/svelte@0.544.0",
   "icons": {
     "home": { "lucide": "house" },
-    "mods": { "lucide": "package" },
+    "mods": { "lucide": "puzzle" },
     "performance": { "lucide": "gauge" },
     "profiles": { "lucide": "layers" },
     "privacy": { "lucide": "shield-check" },

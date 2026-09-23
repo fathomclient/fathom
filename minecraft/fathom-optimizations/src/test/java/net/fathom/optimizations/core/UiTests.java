@@ -81,6 +81,7 @@ public final class UiTests {
         insettingNeverProducesANegativeSize();
         roundedGeometryIsBoundedAndConcentric();
         staticEdgesSnapAtEveryMinecraftGuiScale();
+        everyOfferedInterfaceScaleIsOneTheRendererWillHonour();
         responsiveGridUsesAvailableWidthWithoutClipping();
 
         // -- colour -----------------------------------------------------------
@@ -845,6 +846,35 @@ public final class UiTests {
     }
 
     // -----------------------------------------------------------------------
+
+    /**
+     * Every scale the Hub offers has to be one {@link UiScale} will actually
+     * use.
+     *
+     * <p>`UiScale.scaleFor` clamps its preference to MIN_PREFERENCE and
+     * MAX_PREFERENCE, so an option outside that range would be a control that
+     * appears to do something and does nothing -- the user picks 200%, the
+     * interface moves to 150%, and nothing says why. The two lists are in
+     * different classes for good reasons, so this is what keeps them in step.
+     */
+    static void everyOfferedInterfaceScaleIsOneTheRendererWillHonour() {
+        String[] labels = net.fathom.optimizations.core.module.ClientPrefs.SCALE_CHOICES;
+        net.fathom.optimizations.core.module.ClientPrefs prefs =
+                new net.fathom.optimizations.core.module.ClientPrefs();
+
+        check(labels.length > 1, "there should be more than just Auto");
+        for (int index = 0; index < labels.length; index++) {
+            prefs.setScaleChoice(index);
+            float wanted = prefs.uiScale();
+            check(wanted >= UiScale.MIN_PREFERENCE && wanted <= UiScale.MAX_PREFERENCE,
+                    labels[index] + " is outside what the renderer will honour");
+            // And the round trip through the file, since the choice is stored
+            // by its label rather than its index.
+            prefs.setScaleChoice(0);
+            prefs.setScaleLabel(labels[index]);
+            check(prefs.scaleChoice() == index, labels[index] + " did not survive being saved");
+        }
+    }
 
     private static void check(boolean condition, String what) {
         if (!condition) {

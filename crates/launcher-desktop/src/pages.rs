@@ -107,6 +107,103 @@ pub fn project_url(slug: &str) -> Option<String> {
     Some(format!("https://modrinth.com/mod/{slug}"))
 }
 
+/// Open Microsoft's sign-in page for a device code, with the code filled in.
+///
+/// # Why this is allowed to open a page it did not write down
+///
+/// Because the page is Microsoft's own, and this checks that it is. The
+/// verification address arrives from `login.microsoftonline.com` over TLS, but
+/// it is still treated as input: it must be HTTPS on one of the hosts below,
+/// and what is opened is **rebuilt here** from that host and a code checked
+/// against the alphabet device codes use. Nothing else from the response is
+/// passed to the shell.
+///
+/// The code is a device *user* code, not a credential: it grants nothing
+/// unless the account holder signs in on the page it opens.
+pub fn open_microsoft_sign_in(verification_uri: &str, user_code: &str) -> Result<bool, String> {
+    let url = microsoft_sign_in_url(verification_uri, user_code)
+        .ok_or_else(|| "Microsoft sent a sign-in address Fathom will not open".to_owned())?;
+    let copied = copy_user_code(user_code);
+    launch_browser(&url).map(|()| copied)
+}
+
+/// The bounded builder behind [`open_microsoft_sign_in`].
+pub fn microsoft_sign_in_url(verification_uri: &str, user_code: &str) -> Option<String> {
+    let rest = verification_uri.trim().strip_prefix("https://")?;
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let host = host.to_ascii_lowercase();
+    if !matches!(
+        host.as_str(),
+        "microsoft.com" | "www.microsoft.com" | "login.microsoftonline.com" | "login.live.com"
+    ) {
+        return None;
+    }
+    let code_ok = (4..=16).contains(&user_code.len())
+        && user_code
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-');
+    if !code_ok {
+        return None;
+    }
+    let path = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('/');
+    if host.ends_with("microsoft.com")
+        && !host.starts_with("login.")
+        && path.eq_ignore_ascii_case("link")
+    {
+        // Do not append the undocumented `otc` query. It currently sends some
+        // first-party app registrations through a consent route Microsoft
+        // rejects as `invalid_request`. The supported device page plus a
+        // clipboard copy is both reliable and explicit.
+        return Some("https://www.microsoft.com/link".to_owned());
+    }
+    if !path
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '/' || c == '-' || c == '_' || c == '.')
+        || path.contains("..")
+    {
+        return None;
+    }
+    Some(if path.is_empty() {
+        format!("https://{host}/")
+    } else {
+        format!("https://{host}/{path}")
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn copy_user_code(code: &str) -> bool {
+    use std::io::Write as _;
+    use std::os::windows::process::CommandExt as _;
+    use std::process::{Command, Stdio};
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let Ok(mut child) = Command::new("clip.exe")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+    else {
+        return false;
+    };
+    if child
+        .stdin
+        .take()
+        .is_none_or(|mut input| input.write_all(code.as_bytes()).is_err())
+    {
+        return false;
+    }
+    child.wait().is_ok_and(|status| status.success())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn copy_user_code(_code: &str) -> bool {
+    false
+}
+
 #[cfg(target_os = "windows")]
 fn launch_browser(url: &str) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
@@ -160,6 +257,30 @@ mod tests {
             "../optifine",
         ] {
             assert_eq!(url_for(hostile), None, "{hostile} should not resolve");
+        }
+    }
+
+    #[test]
+    fn only_microsofts_own_sign_in_page_is_opened() {
+        assert_eq!(
+            microsoft_sign_in_url("https://www.microsoft.com/link", "ABCD1234").as_deref(),
+            Some("https://www.microsoft.com/link")
+        );
+        assert_eq!(
+            microsoft_sign_in_url("https://microsoft.com/devicelogin", "ABCD1234").as_deref(),
+            Some("https://microsoft.com/devicelogin")
+        );
+        for (uri, code) in [
+            ("http://www.microsoft.com/link", "ABCD1234"),
+            ("https://www.microsoft.com.evil.example/link", "ABCD1234"),
+            ("https://evil.example/link", "ABCD1234"),
+            ("https://www.microsoft.com@evil.example/link", "ABCD1234"),
+            ("https://www.microsoft.com/link", "ABCD&x=1"),
+            ("https://www.microsoft.com/link", ""),
+            ("https://login.live.com/../../x", "ABCD1234"),
+            ("file:///C:/Windows/System32/calc.exe", "ABCD1234"),
+        ] {
+            assert_eq!(microsoft_sign_in_url(uri, code), None, "{uri} {code}");
         }
     }
 

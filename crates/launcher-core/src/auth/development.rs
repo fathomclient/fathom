@@ -119,6 +119,7 @@ impl DevelopmentAuthProvider {
             profile: AccountProfile {
                 id: DEVELOPMENT_UUID.to_owned(),
                 name: DEVELOPMENT_USERNAME.to_owned(),
+                ..AccountProfile::default()
             },
             access_token: Secret::new(PLACEHOLDER_TOKEN),
             kind: IdentityKind::Development,

@@ -285,13 +285,32 @@ public final class Runtime {
      * benchmark is running, which is the common case.
      */
     public static void frame(long frameNanos) {
-        refreshHotSwitches();
+        if (net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
+            refreshHotSwitches();
+        }
+        // The performance layer's hooks read plain statics; this refreshes them
+        // when a setting changed, and resets the per-frame nametag budget.
+        net.fathom.optimizations.fabric.perf.PerfLayer.frame();
         // The probe first: it rolls the per-frame section totals into the
         // worst-frame figure, and a session that ended mid-frame should still
         // see the frame it was in.
         net.fathom.optimizations.core.instrument.Probe.frameEnded();
+        // After frameEnded, so the window that is about to be reported has this
+        // frame's sections rolled in.
+        if (net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowCoreHooks()) {
+            net.fathom.optimizations.fabric.diag.FramePerf.frame(frameNanos);
+        }
+        // The automated benchmark advances here because this is the render
+        // thread and the frame time is already in hand. Folds away when the
+        // process was not started for a benchmark.
+        if (net.fathom.optimizations.fabric.bench.auto.BenchmarkState.ACTIVE) {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.FRAMES);
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkRunner.frame(frameNanos);
+        }
         Session current = session;
-        if (current != null) {
+        if (current != null
+                && net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
             current.frame(frameNanos);
             // Focus is checked here rather than only while a screen is drawn,
             // because a benchmark is played in the world with everything closed

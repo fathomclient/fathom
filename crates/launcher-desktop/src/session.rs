@@ -20,7 +20,7 @@
 //! reads the log file the launch pipeline is already writing, which is why
 //! closing it cannot affect the game.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -40,6 +40,12 @@ use crate::State;
 /// noticed" feel like one event, slow enough that a four-hour session costs
 /// thirty thousand cheap mutex acquisitions rather than a core.
 const POLL: Duration = Duration::from_millis(500);
+
+/// Fabric reaches Fathom's entrypoint well before the main menu. This is long
+/// enough for a cold, low-end machine without letting a vanilla process remain
+/// open indefinitely when the client never loads.
+const CLIENT_PROOF_TIMEOUT: Duration = Duration::from_secs(30);
+const CLIENT_PROOF_POLL: Duration = Duration::from_millis(200);
 
 /// Start a launch. Returns as soon as the thread is running.
 pub fn start(app: &tauri::AppHandle) -> Result<LaunchProgress, String> {
@@ -98,8 +104,8 @@ fn groundwork(core: &mut Launcher) -> Result<Groundwork, String> {
     // The same profile Home is showing. Shared rather than reimplemented: a
     // launch that started a different profile than the one on the launch screen
     // would be the worst possible version of this bug.
-    let profile = crate::api::current_profile(core)
-        .ok_or_else(|| "there are no profiles".to_owned())?;
+    let profile =
+        crate::api::current_profile(core).ok_or_else(|| "there are no profiles".to_owned())?;
 
     let version_id = profile.version_id.clone();
     Ok(Groundwork {
@@ -143,7 +149,11 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
                 "Offline mode is on and this version has not been downloaded yet.",
             );
         }
-        None => match work.service.metadata().fetch(&work.version_id, launch::PURPOSE) {
+        None => match work
+            .service
+            .metadata()
+            .fetch(&work.version_id, launch::PURPOSE)
+        {
             Ok(version) => version,
             Err(error) => {
                 return launch::failure(format!("Could not read the version manifest. {error}"))
@@ -183,8 +193,13 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
             );
         }
 
-        report(LaunchProgress::from_stage(&InstallStage::FetchingAssetIndex));
-        let resolved = match work.service.prepare(&work.version_id, launch::PURPOSE, cancel) {
+        report(LaunchProgress::from_stage(
+            &InstallStage::FetchingAssetIndex,
+        ));
+        let resolved = match work
+            .service
+            .prepare(&work.version_id, launch::PURPOSE, cancel)
+        {
             Ok(resolved) => resolved,
             Err(error) => {
                 return if cancel.is_cancelled() {
@@ -195,12 +210,11 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
             }
         };
 
-        let result = work.service.install(
-            &resolved,
-            &work.scratch_natives,
-            cancel,
-            &mut |stage| report(LaunchProgress::from_stage(stage)),
-        );
+        let result = work
+            .service
+            .install(&resolved, &work.scratch_natives, cancel, &mut |stage| {
+                report(LaunchProgress::from_stage(stage))
+            });
         if let Err(error) = result {
             return if cancel.is_cancelled() {
                 launch::cancelled()
@@ -214,6 +228,13 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
         return launch::cancelled();
     }
 
+    // -- 3a. a session that will last the launch ------------------------------
+    //
+    // A Minecraft token lives a day. A launcher left open longer than that
+    // would otherwise refuse Play with "session expired" when the stored
+    // refresh token could simply have renewed it.
+    crate::signin::refresh_if_needed(app);
+
     // -- 4. start the game --------------------------------------------------
     //
     // Past this point Stop is no longer offered, so the phase changes before
@@ -221,6 +242,7 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
     // cancellable state during the second in which cancelling would do nothing.
     report(LaunchProgress::starting());
 
+    let launch_started = SystemTime::now();
     let status = {
         let state = app.state::<State>();
         let Ok(core) = state.core.lock() else {
@@ -233,6 +255,26 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
     };
 
     tracing::info!(pid = status.pid, "the interface started a session");
+
+    // Remove the session descriptor on every path after spawn, including a
+    // failed client-proof check. Otherwise a later game started by hand could
+    // mistake a stale descriptor for a launcher-owned session.
+    let descriptor_directory = {
+        let state = app.state::<State>();
+        state
+            .core
+            .lock()
+            .ok()
+            .map(|core| core.dirs_for(&work.profile).minecraft_dir())
+    };
+    let _descriptor = descriptor_directory.map(SessionDescriptorGuard);
+
+    if work.profile.owns_components() {
+        report(launch::confirming_fathom());
+        if let Err(reason) = confirm_fathom_client(app, &work.profile, launch_started) {
+            return launch::failure(reason);
+        }
+    }
 
     // -- 4a. the bridge -----------------------------------------------------
     //
@@ -252,22 +294,6 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
         }
     };
 
-    // The session descriptor is removed on the way out, alongside the
-    // handshake. It is written by `services::launch` before the process starts;
-    // leaving it behind would tell a game somebody later started by hand in the
-    // same directory that Fathom launched it into a profile, and the main menu
-    // would then show a profile name for a session the launcher had nothing to
-    // do with.
-    let descriptor_directory = {
-        let state = app.state::<State>();
-        state
-            .core
-            .lock()
-            .ok()
-            .map(|core| core.dirs_for(&work.profile).minecraft_dir())
-    };
-    let _descriptor = descriptor_directory.map(SessionDescriptorGuard);
-
     if work.console.opens_at_launch() {
         open_console(app);
     }
@@ -282,7 +308,9 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
             let state = app.state::<State>();
             let Ok(core) = state.core.lock() else {
                 // The game is still running; we simply cannot see it any more.
-                return launch::failure("Fathom lost track of the session, but Minecraft is still running.");
+                return launch::failure(
+                    "Fathom lost track of the session, but Minecraft is still running.",
+                );
             };
             core.game_status(&profile_id)
         };
@@ -306,6 +334,119 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
         }
         return launch::finished(clean, current.outcome.message());
     }
+}
+
+/// Require positive proof from the game-side module before calling this a
+/// running Fathom session. A failed proof stops only the process this launch
+/// just created; leaving it up would be the old silent-vanilla fallback under
+/// another name.
+fn confirm_fathom_client(
+    app: &tauri::AppHandle,
+    profile: &Profile,
+    launch_started: SystemTime,
+) -> Result<(), String> {
+    let (game_directory, expected_sha1) = {
+        let state = app.state::<State>();
+        let core = state.core.lock().map_err(|_| {
+            "Fathom lost track of the session while checking its client.".to_owned()
+        })?;
+        (
+            core.dirs_for(profile).minecraft_dir(),
+            core.expected_client_sha1(profile),
+        )
+    };
+    let Some(expected_sha1) = expected_sha1 else {
+        stop_unverified(app, profile);
+        return Err(
+            "Fathom started a managed profile without a recorded client module. The process was stopped."
+                .to_owned(),
+        );
+    };
+
+    let deadline = std::time::Instant::now() + CLIENT_PROOF_TIMEOUT;
+    loop {
+        match launcher_core::fathom_client::check_loaded(
+            &game_directory,
+            launch_started,
+            &expected_sha1,
+        ) {
+            launcher_core::fathom_client::ClientLoad::Loaded {
+                version,
+                build,
+                features,
+            } if features > 0 => {
+                tracing::info!(
+                    profile = %profile.id,
+                    %version,
+                    // The same string the game prints as `[FATHOM PERF] Fathom
+                    // build:`. Two logs naming the same build is what makes a
+                    // stale runtime obvious instead of invisible.
+                    build = %if build.is_empty() { "unknown".to_owned() } else { build },
+                    features,
+                    expected_sha1 = %expected_sha1,
+                    marker = %game_directory.join(launcher_core::fathom_client::MARKER_PATH).display(),
+                    "verified Fathom client inside Minecraft"
+                );
+                return Ok(());
+            }
+            launcher_core::fathom_client::ClientLoad::Loaded { version, .. } => {
+                stop_unverified(app, profile);
+                return Err(format!(
+                    "Fathom client {version} loaded but reported no initialized features. The game was stopped; inspect the game log."
+                ));
+            }
+            launcher_core::fathom_client::ClientLoad::WrongBuild { expected, found } => {
+                stop_unverified(app, profile);
+                return Err(format!(
+                    "Minecraft loaded a different Fathom client (expected {expected}, found {found}). The game was stopped."
+                ));
+            }
+            launcher_core::fathom_client::ClientLoad::Pending => {}
+        }
+
+        let running = {
+            let state = app.state::<State>();
+            state
+                .core
+                .lock()
+                .ok()
+                .and_then(|core| core.game_status(&profile.id))
+                .is_some_and(|status| status.is_running())
+        };
+        if !running {
+            return Err(
+                "Minecraft exited before the Fathom client confirmed it loaded. Inspect the game log."
+                    .to_owned(),
+            );
+        }
+        if std::time::Instant::now() >= deadline {
+            stop_unverified(app, profile);
+            return Err(format!(
+                "Minecraft did not confirm the Fathom client within {} seconds. The game was stopped instead of falling back to vanilla.",
+                CLIENT_PROOF_TIMEOUT.as_secs()
+            ));
+        }
+        std::thread::sleep(CLIENT_PROOF_POLL);
+    }
+}
+
+fn stop_unverified(app: &tauri::AppHandle, profile: &Profile) {
+    let state = app.state::<State>();
+    if let Ok(core) = state.core.lock() {
+        match core.running().terminate(&profile.id) {
+            Ok(Some(status)) => tracing::error!(
+                profile = %profile.id,
+                pid = status.pid,
+                "stopped an unverified Minecraft process"
+            ),
+            Ok(None) => {}
+            Err(error) => tracing::error!(
+                profile = %profile.id,
+                %error,
+                "could not stop an unverified Minecraft process"
+            ),
+        }
+    };
 }
 
 /// Removes the session descriptor when the launch thread ends.
@@ -338,6 +479,35 @@ fn open_bridge(
     app: &tauri::AppHandle,
     profile: &launcher_core::profiles::Profile,
 ) -> Result<Bridge, String> {
+    open_bridge_in(app, profile, None)
+}
+
+/// The bridge that lives as long as the launcher does.
+///
+/// A game started some other way — from a development run, or from another
+/// launcher — has no per-game handshake, so its Sign In button had nothing to
+/// talk to. This one is written to `launcher/fathom/bridge.json` in the data
+/// directory, which the module looks for when its own game directory has none.
+/// Same token rule, same closed set of verbs, loopback only; it is removed when
+/// the launcher exits.
+pub fn open_launcher_bridge(app: &tauri::AppHandle) -> Result<Bridge, String> {
+    let (directory, profile) = {
+        let state = app.state::<State>();
+        let core = state
+            .core
+            .lock()
+            .map_err(|_| "the launcher is in a bad state")?;
+        let profile = crate::api::current_profile(&core).ok_or("there are no profiles")?;
+        (core.paths().root().join("launcher"), profile)
+    };
+    open_bridge_in(app, &profile, Some(directory))
+}
+
+fn open_bridge_in(
+    app: &tauri::AppHandle,
+    profile: &launcher_core::profiles::Profile,
+    directory_override: Option<std::path::PathBuf>,
+) -> Result<Bridge, String> {
     // The background the launcher is showing, so the hub can wear a theme
     // derived from the same picture. The module maps `bg_1`..`bg_4` onto its
     // own names, so no translation table has to exist on this side.
@@ -350,8 +520,12 @@ fn open_bridge(
 
     let (game_directory, handshake) = {
         let state = app.state::<State>();
-        let core = state.core.lock().map_err(|_| "the launcher is in a bad state")?;
-        let directory = core.dirs_for(profile).minecraft_dir();
+        let core = state
+            .core
+            .lock()
+            .map_err(|_| "the launcher is in a bad state")?;
+        let directory =
+            directory_override.unwrap_or_else(|| core.dirs_for(profile).minecraft_dir());
 
         let profiles = core
             .profiles()
@@ -423,6 +597,16 @@ fn serve_bridge(app: &tauri::AppHandle, command: bridge::Command) -> bridge::Rep
                 Err(error) => bridge::Reply::No(error.to_string()),
             }
         }
+        bridge::Command::SignIn => match crate::signin::from_game(app) {
+            Ok(word) => bridge::Reply::Ok(word.to_owned()),
+            Err(reason) => bridge::Reply::No(one_line(&reason)),
+        },
+        bridge::Command::Account => account_reply(app),
+        bridge::Command::Accounts => accounts_reply(app),
+        bridge::Command::SwitchAccount(id) => match crate::signin::switch_account(app, id) {
+            Ok(_) => bridge::Reply::Ok("switching".to_owned()),
+            Err(reason) => bridge::Reply::No(one_line(&reason)),
+        },
         bridge::Command::NextProfile(id) => select_profile(app, &id),
         bridge::Command::RestartInto(id) => match select_profile(app, &id) {
             // The launcher does not kill the game. Selecting the profile and
@@ -435,6 +619,76 @@ fn serve_bridge(app: &tauri::AppHandle, command: bridge::Command) -> bridge::Rep
             refusal => refusal,
         },
     }
+}
+
+/// Who is signed in, for the game's menu. Public profile only.
+///
+/// `ok signed-in <uuid> <name>`, `ok signing-in`, `ok signed-out`, or
+/// `ok failed <sentence>`. The launcher lock is only tried, never waited for:
+/// the game is waiting a quarter of a second, and a launch holding the lock
+/// answers `no busy` rather than a timeout.
+fn account_reply(app: &tauri::AppHandle) -> bridge::Reply {
+    let state = app.state::<State>();
+    let progress = state.auth.progress();
+    if progress.active {
+        return bridge::Reply::Ok(match progress.user_code {
+            Some(code) => format!("signing-in {code}"),
+            None => "signing-in".to_owned(),
+        });
+    }
+    let Ok(core) = state.core.try_lock() else {
+        return bridge::Reply::No("busy".to_owned());
+    };
+    match core.account().filter(|account| account.signed_in) {
+        Some(account) if is_username(&account.name) => {
+            bridge::Reply::Ok(format!("signed-in {} {}", account.id, account.name))
+        }
+        _ if progress.phase == crate::api::auth::AuthPhase::Failed => bridge::Reply::Ok(format!(
+            "failed {}",
+            one_line(progress.failure.as_deref().unwrap_or("Sign-in failed."))
+        )),
+        _ => bridge::Reply::Ok("signed-out".to_owned()),
+    }
+}
+
+/// The remembered public profiles for the in-game account picker.
+/// Usernames and UUIDs are both constrained alphabets, so commas and colons
+/// are unambiguous separators and the reply remains one line.
+fn accounts_reply(app: &tauri::AppHandle) -> bridge::Reply {
+    let state = app.state::<State>();
+    let Ok(core) = state.core.try_lock() else {
+        return bridge::Reply::No("busy".to_owned());
+    };
+    let rows = core
+        .accounts()
+        .into_iter()
+        .filter(|account| is_username(&account.name))
+        .take(12)
+        .map(|account| {
+            format!(
+                "{}:{}:{}",
+                account.id,
+                account.name,
+                if account.signed_in { "1" } else { "0" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    bridge::Reply::Ok(rows)
+}
+
+/// A Minecraft username: what the game accepts, and nothing that could break a
+/// one-line reply.
+fn is_username(name: &str) -> bool {
+    (1..=16).contains(&name.len()) && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// One line, bounded, for a bridge reply.
+fn one_line(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(160)
+        .collect()
 }
 
 /// Make a profile the one that launches next.
@@ -524,17 +778,14 @@ fn post(app: &tauri::AppHandle, focus_existing: bool) {
             return;
         }
 
-        let built = WebviewWindowBuilder::new(
-            &handle,
-            CONSOLE_LABEL,
-            WebviewUrl::App("index.html".into()),
-        )
-        .title("Fathom \u{2014} Game console")
-        .inner_size(880.0, 560.0)
-        .min_inner_size(520.0, 320.0)
-        .background_color(tauri::window::Color(0, 0, 0, 255))
-        .resizable(true)
-        .build();
+        let built =
+            WebviewWindowBuilder::new(&handle, CONSOLE_LABEL, WebviewUrl::App("index.html".into()))
+                .title("Fathom \u{2014} Game console")
+                .inner_size(880.0, 560.0)
+                .min_inner_size(520.0, 320.0)
+                .background_color(tauri::window::Color(0, 0, 0, 255))
+                .resizable(true)
+                .build();
         tracing::debug!(ok = built.is_ok(), "console: build returned");
 
         if let Err(error) = built {
@@ -572,7 +823,10 @@ mod tests {
 
     #[test]
     fn a_refusal_is_capitalised_for_display() {
-        assert_eq!(sentence("no Java 8 runtime was found"), "No Java 8 runtime was found");
+        assert_eq!(
+            sentence("no Java 8 runtime was found"),
+            "No Java 8 runtime was found"
+        );
     }
 
     /// An already-capital first letter must survive, and so must the rest of a

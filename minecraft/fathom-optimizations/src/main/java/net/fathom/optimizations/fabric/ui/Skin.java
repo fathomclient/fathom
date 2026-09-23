@@ -94,7 +94,24 @@ public final class Skin {
      * panel, which is the point, and a nether portal cannot shine through the
      * type.
      */
-    public static final int SCRIM = FathomTheme.COLOR_SCRIM;
+    /**
+     * The dimming behind a Fathom screen. **Deliberately lighter in game than
+     * the shared theme's.**
+     *
+     * <p>`fathom-theme.json` specifies `scrim` at 82% black, and that is right
+     * for the launcher, where the thing behind a modal is the launcher's own
+     * chrome and there is nothing to preserve. In game the thing behind is the
+     * world, and how much of it survives is the entire point of the glass. At
+     * 82% the panels could be as translucent as you like and still show almost
+     * nothing, because there was almost nothing left to show.
+     *
+     * <p>So this is 62%, and the surfaces above are in the high seventies —
+     * roughly 9% of the world reaches the eye through a panel, which is
+     * visible without competing with body text. The shared token is
+     * deliberately not edited: the launcher's scrim is correct for the
+     * launcher.
+     */
+    public static final int SCRIM = 0x9E000000;
 
     /** Under a floating panel. Not a blur — a falloff. */
     public static final int SHADOW = FathomTheme.COLOR_SHADOW;
@@ -104,14 +121,34 @@ public final class Skin {
     // -----------------------------------------------------------------------
 
     /** The five material levels used by the in-game renderer, darkest first. */
-    public static final int BACKGROUND = 0xFF050607;
-    public static final int RECESSED = 0xFF08090B;
-    public static final int SURFACE = 0xFF0A0B0D;
-    public static final int ELEVATED = 0xFF101216;
+    // ALPHA IS PART OF THESE TOKENS, AND USED TO BE MISSING.
+    //
+    // Every one of these was `0xFF......`. The Hub paints a scrim over the world
+    // and then fills its panel with `BACKGROUND`, its rail and trays with
+    // `RECESSED` and its cards with `SURFACE` -- so wherever the interface was,
+    // the world was gone. That is why the in-game UI read as opaque black boxes
+    // while the launcher, whose chrome is `rgba(12,14,19,0.55)`, reads as glass.
+    // It was never a blending bug: the colours simply had no transparency in
+    // them.
+    //
+    // The values are deliberately conservative. These panels carry body text
+    // over a moving world, and the failure mode on the other side -- a
+    // fashionably translucent panel nobody can read -- is worse than the one
+    // being fixed. If you want more of the world coming through, there are
+    // exactly two knobs: these alphas, and `COLOR_SCRIM` in `FathomTheme`,
+    // which decides how much world is behind them in the first place.
+    //
+    // `Colour.mix` interpolates alpha, and `Colour.fade` replaces it outright,
+    // so `fade(BACKGROUND, 0.82f)` in the main menu's chrome still means exactly
+    // 0.82 and is unaffected by the alpha carried here.
+    public static final int BACKGROUND = 0xC4050607;
+    public static final int RECESSED = 0xB808090B;
+    public static final int SURFACE = 0xC40A0B0D;
+    public static final int ELEVATED = 0xCC101216;
     public static final int FLOATING = 0xFA0E1013;
 
     /** One step up from a surface: what hover does, and nothing more. */
-    public static final int SURFACE_HOVER = 0xFF13161A;
+    public static final int SURFACE_HOVER = 0xD413161A;
     /** Muted charcoal borders. */
     public static final int EDGE_RECESSED = 0x10FFFFFF;
     public static final int EDGE_SURFACE = 0x1AFFFFFF;

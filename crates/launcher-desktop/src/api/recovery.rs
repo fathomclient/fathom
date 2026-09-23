@@ -78,8 +78,7 @@ pub fn view(core: &Launcher) -> RecoveryView {
     actions.push(RecoveryAction {
         id: "verify",
         label: "Check game files",
-        detail: "Reports anything missing or damaged. Launching re-downloads it."
-            .to_owned(),
+        detail: "Reports anything missing or damaged. Launching re-downloads it.".to_owned(),
         verb: "Check",
         tone: "normal",
         unavailable: None,
@@ -96,11 +95,9 @@ pub fn view(core: &Launcher) -> RecoveryView {
         detail: if java_ok {
             "Java 8 is available. Search again if you installed another.".to_owned()
         } else if may_download {
-            "Downloads a verified Temurin runtime into Fathom's folder."
-                .to_owned()
+            "Downloads a verified Temurin runtime into Fathom's folder.".to_owned()
         } else {
-            "Search again, or let Fathom install it from Settings."
-                .to_owned()
+            "Search again, or let Fathom install it from Settings.".to_owned()
         },
         verb: if java_ok || !may_download {
             "Search"
@@ -155,8 +152,7 @@ pub fn view(core: &Launcher) -> RecoveryView {
     actions.push(RecoveryAction {
         id: "diagnostics",
         label: "Save a diagnostics report",
-        detail: "A text file about this install. Username and paths removed."
-            .to_owned(),
+        detail: "A text file about this install. Username and paths removed.".to_owned(),
         verb: "Save",
         tone: "normal",
         unavailable: None,
@@ -223,10 +219,9 @@ pub fn run(core: &mut Launcher, id: &str) -> Result<ActionOutcome, String> {
             // that permission is the whole point of the setting.
             if core.settings().privacy.managed_java {
                 return Ok(match core.install_java(8) {
-                    Ok(java) => ActionOutcome::ok(format!(
-                        "Downloaded and verified Java {}.",
-                        java.major
-                    )),
+                    Ok(java) => {
+                        ActionOutcome::ok(format!("Downloaded and verified Java {}.", java.major))
+                    }
                     Err(error) => ActionOutcome::failed(error.to_string()),
                 });
             }

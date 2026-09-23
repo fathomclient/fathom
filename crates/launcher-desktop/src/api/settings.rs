@@ -116,7 +116,6 @@ pub const TOGGLES: [(&str, &str, &str, &str); 4] = [
     ),
 ];
 
-
 /// One setting that is not a yes/no.
 ///
 /// Kept apart from [`ToggleRow`] rather than folded into a single "setting"
@@ -164,7 +163,6 @@ fn console_choice(settings: &Settings) -> ChoiceRow {
     }
 }
 
-
 /// The Java runtime policy, as a choice rather than a switch.
 ///
 /// This replaced *Let Fathom install Java*, which was a switch that greyed
@@ -176,7 +174,11 @@ fn console_choice(settings: &Settings) -> ChoiceRow {
 /// path, a path needs a file picker, and a settings row is the wrong place to
 /// open one; a profile that wants a specific executable sets it on the profile.
 fn java_choice(settings: &Settings) -> ChoiceRow {
-    let policies = [JavaPolicy::Automatic, JavaPolicy::Managed, JavaPolicy::System];
+    let policies = [
+        JavaPolicy::Automatic,
+        JavaPolicy::Managed,
+        JavaPolicy::System,
+    ];
     ChoiceRow {
         id: "java-runtime",
         label: "Java runtime",
@@ -332,7 +334,6 @@ pub fn apply(settings: &Settings, id: &str, value: bool) -> Result<Settings, Str
     Ok(next)
 }
 
-
 /// Apply one multiple-choice change, by id.
 ///
 /// Same contract as [`apply`]: an unknown id, or an unknown value for a known
@@ -371,8 +372,14 @@ mod tests {
         // Account and Privacy are NOT categories. The account lives in the
         // top-bar drawer and Privacy is a main destination; giving either a
         // Settings category as well is the duplication this structure removes.
-        const CATEGORIES: [&str; 6] =
-            ["general", "game", "appearance", "network", "storage", "advanced"];
+        const CATEGORIES: [&str; 6] = [
+            "general",
+            "game",
+            "appearance",
+            "network",
+            "storage",
+            "advanced",
+        ];
         for (id, _, _, section) in TOGGLES {
             assert!(
                 CATEGORIES.contains(&section),
@@ -404,7 +411,10 @@ mod tests {
         let before = Settings::default();
         let after = apply(&before, "offline", true).expect("a real setting");
         assert!(after.privacy.offline_mode);
-        assert_eq!(after.privacy.check_for_updates, before.privacy.check_for_updates);
+        assert_eq!(
+            after.privacy.check_for_updates,
+            before.privacy.check_for_updates
+        );
         assert_eq!(after.privacy.managed_java, before.privacy.managed_java);
         assert_eq!(after.selected_profile, before.selected_profile);
     }
@@ -413,8 +423,14 @@ mod tests {
     /// in a category that exists for the same reason.
     #[test]
     fn every_choice_has_a_real_category_and_a_valid_default() {
-        const CATEGORIES: [&str; 6] =
-            ["general", "game", "appearance", "network", "storage", "advanced"];
+        const CATEGORIES: [&str; 6] = [
+            "general",
+            "game",
+            "appearance",
+            "network",
+            "storage",
+            "advanced",
+        ];
         let settings = Settings::default();
         for row in [console_choice(&settings), java_choice(&settings)] {
             assert!(CATEGORIES.contains(&row.section), "{}", row.id);

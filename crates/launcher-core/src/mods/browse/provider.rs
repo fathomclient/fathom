@@ -425,8 +425,11 @@ pub trait CatalogProvider: Debug + Send + Sync {
     fn availability(&self) -> Availability;
 
     /// A page of projects matching a query.
-    fn search(&self, query: &SearchQuery, ctx: ProviderContext<'_>)
-        -> Result<SearchPage, BrowseError>;
+    fn search(
+        &self,
+        query: &SearchQuery,
+        ctx: ProviderContext<'_>,
+    ) -> Result<SearchPage, BrowseError>;
 
     /// Everything about one project, including description and gallery.
     fn project(&self, id: &str, ctx: ProviderContext<'_>) -> Result<ModProject, BrowseError>;
@@ -493,14 +496,16 @@ mod tests {
     #[test]
     fn a_cache_key_changes_with_everything_that_changes_the_answer() {
         let base = SearchQuery::new(Target::new("1.8.9", Loader::LegacyFabric)).with_text("sodium");
-        let same = SearchQuery::new(Target::new("1.8.9", Loader::LegacyFabric)).with_text("Sodium ");
+        let same =
+            SearchQuery::new(Target::new("1.8.9", Loader::LegacyFabric)).with_text("Sodium ");
         assert_eq!(base.cache_key(), same.cache_key(), "case and spacing only");
 
         let other_version =
             SearchQuery::new(Target::new("1.12.2", Loader::LegacyFabric)).with_text("sodium");
         assert_ne!(base.cache_key(), other_version.cache_key());
 
-        let other_loader = SearchQuery::new(Target::new("1.8.9", Loader::Forge)).with_text("sodium");
+        let other_loader =
+            SearchQuery::new(Target::new("1.8.9", Loader::Forge)).with_text("sodium");
         assert_ne!(base.cache_key(), other_loader.cache_key());
 
         let page = base.clone().with_page(20, 20);

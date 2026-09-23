@@ -20,6 +20,17 @@ public abstract class WorldDirectionsMixin {
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/util/math/Direction;values()[Lnet/minecraft/util/math/Direction;"))
     private Direction[] fathom$sharedDirections() {
-        return DirectionArrays.values();
+        long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        try {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()) {
+                return Direction.values();
+            }
+            return DirectionArrays.values();
+        } finally {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
+        }
     }
 }

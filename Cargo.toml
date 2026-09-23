@@ -37,6 +37,10 @@ sha1 = "0.10"
 sha2 = "0.10"
 base64 = "0.22"
 
+# Decoding a signed-in player's skin to cut out their head for the account
+# avatar, and encoding the result. Already in the tree through Tauri.
+png = "0.17"
+
 # Entitlement JWT signature verification (ownership gate).
 # `rust_crypto` rather than `aws_lc_rs`: pure Rust, no C toolchain, consistent
 # with the rustls choice. Without an explicit provider feature, jsonwebtoken
@@ -74,36 +78,6 @@ ed25519-dalek = { version = "2.2", default-features = false, features = [
     "std",
     "zeroize",
 ] }
-
-# Image decoding is optimised even in a debug build.
-#
-# The launcher decodes one 1280x720 JPEG per background frame, thirty times a
-# second. Optimised that is 5.1 ms; at `opt-level = 0` it is about 150 ms, which
-# makes a debug build play the background at 6 fps and look exactly like the bug
-# this rewrite exists to fix. Optimising two leaf dependencies costs a few
-# seconds on the first build, changes nothing about our own code being
-# debuggable, and means what a developer sees is what a user sees.
-[profile.dev.package.image]
-opt-level = 3
-
-[profile.dev.package.jpeg-decoder]
-opt-level = 3
-
-# ...and in release, for a different reason and with more at stake.
-#
-# `[profile.release]` below is `opt-level = "z"`, which is right for a launcher
-# whose binary size is a shipped cost and whose own code is not hot. The JPEG
-# decoder is the exception: it runs thirty times a second. Optimising it for
-# size instead of speed costs the vectorised inner loops the decode depends on,
-# which risks shipping a release that plays the background slower than the
-# development build does -- the failure being fixed here, reintroduced in the
-# only build a user ever runs. These two lines apply to two leaf dependencies
-# and leave the rest of the binary optimised for size.
-[profile.release.package.image]
-opt-level = 3
-
-[profile.release.package.jpeg-decoder]
-opt-level = 3
 
 [profile.release]
 opt-level = "z"

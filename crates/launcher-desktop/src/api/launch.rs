@@ -75,7 +75,11 @@ impl Phase {
     pub fn is_active(self) -> bool {
         matches!(
             self,
-            Phase::Preparing | Phase::Downloading | Phase::Unpacking | Phase::Starting | Phase::Running
+            Phase::Preparing
+                | Phase::Downloading
+                | Phase::Unpacking
+                | Phase::Starting
+                | Phase::Running
         )
     }
 
@@ -87,7 +91,10 @@ impl Phase {
     /// close the game window. A Stop button that turns into a Kill button
     /// without saying so is the kind of control that loses a world.
     pub fn is_cancellable(self) -> bool {
-        matches!(self, Phase::Preparing | Phase::Downloading | Phase::Unpacking)
+        matches!(
+            self,
+            Phase::Preparing | Phase::Downloading | Phase::Unpacking
+        )
     }
 }
 
@@ -212,7 +219,6 @@ impl Supervisor {
         }
         Ok(true)
     }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -226,9 +232,11 @@ impl LaunchProgress {
     /// tells somebody whether to wait or make tea, and a bare 53% does not.
     pub(crate) fn from_stage(stage: &InstallStage) -> Self {
         match stage {
-            InstallStage::ResolvingMetadata => {
-                Self::new(Phase::Preparing, "Preparing", "Reading the version manifest")
-            }
+            InstallStage::ResolvingMetadata => Self::new(
+                Phase::Preparing,
+                "Preparing",
+                "Reading the version manifest",
+            ),
             InstallStage::FetchingAssetIndex => {
                 Self::new(Phase::Preparing, "Preparing", "Reading the asset index")
             }
@@ -274,16 +282,30 @@ impl LaunchProgress {
     }
 }
 
+/// The process exists, but it is not called a Fathom session until the client
+/// module proves that the expected jar completed initialization.
+pub(crate) fn confirming_fathom() -> LaunchProgress {
+    LaunchProgress::new(Phase::Starting, "Starting", "Confirming the Fathom client")
+}
+
 /// What the interface says while the game is up.
 pub(crate) fn running(elapsed: Duration) -> LaunchProgress {
-    LaunchProgress::new(Phase::Running, "Minecraft is running", elapsed_phrase(elapsed))
+    LaunchProgress::new(
+        Phase::Running,
+        "Minecraft is running",
+        elapsed_phrase(elapsed),
+    )
 }
 
 /// A settled, finished launch.
 pub(crate) fn finished(clean: bool, message: String) -> LaunchProgress {
     let mut progress = LaunchProgress::new(
         Phase::Finished,
-        if clean { "Session ended" } else { "Minecraft stopped" },
+        if clean {
+            "Session ended"
+        } else {
+            "Minecraft stopped"
+        },
         message.clone(),
     );
     if !clean {
@@ -316,7 +338,10 @@ fn elapsed_phrase(elapsed: Duration) -> String {
     let hours = minutes / 60;
     let rest = minutes % 60;
     if rest == 0 {
-        format!("Running for {hours} {}", if hours == 1 { "hour" } else { "hours" })
+        format!(
+            "Running for {hours} {}",
+            if hours == 1 { "hour" } else { "hours" }
+        )
     } else {
         format!(
             "Running for {hours} {} {rest} min",
@@ -361,8 +386,16 @@ mod tests {
 
     #[test]
     fn a_settled_launch_is_not_active() {
-        for phase in [Phase::Idle, Phase::Finished, Phase::Failed, Phase::Cancelled] {
-            assert!(!phase.is_active(), "{phase:?} should not keep the poll alive");
+        for phase in [
+            Phase::Idle,
+            Phase::Finished,
+            Phase::Failed,
+            Phase::Cancelled,
+        ] {
+            assert!(
+                !phase.is_active(),
+                "{phase:?} should not keep the poll alive"
+            );
         }
         for phase in [
             Phase::Preparing,
@@ -397,7 +430,11 @@ mod tests {
             bytes_transferred: 88_080_384,
         }));
         assert_eq!(progress.phase, Phase::Downloading);
-        assert!(progress.detail.contains("412 of 771"), "{}", progress.detail);
+        assert!(
+            progress.detail.contains("412 of 771"),
+            "{}",
+            progress.detail
+        );
         assert!(progress.detail.contains("MB"), "{}", progress.detail);
         assert!(progress.fraction.is_some_and(|f| (0.53..0.54).contains(&f)));
     }
@@ -410,7 +447,10 @@ mod tests {
         let progress = failure("no Java 8 runtime was found");
         assert_eq!(progress.phase, Phase::Failed);
         assert!(!progress.active);
-        assert_eq!(progress.failure.as_deref(), Some("no Java 8 runtime was found"));
+        assert_eq!(
+            progress.failure.as_deref(),
+            Some("no Java 8 runtime was found")
+        );
     }
 
     #[test]
@@ -437,7 +477,9 @@ mod tests {
         let supervisor = Supervisor::default();
         supervisor.begin().expect("the first launch");
         supervisor.set(failure("something went wrong"));
-        supervisor.begin().expect("a second attempt after a failure");
+        supervisor
+            .begin()
+            .expect("a second attempt after a failure");
     }
 
     #[test]
@@ -452,7 +494,10 @@ mod tests {
         let cancel = supervisor.begin().expect("a launch");
         assert!(!cancel.is_cancelled());
         assert_eq!(supervisor.request_cancel(), Ok(true));
-        assert!(cancel.is_cancelled(), "the running work never saw the request");
+        assert!(
+            cancel.is_cancelled(),
+            "the running work never saw the request"
+        );
     }
 
     /// Cancelling after the process exists must not raise the flag: the flag is
@@ -471,8 +516,14 @@ mod tests {
     fn elapsed_time_is_rounded_rather_than_ticking() {
         assert_eq!(elapsed_phrase(Duration::from_secs(3)), "Started just now");
         assert_eq!(elapsed_phrase(Duration::from_secs(89)), "Started just now");
-        assert_eq!(elapsed_phrase(Duration::from_secs(600)), "Running for 10 minutes");
-        assert_eq!(elapsed_phrase(Duration::from_secs(3600)), "Running for 1 hour");
+        assert_eq!(
+            elapsed_phrase(Duration::from_secs(600)),
+            "Running for 10 minutes"
+        );
+        assert_eq!(
+            elapsed_phrase(Duration::from_secs(3600)),
+            "Running for 1 hour"
+        );
         assert_eq!(
             elapsed_phrase(Duration::from_secs(9000)),
             "Running for 2 hours 30 min"

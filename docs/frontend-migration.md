@@ -8,13 +8,25 @@ The presentation layer moved from `iced` to Tauri 2 + Svelte 5 + TypeScript.
 | | |
 | --- | --- |
 | `crates/launcher-core` | **Unchanged.** Auth, installer, Java, profiles, mods, downloads, network policy, recovery, updater, paths, credentials, launch pipeline. |
-| `crates/launcher-desktop` | The new shell. A window, a WebView, four typed commands. |
+| `crates/launcher-desktop` | The canonical shell. A window, a WebView, and typed commands. |
 | `desktop/` | Svelte frontend. Renders; decides nothing. |
-| `crates/launcher-ui` | The old iced interface, still building and still passing its tests. |
+| `crates/launcher-ui` | A compatibility command that calls `launcher_desktop::run()` and embeds `desktop/dist`. |
 
-The iced crate is deliberately still there. It is a working reference for the
-pages that have not been rebuilt, and deleting it before its replacements exist
-would trade a dated interface for a missing one.
+The iced-era files remain quarantined as historical reference, but Cargo does
+not compile them and packaging does not copy them. There is one application
+implementation and one frontend bundle; the old package name cannot select a
+different launcher.
+
+## WebView transport
+
+Every ordinary Cargo build enables Tauri's `custom-protocol` feature by
+default. `desktop/dist` is embedded in the executable, so installed and
+portable builds do not start an HTTP server, select a port, navigate to
+localhost, or depend on firewall loopback behavior.
+
+The only local server is the explicit `tools/dev.ps1` hot-reload workflow. It
+uses an ephemeral IPv4 loopback port, starts Vite with strict port ownership,
+and lets the Tauri CLI wait for readiness before the WebView is created.
 
 ## The boundary
 
@@ -155,18 +167,15 @@ from a cargo feature rather than from debug-vs-release:
 dev: cfg!(not(feature = "custom-protocol")),
 ```
 
-`package-portable.ps1` passes `--features custom-protocol` and gets an embedded
-bundle; `dev.ps1` omits it and gets `devUrl`. A release build that forgets the
-flag is the bug that once shipped a launcher showing "localhost refused to
-connect".
+`custom-protocol` is now a default feature, so ordinary debug and release builds
+both get the embedded bundle. The Tauri development command deliberately
+disables that default and uses the `devUrl` supplied by `dev.ps1`.
 
 ### One trap worth knowing
 
-Vite here binds to **`::1` only** unless told otherwise, while `devUrl` is
-`http://localhost:5173` — so whether the WebView reaches it depends on which
-address its resolver tries first. `dev.ps1` pins `--host 127.0.0.1`. The first
-version of the script also probed the port over IPv4 and concluded, wrongly,
-that Vite had failed to start.
+Vite is bound explicitly to `127.0.0.1` on an ephemeral port. `--strictPort`
+prevents it from silently moving away from the URL Tauri was given, and Tauri's
+readiness wait prevents WebView2 from navigating before Vite responds.
 
 ## What is not done
 

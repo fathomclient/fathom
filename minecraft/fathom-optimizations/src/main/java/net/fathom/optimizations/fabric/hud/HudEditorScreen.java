@@ -85,6 +85,18 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private static final int HANDLE = 6;
 
     private static final float TOOLBAR_HEIGHT = 52f;
+
+    /**
+     * The toolbar's buttons, as widths and the gap that follows each.
+     *
+     * <p>One array, read by both the pass that draws the bar and the pass that
+     * decides whether a click landed on it. They were two copies of the same
+     * arithmetic and drifted apart the first time a button changed width, which
+     * is exactly the divergence {@link Rect} exists to prevent.
+     */
+    private static final float[] TOOL_WIDTHS = {96f, 92f, 110f, 116f, 100f, 104f};
+    private static final float[] TOOL_GAPS = {Skin.S3, Skin.S2, Skin.S2, Skin.S2, Skin.S2, Skin.S4};
+    private static final float PICKER_WIDTH = 200f;
     // Wide enough for "Reset position" beside "Reset widget", tall enough for
     // the row they sit in. Both were measured against the panel in the game
     // after the buttons were added and drew outside it.
@@ -129,6 +141,30 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private float mcToLogical = 1f;
     private int screenWidth;
     private int screenHeight;
+
+    /**
+     * Every widget's rectangle for this frame, measured once.
+     *
+     * <p>Hit testing, snapping, outlines and the yield test all want the same
+     * list, and measuring a widget means measuring its text. This was being
+     * recomputed four or five times a frame for one answer.
+     */
+    private List<FathomHud.Positioned> frameBoxes;
+
+    /**
+     * Whether the toolbar has stepped aside for the widget being worked on.
+     *
+     * <p>The bar sits over the bottom of the screen, which is also where the
+     * hotbar is and therefore where people put widgets. While the widget under
+     * the pointer -- or the one being dragged -- reaches into the strip, the bar
+     * fades and stops taking clicks, so the widget underneath can be grabbed,
+     * seen and dropped. Without this a widget dropped under a toolbar button
+     * could never be picked up again.
+     */
+    private boolean barYields;
+
+    /** The same, for the inspector panel in the top right. */
+    private boolean inspectorYields;
 
     public HudEditorScreen(FathomHud hud) {
         this.hud = hud;
@@ -198,10 +234,17 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             controls.begin(pointer, delta);
             mcToLogical = (client.width / (float) Math.max(1, screenWidth)) / ui.scale();
 
-            input(ui);
-
+            frameBoxes = null;
             int mouseX = toScaledX(pointer.x());
             int mouseY = toScaledY(pointer.y());
+            // Decided before anything reads it: the bar's own controls consult it
+            // to know whether to respond, and so does the widget hit test.
+            barYields = chromeYields(
+                    Rect.of(0f, ui.height() - TOOLBAR_HEIGHT, ui.width(), ui.height()), mouseX, mouseY);
+            inspectorYields = selected != null && chromeYields(inspectorArea(ui), mouseX, mouseY);
+
+            input(ui);
+
             if (dragging != null) {
                 drag(mouseX, mouseY);
             } else if (resizing != null) {
@@ -228,12 +271,15 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 safeBounds(ui);
             }
             drawGuides(ui);
-            outlines(ui, mouseX, mouseY);
 
             toolbar(ui);
             if (selected != null) {
                 inspector(ui);
             }
+            // After the chrome, not before it. A widget under the toolbar or the
+            // inspector is exactly the one somebody is trying to move, and an
+            // outline drawn underneath the panel covering it is no help at all.
+            outlines(ui, mouseX, mouseY);
             controls.drawOverlays(ui);
             controls.end();
             ui.popTransform();
@@ -266,6 +312,64 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         System.out.println("[Fathom] UI QA hud-editor " + quality + ": mean "
                 + Gfx.frames().uiMeanMillis() + " ms.");
         client.scheduleStop();
+    }
+
+    /**
+     * This frame's widget rectangles, measured on first ask and kept.
+     *
+     * <p>Invalidated by {@link #place}, so the outline drawn after a drag step
+     * is where the widget now is rather than where it was at the top of the
+     * frame.
+     */
+    private List<FathomHud.Positioned> boxes() {
+        if (frameBoxes == null) {
+            frameBoxes = hud.boxes(client, screenWidth, screenHeight);
+        }
+        return frameBoxes;
+    }
+
+    /** The topmost widget under a point in Minecraft's scaled space, or null. */
+    private FathomHud.Positioned widgetAt(int scaledX, int scaledY) {
+        List<FathomHud.Positioned> positioned = boxes();
+        for (int index = positioned.size() - 1; index >= 0; index--) {
+            if (positioned.get(index).box.contains(scaledX, scaledY)) {
+                return positioned.get(index);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The widget a yield would be for: the one being worked on, or the one under
+     * the pointer.
+     */
+    private FathomHud.Positioned inPlay(int scaledX, int scaledY) {
+        if (dragging != null) {
+            return find(dragging);
+        }
+        if (resizing != null) {
+            return find(resizing);
+        }
+        return widgetAt(scaledX, scaledY);
+    }
+
+    /**
+     * Whether a piece of chrome overlaps the widget in play.
+     *
+     * <p>Only then, so the bar does not blink every time the pointer crosses a
+     * widget somewhere else on the screen.
+     */
+    private boolean chromeYields(Rect chrome, int scaledX, int scaledY) {
+        FathomHud.Positioned active = inPlay(scaledX, scaledY);
+        if (active == null) {
+            return false;
+        }
+        Rect widget = Rect.of(
+                toLogical(active.box.x),
+                toLogical(active.box.y),
+                toLogical(active.box.right()),
+                toLogical(active.box.bottom()));
+        return !chrome.intersect(widget).empty();
     }
 
     private float toLogical(float scaled) {
@@ -362,7 +466,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     private void outlines(GlRenderer ui, int mouseX, int mouseY) {
-        for (FathomHud.Positioned positioned : hud.boxes(client, screenWidth, screenHeight)) {
+        for (FathomHud.Positioned positioned : boxes()) {
             boolean hovered = positioned.box.contains(mouseX, mouseY);
             boolean active = positioned.widget.id().equals(dragging)
                     || positioned.widget.id().equals(resizing)
@@ -408,30 +512,36 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private void toolbar(GlRenderer ui) {
         float top = ui.height() - TOOLBAR_HEIGHT;
         Rect bar = Rect.of(0f, top, ui.width(), ui.height());
+        Rect row = toolbarRow(ui);
+        Rect[] keys = toolbarButtons(ui);
+
+        // Stepped aside: faint, and deaf. The fade is what makes it legible as
+        // "the bar has moved out of your way" rather than "the bar is broken",
+        // and the shield stops a press that is grabbing the widget underneath
+        // from also pressing the button it happens to be over.
+        if (barYields) {
+            controls.shield(bar);
+        }
+        ui.pushAlpha(barYields ? 0.18f : 1f);
+
         ui.fill(bar.x, bar.y, bar.right(), bar.bottom(), Skin.fade(Skin.CHROME, 0.94f));
         ui.fill(bar.x, bar.y, bar.right(), bar.y + Skin.HAIRLINE, Skin.CHROME_LINE_STRONG);
 
-        Rect row = bar.inset(Skin.S5, 0f).vcentre(0f, bar.width - Skin.S5 * 2f, Skin.H_MD);
-        float cursor = row.x;
-
-        if (controls.primary(ui, "edit.done", new Rect(cursor, row.y, 96f, row.height), "Done", true)) {
+        if (controls.primary(ui, "edit.done", keys[0], "Done", true)) {
             close();
         }
-        cursor += 96f + Skin.S3;
-        if (controls.secondary(ui, "edit.grid", new Rect(cursor, row.y, 92f, row.height),
+        if (controls.secondary(ui, "edit.grid", keys[1],
                 prefs.grid() ? "Grid on" : "Grid", true)) {
             prefs.setGrid(!prefs.grid());
         }
-        cursor += 92f + Skin.S2;
-        if (controls.secondary(ui, "edit.bounds", new Rect(cursor, row.y, 110f, row.height),
+        if (controls.secondary(ui, "edit.bounds", keys[2],
                 prefs.bounds() ? "Bounds on" : "Bounds", true)) {
             prefs.setBounds(!prefs.bounds());
         }
-        cursor += 110f + Skin.S2;
         // Snapping strength, as one cycling button rather than four: it has an
         // order, exactly one value is in force, and a dropdown for four words
         // would be the largest control on the bar.
-        if (controls.secondary(ui, "edit.snap", new Rect(cursor, row.y, 116f, row.height),
+        if (controls.secondary(ui, "edit.snap", keys[3],
                 "Snap: " + prefs.snapLabel(), true)) {
             prefs.cycleSnap();
             note = prefs.snapPixels() == 0
@@ -439,8 +549,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                     : "Snapping " + prefs.snapLabel().toLowerCase(java.util.Locale.ROOT)
                             + ". Hold Alt to place freely.";
         }
-        cursor += 116f + Skin.S2;
-        if (controls.secondary(ui, "edit.dup", new Rect(cursor, row.y, 100f, row.height), "Duplicate",
+        if (controls.secondary(ui, "edit.dup", keys[4], "Duplicate",
                 hud.profiles() != null)) {
             // A copy of the whole loadout, made live, so the dragging that follows
             // changes the copy. The HUD belongs to a profile now; it has no names
@@ -455,19 +564,18 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 problem = failure.getMessage();
             }
         }
-        cursor += 100f + Skin.S2;
-        if (controls.danger(ui, "edit.reset", new Rect(cursor, row.y, 104f, row.height), "Reset all", true)) {
+        if (controls.danger(ui, "edit.reset", keys[5], "Reset all", true)) {
             hud.resetLayout();
             selected = null;
             note = "Every widget is back where it started.";
             problem = hud.save();
         }
-        cursor += 104f + Skin.S4;
+        float cursor = keys[5].right() + Skin.S4;
 
         // The profile picker, at the right where a document's name goes. The
         // layout being edited is the live profile's, so choosing another profile
         // switches the whole loadout, live, and edits that one's HUD.
-        Rect picker = row.vcentreRight(0f, 200f, row.height);
+        Rect picker = toolbarPicker(ui);
         net.fathom.optimizations.fabric.profile.ProfileRuntime profiles = hud.profiles();
         if (profiles != null) {
             List<net.fathom.optimizations.core.profile.FathomProfile> all = profiles.cachedProfiles();
@@ -493,8 +601,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
         String hint = selected == null
                 ? "Drag to move, corner to resize, scroll to fade, Shift-scroll to scale. "
-                        + "Edges and centres snap; hold Alt to place freely."
-                : selected + " selected — arrows nudge, Shift-arrows by ten, Delete switches it off";
+                        + "Tab steps through the widgets; hold Alt to place freely."
+                : selected + " selected — arrows nudge, Shift-arrows by ten, Tab for the next, "
+                        + "Delete switches it off";
         float room = picker.x - cursor - Skin.S4;
         if (room > 80f) {
             ui.text(Text.fit(ui, note.isEmpty() ? hint : note, Type.BODY, room), cursor,
@@ -505,6 +614,25 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         if (problem != null) {
             ui.text("Could not save: " + problem, Skin.S5, top - Skin.S3, Type.BODY, Skin.BAD);
         }
+        ui.popAlpha();
+        controls.clearShield();
+    }
+
+    /** The six buttons along the left of the bar, laid out once. */
+    private Rect[] toolbarButtons(GlRenderer ui) {
+        Rect row = toolbarRow(ui);
+        Rect[] out = new Rect[TOOL_WIDTHS.length];
+        float cursor = row.x;
+        for (int index = 0; index < TOOL_WIDTHS.length; index++) {
+            out[index] = new Rect(cursor, row.y, TOOL_WIDTHS[index], row.height);
+            cursor += TOOL_WIDTHS[index] + TOOL_GAPS[index];
+        }
+        return out;
+    }
+
+    /** The profile picker, at the right of the bar. */
+    private Rect toolbarPicker(GlRenderer ui) {
+        return toolbarRow(ui).vcentreRight(0f, PICKER_WIDTH, toolbarRow(ui).height);
     }
 
     /**
@@ -520,9 +648,21 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         if (widget == null) {
             return;
         }
-        Placement placement = hud.placement(widget.id());
-        Rect panel = new Rect(ui.width() - INSPECTOR_WIDTH - Skin.S5, Skin.S5, INSPECTOR_WIDTH, INSPECTOR_HEIGHT);
+        Rect panel = inspectorArea(ui);
+        if (inspectorYields) {
+            controls.shield(panel);
+        }
+        ui.pushAlpha(inspectorYields ? 0.18f : 1f);
+        try {
+            inspectorBody(ui, widget, panel);
+        } finally {
+            ui.popAlpha();
+            controls.clearShield();
+        }
+    }
 
+    private void inspectorBody(GlRenderer ui, Widget widget, Rect panel) {
+        Placement placement = hud.placement(widget.id());
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
         ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.RAISED);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
@@ -645,12 +785,21 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         float mouseX = pointer.x();
         float mouseY = pointer.y();
 
-        // The chrome takes its own clicks — the controls do that themselves —
-        // so a press that lands on it is not also a press on a widget.
-        if (mouseY >= ui.height() - TOOLBAR_HEIGHT) {
+        // Only real controls take the click. The old test rejected the entire
+        // 52-pixel strip, including the empty space between the buttons and the
+        // profile picker. A widget dropped anywhere in that strip could then
+        // never be selected again. The bar is visual chrome; its empty space is
+        // deliberately click-through so a covered widget can be dragged out.
+        if (toolbarOwns(ui, mouseX, mouseY)) {
             return;
         }
-        if (selected != null && inspectorArea(ui).contains(mouseX, mouseY)) {
+        if (selected != null && !inspectorYields && inspectorArea(ui).contains(mouseX, mouseY)) {
+            return;
+        }
+        // An open dropdown is drawn over everything and takes its own click in
+        // drawOverlays, which runs after this. Without this the same press both
+        // chose an option and grabbed whatever widget was behind the list.
+        if (controls.popoverOpen()) {
             return;
         }
 
@@ -658,7 +807,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         int scaledY = toScaledY(mouseY);
         // Reversed, so the widget drawn last -- the one on top -- is the one
         // grabbed when two overlap.
-        List<FathomHud.Positioned> positioned = hud.boxes(client, screenWidth, screenHeight);
+        List<FathomHud.Positioned> positioned = boxes();
         for (int index = positioned.size() - 1; index >= 0; index--) {
             FathomHud.Positioned candidate = positioned.get(index);
             int hx = candidate.box.right();
@@ -681,6 +830,32 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             }
         }
         selected = null;
+    }
+
+    private Rect toolbarRow(GlRenderer ui) {
+        Rect bar = Rect.of(0f, ui.height() - TOOLBAR_HEIGHT, ui.width(), ui.height());
+        return bar.inset(Skin.S5, 0f).vcentre(0f, bar.width - Skin.S5 * 2f, Skin.H_MD);
+    }
+
+    /**
+     * Whether the pointer is on an actual toolbar control, not merely its backdrop.
+     *
+     * <p>The backdrop is deliberately click-through: a widget dropped in the
+     * empty space between the buttons and the profile picker used to be
+     * unreachable for the rest of the session. And when the bar has stepped
+     * aside for a widget underneath it, even the buttons let the click past --
+     * otherwise a widget parked under one of them would be just as stuck.
+     */
+    private boolean toolbarOwns(GlRenderer ui, float mouseX, float mouseY) {
+        if (barYields) {
+            return false;
+        }
+        for (Rect key : toolbarButtons(ui)) {
+            if (key.contains(mouseX, mouseY)) {
+                return true;
+            }
+        }
+        return hud.profiles() != null && toolbarPicker(ui).contains(mouseX, mouseY);
     }
 
     private Rect inspectorArea(GlRenderer ui) {
@@ -715,7 +890,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
         Snap.Box wanted = new Snap.Box(wantedX, wantedY, target.box.width, target.box.height);
         List<Snap.Box> others = new ArrayList<Snap.Box>();
-        for (FathomHud.Positioned other : hud.boxes(client, screenWidth, screenHeight)) {
+        for (FathomHud.Positioned other : boxes()) {
             if (!other.widget.id().equals(dragging)) {
                 others.add(other.box);
             }
@@ -741,7 +916,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             return;
         }
         List<Snap.Box> others = new ArrayList<Snap.Box>();
-        for (FathomHud.Positioned other : hud.boxes(client, screenWidth, screenHeight)) {
+        for (FathomHud.Positioned other : boxes()) {
             if (!other.widget.id().equals(widgetId)) {
                 others.add(other.box);
             }
@@ -761,11 +936,14 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         // where the widget will actually be, and for a right-anchored widget
         // that is different arithmetic than for a left-anchored one.
         Anchor anchor = Anchor.nearest(placed.centerX(), placed.centerY(), screenWidth, screenHeight);
-        int offsetX = offsetFor(anchor.horizontal(), placed.x, placed.width, screenWidth);
-        int offsetY = offsetFor(anchor.vertical(), placed.y, placed.height, screenHeight);
+        int offsetX = unscaleHudOffset(
+                offsetFor(anchor.horizontal(), placed.x, placed.width, screenWidth));
+        int offsetY = unscaleHudOffset(
+                offsetFor(anchor.vertical(), placed.y, placed.height, screenHeight));
         hud.place(
                 target.widget.id(),
                 hud.placement(target.widget.id()).withAnchor(anchor).withOffset(offsetX, offsetY));
+        frameBoxes = null;
         readout = anchor.label() + "  " + offsetX + ", " + offsetY
                 + "  " + placed.width + "x" + placed.height;
     }
@@ -786,8 +964,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             return;
         }
         int travel = mouseX - resizeStartX;
-        float scale = resizeStartScale + travel / 60f;
+        float scale = resizeStartScale + travel / (60f * hudInterfaceScale());
         hud.place(resizing, hud.placement(resizing).withScale(scale));
+        frameBoxes = null;
         readout = Math.round(hud.placement(resizing).scale() * 100) + "%";
     }
 
@@ -808,8 +987,18 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         return position - Math.round((extent - size) * 0.5f);
     }
 
+    /** Convert a rendered HUD offset back to the logical value stored in a profile. */
+    private static int unscaleHudOffset(int renderedOffset) {
+        return Math.round(renderedOffset / hudInterfaceScale());
+    }
+
+    private static float hudInterfaceScale() {
+        float scale = Runtime.uiScale();
+        return Float.isNaN(scale) || scale <= 0f ? 1f : scale;
+    }
+
     private FathomHud.Positioned find(String id) {
-        for (FathomHud.Positioned positioned : hud.boxes(client, screenWidth, screenHeight)) {
+        for (FathomHud.Positioned positioned : boxes()) {
             if (positioned.widget.id().equals(id)) {
                 return positioned;
             }
@@ -824,7 +1013,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private void wheel(int notches) {
         int mouseX = toScaledX(pointer.x());
         int mouseY = toScaledY(pointer.y());
-        for (FathomHud.Positioned positioned : hud.boxes(client, screenWidth, screenHeight)) {
+        for (FathomHud.Positioned positioned : boxes()) {
             if (!positioned.box.contains(mouseX, mouseY)) {
                 continue;
             }
@@ -874,6 +1063,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             case Keyboard.KEY_DELETE:
                 hideSelected();
                 return true;
+            case Keyboard.KEY_TAB:
+                cycleSelection(hasShiftDown() ? -1 : 1);
+                return true;
             default:
                 break;
         }
@@ -889,6 +1081,34 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     @Override
     protected void keyPressed(char character, int keyCode) {
         // FrameKeyboard drains this screen's events every rendered frame.
+    }
+
+    /**
+     * Step the selection to the next widget.
+     *
+     * <p>The way to reach a widget the chrome is sitting on. The bar and the
+     * inspector step aside for whatever is being worked on, but a widget that is
+     * entirely under one of them is hard to aim at, and this needs no aim at
+     * all: Tab to it, then the arrow keys and the inspector move it.
+     */
+    private void cycleSelection(int step) {
+        List<FathomHud.Positioned> positioned = boxes();
+        if (positioned.isEmpty()) {
+            selected = null;
+            return;
+        }
+        int at = -1;
+        for (int index = 0; index < positioned.size(); index++) {
+            if (positioned.get(index).widget.name().equals(selected)) {
+                at = index;
+                break;
+            }
+        }
+        int next = at < 0
+                ? (step > 0 ? 0 : positioned.size() - 1)
+                : Math.floorMod(at + step, positioned.size());
+        selected = positioned.get(next).widget.name();
+        note = selected + " selected. Arrows nudge it.";
     }
 
     private boolean nudge(int keyCode) {

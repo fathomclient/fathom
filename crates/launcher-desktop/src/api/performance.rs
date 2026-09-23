@@ -12,7 +12,7 @@
 use serde::Serialize;
 
 use launcher_core::optimizations::{self, Category, Group, Optimization, Status};
-use launcher_core::profiles::{OptimizationPreset, Profile};
+use launcher_core::profiles::{game_options, OptimizationPreset, Profile};
 use launcher_core::Launcher;
 
 /// What the Performance page needs to draw itself, in one call.
@@ -34,6 +34,61 @@ pub struct PerformanceView {
     /// How many runs are on disk, so a single result does not look like the
     /// only one there has ever been.
     pub benchmark_count: usize,
+    /// Whether this profile's own `options.txt` is holding the frame rate down,
+    /// and what to say about it.
+    ///
+    /// `None` for a profile that is not limited, which includes every profile
+    /// created since Fathom started seeding its own video defaults. The page
+    /// shows nothing at all in that case — an always-present row saying "not
+    /// capped" is noise.
+    pub video_limits: Option<VideoLimitsView>,
+}
+
+/// A profile whose frame rate is capped by its own saved video settings.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoLimitsView {
+    /// The saved `maxFps`, when there is one.
+    pub max_fps: Option<u32>,
+    /// The saved `enableVsync`, when there is one.
+    pub vsync: Option<bool>,
+    /// One line naming what is limiting this profile.
+    pub summary: String,
+}
+
+/// Describe a profile's video limits, or `None` when nothing is limiting it.
+fn video_limits(core: &Launcher, profile: &Profile) -> Option<VideoLimitsView> {
+    let limits = game_options::limits(&core.dirs_for(profile));
+    if !limits.is_limited() {
+        return None;
+    }
+
+    // Named separately because they are separate causes with separate fixes,
+    // and a player who set one deliberately should be told which one we mean.
+    let summary = match (limits.max_fps, limits.vsync) {
+        (Some(fps), Some(true)) if fps < game_options::UNLIMITED => {
+            format!("Capped at {fps} fps with VSync on")
+        }
+        (Some(fps), _) if fps < game_options::UNLIMITED => format!("Capped at {fps} fps"),
+        _ => "VSync is on".to_owned(),
+    };
+
+    Some(VideoLimitsView {
+        max_fps: limits.max_fps,
+        vsync: limits.vsync,
+        summary,
+    })
+}
+
+/// Raise this profile's frame limit and turn VSync off, leaving every other
+/// saved setting alone.
+///
+/// Deliberately an action rather than something the launcher does on its own:
+/// `options.txt` belongs to whoever has been playing, and a launcher that
+/// silently rewrote video settings would be indistinguishable from a bug the
+/// first time somebody had capped their frame rate on purpose.
+pub fn unlock_frame_rate(core: &Launcher, profile: &Profile) -> Result<bool, String> {
+    game_options::apply_recommended(&core.dirs_for(profile)).map_err(|error| error.to_string())
 }
 
 /// One measured run, rendered.
@@ -83,7 +138,10 @@ fn megabytes(bytes: u64) -> String {
 fn summarise(run: &launcher_core::optimizations::benchmarks::Benchmark) -> BenchmarkSummary {
     let frames = vec![
         measurement("Average", format!("{:.0} fps", run.frames.average_fps)),
-        measurement("1% low", format!("{:.0} fps", run.frames.one_percent_low_fps)),
+        measurement(
+            "1% low",
+            format!("{:.0} fps", run.frames.one_percent_low_fps),
+        ),
         measurement(
             "0.1% low",
             format!("{:.0} fps", run.frames.point_one_percent_low_fps),
@@ -296,12 +354,11 @@ pub fn preset_from_id(id: &str) -> Option<OptimizationPreset> {
 /// heard of is what lets a newly added optimization appear switched on for
 /// somebody on Balanced without rewriting their profile.
 fn is_enabled(profile: &Profile, entry: &Optimization) -> bool {
-    profile
-        .optimizations
-        .rendering
-        .get(entry.id)
-        .copied()
-        .unwrap_or_else(|| profile.optimizations.preset.includes(entry))
+    // The same answer the bridge gives the game. These were two separate
+    // fallbacks once -- this one deferred to the preset, the bridge's deferred
+    // to `false` -- so an optimization the stored map did not mention was drawn
+    // as on here and run as off there.
+    optimizations::enabled_for(profile, entry)
 }
 
 /// The first sentence of a summary, for the collapsed row.
@@ -358,11 +415,9 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
     let runs = launcher_core::optimizations::benchmarks::read_all(&game_directory);
 
     PerformanceView {
-        benchmark: runs
-            .iter()
-            .find(|run| run.is_usable())
-            .map(summarise),
+        benchmark: runs.iter().find(|run| run.is_usable()).map(summarise),
         benchmark_count: runs.len(),
+        video_limits: video_limits(core, profile),
         profile_name: profile.display_name.clone(),
         presets: OptimizationPreset::ALL
             .into_iter()
@@ -464,7 +519,10 @@ pub fn set_optimization(profile: &mut Profile, id: &str, enabled: bool) -> Resul
             profile.optimizations.rendering.entry(key).or_insert(value);
         }
     }
-    profile.optimizations.rendering.insert(id.to_owned(), enabled);
+    profile
+        .optimizations
+        .rendering
+        .insert(id.to_owned(), enabled);
     profile.optimizations.preset = OptimizationPreset::Custom;
 
     match id {

@@ -20,7 +20,10 @@ use crate::State;
 /// Lock the launcher, or fail with a message the interface can show.
 macro_rules! locked {
     ($state:expr) => {
-        $state.core.lock().map_err(|_| "launcher state is poisoned")?
+        $state
+            .core
+            .lock()
+            .map_err(|_| "launcher state is poisoned")?
     };
 }
 
@@ -90,7 +93,9 @@ pub fn create_profile(state: tauri::State<'_, State>, name: String) -> Result<()
     if name.is_empty() {
         return Err("a profile needs a name".to_owned());
     }
-    core.create_profile(name).map(|_| ()).map_err(|e| e.to_string())
+    core.create_profile(name)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -212,7 +217,10 @@ pub fn save_profile(state: tauri::State<'_, State>, edit: ProfileEdit) -> Result
         // A path only ever comes from the picker, so a policy that needs one and
         // arrives without it keeps whatever the profile already had rather than
         // being stored half-set.
-        let existing = profile.java.explicit_path().map(std::path::Path::to_path_buf);
+        let existing = profile
+            .java
+            .explicit_path()
+            .map(std::path::Path::to_path_buf);
         profile.java = launcher_core::profiles::JavaPolicy::from_id(&policy, existing)
             .ok_or_else(|| format!("unknown Java policy: {policy}"))?;
     }
@@ -447,6 +455,22 @@ pub fn set_optimization(
     Ok(api::performance::view(&core, &target))
 }
 
+/// Raise a profile's frame limit and turn VSync off.
+///
+/// The profile is not saved here because nothing about the profile changes:
+/// this edits the game's own `options.txt`, which is not part of the profile
+/// record. The view is returned so the page can drop the notice it was showing.
+#[tauri::command]
+pub fn unlock_frame_rate(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+) -> Result<api::performance::PerformanceView, String> {
+    let core = locked!(state);
+    let target = resolve_profile(&core, profile.as_deref())?;
+    api::performance::unlock_frame_rate(&core, &target)?;
+    Ok(api::performance::view(&core, &target))
+}
+
 // ---------------------------------------------------------------------------
 // Settings, Privacy, Recovery
 // ---------------------------------------------------------------------------
@@ -516,7 +540,10 @@ pub fn run_recovery(
     state: tauri::State<'_, State>,
     id: String,
 ) -> Result<api::recovery::ActionOutcome, String> {
-    let mut core = state.core.lock().map_err(|_| "launcher state is poisoned")?;
+    let mut core = state
+        .core
+        .lock()
+        .map_err(|_| "launcher state is poisoned")?;
     api::recovery::run(&mut core, &id)
 }
 
@@ -624,6 +651,14 @@ pub fn cancel_sign_in(app: tauri::AppHandle) -> Result<api::auth::AuthProgress, 
     crate::signin::cancel(&app)
 }
 
+/// Open Microsoft's sign-in page again for the code on screen, for when the
+/// browser was closed or never opened. Takes nothing: the page and the code
+/// come from the sign-in in flight, not from the window.
+#[tauri::command]
+pub fn reopen_sign_in_page(app: tauri::AppHandle) -> Result<api::auth::AuthProgress, String> {
+    crate::signin::reopen_page(&app)
+}
+
 #[tauri::command]
 pub fn sign_in_progress(state: tauri::State<'_, State>) -> Result<api::auth::AuthProgress, String> {
     Ok(state.auth.progress())
@@ -633,6 +668,69 @@ pub fn sign_in_progress(state: tauri::State<'_, State>) -> Result<api::auth::Aut
 #[tauri::command]
 pub fn sign_out(app: tauri::AppHandle) -> Result<api::auth::AuthProgress, String> {
     crate::signin::sign_out(&app)
+}
+
+#[tauri::command]
+pub fn switch_account(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<api::auth::AuthProgress, String> {
+    crate::signin::switch_account(&app, id)
+}
+
+#[tauri::command]
+pub fn forget_account(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<api::auth::AuthProgress, String> {
+    crate::signin::forget_account(&app, id)
+}
+
+// Native window controls for the integrated title bar. Keeping these as
+// narrow commands avoids granting the WebView general window-management
+// permissions.
+#[tauri::command]
+pub fn window_show(window: tauri::Window) -> Result<(), String> {
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn window_minimize(window: tauri::Window) -> Result<(), String> {
+    window.minimize().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn window_toggle_maximize(window: tauri::Window) -> Result<(), String> {
+    window
+        .is_maximized()
+        .map_err(|error| error.to_string())?
+        .then(|| window.unmaximize())
+        .unwrap_or_else(|| window.maximize())
+        .map_err(|error| error.to_string())
+}
+
+/// Toggle the launcher between windowed and fullscreen.
+///
+/// The window manager restores the previous windowed bounds on the way out, so
+/// nothing is recorded here: asking Tauri for the size and position and putting
+/// them back by hand would be a second source of truth that drifts the first
+/// time somebody moves the window between monitors while fullscreen.
+///
+/// Only the main window. The game console is a separate window and has no
+/// business going fullscreen behind the launcher.
+#[tauri::command]
+pub fn window_toggle_fullscreen(window: tauri::Window) -> Result<bool, String> {
+    let now = window.is_fullscreen().map_err(|error| error.to_string())?;
+    window
+        .set_fullscreen(!now)
+        .map_err(|error| error.to_string())?;
+    Ok(!now)
+}
+
+#[tauri::command]
+pub fn window_close(window: tauri::Window) -> Result<(), String> {
+    window.close().map_err(|error| error.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -656,10 +754,7 @@ pub fn setup_options(state: tauri::State<'_, State>) -> Result<api::setup::Setup
 /// between profile types, and re-fetching one list is cheaper than re-fetching
 /// the form.
 #[tauri::command]
-pub fn setup_components(
-    loader: String,
-    selected: Vec<String>,
-) -> Vec<api::setup::ComponentOption> {
+pub fn setup_components(loader: String, selected: Vec<String>) -> Vec<api::setup::ComponentOption> {
     api::setup::components_for(&loader, &selected)
 }
 
@@ -897,7 +992,8 @@ pub fn add_supplied_jar(
     let mut target = resolve_profile(&core, Some(&profile))?;
     launcher_core::mods::supplied::attach(&mut target.mods, &accepted)
         .map_err(|error| error.to_string())?;
-    core.save_profile(&target).map_err(|error| error.to_string())?;
+    core.save_profile(&target)
+        .map_err(|error| error.to_string())?;
     Ok(api::supplied::AddedView::of(&accepted, &target))
 }
 

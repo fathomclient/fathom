@@ -73,7 +73,7 @@ final class ModsSection implements Section {
 
     private static final float CARD_HEIGHT = 128f;
     private static final float CARD_GAP = 12f;
-    /** Space inside the scroller for hover lift, shadow and glow falloff. */
+    /** Space inside the scroller for shadows and press feedback. */
     private static final float CARD_FIELD_PAD = 12f;
     private static final float MIN_CARD_WIDTH = 190f;
     private static final float ICON = 22f;
@@ -291,10 +291,21 @@ final class ModsSection implements Section {
         float selected = controls.towards("mod.card." + feature.id() + "#selected",
                 feature == open && !drawerClosing, Timing.NAVIGATION);
         float lit = Math.max(enabled, selected);
-        float scale = 1f + surface.hover * VisualEffects.CARD_HOVER_SCALE
-                - surface.press * 0.008f;
-        float lift = surface.press * 0.80f
-                - surface.hover * VisualEffects.CARD_HOVER_LIFT * (1f - surface.press);
+        // Hover changes colour, never geometry.
+        //
+        // This used to scale the card by `CARD_HOVER_SCALE` and lift it by
+        // `CARD_HOVER_LIFT`, through a transform that wraps the whole card --
+        // face, border, icon and *text*. A 0.5% scale about the card's centre
+        // moves a title several pixels at the far edge, and a 1.5px lift moves
+        // every line in the card. The result was text that visibly jumped when
+        // the pointer crossed a card, which is the one thing a hover state must
+        // not do: it makes the row you are reading move as you reach for it.
+        //
+        // Press is still allowed to move the card. That is a momentary,
+        // deliberate acknowledgement of a click that ends when the button comes
+        // up, and it is the affordance that says the surface is tactile.
+        float scale = 1f - surface.press * 0.008f;
+        float lift = surface.press * 0.80f;
         ui.pushTransform(0f, lift, scale, card.centreX(), card.centreY());
 
         // Enabled cards stay dark: the state is the red edge, notch and icon,
@@ -318,15 +329,15 @@ final class ModsSection implements Section {
                 edge);
 
         Rect iconBox = new Rect(card.x + Skin.S3, card.y + Skin.S3, 40f, 40f);
-        float iconScale = 1f + surface.hover * VisualEffects.ICON_HOVER_SCALE
+        // Same rule for the icon: the activation pulse may scale it, because that
+        // is a one-shot response to a click, but hover may not -- a 3% icon
+        // scale shifted the glyph under the pointer every time it arrived.
+        float iconScale = 1f
                 + (1f - pulseProgress) * (memory.activating ? 0.05f : -0.02f);
         ui.pushTransform(0f, 0f, iconScale, iconBox.centreX(), iconBox.centreY());
         // The one light on an enabled card: a tight falloff around its icon.
-        VisualEffects.stateGlow(ui, iconBox, Skin.R_MEDIUM, lit);
         int iconFace = Skin.mix(Skin.RECESSED, Skin.BASE_RED, enabled * 0.22f + selected * 0.10f);
         VisualEffects.layeredSurface(ui, iconBox, Skin.R_MEDIUM, iconFace, 0f);
-        VisualEffects.energyWash(ui, iconBox, Skin.R_MEDIUM, iconBox.centreX(), iconBox.centreY(),
-                VisualEffects.ICON_ENERGY_REACH, enabled);
         ui.outline(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_MEDIUM,
                 Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_SURFACE, Skin.ACTIVE_RED, lit));
         int icon = Skin.mix(Skin.TEXT_FAINT, Skin.HOT_RED, enabled);
@@ -341,6 +352,9 @@ final class ModsSection implements Section {
                 card.y + Skin.S3 + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE,
                 Skin.mix(Skin.TEXT_MUTED, Skin.TEXT,
                         Math.max(Math.max(enabled, selected * 0.82f), surface.hover * 0.85f)));
+        if (Text.overflows(ui, feature.name(), Type.ROW_TITLE, titleRoom)) {
+            controls.tooltip(surface, card, feature.name());
+        }
         statusRail(ui, titleX, card.y + 34f, visuallyEnabled, enabled, surface.hover);
 
         String badge = compactBadge(feature);
@@ -527,7 +541,6 @@ final class ModsSection implements Section {
 
         Rect moduleIcon = new Rect(head.x, head.y, 36f, 36f);
         // The only light in the drawer: the selected module's header icon.
-        VisualEffects.stateGlow(ui, moduleIcon, Skin.R_MEDIUM, shown);
         VisualEffects.layeredSurface(ui, moduleIcon, Skin.R_MEDIUM,
                 Skin.mix(Skin.RECESSED, Skin.BASE_RED, 0.22f), 0f);
         ui.outline(moduleIcon.x, moduleIcon.y, moduleIcon.right(), moduleIcon.bottom(),

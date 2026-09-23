@@ -227,6 +227,9 @@ impl Blueprint {
             ProfileKind::Vanilla | ProfileKind::Custom => OptimizationPreset::Custom,
         };
         if self.kind == ProfileKind::Fathom {
+            // Expanded, not just named: the bridge file the game reads is the
+            // switch map, and a preset nobody expanded reaches the game as
+            // nothing switched on.
             profile.optimizations.rendering = OptimizationPreset::Balanced.switches();
         }
 
@@ -384,7 +387,10 @@ mod tests {
 
     #[test]
     fn an_absurd_explicit_heap_is_clamped_rather_than_stored() {
-        assert_eq!(MemoryChoice::Explicit(99_999).resolve().heap_mb, MAX_HEAP_MB);
+        assert_eq!(
+            MemoryChoice::Explicit(99_999).resolve().heap_mb,
+            MAX_HEAP_MB
+        );
         assert_eq!(MemoryChoice::Explicit(1).resolve().heap_mb, MIN_HEAP_MB);
     }
 

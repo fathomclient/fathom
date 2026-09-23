@@ -118,9 +118,12 @@ Two of these are worth reading carefully:
 - **ParallelGC is the default.** `performance.md` §5.3 calls it "the source of
   the classic 1.8 freeze". Every unmodded 1.8.9 player is running it, which makes
   it the honest control arm for `jvm.collector` rather than a straw man.
-- **`DontCompileHugeMethods` is on by default**, which is the state
-  `performance.md` §5.4 describes: Minecraft methods over the 8000-byte limit
-  never compile.
+- **`DontCompileHugeMethods` is on by default**, and on 1.8.9 that costs
+  nothing. `performance.md` §5.4 described this as leaving hot Minecraft methods
+  permanently interpreted; that was measured on 2026-09-17 and is wrong for this
+  version. One method in the game exceeds the 8000-byte limit —
+  `RecipeDispatcher.<init>` at 8296 bytes, run once at startup. The default is
+  the right setting and `jvm.compile-huge-methods` has nothing to gain.
 
 ### 3.3 What the launcher currently passes
 

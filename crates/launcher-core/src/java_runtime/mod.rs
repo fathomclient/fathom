@@ -128,7 +128,9 @@ pub fn probe(java: &Path) -> Result<JavaInstallation, JavaError> {
     if !java.is_file() {
         return Err(JavaError::NotFound(java.display().to_string()));
     }
-    let output = Command::new(java)
+    let mut command = Command::new(java);
+    suppress_console_window(&mut command);
+    let output = command
         .arg("-version")
         .output()
         .map_err(|source| JavaError::NotRunnable {
@@ -152,6 +154,21 @@ pub fn probe(java: &Path) -> Result<JavaInstallation, JavaError> {
         vendor,
     })
 }
+
+/// A console-subsystem child started by the windowed launcher otherwise asks
+/// Windows to create a transient terminal for `java -version`. Discovery may
+/// probe several runtimes, which is why startup used to flash several black
+/// windows before the launcher finished loading.
+#[cfg(windows)]
+fn suppress_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt as _;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn suppress_console_window(_command: &mut Command) {}
 
 fn executable_name() -> &'static str {
     if cfg!(windows) {

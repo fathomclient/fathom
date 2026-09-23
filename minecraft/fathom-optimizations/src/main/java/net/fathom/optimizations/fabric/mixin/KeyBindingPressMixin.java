@@ -24,6 +24,11 @@ public abstract class KeyBindingPressMixin {
 
     @Inject(method = "onKeyPressed(I)V", at = @At("HEAD"))
     private static void fathom$observePress(int code, CallbackInfo info) {
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
+            return;
+        }
         if (code != -100 && code != -99) {
             return;
         }

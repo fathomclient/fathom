@@ -180,7 +180,6 @@ impl Draft {
     }
 }
 
-
 /// What came of a setup.
 ///
 /// Carries `unavailable` rather than swallowing it: a Fathom profile whose HUD
@@ -212,7 +211,10 @@ pub fn options(core: &Launcher) -> SetupOptions {
                 label: format!("Minecraft {id}"),
             })
             .collect(),
-        kinds: ProfileKind::ALL.iter().map(|kind| kind_option(*kind)).collect(),
+        kinds: ProfileKind::ALL
+            .iter()
+            .map(|kind| kind_option(*kind))
+            .collect(),
         loaders: Loader::ALL
             .iter()
             .map(|loader| LoaderOption {
@@ -377,7 +379,10 @@ mod tests {
     fn absent_memory_means_automatic() {
         let blueprint = draft().to_blueprint().unwrap();
         assert_eq!(blueprint.memory, MemoryChoice::Automatic);
-        assert_eq!(blueprint.memory.resolve().heap_mb, blueprint::recommended_heap_mb());
+        assert_eq!(
+            blueprint.memory.resolve().heap_mb,
+            blueprint::recommended_heap_mb()
+        );
 
         let mut explicit = draft();
         explicit.memory_mb = Some(4096);
@@ -470,7 +475,11 @@ mod tests {
         let options = java_options();
         assert_eq!(options.len(), 4);
         for option in options {
-            assert!(!option.detail.is_empty(), "{} has no description", option.id);
+            assert!(
+                !option.detail.is_empty(),
+                "{} has no description",
+                option.id
+            );
         }
     }
 
@@ -484,7 +493,10 @@ mod tests {
             .find(|option| option.id == "optifine")
             .expect("offered under Legacy Fabric");
         assert!(!optifine.installable);
-        assert_eq!(optifine.where_to_get, Some("https://optifine.net/downloads"));
+        assert_eq!(
+            optifine.where_to_get,
+            Some("https://optifine.net/downloads")
+        );
         assert!(optifine.blocker.is_some());
     }
 

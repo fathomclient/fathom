@@ -526,9 +526,10 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         float focus = controls.towards(SEARCH_ID + "#focus", focused, Timing.STANDARD);
         float response = Math.max(s.hover, focus);
         // Focus is a red border; no glow.
-        ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MEDIUM,
+        float radius = Skin.pill(searchBox);
+        ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), radius,
                 Skin.mix(Skin.RECESSED, Skin.SURFACE_HOVER, Math.max(s.hover * 0.6f, focus)));
-        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), Skin.R_MEDIUM,
+        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), radius,
                 Skin.BORDER_STANDARD + focus * (Skin.BORDER_ENERGIZED - Skin.BORDER_STANDARD),
                 Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover), Skin.ACTIVE_RED, focus));
 
@@ -618,7 +619,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         float markY = rail.y + Skin.S3 + railMark.update(current, context.delta()) * rowHeight;
         Rect marker = Rect.of(markerX, markY + rowHeight * 0.28f,
                 markerX + 3f, markY + rowHeight * 0.72f);
-        VisualEffects.navigationGlow(ui, marker, 1f);
         ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker), Skin.HOT_RED);
 
         for (int index = 0; index < sections.size(); index++) {
@@ -632,13 +632,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             if (s.hover > 0.01f || on > 0.01f) {
                 // Selected: a stronger dark face, a red edge and a small light
                 // behind the icon. Hover: a surface step only.
-                ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.R_CONTROL,
+                float rowRadius = Skin.pill(row);
+                ui.rounded(row.x, row.y, row.right(), row.bottom(), rowRadius,
                         Skin.mix(Skin.scaleAlpha(Skin.SURFACE_HOVER, s.hover), Skin.ELEVATED, on));
                 if (on > 0.01f) {
-                    ui.outline(row.x, row.y, row.right(), row.bottom(), Skin.R_CONTROL,
+                    ui.outline(row.x, row.y, row.right(), row.bottom(), rowRadius,
                             Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.BASE_RED, on));
-                    Rect light = new Rect(row.x + Skin.S3, row.centreY() - 8.5f, 17f, 17f);
-                    VisualEffects.stateGlow(ui, light, Skin.R_SMALL, on * 0.55f);
                 }
             }
 
@@ -662,6 +661,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                         Controls.baseline(ui, row, Type.ROW_TITLE), Type.ROW_TITLE, tint);
                 ui.popAlpha();
                 ui.unclip();
+            }
+            if (Text.overflows(ui, section.title(), Type.ROW_TITLE, labelRoom)) {
+                controls.tooltip(s, row, section.title());
             }
 
             if (s.clicked && index != current) {

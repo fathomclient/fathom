@@ -160,7 +160,9 @@ pub fn run(store: &ProfileStore, game_directory: &Path) -> Result<Report, StoreE
     for (name, path) in &layouts {
         let Some(name) = name else { continue };
         let Some(id) = ProfileId::from_display_name(name, &store.ids()) else {
-            report.unmapped.push(format!("hud layout {name:?}: unusable name"));
+            report
+                .unmapped
+                .push(format!("hud layout {name:?}: unusable name"));
             continue;
         };
         let mut profile = base.duplicated(id, title_case(name));
@@ -186,8 +188,12 @@ pub fn run(store: &ProfileStore, game_directory: &Path) -> Result<Report, StoreE
     }
     text.push_str(&key);
     text.push('\n');
-    crate::fs_safety::atomic_write(&marker, text.as_bytes())
-        .map_err(|source| StoreError::Write { path: marker, source })?;
+    crate::fs_safety::atomic_write(&marker, text.as_bytes()).map_err(|source| {
+        StoreError::Write {
+            path: marker,
+            source,
+        }
+    })?;
 
     Ok(report)
 }
@@ -210,7 +216,11 @@ fn collection_key(directory: &Path) -> String {
 // Mapping
 // ---------------------------------------------------------------------------
 
-fn apply_features(profile: &mut FathomProfile, keys: &BTreeMap<String, String>, report: &mut Report) {
+fn apply_features(
+    profile: &mut FathomProfile,
+    keys: &BTreeMap<String, String>,
+    report: &mut Report,
+) {
     for (key, value) in keys {
         if key == "schema" {
             continue;
@@ -264,7 +274,10 @@ fn apply_performance(profile: &mut FathomProfile, keys: &BTreeMap<String, String
                     continue;
                 };
                 if let Some(on) = parse_bool(value) {
-                    profile.performance.switches.insert(id.trim().to_owned(), on);
+                    profile
+                        .performance
+                        .switches
+                        .insert(id.trim().to_owned(), on);
                 }
             }
         }
@@ -280,10 +293,7 @@ fn apply_hud(profile: &mut FathomProfile, keys: &BTreeMap<String, String>) {
         let Some((widget, field)) = rest.rsplit_once('.') else {
             continue;
         };
-        let entry = profile
-            .hud
-            .entry(widget.to_owned())
-            .or_default();
+        let entry = profile.hud.entry(widget.to_owned()).or_default();
         match field {
             // The old files wrote the Java enum's name, `TOP_LEFT`. The profile
             // format is kebab-case, `top-left`, and a migrated profile must not
@@ -454,8 +464,8 @@ widget.cps.hidden=true
 ";
 
     // The real shape: written by the launcher before every launch, `key = value`
-// with spaces, `opt.` switches by dotted id, and a `conflict.` stand-down.
-const PERFORMANCE: &str = "\
+    // with spaces, `opt.` switches by dotted id, and a `conflict.` stand-down.
+    const PERFORMANCE: &str = "\
 # Written by Fathom before launch. Do not edit.
 schema = 1
 preset = balanced
@@ -487,23 +497,39 @@ conflict.render.font.batching = OptiFine
         assert!(fps.favourite);
         assert_eq!(fps.settings.get("decimals").unwrap(), "0");
         assert_eq!(
-            profile.modules.get("zoom").unwrap().keys.get("hold").unwrap(),
+            profile
+                .modules
+                .get("zoom")
+                .unwrap()
+                .keys
+                .get("hold")
+                .unwrap(),
             "46"
         );
         assert_eq!(profile.modules.get("cps").unwrap().enabled, Some(false));
 
-        assert_eq!(profile.hud.get("fps").unwrap().anchor, "top-left", "enum name normalised");
+        assert_eq!(
+            profile.hud.get("fps").unwrap().anchor,
+            "top-left",
+            "enum name normalised"
+        );
         assert_eq!(profile.hud.get("fps").unwrap().x, 4);
         assert!((profile.hud.get("fps").unwrap().scale - 1.5).abs() < f32::EPSILON);
         assert!(profile.hud.get("cps").unwrap().hidden);
 
         assert_eq!(profile.performance.preset.as_deref(), Some("balanced"));
         assert_eq!(
-            profile.performance.switches.get("render.font.metrics-cache"),
+            profile
+                .performance
+                .switches
+                .get("render.font.metrics-cache"),
             Some(&true),
             "the opt. prefix is stripped to the registry id"
         );
-        assert_eq!(profile.performance.switches.get("memory.world-change-gc"), Some(&false));
+        assert_eq!(
+            profile.performance.switches.get("memory.world-change-gc"),
+            Some(&false)
+        );
         assert!(
             !profile
                 .performance
@@ -538,7 +564,9 @@ conflict.render.font.batching = OptiFine
         let store = ProfileStore::new(game.path().join("profiles"));
         let report = run(&store, game.path()).unwrap();
         assert!(
-            report.unmapped.contains(&"something.we.do.not.know".to_owned()),
+            report
+                .unmapped
+                .contains(&"something.we.do.not.know".to_owned()),
             "unmapped keys: {:?}",
             report.unmapped
         );
@@ -592,9 +620,17 @@ conflict.render.font.batching = OptiFine
         store.save(&mine).unwrap();
 
         let report = run(&store, game.path()).unwrap();
-        assert!(report.created.contains(&IMPORTED_NAME.to_owned()), "{:?}", report.created);
+        assert!(
+            report.created.contains(&IMPORTED_NAME.to_owned()),
+            "{:?}",
+            report.created
+        );
         let kept = store.load(&ProfileId::default_id()).unwrap();
-        assert_eq!(kept.client.hud_font.as_deref(), Some("Fathom"), "the edited Default survived");
+        assert_eq!(
+            kept.client.hud_font.as_deref(),
+            Some("Fathom"),
+            "the edited Default survived"
+        );
         assert_eq!(store.list().profiles.len(), 2);
     }
 
@@ -604,8 +640,15 @@ conflict.render.font.batching = OptiFine
         let store = ProfileStore::new(game.path().join("profiles"));
         store.resolve_live().unwrap();
         run(&store, game.path()).unwrap();
-        assert_eq!(store.list().profiles.len(), 1, "a placeholder is filled, not duplicated");
-        assert_eq!(store.load(&ProfileId::default_id()).unwrap().client.hub_key, Some(54));
+        assert_eq!(
+            store.list().profiles.len(),
+            1,
+            "a placeholder is filled, not duplicated"
+        );
+        assert_eq!(
+            store.load(&ProfileId::default_id()).unwrap().client.hub_key,
+            Some(54)
+        );
     }
 
     #[test]
@@ -646,7 +689,10 @@ conflict.render.font.batching = OptiFine
 
         let profile = store.load(&ProfileId::default_id()).unwrap();
         let fps = profile.hud.get("fps").unwrap();
-        assert!((fps.opacity - 1.0).abs() < f32::EPSILON, "fell back to the default");
+        assert!(
+            (fps.opacity - 1.0).abs() < f32::EPSILON,
+            "fell back to the default"
+        );
         assert!((fps.scale - 1.0).abs() < f32::EPSILON);
         assert_eq!(fps.x, 4, "and the usable value beside it survived");
     }

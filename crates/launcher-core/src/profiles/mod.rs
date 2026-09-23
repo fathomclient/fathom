@@ -27,6 +27,7 @@
 //! validation, and every path helper hangs off it.
 
 pub mod blueprint;
+pub mod game_options;
 pub mod inherit;
 pub mod model;
 pub mod ops;
@@ -41,13 +42,13 @@ use serde::{Deserialize, Serialize};
 use crate::fs_safety::{self, FsError};
 use crate::paths::DataPaths;
 
+pub use blueprint::{Blueprint, MemoryChoice};
+pub use inherit::{derive, may_parent, InheritError};
 pub use model::{
     DisplayConfig, GameDirectory, JavaPolicy, JavaPreference, JvmOptimizations, JvmOptions, Loader,
     LoaderConfig, MemoryConfig, ModConfiguration, OptimizationConfig, OptimizationPreset,
     Presentation, Profile, ProfileKind, Resolution, ServerShortcut, Timestamp,
 };
-pub use blueprint::{Blueprint, MemoryChoice};
-pub use inherit::{derive, may_parent, InheritError};
 pub use ops::{DeletionReceipt, ExportedProfile, ImportOutcome, ProfileOps};
 pub use store::{LoadOutcome, Loaded, ProfileStore, SCHEMA_VERSION};
 pub use validate::{Defect, ProfileHealth, ProfileReport, RepairAction, RepairSummary};

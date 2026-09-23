@@ -167,6 +167,7 @@ public final class GlRenderer implements Renderer {
         if (inFrame) {
             throw new IllegalStateException("a Fathom frame is already open");
         }
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.GL_FRAME_BEGIN);
         GlStateSnapshot snapshot = frameState.captureInto();
         try {
             if (!created) {

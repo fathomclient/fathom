@@ -9,11 +9,33 @@
 #   pwsh tools/package-portable.ps1 [-OutDir <path>]
 
 param(
-    [string]$OutDir = "dist/Fathom"
+    [string]$OutDir = "dist/Fathom",
+    [string]$GradlePath = "",
+    [string]$NodePath = ""
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
+
+# A release without the first-party client jar is not a degraded Fathom build;
+# it is a launcher that can only start vanilla. Build it up front and fail
+# loudly when the required toolchain or output is unavailable.
+$moduleRoot = Join-Path $root "minecraft/fathom-optimizations"
+$wrapper = Join-Path $moduleRoot "gradlew.bat"
+$gradle = if ($GradlePath) { $GradlePath }
+          elseif (Test-Path -LiteralPath $wrapper) { $wrapper }
+          else {
+              $command = Get-Command gradle -ErrorAction SilentlyContinue
+              if ($command) { $command.Source } else { "" }
+          }
+if (-not $gradle -or -not (Test-Path -LiteralPath $gradle -PathType Leaf)) {
+    throw "Gradle is required to build Fathom's Minecraft client module; refusing to package a launcher without it."
+}
+Write-Host "Building the Fathom Minecraft client..."
+Push-Location $moduleRoot
+& $gradle build
+if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Fathom Minecraft client build failed" }
+Pop-Location
 
 # The frontend first. `fathom.exe` is the Tauri shell, and Tauri embeds
 # `desktop/dist` into the binary at compile time -- so building the Rust side
@@ -21,7 +43,17 @@ $root = Split-Path -Parent $PSScriptRoot
 # previous version of every page.
 Write-Host "Building the frontend..."
 Push-Location (Join-Path $root "desktop")
-npm run build
+if ($NodePath) {
+    if (-not (Test-Path -LiteralPath $NodePath -PathType Leaf)) {
+        Pop-Location
+        throw "Node executable does not exist: $NodePath"
+    }
+    & $NodePath "node_modules/vite/bin/vite.js" build
+} else {
+    node "node_modules/svelte-check/bin/svelte-check" --tsconfig "./tsconfig.json"
+    if ($LASTEXITCODE -ne 0) { Pop-Location; throw "frontend type check failed" }
+    node "node_modules/vite/bin/vite.js" build
+}
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "frontend build failed" }
 Pop-Location
 
@@ -56,15 +88,8 @@ try {
     cargo build --workspace --release
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 
-    # The shell, again, with `custom-protocol`.
-    #
-    # This flag is what makes Tauri serve the interface from inside the
-    # executable instead of fetching it from the vite dev server. It is decided
-    # by a cargo feature and NOT by debug versus release -- `tauri-macros` reads
-    # it as `dev: cfg!(not(feature = "custom-protocol"))` -- so a plain
-    # `cargo build --release` silently produces a binary that opens on
-    # "localhost refused to connect". It did, and this line is why it no longer
-    # does.
+    # Build the shell explicitly as well. `custom-protocol` is a default feature
+    # now, and naming it here keeps this older developer artifact self-checking.
     cargo build -p launcher-desktop --release --features custom-protocol
     if ($LASTEXITCODE -ne 0) { throw "cargo build (launcher-desktop) failed" }
 } finally {
@@ -91,16 +116,16 @@ New-Item -ItemType Directory -Force $dest | Out-Null
 # `fathom-release` is deliberately NOT copied: it is the offline signing tool
 # and has no business on a user's machine.
 #
-# `fathom.exe` is `fathom-desktop.exe` under its user-facing name. The product
-# is the Tauri shell; `crates/launcher-ui` still builds a binary also called
-# `fathom.exe`, and copying that one would ship the interface this migration
-# replaced. Renaming on copy rather than renaming the crate's `[[bin]]` keeps
-# the two distinguishable in `target/release`, where both exist.
+# `fathom.exe` is `fathom-desktop.exe` under its user-facing name. The
+# `launcher-ui` package is now only a compatibility command that calls this
+# same Tauri application; there is no independently shippable legacy UI.
 Copy-Item (Join-Path $root "target/release/fathom-desktop.exe") (Join-Path $dest "fathom.exe")
 Copy-Item (Join-Path $root "target/release/fathom-cli.exe") $dest
 
-# First-party resources the launcher looks for beside the executable.
-# `DataPaths::bundled_resource` checks here first, then application data.
+# First-party resources are copied beside the executable for transparent
+# inspection and installed layouts. The executable also embeds this jar and
+# stages it into application data, so `fathom.exe` remains functional if it is
+# dragged out of this directory by itself.
 $resources = Join-Path $dest "resources"
 New-Item -ItemType Directory -Force $resources | Out-Null
 # The optimization module.
@@ -118,20 +143,17 @@ New-Item -ItemType Directory -Force $resources | Out-Null
 # one under `resources/` would put a jar that cannot load where the launcher
 # looks for one that can, so both are excluded by name and by suffix rather
 # than by hoping the directory only ever holds one file.
-$module = Join-Path $root "minecraft/fathom-optimizations/build/libs"
-if (Test-Path $module) {
-    $loadable = @(Get-ChildItem $module -Filter *.jar |
-                  Where-Object { $_.Name -ne 'fathom-optimizations-core.jar' -and
-                                 $_.Name -notlike '*-sources.jar' })
-    if ($loadable) {
-        $loadable | Copy-Item -Destination $resources
-        Write-Host "Optimization module: $($loadable.Name -join ', ')"
-    } else {
-        Write-Host "note: no loadable module jar was found; not shipped."
-    }
-} else {
-    Write-Host "note: the optimization module has not been built; skipping."
+$module = Join-Path $moduleRoot "build/libs"
+$versionLine = Select-String -Path (Join-Path $moduleRoot "gradle.properties") -Pattern '^mod_version=' |
+               Select-Object -First 1
+if (-not $versionLine) { throw "mod_version is missing from the client module's gradle.properties" }
+$moduleVersion = ($versionLine.Line -split '=', 2)[1].Trim()
+$loadable = Join-Path $module "fathom-optimizations-$moduleVersion.jar"
+if (-not (Test-Path -LiteralPath $loadable -PathType Leaf)) {
+    throw "Required Fathom client output is missing: $loadable"
 }
+Copy-Item -LiteralPath $loadable -Destination $resources
+Write-Host "Optimization module: $(Split-Path -Leaf $loadable)"
 
 # The backgrounds are NOT copied beside the executable any more.
 #
@@ -142,7 +164,7 @@ if (Test-Path $module) {
 # the old frame sequences here would add tens of megabytes of files nothing
 # reads.
 #
-# The iced assets are still in the repository and still used by that crate.
+# The iced-era assets remain quarantined source material and are not packaged.
 
 Copy-Item (Join-Path $root "PRIVACY.md") $dest -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "README.md") $dest -ErrorAction SilentlyContinue

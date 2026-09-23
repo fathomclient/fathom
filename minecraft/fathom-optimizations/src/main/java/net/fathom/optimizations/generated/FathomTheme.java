@@ -65,6 +65,7 @@ public final class FathomTheme {
     public static final float DIM_RAIL_WIDTH = 56.0f;
     public static final float DIM_RAIL_TRAY_WIDTH = 186.0f;
     public static final float DIM_RAIL_ROW = 40.0f;
+    public static final float DIM_TITLEBAR_HEIGHT = 32.0f;
     public static final float DIM_TOPBAR_HEIGHT = 46.0f;
     public static final float DIM_BOTTOMBAR_HEIGHT = 38.0f;
     public static final float DIM_HUB_HEADER_HEIGHT = 62.0f;

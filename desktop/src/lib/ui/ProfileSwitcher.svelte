@@ -167,7 +167,14 @@
   }
 
   .label {
-    max-width: 180px;
+    /* Content-sized, with a cap that only bites when the name genuinely has
+       nowhere to go. The cap used to be a flat 180px, which ellipsised ordinary
+       profile names on a wide window with empty space beside them -- an
+       arbitrary pixel count standing in for "is there room". `ch` ties it to the
+       text instead, and `min-width: 0` lets the flex parent shrink it further
+       when the bar really is tight, so the ellipsis appears only then. */
+    min-width: 0;
+    max-width: 28ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

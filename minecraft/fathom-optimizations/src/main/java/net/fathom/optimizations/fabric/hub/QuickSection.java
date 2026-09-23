@@ -61,6 +61,15 @@ final class QuickSection implements Section {
     private static final float SLIDER_ROW = 58f;
     private static final float CONTROL = 220f;
 
+    /**
+     * The interface-scale control is wider than the rest.
+     *
+     * <p>It has six options where the others have two or four. The natural-width
+     * segmented control measures those labels with the active renderer and can
+     * pan rather than clipping if a narrow window cannot give it all 320 units.
+     */
+    private static final float SCALE_CONTROL = 320f;
+
     @Override
     public String title() {
         return "Quick";
@@ -191,9 +200,9 @@ final class QuickSection implements Section {
                 + "× on " + framebufferWidth + "×" + framebufferHeight;
         label(context, row, "Fathom UI scale", effective);
 
-        Rect control = row.vcentreRight(0f, CONTROL, Skin.H_SM);
-        int chosen = context.controls()
-                .segmented(ui, "quick.uiscale", control, ClientPrefs.SCALE_CHOICES, prefs.scaleChoice());
+        Rect control = row.vcentreRight(0f, SCALE_CONTROL, Skin.H_SM);
+        int chosen = context.controls().segmentedNatural(
+                ui, "quick.uiscale", control, ClientPrefs.SCALE_CHOICES, prefs.scaleChoice());
         if (chosen != prefs.scaleChoice()) {
             prefs.setScaleChoice(chosen);
             context.markDirty();

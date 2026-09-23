@@ -217,7 +217,10 @@ pub fn install(
     if !actual.eq_ignore_ascii_case(package.checksum.trim()) {
         // Deliberately not logged with both hashes at info level: a mismatch is
         // a security event, and the useful reaction is to stop.
-        tracing::error!(major, "the Java download did not match its published checksum");
+        tracing::error!(
+            major,
+            "the Java download did not match its published checksum"
+        );
         return Err(JavaInstallError::ChecksumMismatch);
     }
 
@@ -238,7 +241,8 @@ pub fn install(
     unzip(&response.body, &root)?;
 
     let executable = find_executable(&root)?;
-    let probed = super::probe(&executable).map_err(|e| JavaInstallError::Unusable(e.to_string()))?;
+    let probed =
+        super::probe(&executable).map_err(|e| JavaInstallError::Unusable(e.to_string()))?;
     if probed.major != major {
         return Err(JavaInstallError::Unusable(format!(
             "expected Java {major} but the runtime reports {}",
@@ -388,7 +392,10 @@ mod tests {
     fn the_query_asks_for_a_runtime_not_a_compiler() {
         let path = query_path(8);
         assert!(path.starts_with("/v3/assets/latest/8/hotspot"));
-        assert!(path.contains("image_type=jre"), "a JDK is twice the download");
+        assert!(
+            path.contains("image_type=jre"),
+            "a JDK is twice the download"
+        );
         assert!(path.contains("vendor=eclipse"));
     }
 
@@ -419,8 +426,8 @@ mod tests {
         let mut buffer = Vec::new();
         {
             let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut buffer));
-            let options: zip::write::FileOptions<'_, ()> =
-                zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
             // `start_file` with a traversal path; `enclosed_name` must reject it
             // when reading back.
             writer.start_file("../escaped.txt", options).unwrap();
@@ -447,8 +454,8 @@ mod tests {
         let mut buffer = Vec::new();
         {
             let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut buffer));
-            let options: zip::write::FileOptions<'_, ()> =
-                zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
             writer.start_file("jdk8u1/bin/notes.txt", options).unwrap();
             writer.write_all(b"hello").unwrap();
             writer.finish().unwrap();

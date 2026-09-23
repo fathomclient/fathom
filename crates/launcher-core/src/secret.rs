@@ -80,8 +80,14 @@ impl Secret {
         // real bytes rather than a constant an optimiser could hoist.
         let length = expected.len().max(actual.len());
         for index in 0..length {
-            let left = expected.get(index % expected.len().max(1)).copied().unwrap_or(0);
-            let right = actual.get(index % actual.len().max(1)).copied().unwrap_or(0);
+            let left = expected
+                .get(index % expected.len().max(1))
+                .copied()
+                .unwrap_or(0);
+            let right = actual
+                .get(index % actual.len().max(1))
+                .copied()
+                .unwrap_or(0);
             difference |= left ^ right;
         }
         // An empty secret never matches. It is the state `random_token` falls

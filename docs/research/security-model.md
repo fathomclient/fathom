@@ -224,6 +224,7 @@ The launcher may contact **only** these hosts, and every one of them has a state
 | `user.auth.xboxlive.com` | Xbox Live user authentication |
 | `xsts.auth.xboxlive.com` | XSTS authorization |
 | `api.minecraftservices.com` | Minecraft login, entitlements, profile |
+| `textures.minecraft.net` | The signed-in account's own skin, once after sign-in, to show their head |
 | `piston-meta.mojang.com` | Version manifest and version JSON |
 | `piston-data.mojang.com` / `launcher.mojang.com` | Client jar and libraries |
 | `libraries.minecraft.net` | Libraries |
@@ -239,8 +240,9 @@ Rules:
   A plain `UserAgent: <product>/<version>` is acceptable and honest.
 - **No request is made before the user acts**, with the single exception of the update check, which
   is user-visible and disableable.
-- Skin and cape textures come from `textures.minecraft.net` **and are fetched by the game, not the
-  launcher.**
+- Skin and cape textures for other players come from `textures.minecraft.net` **and are fetched by
+  the game.** The launcher fetches exactly one: the signed-in account's own skin, after sign-in, to
+  show the player's head. No credential is sent with it.
 - This list should be asserted in an automated test that fails if any other host appears in the
   binary's string table or in a network trace of a full login-install-launch run.
 

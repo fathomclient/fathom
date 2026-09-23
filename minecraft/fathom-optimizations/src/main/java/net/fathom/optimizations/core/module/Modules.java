@@ -465,6 +465,8 @@ final class Modules {
                 .onByDefault()
                 .build());
 
+        out.add(PerformanceLayer.declare());
+
         return out;
     }
 }

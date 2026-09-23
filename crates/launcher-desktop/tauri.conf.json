@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Fathom",
+  "productName": "Fathom Client",
   "version": "0.1.0",
   "identifier": "net.fathom.launcher",
   "build": {
@@ -21,6 +21,8 @@
         "center": true,
         "theme": "Dark",
         "backgroundColor": "#000000",
+        "decorations": false,
+        "visible": false,
         "label": "main"
       }
     ],
@@ -31,13 +33,28 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "Fathom",
+    "homepage": "https://github.com/fathomclient/fathom",
+    "category": "Game",
+    "shortDescription": "A private, performance-focused Minecraft 1.8.9 client.",
+    "longDescription": "Fathom is a private, performance-focused launcher and managed client for Minecraft: Java Edition 1.8.9.",
+    "licenseFile": "../../LICENSE",
     "targets": [
       "nsis"
     ],
     "resources": [],
     "windows": {
+      "allowDowngrades": false,
       "webviewInstallMode": {
-        "type": "downloadBootstrapper"
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "startMenuFolder": "Fathom",
+        "compression": "lzma"
       }
     },
     "icon": [

@@ -44,9 +44,9 @@ use std::fmt::Write as _;
 use serde::Deserialize;
 
 use super::model::{
-    safe_link, sanitise_slug,
-    clip, limits, safe_file_name, DependencyKind, Distribution, FileDependency, FileDownload,
-    ImageRef, ModFile, ModProject, ProjectRef, Provider, ReleaseChannel, Target,
+    clip, limits, safe_file_name, safe_link, sanitise_slug, DependencyKind, Distribution,
+    FileDependency, FileDownload, ImageRef, ModFile, ModProject, ProjectRef, Provider,
+    ReleaseChannel, Target,
 };
 use super::provider::{
     Availability, BrowseError, CatalogProvider, ProviderContext, SearchPage, SearchQuery, Sort,
@@ -381,7 +381,8 @@ impl CatalogProvider for CurseForgeProvider {
         // The project is fetched for one fact: whether its author allows
         // third-party downloads. A file list that offered downloads the API
         // will not serve is a list of buttons that fail.
-        let project: RawOne<RawMod> = self.get_json(&format!("{API}/mods/{}", numeric(id)?), ctx)?;
+        let project: RawOne<RawMod> =
+            self.get_json(&format!("{API}/mods/{}", numeric(id)?), ctx)?;
         let distribution = project.data.distribution();
 
         let mut files: Vec<ModFile> = raw
@@ -413,20 +414,19 @@ impl CatalogProvider for CurseForgeProvider {
             self.get_json(&format!("{API}/mods/{}", numeric(project)?), ctx)?;
         raw.data
             .into_file(project, &details.data.distribution())
-            .ok_or_else(|| BrowseError::Refused(
-                "that CurseForge file has no published SHA-1, so Fathom will not install it"
-                    .to_owned(),
-            ))
+            .ok_or_else(|| {
+                BrowseError::Refused(
+                    "that CurseForge file has no published SHA-1, so Fathom will not install it"
+                        .to_owned(),
+                )
+            })
     }
 }
 
 /// `CurseForge` ids are numbers. Anything else never becomes part of a path.
 fn numeric(id: &str) -> Result<String, BrowseError> {
     let trimmed = id.trim();
-    if trimmed.is_empty()
-        || trimmed.len() > 12
-        || !trimmed.chars().all(|c| c.is_ascii_digit())
-    {
+    if trimmed.is_empty() || trimmed.len() > 12 || !trimmed.chars().all(|c| c.is_ascii_digit()) {
         return Err(BrowseError::Refused(format!(
             "{trimmed:?} is not a CurseForge project id"
         )));
@@ -648,15 +648,12 @@ impl RawMod {
                 .flat_map(|file| file.game_versions.iter().map(String::as_str)),
         );
 
-        let icon = self
-            .logo
-            .as_ref()
-            .and_then(|logo| {
-                logo.thumbnail_url
-                    .as_deref()
-                    .or(logo.url.as_deref())
-                    .and_then(|url| ImageRef::new(url, None))
-            });
+        let icon = self.logo.as_ref().and_then(|logo| {
+            logo.thumbnail_url
+                .as_deref()
+                .or(logo.url.as_deref())
+                .and_then(|url| ImageRef::new(url, None))
+        });
         let gallery = self
             .screenshots
             .iter()
@@ -766,8 +763,7 @@ impl RawFile {
             },
         };
 
-        let (game_versions, loaders) =
-            facets_of(self.game_versions.iter().map(String::as_str));
+        let (game_versions, loaders) = facets_of(self.game_versions.iter().map(String::as_str));
 
         let dependencies = self
             .dependencies
@@ -917,7 +913,10 @@ mod tests {
         ] {
             assert!(clean_key(hostile).is_none(), "{hostile:?} must be refused");
         }
-        assert_eq!(clean_key("  $2a$10$abcdef  ").as_deref(), Some("$2a$10$abcdef"));
+        assert_eq!(
+            clean_key("  $2a$10$abcdef  ").as_deref(),
+            Some("$2a$10$abcdef")
+        );
     }
 
     #[test]
@@ -931,7 +930,10 @@ mod tests {
         match provider.availability() {
             Availability::NotConfigured { reason } => {
                 assert!(reason.contains(KEY_FILE));
-                assert!(!reason.contains("api-key:"), "no key material in the advice");
+                assert!(
+                    !reason.contains("api-key:"),
+                    "no key material in the advice"
+                );
             }
             other @ Availability::Ready => panic!("expected NotConfigured, got {other:?}"),
         }
@@ -949,7 +951,9 @@ mod tests {
             Distribution::ForbiddenByAuthor { where_to_get } => {
                 assert!(where_to_get.contains("curseforge.com"));
             }
-            other @ Distribution::Allowed => panic!("expected the author's opt-out to be honoured, got {other:?}"),
+            other @ Distribution::Allowed => {
+                panic!("expected the author's opt-out to be honoured, got {other:?}")
+            }
         }
 
         let file = parse_file(
@@ -975,7 +979,10 @@ mod tests {
                 "gameVersions":["1.8.9","Fabric"]}"#,
             &Distribution::Allowed,
         );
-        assert!(without.is_none(), "MD5 alone is not a hash we verify against");
+        assert!(
+            without.is_none(),
+            "MD5 alone is not a hash we verify against"
+        );
     }
 
     #[test]
@@ -1014,7 +1021,10 @@ mod tests {
         )
         .expect("a file");
         assert!(file.loaders.contains("legacy-fabric"));
-        assert!(!file.loaders.contains("client"), "an environment tag is not a loader");
+        assert!(
+            !file.loaders.contains("client"),
+            "an environment tag is not a loader"
+        );
         assert!(file.game_versions.contains("1.8.9"));
         assert!(file.supports(&Target::new("1.8.9", Loader::LegacyFabric)));
         assert!(file.is_downloadable());
@@ -1076,7 +1086,10 @@ mod tests {
                 "links":{"websiteUrl":"https://www.curseforge.com/minecraft/mc-mods/m"}}"#,
         )
         .expect("a project");
-        assert_eq!(honest.project_url, "https://www.curseforge.com/minecraft/mc-mods/m");
+        assert_eq!(
+            honest.project_url,
+            "https://www.curseforge.com/minecraft/mc-mods/m"
+        );
     }
 
     #[test]

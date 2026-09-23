@@ -18,11 +18,22 @@ import java.util.List;
  *
  * <h2>What crosses, and what never does</h2>
  *
- * <p>Four commands, none of which carries anything sensitive: bring the launcher
- * to the front, choose which profile launches next, ask what it knows, and say
- * hello. <b>No account token, no refresh token, no Microsoft identity, no
- * username, and no session id ever crosses this connection in either
- * direction.</b> The module has no reason to know any of it and no way to ask.
+ * <p>A few commands, none of which carries anything secret: bring the launcher
+ * to the front, choose which profile launches next, start the launcher's
+ * Microsoft sign-in, ask who is signed in, and say hello. <b>No access token,
+ * no refresh token, no Xbox token, no sign-in code, no email and no session id
+ * ever crosses this connection in either direction.</b> The one identity that
+ * does is the public Minecraft profile — a username and a UUID, which every
+ * server the player joins already sees.
+ *
+ * <h2>Two handshakes</h2>
+ *
+ * <p>A game Fathom started finds {@code fathom/bridge.json} in its own
+ * directory. A game started any other way — a development run, another
+ * launcher — has none, so it looks for the launcher's own handshake in
+ * Fathom's data directory instead, which the launcher writes for as long as it
+ * is open. That one is enough to sign in and to read the account; it names no
+ * profile for this game, because Fathom did not start this game.
  *
  * <h2>How it is authenticated</h2>
  *
@@ -86,6 +97,8 @@ public final class LauncherBridge {
 
     private final File gameDirectory;
     private Handshake handshake;
+    /** Whether the handshake is the launcher's own rather than this game's. */
+    private boolean launcherOnly;
     private State state = State.ABSENT;
     private String detail = "";
 
@@ -121,6 +134,18 @@ public final class LauncherBridge {
     public void refresh() {
         session = readSession();
         handshake = Handshake.read(new File(gameDirectory, HANDSHAKE_PATH));
+        launcherOnly = false;
+        if (handshake == null) {
+            File root = launcherRoot();
+            handshake = root == null ? null : Handshake.read(new File(new File(root, "launcher"), HANDSHAKE_PATH));
+            launcherOnly = handshake != null;
+            if (launcherOnly) {
+                // Not this game's profile, so none of it is repeated as if it were.
+                handshake.profileId = null;
+                handshake.profileName = null;
+                handshake.profiles = Collections.<Profile>emptyList();
+            }
+        }
         if (handshake == null) {
             state = State.ABSENT;
             detail = "Not started from Fathom.";
@@ -143,6 +168,66 @@ public final class LauncherBridge {
 
     public State state() {
         return state;
+    }
+
+    /** The directory this bridge was made for. */
+    public File gameDirectory() {
+        return gameDirectory;
+    }
+
+    /** Whether Fathom started this game, as opposed to only being reachable from it. */
+    public boolean startedByLauncher() {
+        return handshake != null && !launcherOnly;
+    }
+
+    /**
+     * Fathom's data directory: the one the launcher named in this session's
+     * descriptor, or the platform default. Null when neither can be worked out.
+     */
+    public File launcherRoot() {
+        String named = session.root();
+        if (named != null && !named.trim().isEmpty()) {
+            return new File(named);
+        }
+        return net.fathom.optimizations.core.profile.ProfileLocation.platformRoot();
+    }
+
+    /**
+     * Ask the launcher to sign in with Microsoft.
+     *
+     * <p>The launcher opens Microsoft's page in the browser and raises its own
+     * account drawer; no credential ever reaches this process. Returns the
+     * launcher's word for what it did — {@code started}, {@code signing-in} or
+     * {@code signed-in} — or {@code null} when it did not answer, and
+     * {@code "no <reason>"} when it refused.
+     */
+    public String signIn() {
+        String answer = send("sign-in");
+        if (answer == null) {
+            return null;
+        }
+        return answer.startsWith("ok") ? answer.substring(2).trim() : answer;
+    }
+
+    /** Who the launcher has signed in, or null when it did not answer. */
+    public Account account() {
+        String answer = send("account");
+        return answer == null ? null : Account.parse(answer);
+    }
+
+    /** Public Minecraft profiles remembered by the launcher. */
+    public SavedAccount[] accounts() {
+        String answer = send("accounts");
+        return answer == null ? new SavedAccount[0] : SavedAccount.parse(answer);
+    }
+
+    /** Select a remembered account for the next launch. */
+    public boolean switchAccount(String uuid) {
+        if (uuid == null || !uuid.matches("[0-9a-f]{32}")) {
+            return false;
+        }
+        String answer = send("switch-account " + uuid);
+        return answer != null && answer.startsWith("ok");
     }
 
     /** One sentence about the connection, for the Launcher section. */
@@ -278,7 +363,7 @@ public final class LauncherBridge {
 
     /** Choose which profile the launcher should use next time. */
     public boolean selectNextProfile(String id) {
-        if (state != State.READY || id == null) {
+        if (state != State.READY || launcherOnly || id == null) {
             return false;
         }
         String answer = send("next-profile " + id);
@@ -294,7 +379,7 @@ public final class LauncherBridge {
      * away from taking somebody's session with it.
      */
     public boolean requestRestart(String profileId) {
-        if (state != State.READY || profileId == null) {
+        if (state != State.READY || launcherOnly || profileId == null) {
             return false;
         }
         String answer = send("restart-into " + profileId);
@@ -372,6 +457,98 @@ public final class LauncherBridge {
             } catch (IOException ignored) {
                 // A failed close on a socket we are done with is not news.
             }
+        }
+    }
+
+    /**
+     * The launcher's answer to "who is signed in".
+     *
+     * <p>Public profile only. Parsed strictly: a name that is not a Minecraft
+     * username or a UUID that is not 32 hex characters is treated as no answer
+     * rather than displayed.
+     */
+    public static final class Account {
+        public enum Status { SIGNED_IN, SIGNING_IN, SIGNED_OUT, FAILED, BUSY }
+
+        public final Status status;
+        /** 32 lowercase hex characters, or empty. */
+        public final String uuid;
+        public final String name;
+        /** Why the last sign-in failed, when it did. */
+        public final String message;
+        /** Device code while a Microsoft sign-in is waiting; never a token. */
+        public final String userCode;
+
+        Account(Status status, String uuid, String name, String message, String userCode) {
+            this.status = status;
+            this.uuid = uuid;
+            this.name = name;
+            this.message = message;
+            this.userCode = userCode;
+        }
+
+        public static Account parse(String line) {
+            String text = line.trim();
+            if (text.startsWith("no")) {
+                return new Account(Status.BUSY, "", "", "", "");
+            }
+            if (!text.startsWith("ok")) {
+                return null;
+            }
+            String[] words = text.substring(2).trim().split(" ", 3);
+            String word = words.length > 0 ? words[0] : "";
+            if ("signed-in".equals(word) && words.length == 3
+                    && words[1].matches("[0-9a-f]{32}") && words[2].matches("[A-Za-z0-9_]{1,16}")) {
+                return new Account(Status.SIGNED_IN, words[1], words[2], "", "");
+            }
+            if ("signing-in".equals(word)) {
+                String code = words.length > 1 && words[1].matches("[A-Z0-9-]{4,16}")
+                        ? words[1] : "";
+                return new Account(Status.SIGNING_IN, "", "", "", code);
+            }
+            if ("failed".equals(word)) {
+                String reason = text.substring(2).trim().substring("failed".length()).trim();
+                return new Account(Status.FAILED, "", "", reason.length() > 160 ? reason.substring(0, 160) : reason, "");
+            }
+            if ("signed-out".equals(word)) {
+                return new Account(Status.SIGNED_OUT, "", "", "", "");
+            }
+            return null;
+        }
+    }
+
+    /** One non-secret row in the launcher's account picker. */
+    public static final class SavedAccount {
+        public final String uuid;
+        public final String name;
+        public final boolean active;
+
+        SavedAccount(String uuid, String name, boolean active) {
+            this.uuid = uuid;
+            this.name = name;
+            this.active = active;
+        }
+
+        static SavedAccount[] parse(String line) {
+            String text = line == null ? "" : line.trim();
+            if (!text.startsWith("ok")) {
+                return new SavedAccount[0];
+            }
+            text = text.substring(2).trim();
+            if (text.isEmpty()) {
+                return new SavedAccount[0];
+            }
+            String[] rows = text.split(",");
+            List<SavedAccount> accounts = new ArrayList<SavedAccount>();
+            for (String row : rows) {
+                String[] fields = row.split(":", 3);
+                if (fields.length == 3 && fields[0].matches("[0-9a-f]{32}")
+                        && fields[1].matches("[A-Za-z0-9_]{1,16}")
+                        && ("0".equals(fields[2]) || "1".equals(fields[2]))) {
+                    accounts.add(new SavedAccount(fields[0], fields[1], "1".equals(fields[2])));
+                }
+            }
+            return accounts.toArray(new SavedAccount[accounts.size()]);
         }
     }
 

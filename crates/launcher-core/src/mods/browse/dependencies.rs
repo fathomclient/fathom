@@ -54,8 +54,11 @@ pub trait DependencySource {
     fn project(&self, reference: &ProjectRef) -> Result<ModProject, BrowseError>;
 
     /// The newest build of a project that fits the target, if there is one.
-    fn latest(&self, reference: &ProjectRef, target: &Target)
-        -> Result<Option<ModFile>, BrowseError>;
+    fn latest(
+        &self,
+        reference: &ProjectRef,
+        target: &Target,
+    ) -> Result<Option<ModFile>, BrowseError>;
 
     /// One exact build.
     fn file(&self, reference: &ProjectRef, version_id: &str) -> Result<ModFile, BrowseError>;
@@ -128,7 +131,10 @@ pub enum Blocker {
     /// A required dependency named only a file, not a project.
     UnnamedDependency { required_by: ProjectRef },
     /// This mod is already installed. Use update instead.
-    AlreadyInstalled { installed_id: String, detail: String },
+    AlreadyInstalled {
+        installed_id: String,
+        detail: String,
+    },
     /// Something the plan would install is marked incompatible with something
     /// installed or planned.
     Conflict {
@@ -169,7 +175,8 @@ impl InstallPlan {
     /// Whether the plan contains anything the user has to confirm as not a
     /// duplicate.
     pub fn needs_duplicate_confirmation(&self) -> bool {
-        self.installs().any(|planned| planned.possible_duplicate.is_some())
+        self.installs()
+            .any(|planned| planned.possible_duplicate.is_some())
     }
 
     pub fn download_count(&self) -> usize {
@@ -462,7 +469,12 @@ pub fn plan(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 pub(crate) mod tests {
     use std::cell::RefCell;
     use std::collections::BTreeMap;
@@ -503,7 +515,11 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn file(reference: &ProjectRef, version: &str, deps: Vec<FileDependency>) -> ModFile {
+    pub(crate) fn file(
+        reference: &ProjectRef,
+        version: &str,
+        deps: Vec<FileDependency>,
+    ) -> ModFile {
         let seed = format!("{}{}", reference.qualified(), version);
         let sha1 = crate::install::download::sha1_hex(seed.as_bytes());
         ModFile {
@@ -516,7 +532,10 @@ pub(crate) mod tests {
             game_versions: ["1.8.9".to_owned()].into_iter().collect(),
             file_name: format!("{}-{version}.jar", reference.id),
             download: FileDownload::Url {
-                url: format!("https://cdn.modrinth.com/data/{}/{version}.jar", reference.id),
+                url: format!(
+                    "https://cdn.modrinth.com/data/{}/{version}.jar",
+                    reference.id
+                ),
             },
             hash: ArtifactHash::new(sha1, None).unwrap(),
             dependencies: deps,
@@ -551,7 +570,9 @@ pub(crate) mod tests {
 
     impl DependencySource for FakeIndex {
         fn project(&self, reference: &ProjectRef) -> Result<ModProject, BrowseError> {
-            self.requests.borrow_mut().push(format!("project {reference}"));
+            self.requests
+                .borrow_mut()
+                .push(format!("project {reference}"));
             self.projects
                 .get(&reference.qualified())
                 .cloned()
@@ -566,7 +587,9 @@ pub(crate) mod tests {
             reference: &ProjectRef,
             target: &Target,
         ) -> Result<Option<ModFile>, BrowseError> {
-            self.requests.borrow_mut().push(format!("latest {reference}"));
+            self.requests
+                .borrow_mut()
+                .push(format!("latest {reference}"));
             Ok(self
                 .files
                 .get(&reference.qualified())
@@ -586,7 +609,12 @@ pub(crate) mod tests {
 
     fn installed_from(provider: Provider, id: &str, file_name: &str) -> ProfileMod {
         ProfileMod::new(
-            ModId::new(&crate::mods::id_from_file_name(file_name).unwrap().to_string()).unwrap(),
+            ModId::new(
+                &crate::mods::id_from_file_name(file_name)
+                    .unwrap()
+                    .to_string(),
+            )
+            .unwrap(),
             "f".repeat(40),
             file_name,
         )
@@ -604,7 +632,10 @@ pub(crate) mod tests {
         let lib = ProjectRef::new(Provider::Modrinth, "lib");
         let root = ProjectRef::new(Provider::Modrinth, "root");
         let mut index = FakeIndex::default();
-        index.add(project(Provider::Modrinth, "lib", "lib"), vec![file(&lib, "1", vec![])]);
+        index.add(
+            project(Provider::Modrinth, "lib", "lib"),
+            vec![file(&lib, "1", vec![])],
+        );
         index.add(
             project(Provider::Modrinth, "api", "api-thing"),
             vec![file(&api, "1", vec![needs(DependencyKind::Required, &lib)])],
@@ -622,7 +653,10 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert!(!plan.is_blocked(), "{:?}", plan.blockers);
-        let order: Vec<_> = plan.installs().map(|p| p.project.reference.id.clone()).collect();
+        let order: Vec<_> = plan
+            .installs()
+            .map(|p| p.project.reference.id.clone())
+            .collect();
         assert_eq!(order, vec!["lib", "api", "root"]);
     }
 
@@ -633,13 +667,19 @@ pub(crate) mod tests {
         let lib = ProjectRef::new(Provider::Modrinth, "lib");
         let root = ProjectRef::new(Provider::Modrinth, "root");
         let mut index = FakeIndex::default();
-        index.add(project(Provider::Modrinth, "lib", "lib"), vec![file(&lib, "1", vec![])]);
+        index.add(
+            project(Provider::Modrinth, "lib", "lib"),
+            vec![file(&lib, "1", vec![])],
+        );
         index.add(
             project(Provider::Modrinth, "a", "aaa"),
             vec![file(
                 &a,
                 "1",
-                vec![needs(DependencyKind::Required, &b), needs(DependencyKind::Required, &lib)],
+                vec![
+                    needs(DependencyKind::Required, &b),
+                    needs(DependencyKind::Required, &lib),
+                ],
             )],
         );
         index.add(
@@ -672,7 +712,10 @@ pub(crate) mod tests {
             .iter()
             .filter(|r| r.ends_with("modrinth:lib"))
             .count();
-        assert_eq!(lib_requests, 2, "one project and one version lookup, not one per dependent");
+        assert_eq!(
+            lib_requests, 2,
+            "one project and one version lookup, not one per dependent"
+        );
     }
 
     #[test]
@@ -680,12 +723,23 @@ pub(crate) mod tests {
         let extra = ProjectRef::new(Provider::Modrinth, "extra");
         let root = ProjectRef::new(Provider::Modrinth, "root");
         let mut index = FakeIndex::default();
-        index.add(project(Provider::Modrinth, "extra", "extra"), vec![file(&extra, "1", vec![])]);
+        index.add(
+            project(Provider::Modrinth, "extra", "extra"),
+            vec![file(&extra, "1", vec![])],
+        );
         let root_file = file(&root, "1", vec![needs(DependencyKind::Optional, &extra)]);
         let root_project = project(Provider::Modrinth, "root", "root");
 
-        let silent = plan(&index, &target(), &[], root_project.clone(), root_file.clone(), &[], None)
-            .unwrap();
+        let silent = plan(
+            &index,
+            &target(),
+            &[],
+            root_project.clone(),
+            root_file.clone(),
+            &[],
+            None,
+        )
+        .unwrap();
         assert_eq!(silent.download_count(), 1);
         assert_eq!(silent.optional.len(), 1);
 
@@ -721,7 +775,10 @@ pub(crate) mod tests {
         .unwrap();
         assert_eq!(plan.download_count(), 1);
         assert_eq!(plan.satisfied.len(), 1);
-        assert!(index.requests.borrow().is_empty(), "no request for a satisfied dependency");
+        assert!(
+            index.requests.borrow().is_empty(),
+            "no request for a satisfied dependency"
+        );
     }
 
     #[test]
@@ -774,12 +831,19 @@ pub(crate) mod tests {
             &target(),
             &installed,
             project(Provider::Modrinth, "root", "root"),
-            file(&root, "1", vec![needs(DependencyKind::Incompatible, &rival)]),
+            file(
+                &root,
+                "1",
+                vec![needs(DependencyKind::Incompatible, &rival)],
+            ),
             &[],
             None,
         )
         .unwrap();
-        assert!(plan.blockers.iter().any(|b| matches!(b, Blocker::Conflict { .. })));
+        assert!(plan
+            .blockers
+            .iter()
+            .any(|b| matches!(b, Blocker::Conflict { .. })));
     }
 
     #[test]
@@ -796,7 +860,10 @@ pub(crate) mod tests {
             None,
         )
         .unwrap();
-        assert!(matches!(again.blockers[0], Blocker::AlreadyInstalled { .. }));
+        assert!(matches!(
+            again.blockers[0],
+            Blocker::AlreadyInstalled { .. }
+        ));
 
         let update = plan(
             &FakeIndex::default(),

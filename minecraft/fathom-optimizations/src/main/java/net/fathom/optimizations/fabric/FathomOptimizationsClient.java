@@ -62,6 +62,10 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        // First, before anything this class does can change what is being
+        // reported. The point of the block is to describe the process as the
+        // loader handed it over, not as Fathom left it.
+        net.fathom.optimizations.fabric.diag.RuntimeTrace.print();
         repairLegacyFovCorruption();
         installRendererReloadHook();
         OptimizationRegistry registry = OptimizationRegistry.standard();
@@ -177,6 +181,11 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
             }
         });
 
+        // This is the launcher's positive proof that the exact jar it placed
+        // was loaded and that Fathom completed client initialization. It is
+        // deliberately after the registries, HUD and public API above.
+        ClientMarker.write(gameDirectory, features.size());
+
         net.fathom.optimizations.core.module.ModuleLog.say(
                 "" + registry.size() + " optimizations registered, "
                         + switches.enabled().size() + " enabled, "
@@ -187,6 +196,9 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
                 "" + hud.sessionName()
                         + ", launcher bridge " + bridge.state().name().toLowerCase(java.util.Locale.ROOT)
                         + ". Press " + hud.hubKey().keyName() + " in game to open Fathom Hub.");
+
+        // Last, so the probe's totals do not include this method's own work.
+        net.fathom.optimizations.fabric.diag.FramePerf.start();
     }
 
     /**

@@ -66,10 +66,16 @@ pub struct AuthProgress {
     pub detail: String,
     /// The short code to type. Present only while `Waiting`.
     pub user_code: Option<String>,
-    /// The page to type it on. Shown as text, never opened for the user: a
-    /// launcher that opens a browser by itself, at a URL the user did not read,
-    /// is teaching exactly the habit that makes phishing work.
+    /// The page to type it on. Opened in the default browser when the code
+    /// arrives — only after `pages::microsoft_sign_in_url` has confirmed it is
+    /// Microsoft's own page — and shown as text as well, so the flow still
+    /// works on a machine where no browser opens.
     pub verification_uri: Option<String>,
+    /// Whether the browser was opened for the user.
+    pub browser_opened: bool,
+    /// Whether the user code was placed on the system clipboard before the
+    /// browser opened.
+    pub code_copied: bool,
     pub active: bool,
     pub failure: Option<String>,
 }
@@ -82,6 +88,8 @@ impl AuthProgress {
             detail: detail.into(),
             user_code: None,
             verification_uri: None,
+            browser_opened: false,
+            code_copied: false,
             active: phase.is_active(),
             failure: None,
         }
@@ -100,18 +108,37 @@ impl AuthProgress {
     }
 
     pub(crate) fn starting() -> Self {
-        Self::new(AuthPhase::Starting, "Contacting Microsoft", "Requesting a code")
+        Self::new(
+            AuthPhase::Starting,
+            "Contacting Microsoft",
+            "Requesting a code",
+        )
     }
 
     /// The code, and where to type it.
-    pub(crate) fn waiting(code: &str, uri: &str) -> Self {
-        let mut progress = Self::new(
-            AuthPhase::Waiting,
-            "Enter this code",
-            "Sign in on Microsoft's page, then come back",
-        );
+    pub(crate) fn waiting(
+        code: &str,
+        uri: &str,
+        browser_opened: bool,
+        code_copied: bool,
+    ) -> Self {
+        let mut progress = if browser_opened {
+            Self::new(
+                AuthPhase::Waiting,
+                "Continue in your browser",
+                "Sign in on Microsoft's page. Fathom continues by itself when you are done.",
+            )
+        } else {
+            Self::new(
+                AuthPhase::Waiting,
+                "Enter this code",
+                "Sign in on Microsoft's page, then come back",
+            )
+        };
         progress.user_code = Some(code.to_owned());
         progress.verification_uri = Some(uri.to_owned());
+        progress.browser_opened = browser_opened;
+        progress.code_copied = code_copied;
         progress
     }
 
@@ -124,7 +151,11 @@ impl AuthProgress {
     }
 
     pub(crate) fn signed_in(name: &str) -> Self {
-        Self::new(AuthPhase::SignedIn, "Signed in", format!("Playing as {name}"))
+        Self::new(
+            AuthPhase::SignedIn,
+            "Signed in",
+            format!("Playing as {name}"),
+        )
     }
 
     pub(crate) fn failed(message: impl Into<String>) -> Self {
@@ -235,7 +266,12 @@ mod tests {
     /// nowhere to type it is not an instruction.
     #[test]
     fn the_code_and_the_page_arrive_together() {
-        let progress = AuthProgress::waiting("ABCD-EFGH", "https://microsoft.com/link");
+        let progress = AuthProgress::waiting(
+            "ABCD-EFGH",
+            "https://microsoft.com/link",
+            true,
+            true,
+        );
         assert_eq!(progress.user_code.as_deref(), Some("ABCD-EFGH"));
         assert_eq!(
             progress.verification_uri.as_deref(),
@@ -285,7 +321,9 @@ mod tests {
     #[test]
     fn cancelling_raises_the_flag_the_poll_loop_watches() {
         let supervisor = Supervisor::default();
-        let cancel = supervisor.begin(AuthProgress::starting()).expect("an attempt");
+        let cancel = supervisor
+            .begin(AuthProgress::starting())
+            .expect("an attempt");
         assert_eq!(supervisor.request_cancel(), Ok(true));
         assert!(cancel.is_cancelled());
     }

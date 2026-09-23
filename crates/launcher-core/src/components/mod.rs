@@ -167,6 +167,27 @@ pub struct Component {
     pub supply: Supply,
     /// Loaders this component can be installed under.
     pub loaders: &'static [Loader],
+    /// A component that must be installed alongside this one, under one
+    /// particular loader, for it to work at all.
+    ///
+    /// Exists for OptiFine, and models the thing this launcher used to get
+    /// wrong. OptiFine is not a Fabric mod: dropping its jar into a Fabric
+    /// profile's mods directory does nothing, because the loader has no idea
+    /// what to do with it. Under Forge it is self-installing and needs nothing;
+    /// under Legacy Fabric it needs a bridge that patches it into the game at
+    /// runtime. That difference is a property of the pair, so it is recorded
+    /// as one rather than as a check somewhere downstream.
+    pub bridge: Option<Bridge>,
+}
+
+/// A component another one cannot work without, under a given loader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bridge {
+    /// The id of the component that must also be present.
+    pub component: &'static str,
+    /// The loader under which it is required. Under any other loader the
+    /// component stands alone.
+    pub loader: Loader,
 }
 
 impl Component {
@@ -190,7 +211,7 @@ const FABRIC_OR_FORGE: &[Loader] = &[Loader::LegacyFabric, Loader::Forge];
 ///
 /// Ordered as the setup screen shows them: what a Fathom profile is, then what
 /// can be added to one.
-pub const ALL: [Component; 5] = [
+pub const ALL: [Component; 6] = [
     Component {
         id: "fathom-core",
         name: "Fathom Core",
@@ -204,6 +225,7 @@ pub const ALL: [Component; 5] = [
             component: "fathom-performance",
         },
         loaders: FABRIC,
+        bridge: None,
     },
     Component {
         id: "fathom-performance",
@@ -215,6 +237,7 @@ pub const ALL: [Component; 5] = [
             jar_prefix: "fathom-optimizations-",
         },
         loaders: FABRIC,
+        bridge: None,
     },
     Component {
         id: "fathom-hud",
@@ -232,6 +255,7 @@ pub const ALL: [Component; 5] = [
             component: "fathom-performance",
         },
         loaders: FABRIC,
+        bridge: None,
     },
     Component {
         id: "fabric-api",
@@ -247,6 +271,7 @@ pub const ALL: [Component; 5] = [
             project: crate::mods::catalog::MODRINTH_FABRIC_API,
         },
         loaders: FABRIC,
+        bridge: None,
     },
     Component {
         id: "optifine",
@@ -261,8 +286,72 @@ pub const ALL: [Component; 5] = [
             where_to_get: "https://optifine.net/downloads",
         },
         loaders: FABRIC_OR_FORGE,
+        // Under Forge, OptiFine installs itself and needs nothing. Under Legacy
+        // Fabric it is inert on its own -- it is not a Fabric mod and the
+        // loader will not load it -- so it needs OptiFabric to patch it in.
+        bridge: Some(Bridge {
+            component: "optifabric",
+            loader: Loader::LegacyFabric,
+        }),
+    },
+    Component {
+        id: "optifabric",
+        name: "OptiFabric",
+        summary: "Lets an OptiFine jar run under Legacy Fabric. MPL-2.0.",
+        mod_id: "optifabric",
+        tier: Tier::Optional,
+        // Mozilla Public License 2.0, published on Modrinth with a per-file
+        // SHA-1. Distributable, unlike the thing it bridges to: this is the
+        // component Fathom may fetch, and OptiFine is the one it may not.
+        //
+        // `Managed` rather than `Bundled` deliberately. Shipping a copy inside
+        // the installer would make Fathom a redistributor of a third party's
+        // MPL-2.0 work, with the source-availability obligations that carries,
+        // in order to save one download of a 448 KB file.
+        supply: Supply::Managed {
+            repository: "modrinth",
+            project: crate::mods::catalog::MODRINTH_OPTIFABRIC,
+        },
+        loaders: FABRIC,
+        bridge: None,
     },
 ];
+
+/// Whether this component's jar is in the profile's mod list.
+pub fn installed_in(component: &Component, profile: &Profile) -> bool {
+    component
+        .parsed_mod_id()
+        .is_some_and(|id| profile.mods.get(&id).is_some())
+}
+
+/// A component this profile has installed that cannot work, and the bridge it
+/// is missing.
+///
+/// Returns `(component, bridge)`. `None` is the normal answer and means every
+/// installed component either needs no bridge under this loader or has the one
+/// it needs.
+///
+/// Only the loader named in the [`Bridge`] is checked: OptiFine under Forge
+/// installs itself and reports nothing here, which is correct and is the reason
+/// the loader is part of the record rather than assumed.
+pub fn missing_bridge(profile: &Profile) -> Option<(&'static Component, &'static Component)> {
+    let loader = profile.loader_kind();
+    for component in ALL.iter() {
+        let Some(bridge) = component.bridge else {
+            continue;
+        };
+        if bridge.loader != loader || !installed_in(component, profile) {
+            continue;
+        }
+        let Some(needed) = find(bridge.component) else {
+            continue;
+        };
+        if !installed_in(needed, profile) {
+            return Some((component, needed));
+        }
+    }
+    None
+}
 
 pub fn find(id: &str) -> Option<&'static Component> {
     ALL.iter().find(|component| component.id == id)
@@ -499,10 +588,16 @@ fn install_bundled(
     jar_prefix: &'static str,
     report: &mut Report,
 ) -> Result<(), ComponentError> {
-    let Some(jar) = newest_jar(paths, jar_prefix) else {
-        // A developer `cargo run` has no `resources/` beside the executable.
-        // That is not an error and not a reason to refuse the profile; it is a
-        // component this particular build cannot supply.
+    let lookup = bundled_jar(paths, jar_prefix);
+    let Some(jar) = lookup.jar().map(|jar| jar.path.clone()) else {
+        // Not installed, and not silently papered over: the launch gate
+        // (`Launcher::verify_fathom_client`) refuses a Fathom profile whose
+        // client module this build cannot supply, with the same sentence.
+        tracing::warn!(
+            component = component.id,
+            problem = lookup.problem().unwrap_or_default(),
+            "a Fathom component is unavailable in this build"
+        );
         report
             .unavailable
             .push((component.id, "Not included in this build."));
@@ -513,7 +608,11 @@ fn install_bundled(
         return Err(ComponentError::Unknown(component.mod_id.to_owned()));
     };
 
-    let existing = profile.mods.iter().find(|entry| entry.id == mod_id).cloned();
+    let existing = profile
+        .mods
+        .iter()
+        .find(|entry| entry.id == mod_id)
+        .cloned();
 
     // A user-supplied jar under the same id stays exactly as it is.
     if let Some(entry) = &existing {
@@ -533,7 +632,10 @@ fn install_bundled(
             source,
         })?;
 
-    if existing.as_ref().is_some_and(|entry| entry.sha1 == stored.sha1) {
+    if existing
+        .as_ref()
+        .is_some_and(|entry| entry.sha1 == stored.sha1)
+    {
         report.current.push(component.id);
         return Ok(());
     }
@@ -544,7 +646,8 @@ fn install_bundled(
         .unwrap_or(component.name)
         .to_owned();
 
-    let mut entry = ProfileMod::new(mod_id, &stored.sha1, file_name).from_source(ModSource::FirstParty);
+    let mut entry =
+        ProfileMod::new(mod_id, &stored.sha1, file_name).from_source(ModSource::FirstParty);
     // A component the launcher installs arrives switched on. The Performance
     // page is where it gets switched off, and that decision is preserved
     // because an existing entry's enabled state is carried over.
@@ -559,24 +662,146 @@ fn install_bundled(
     Ok(())
 }
 
-/// The newest-looking jar in `resources/` whose name starts with `prefix`.
-///
-/// Excludes the artifacts that are not loadable mods by the same rule
-/// `tools/package-portable.ps1` uses. Packaging should never put them there;
-/// this is the second lock on the same door, because the consequence of getting
-/// it wrong is a profile that refuses to start over a mod nobody chose.
-pub fn newest_jar(paths: &DataPaths, prefix: &str) -> Option<PathBuf> {
-    let directory = resources_dir(paths)?;
-    let mut candidates: Vec<PathBuf> = std::fs::read_dir(&directory)
-        .ok()?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| is_loadable_jar(path, prefix))
-        .collect();
+/// The file-name prefix of Fathom's client module jar.
+pub const FATHOM_JAR_PREFIX: &str = "fathom-optimizations-";
 
-    // Deterministic: the same build must install the same jar every time.
-    candidates.sort();
-    candidates.pop()
+/// Where a bundled jar was found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JarOrigin {
+    /// The Gradle output of the source checkout a development build came from.
+    DevelopmentBuild,
+    /// `resources/` beside the executable: a portable or installed build.
+    BesideExecutable,
+    /// `resources/` in application data, where an update places it.
+    ApplicationData,
+}
+
+impl JarOrigin {
+    pub fn label(self) -> &'static str {
+        match self {
+            JarOrigin::DevelopmentBuild => "development build output",
+            JarOrigin::BesideExecutable => "resources beside the launcher",
+            JarOrigin::ApplicationData => "resources in application data",
+        }
+    }
+}
+
+/// A bundled jar, and what is known about it without opening it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BundledJar {
+    pub path: PathBuf,
+    pub origin: JarOrigin,
+    pub modified: Option<std::time::SystemTime>,
+}
+
+/// The answer to "which jar would this build install for `prefix`".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JarLookup {
+    Found(BundledJar),
+    /// A development build whose module jar is older than the module's own
+    /// sources. Installing it would launch yesterday's client.
+    Stale {
+        jar: BundledJar,
+        newest_source: PathBuf,
+    },
+    /// Nowhere this build looks has one.
+    Missing {
+        searched: Vec<PathBuf>,
+        hint: String,
+    },
+}
+
+impl JarLookup {
+    pub fn jar(&self) -> Option<&BundledJar> {
+        match self {
+            JarLookup::Found(jar) => Some(jar),
+            _ => None,
+        }
+    }
+
+    /// A sentence for a person, when there is no usable jar.
+    pub fn problem(&self) -> Option<String> {
+        match self {
+            JarLookup::Found(_) => None,
+            JarLookup::Stale { jar, newest_source } => Some(format!(
+                "The Fathom client jar at {} is older than its source ({}). Rebuild it with \
+                 `gradle build` in minecraft/fathom-optimizations, then press Play again.",
+                jar.path.display(),
+                newest_source.display()
+            )),
+            JarLookup::Missing { hint, .. } => Some(hint.clone()),
+        }
+    }
+}
+
+/// Which jar this build supplies for a bundled component.
+///
+/// **One source per kind of build, never a fallback between them.**
+///
+/// - A development build running from a checkout takes the checkout's Gradle
+///   output (`minecraft/fathom-optimizations/build/libs`) and nothing else, and
+///   refuses it when the module's sources are newer than the jar.
+/// - Any other build takes `resources/` beside the executable, then
+///   `resources/` in application data.
+///
+/// The development rule is the fix for a launcher that silently launched
+/// whichever jar had last been copied into application data by hand.
+pub fn bundled_jar(paths: &DataPaths, prefix: &str) -> JarLookup {
+    if let Some(checkout) = paths.development_checkout() {
+        let module = checkout.join("minecraft").join("fathom-optimizations");
+        let libs = module.join("build").join("libs");
+        return match newest_in(&libs, prefix) {
+            Some(path) => {
+                let jar = BundledJar {
+                    modified: modified(&path),
+                    path,
+                    origin: JarOrigin::DevelopmentBuild,
+                };
+                match newest_source_after(&module, jar.modified) {
+                    Some(newest_source) => JarLookup::Stale { jar, newest_source },
+                    None => JarLookup::Found(jar),
+                }
+            }
+            None => JarLookup::Missing {
+                hint: format!(
+                    "Fathom's client module has not been built in this checkout ({} has no \
+                     {prefix}*.jar). Run `gradle build` in minecraft/fathom-optimizations.",
+                    libs.display()
+                ),
+                searched: vec![libs],
+            },
+        };
+    }
+
+    let mut searched = Vec::new();
+    let candidates = [
+        DataPaths::install_dir().map(|dir| (dir.join("resources"), JarOrigin::BesideExecutable)),
+        Some((paths.root().join("resources"), JarOrigin::ApplicationData)),
+    ];
+    for (directory, origin) in candidates.into_iter().flatten() {
+        if let Some(path) = newest_in(&directory, prefix) {
+            return JarLookup::Found(BundledJar {
+                modified: modified(&path),
+                path,
+                origin,
+            });
+        }
+        searched.push(directory);
+    }
+    JarLookup::Missing {
+        hint: "This Fathom build does not include its client module \
+               (resources/fathom-optimizations-*.jar). Reinstall Fathom, or rebuild it with \
+               tools/package-portable.ps1."
+            .to_owned(),
+        searched,
+    }
+}
+
+/// The jar a build would install, when it has a usable one.
+///
+/// Kept for callers that only need yes or no. [`bundled_jar`] says why not.
+pub fn newest_jar(paths: &DataPaths, prefix: &str) -> Option<PathBuf> {
+    bundled_jar(paths, prefix).jar().map(|jar| jar.path.clone())
 }
 
 pub fn is_loadable_jar(path: &Path, prefix: &str) -> bool {
@@ -596,15 +821,63 @@ pub fn is_loadable_jar(path: &Path, prefix: &str) -> bool {
         && !lower.ends_with("-core.jar")
 }
 
-/// The `resources/` directory, wherever it is for this build.
-fn resources_dir(paths: &DataPaths) -> Option<PathBuf> {
-    if let Some(beside) = DataPaths::install_dir().map(|dir| dir.join("resources")) {
-        if beside.is_dir() {
-            return Some(beside);
+fn modified(path: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()
+}
+
+/// The newest-looking loadable jar in a directory.
+fn newest_in(directory: &Path, prefix: &str) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = std::fs::read_dir(directory)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| is_loadable_jar(path, prefix))
+        .collect();
+    // Deterministic: the same build must install the same jar every time.
+    candidates.sort();
+    candidates.pop()
+}
+
+/// A source file of the module newer than `built`, if there is one.
+///
+/// Looks at what a Gradle build consumes: `src/main` and the build files. A
+/// jar with no timestamp counts as stale, because "we cannot tell" is not a
+/// reason to launch it.
+fn newest_source_after(module: &Path, built: Option<std::time::SystemTime>) -> Option<PathBuf> {
+    let mut stack = vec![module.join("src").join("main")];
+    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
+    for file in ["build.gradle", "gradle.properties", "settings.gradle"] {
+        let path = module.join(file);
+        if let Some(time) = modified(&path) {
+            if newest.as_ref().is_none_or(|(best, _)| time > *best) {
+                newest = Some((time, path));
+            }
         }
     }
-    let in_data = paths.root().join("resources");
-    in_data.is_dir().then_some(in_data)
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                stack.push(path);
+            } else if let Ok(time) = meta.modified() {
+                if newest.as_ref().is_none_or(|(best, _)| time > *best) {
+                    newest = Some((time, path));
+                }
+            }
+        }
+    }
+    let (time, path) = newest?;
+    match built {
+        // A second of slack for filesystems that round timestamps.
+        Some(built) if time <= built + std::time::Duration::from_secs(1) => None,
+        _ => Some(path),
+    }
 }
 
 #[cfg(test)]
@@ -618,6 +891,97 @@ mod tests {
         profile.kind = kind;
         profile.loader.kind = loader;
         profile
+    }
+
+    /// Put a component's jar in a profile, the way installing one would.
+    fn install(profile: &mut Profile, component_id: &str) {
+        let component = find(component_id).expect("a known component");
+        let mod_id = component.parsed_mod_id().expect("a usable mod id");
+        profile.mods.upsert(ProfileMod::new(
+            mod_id,
+            "a".repeat(40),
+            format!("{component_id}.jar"),
+        ));
+    }
+
+    /// The defect this whole feature exists to remove. OptiFine in a Legacy
+    /// Fabric profile, on its own, is a jar the loader will not load — and the
+    /// launcher used to start the game anyway.
+    #[test]
+    fn optifine_under_legacy_fabric_is_refused_without_the_bridge() {
+        let mut profile = profile(ProfileKind::Custom, Loader::LegacyFabric);
+        install(&mut profile, "optifine");
+
+        let (component, bridge) = missing_bridge(&profile).expect("the gap should be reported");
+        assert_eq!(component.id, "optifine");
+        assert_eq!(bridge.id, "optifabric");
+    }
+
+    #[test]
+    fn optifine_with_the_bridge_is_satisfied() {
+        let mut profile = profile(ProfileKind::Custom, Loader::LegacyFabric);
+        install(&mut profile, "optifine");
+        install(&mut profile, "optifabric");
+
+        assert!(missing_bridge(&profile).is_none());
+    }
+
+    /// The loader is part of the record for a reason: under Forge, OptiFine
+    /// installs itself and needs nothing. Reporting a missing bridge there
+    /// would send somebody looking for a file they must not install.
+    #[test]
+    fn optifine_under_forge_needs_no_bridge() {
+        let mut profile = profile(ProfileKind::Custom, Loader::Forge);
+        install(&mut profile, "optifine");
+
+        assert!(missing_bridge(&profile).is_none());
+    }
+
+    #[test]
+    fn a_profile_without_optifine_reports_nothing() {
+        let profile = profile(ProfileKind::Fathom, Loader::LegacyFabric);
+        assert!(missing_bridge(&profile).is_none());
+    }
+
+    /// The licensing split this architecture depends on. OptiFabric is MPL-2.0
+    /// and may be fetched; OptiFine is proprietary and may not. If these two
+    /// ever ended up with the same supply, Fathom would either be failing to
+    /// install a component it is allowed to, or redistributing one it is not.
+    #[test]
+    fn the_bridge_may_be_fetched_and_optifine_may_not() {
+        let bridge = find("optifabric").expect("optifabric is in the registry");
+        assert!(
+            matches!(bridge.supply, Supply::Managed { repository: "modrinth", .. }),
+            "{:?}",
+            bridge.supply
+        );
+
+        let optifine = find("optifine").expect("optifine is in the registry");
+        assert!(matches!(optifine.supply, Supply::UserSupplied { .. }));
+        assert!(!optifine.supply.is_installable());
+    }
+
+    /// OptiFabric is a Fabric mod and OptiFine is not; the bridge only makes
+    /// sense under the loader that cannot load OptiFine by itself.
+    #[test]
+    fn the_bridge_is_a_fabric_component() {
+        let bridge = find("optifabric").expect("optifabric is in the registry");
+        assert!(bridge.supports(Loader::LegacyFabric));
+        assert!(!bridge.supports(Loader::Forge));
+    }
+
+    #[test]
+    fn every_bridge_names_a_component_that_exists() {
+        for component in ALL {
+            if let Some(bridge) = component.bridge {
+                assert!(
+                    find(bridge.component).is_some(),
+                    "{} names a bridge {:?} that is not in the registry",
+                    component.id,
+                    bridge.component
+                );
+            }
+        }
     }
 
     #[test]
@@ -686,7 +1050,11 @@ mod tests {
             optifine.supply.where_to_get(),
             Some("https://optifine.net/downloads")
         );
-        assert_ne!(optifine.tier, Tier::Core, "it must never be installed by default");
+        assert_ne!(
+            optifine.tier,
+            Tier::Core,
+            "it must never be installed by default"
+        );
     }
 
     /// Every component that is not installable must say why, or the interface
@@ -845,13 +1213,21 @@ mod tests {
         paths.ensure().unwrap();
         let resources = paths.root().join("resources");
         std::fs::create_dir_all(&resources).unwrap();
-        std::fs::write(resources.join("fathom-optimizations-1.0.0.jar"), b"PK\x03\x04 old").unwrap();
+        std::fs::write(
+            resources.join("fathom-optimizations-1.0.0.jar"),
+            b"PK\x03\x04 old",
+        )
+        .unwrap();
 
         let engine = ModEngine::new(paths.clone());
         let mut profile = profile(ProfileKind::Fathom, Loader::LegacyFabric);
         ensure(&paths, &engine, &mut profile).unwrap();
 
-        std::fs::write(resources.join("fathom-optimizations-1.1.0.jar"), b"PK\x03\x04 new").unwrap();
+        std::fs::write(
+            resources.join("fathom-optimizations-1.1.0.jar"),
+            b"PK\x03\x04 new",
+        )
+        .unwrap();
         let report = ensure(&paths, &engine, &mut profile).unwrap();
         assert_eq!(report.updated, vec!["fathom-performance"]);
     }
@@ -866,7 +1242,11 @@ mod tests {
         paths.ensure().unwrap();
         let resources = paths.root().join("resources");
         std::fs::create_dir_all(&resources).unwrap();
-        std::fs::write(resources.join("fathom-optimizations-1.0.0.jar"), b"PK\x03\x04 ours").unwrap();
+        std::fs::write(
+            resources.join("fathom-optimizations-1.0.0.jar"),
+            b"PK\x03\x04 ours",
+        )
+        .unwrap();
 
         let engine = ModEngine::new(paths.clone());
         let mut profile = profile(ProfileKind::Fathom, Loader::LegacyFabric);
@@ -898,7 +1278,11 @@ mod tests {
         paths.ensure().unwrap();
         let resources = paths.root().join("resources");
         std::fs::create_dir_all(&resources).unwrap();
-        std::fs::write(resources.join("fathom-optimizations-1.0.0.jar"), b"PK\x03\x04 one").unwrap();
+        std::fs::write(
+            resources.join("fathom-optimizations-1.0.0.jar"),
+            b"PK\x03\x04 one",
+        )
+        .unwrap();
 
         let engine = ModEngine::new(paths.clone());
         let mut profile = profile(ProfileKind::Fathom, Loader::LegacyFabric);
@@ -909,7 +1293,11 @@ mod tests {
         entry.enabled = false;
         profile.mods.upsert(entry);
 
-        std::fs::write(resources.join("fathom-optimizations-1.1.0.jar"), b"PK\x03\x04 two").unwrap();
+        std::fs::write(
+            resources.join("fathom-optimizations-1.1.0.jar"),
+            b"PK\x03\x04 two",
+        )
+        .unwrap();
         ensure(&paths, &engine, &mut profile).unwrap();
 
         assert!(

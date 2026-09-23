@@ -76,6 +76,17 @@ pub struct AcceptedJar {
     pub source: ModSource,
     /// Whether the catalogue recognised it.
     pub recognised: bool,
+    /// Whether the identification came from inside the file rather than from
+    /// its name.
+    ///
+    /// The difference is the whole reason this field exists. A filename match
+    /// is a guess that is wrong in both directions: rename an OptiFine jar and
+    /// it stops being recognised, call any jar `OptiFine_1.8.9_HD_U_M5.jar` and
+    /// it starts being. When this is true, the version and Minecraft version
+    /// below were read out of the jar's own bytecode and are facts about the
+    /// file. The interface says which it got, because "we think this is
+    /// OptiFine" and "this is OptiFine" deserve different confidence.
+    pub verified: bool,
 }
 
 impl AcceptedJar {
@@ -88,7 +99,12 @@ impl AcceptedJar {
     pub fn describe(&self) -> String {
         match (&self.version, &self.minecraft) {
             (Some(version), Some(minecraft)) => {
-                format!("{} {} for Minecraft {}", self.name, tidy(version), minecraft)
+                format!(
+                    "{} {} for Minecraft {}",
+                    self.name,
+                    tidy(version),
+                    minecraft
+                )
             }
             (Some(version), None) => format!("{} {}", self.name, tidy(version)),
             _ => self.name.clone(),
@@ -129,6 +145,30 @@ pub fn accept(engine: &ModEngine, source: &Path) -> Result<AcceptedJar, ModError
         .to_owned();
 
     let stored = engine.store().adopt(source)?;
+
+    // Ask the file what it is before asking its name. OptiFine carries its own
+    // identity in `Config.class`, so when this succeeds it settles the id, the
+    // version and the Minecraft version as facts rather than inferences -- and
+    // it is the identification the OptiFabric bridge requirement hangs off, so
+    // getting it from the filename would mean a renamed jar silently skipping
+    // the bridge check. A failure here is not an error: almost every jar is not
+    // OptiFine, and those fall through to the catalogue as before.
+    if let Ok(identity) = super::optifine::inspect(source) {
+        return Ok(AcceptedJar {
+            id: "optifine".to_owned(),
+            name: identity.name.clone(),
+            version: Some(format!("{}_{}", identity.edition, identity.release)),
+            minecraft: Some(identity.minecraft.clone()),
+            file_name,
+            sha1: stored.sha1,
+            size: facts.size,
+            entries: facts.entries,
+            source: ModSource::UserSupplied,
+            recognised: true,
+            verified: true,
+        });
+    }
+
     let identified = identify::from_file_name(&file_name);
 
     let id = match identified.catalogue_id {
@@ -153,7 +193,23 @@ pub fn accept(engine: &ModEngine, source: &Path) -> Result<AcceptedJar, ModError
         entries: facts.entries,
         source: ModSource::UserSupplied,
         recognised,
+        verified: false,
     })
+}
+
+/// Whether adding this jar to this profile would leave a bridge missing.
+fn needs_bridge(component_id: &str, profile: &Profile) -> bool {
+    let Some(component) = crate::components::find(component_id) else {
+        return false;
+    };
+    let Some(bridge) = component.bridge else {
+        return false;
+    };
+    if bridge.loader != profile.loader_kind() {
+        return false;
+    }
+    crate::components::find(bridge.component)
+        .is_some_and(|needed| !crate::components::installed_in(needed, profile))
 }
 
 /// Record an accepted jar in a profile's configuration.
@@ -187,6 +243,15 @@ pub struct ProfileFit {
     pub already_present: bool,
     /// The reason, when it is not compatible, or a note when it is.
     pub note: String,
+    /// Whether this profile would still be missing the bridge this jar needs.
+    ///
+    /// True only when the jar has a bridge, this profile's loader is the one
+    /// that requires it, and the bridge is not already installed here. It is
+    /// deliberately not a reason to mark the profile incompatible: adding
+    /// OptiFine to a profile and then adding OptiFabric is a perfectly good
+    /// order to do things in, and refusing the first step would make the second
+    /// unreachable.
+    pub needs_bridge: bool,
 }
 
 /// Which profiles this jar suits.
@@ -204,15 +269,14 @@ pub struct ProfileFit {
 ///    profile needs `OptiFabric` alongside it — which is a warning, not a
 ///    refusal, because it is a thing people do successfully every day.
 pub fn compatible_profiles(accepted: &AcceptedJar, profiles: &[Profile]) -> Vec<ProfileFit> {
-    let definition = ModId::new(&accepted.id).ok().and_then(|id| catalog::find(&id));
+    let definition = ModId::new(&accepted.id)
+        .ok()
+        .and_then(|id| catalog::find(&id));
 
     profiles
         .iter()
         .map(|profile| {
-            let already_present = profile
-                .mods
-                .iter()
-                .any(|entry| entry.sha1 == accepted.sha1);
+            let already_present = profile.mods.iter().any(|entry| entry.sha1 == accepted.sha1);
 
             let (compatible, note) = fit(accepted, definition.as_ref(), profile, already_present);
             ProfileFit {
@@ -221,6 +285,7 @@ pub fn compatible_profiles(accepted: &AcceptedJar, profiles: &[Profile]) -> Vec<
                 compatible,
                 already_present,
                 note,
+                needs_bridge: needs_bridge(&accepted.id, profile),
             }
         })
         .collect()
@@ -293,6 +358,55 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let paths = DataPaths::rooted_at(directory.path());
         (directory, ModEngine::new(paths))
+    }
+
+    /// A real OptiFine download, when the machine running the tests has one.
+    /// Skipped rather than failed when absent -- OptiFine cannot be committed
+    /// to this repository or fetched by CI.
+    fn real_optifine() -> Option<std::path::PathBuf> {
+        let jar = std::path::PathBuf::from(std::env::var_os("USERPROFILE")?)
+            .join("Downloads")
+            .join("OptiFine_1.8.9_HD_U_M5.jar");
+        jar.exists().then_some(jar)
+    }
+
+    /// The defect the bytecode inspector removes. Identification used to come
+    /// from the filename, so renaming the file changed what Fathom thought it
+    /// was -- and since the OptiFabric bridge requirement hangs off the id, a
+    /// renamed OptiFine jar would have skipped the bridge check entirely and
+    /// gone on to crash the game.
+    #[test]
+    fn a_renamed_optifine_jar_is_still_optifine() {
+        let Some(real) = real_optifine() else {
+            eprintln!("no OptiFine jar available; skipping");
+            return;
+        };
+        let (directory, engine) = engine();
+        let disguised = directory.path().join("totally-ordinary-mod.jar");
+        std::fs::copy(&real, &disguised).unwrap();
+
+        let accepted = accept(&engine, &disguised).expect("the jar should be accepted");
+
+        assert_eq!(accepted.id, "optifine", "identified by name rather than content");
+        assert_eq!(accepted.minecraft.as_deref(), Some("1.8.9"));
+        assert_eq!(accepted.version.as_deref(), Some("HD_U_M5"));
+        assert!(accepted.verified, "should be identified from the bytecode");
+        assert!(accepted.recognised);
+    }
+
+    /// And the other direction, which matters just as much: a jar that merely
+    /// has OptiFine's filename must not be treated as OptiFine.
+    #[test]
+    fn a_jar_named_like_optifine_but_is_not_is_not_verified() {
+        let (directory, engine) = engine();
+        let impostor = write_jar(directory.path(), "OptiFine_1.8.9_HD_U_M5.jar");
+
+        let accepted = accept(&engine, &impostor).expect("still a usable jar");
+
+        assert!(
+            !accepted.verified,
+            "a filename match must never count as verification"
+        );
     }
 
     fn write_jar(directory: &Path, name: &str) -> std::path::PathBuf {
@@ -388,7 +502,11 @@ mod tests {
     #[test]
     fn a_vanilla_profile_is_offered_with_the_reason_it_cannot_take_it() {
         let (home, engine) = engine();
-        let accepted = accept(&engine, &write_jar(home.path(), "OptiFine_1.8.9_HD_U_M5.jar")).unwrap();
+        let accepted = accept(
+            &engine,
+            &write_jar(home.path(), "OptiFine_1.8.9_HD_U_M5.jar"),
+        )
+        .unwrap();
 
         let fits = compatible_profiles(
             &accepted,
@@ -401,7 +519,11 @@ mod tests {
     #[test]
     fn a_profile_on_another_version_is_refused_by_version() {
         let (home, engine) = engine();
-        let accepted = accept(&engine, &write_jar(home.path(), "OptiFine_1.8.9_HD_U_M5.jar")).unwrap();
+        let accepted = accept(
+            &engine,
+            &write_jar(home.path(), "OptiFine_1.8.9_HD_U_M5.jar"),
+        )
+        .unwrap();
 
         let fits = compatible_profiles(
             &accepted,
@@ -414,7 +536,11 @@ mod tests {
     #[test]
     fn a_matching_fabric_profile_is_offered_with_the_optifabric_note() {
         let (home, engine) = engine();
-        let accepted = accept(&engine, &write_jar(home.path(), "OptiFine_1.8.9_HD_U_M5.jar")).unwrap();
+        let accepted = accept(
+            &engine,
+            &write_jar(home.path(), "OptiFine_1.8.9_HD_U_M5.jar"),
+        )
+        .unwrap();
 
         let fits = compatible_profiles(
             &accepted,
@@ -427,7 +553,11 @@ mod tests {
     #[test]
     fn a_profile_that_already_has_it_says_so_and_is_not_offered_again() {
         let (home, engine) = engine();
-        let accepted = accept(&engine, &write_jar(home.path(), "OptiFine_1.8.9_HD_U_M5.jar")).unwrap();
+        let accepted = accept(
+            &engine,
+            &write_jar(home.path(), "OptiFine_1.8.9_HD_U_M5.jar"),
+        )
+        .unwrap();
 
         let mut target = profile("bedwars", "Bedwars", Loader::LegacyFabric, "1.8.9");
         attach(&mut target.mods, &accepted).unwrap();

@@ -51,17 +51,87 @@ public final class PerfBench {
     private static final float MEASURE_SECONDS = floatProperty("fathom.perfBench.seconds", 20f);
     private static final float SOAK_SECONDS = floatProperty("fathom.perfBench.soakSeconds", 120f);
     private static final float SOAK_WINDOW_SECONDS = 10f;
-    /** Terrain and JIT settle after joining the world, before the first scenario. */
+    /**
+     * The <em>minimum</em> wait after joining the world, before the first
+     * scenario. Terrain streaming, world generation and JIT all happen in here.
+     *
+     * <p>A minimum rather than the whole answer, because a fixed wait cannot
+     * know when the world has finished arriving. This was 45 seconds and that
+     * was not enough: measured at 1920x1080 and render distance 12, the first
+     * scenario after a 45-second wait reported a 125 ms worst frame, a 47 fps
+     * 1% low and a frame-time coefficient of variation of 1.175 -- all of it
+     * chunk generation still in flight. The same scenario after waiting for
+     * quiet reported a 5.4 ms worst frame, a 246 fps 1% low and a CoV of 0.130,
+     * and the mean frame rate of the panning scenario doubled.
+     *
+     * <p>That is the anomaly {@code docs/performance/gameplay-optimization-2026-09.md}
+     * records as "the same still view measured 844 fps in one scenario and 1468
+     * fps in another in the same run". It was not machine noise.
+     */
     private static final float JOIN_SETTLE_SECONDS = floatProperty("fathom.perfBench.joinSettle", 45f);
+
+    /**
+     * How long the frame rate must stay free of hitches before measuring.
+     *
+     * <p>This is what actually decides the run is ready. A frame counts as a
+     * hitch when it takes more than {@link #HITCH_MULTIPLE} times the recent
+     * average or more than {@link #HITCH_FLOOR_MILLIS}, whichever is larger --
+     * the floor so that a machine holding a steady 1 ms frame does not flag
+     * ordinary jitter, the multiple so that a slower machine is not held to an
+     * absolute number it can never meet.
+     */
+    private static final float JOIN_QUIET_SECONDS = floatProperty("fathom.perfBench.joinQuiet", 10f);
+
+    /** Give up waiting for quiet and measure anyway, saying so. */
+    private static final float JOIN_SETTLE_MAX_SECONDS =
+            floatProperty("fathom.perfBench.joinSettleMax", 300f);
+
+    /**
+     * Quiet required before a scenario's own measurement window opens.
+     *
+     * <p>Shorter than the join requirement because the world is already loaded
+     * by then; this is about the tail of whatever the previous scenario did.
+     */
+    private static final float SCENARIO_QUIET_SECONDS =
+            floatProperty("fathom.perfBench.scenarioQuiet", 3f);
+
+    /** How long to wait for that quiet before measuring anyway. */
+    private static final float SCENARIO_QUIET_CEILING_SECONDS =
+            floatProperty("fathom.perfBench.scenarioQuietCeiling", 20f);
+
+    private static final double HITCH_MULTIPLE = 4d;
+    private static final double HITCH_FLOOR_MILLIS = 16d;
+
+    /** Rolling mean frame time while waiting for the world to settle. */
+    private static double settleMeanNanos;
+    /** When the last hitch was seen, so quiet can be measured from it. */
+    private static long lastHitchNanos;
+    /**
+     * When the current scenario's measurement window opened.
+     *
+     * <p>The window used to be timed from the scenario's start, which was fine
+     * while measuring began at a fixed offset. Now that it waits for quiet, a
+     * scenario that took a few seconds to settle would otherwise have those
+     * seconds taken out of its measurement rather than added to its wait.
+     */
+    private static long measureStartNanos;
 
     private enum Scenario {
         STILL("a-still", "standing still, horizon"),
         PAN("b-pan", "panning across terrain at 45 deg/s"),
         GROUND("c-ground", "looking straight down"),
-        MOVE("d-move", "flying through terrain at 12 blocks/s"),
         PARTICLES("h-particles", "torch-style flame and smoke particles in view, standing still"),
         HUD("g-hud", "every HUD module on, standing still"),
-        HUB("f-hub", "Fathom Hub open over the world");
+        HUB("f-hub", "Fathom Hub open over the world"),
+        // Last on purpose. Flying 12 blocks/s for the length of the scenario
+        // leaves a long tail of terrain still arriving, and whichever scenario
+        // ran next inherited it -- the particles scene reported a 42 ms worst
+        // frame standing perfectly still, which was this. The per-scenario
+        // quiet gate shortens that tail but cannot remove it, because it only
+        // guarantees a quiet start and terrain can arrive mid-window. Running
+        // the one moving scenario last removes the path entirely. The ids are
+        // unchanged, so reports and comparisons are unaffected.
+        MOVE("d-move", "flying through terrain at 12 blocks/s");
 
         final String id;
         final String description;
@@ -136,7 +206,7 @@ public final class PerfBench {
         } else if ("ab".equals(MODE)) {
             ab(client, now, frameNanos);
         } else {
-            world(client, now);
+            world(client, now, frameNanos);
         }
     }
 
@@ -365,7 +435,7 @@ public final class PerfBench {
     // Gameplay scenarios
     // -----------------------------------------------------------------------
 
-    private static void world(MinecraftClient client, long now) {
+    private static void world(MinecraftClient client, long now, long frameNanos) {
         if (!joinWorld(client, now)) {
             return;
         }
@@ -377,7 +447,7 @@ public final class PerfBench {
         float elapsed = (now - phaseStartNanos) / 1_000_000_000f;
         if (index < 0) {
             hold(player, 0f, 0f);
-            if (elapsed >= JOIN_SETTLE_SECONDS) {
+            if (settled(now, frameNanos, elapsed)) {
                 begin(client, 0, now);
             }
             return;
@@ -386,12 +456,25 @@ public final class PerfBench {
         Scenario scenario = Scenario.values()[index];
         drive(client, player, scenario, elapsed);
 
-        if (!measuring && elapsed >= SETTLE_SECONDS) {
+        // The same question the join gate asks, asked again per scenario. One
+        // settled world at the start of a run does not stay settled: a scenario
+        // that moves the player leaves terrain arriving behind it, and the next
+        // scenario measured that rather than itself. Looking-down measured a
+        // 75 ms worst frame this way, in a scene whose whole point is that it
+        // draws almost nothing.
+        float quiet = quietSeconds(now, frameNanos);
+        if (!measuring
+                && elapsed >= SETTLE_SECONDS
+                && (quiet >= SCENARIO_QUIET_SECONDS
+                        || elapsed >= SETTLE_SECONDS + SCENARIO_QUIET_CEILING_SECONDS
+                        || !needsQuiet(scenario))) {
             measuring = true;
+            measureStartNanos = now;
             Session session = Runtime.beginSessionFor("bench-" + scenario.id, 0);
             session.scenario(scenario.id).configuration(Capture.configuration())
                     .environment(Capture.environment(client));
-        } else if (measuring && elapsed >= SETTLE_SECONDS + MEASURE_SECONDS) {
+        } else if (measuring
+                && (now - measureStartNanos) / 1_000_000_000f >= MEASURE_SECONDS) {
             measuring = false;
             record(client, scenario.id, scenario.description, Runtime.endSession());
             end(client, scenario);
@@ -401,6 +484,88 @@ public final class PerfBench {
                 finish(client);
             }
         }
+    }
+
+    /**
+     * Whether the world has stopped arriving and measuring can start.
+     *
+     * <p>Three conditions, in order of who they protect:
+     *
+     * <ol>
+     *   <li>{@link #JOIN_SETTLE_SECONDS} must have passed. A floor, so a world
+     *       that happens to look quiet for ten seconds while a distant region
+     *       is still generating does not start a run early.
+     *   <li>No hitch for {@link #JOIN_QUIET_SECONDS}. This is the real test:
+     *       chunk generation shows up as frames an order of magnitude longer
+     *       than their neighbours, and a run started while they are still
+     *       happening measures world generation rather than rendering.
+     *   <li>{@link #JOIN_SETTLE_MAX_SECONDS} ends the wait regardless, with a
+     *       line in the log. A benchmark that silently waits forever on a world
+     *       that never goes quiet is worse than one that measures and says the
+     *       measurement is suspect.
+     * </ol>
+     */
+    /**
+     * Feed one frame to the hitch tracker and report how long it has been quiet.
+     *
+     * <p>Shared by the join gate and the per-scenario gate, because they are the
+     * same question asked at two moments: has the world stopped arriving?
+     */
+    private static float quietSeconds(long now, long frameNanos) {
+        if (frameNanos > 0L) {
+            if (settleMeanNanos == 0d) {
+                settleMeanNanos = frameNanos;
+            }
+            double hitchAbove = Math.max(settleMeanNanos * HITCH_MULTIPLE, HITCH_FLOOR_MILLIS * 1_000_000d);
+            if (frameNanos > hitchAbove) {
+                lastHitchNanos = now;
+            } else {
+                // Only quiet frames move the average, so one 120 ms hitch does
+                // not raise the bar it is being judged against.
+                settleMeanNanos += (frameNanos - settleMeanNanos) * 0.05d;
+            }
+        }
+        if (lastHitchNanos == 0L) {
+            lastHitchNanos = now;
+        }
+        return (now - lastHitchNanos) / 1_000_000_000f;
+    }
+
+    /**
+     * Whether this scenario should wait for a quiet world before measuring.
+     *
+     * <p>False for {@link Scenario#MOVE} alone, and that is not an oversight:
+     * flying through terrain loads chunks continuously, so it never goes quiet,
+     * and the chunk loading <em>is</em> the workload being measured. Requiring
+     * quiet there would wait out the ceiling on every run and then measure the
+     * same thing anyway. Every other scenario holds position, so a world that
+     * will not settle is a world still finishing the previous scenario's work.
+     */
+    private static boolean needsQuiet(Scenario scenario) {
+        return scenario != Scenario.MOVE;
+    }
+
+    private static boolean settled(long now, long frameNanos, float elapsed) {
+        float quiet = quietSeconds(now, frameNanos);
+
+        if (elapsed >= JOIN_SETTLE_MAX_SECONDS) {
+            System.out.println(String.format(java.util.Locale.ROOT,
+                    "[Fathom] Bench: world never went quiet in %.0f s; measuring anyway. "
+                            + "Treat the first scenario's 1%% low and worst frame as suspect.",
+                    elapsed));
+            return true;
+        }
+        if (elapsed < JOIN_SETTLE_SECONDS) {
+            return false;
+        }
+        if (quiet < JOIN_QUIET_SECONDS) {
+            return false;
+        }
+        System.out.println(String.format(java.util.Locale.ROOT,
+                "[Fathom] Bench: world settled after %.0f s (%.0f s without a hitch, "
+                        + "steady frame %.2f ms).",
+                elapsed, quiet, settleMeanNanos / 1_000_000d));
+        return true;
     }
 
     private static void begin(MinecraftClient client, int next, long now) {

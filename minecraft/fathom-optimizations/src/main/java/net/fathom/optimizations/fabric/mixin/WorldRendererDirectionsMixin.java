@@ -17,6 +17,12 @@ public abstract class WorldRendererDirectionsMixin {
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/util/math/Direction;values()[Lnet/minecraft/util/math/Direction;"))
     private Direction[] fathom$sharedDirections() {
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()
+                || !net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowOptifineOverlapHooks()) {
+            return Direction.values();
+        }
         return DirectionArrays.values();
     }
 }

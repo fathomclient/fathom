@@ -40,8 +40,18 @@ use crate::mods::config::ProfileMod;
 /// "Sodium (Fabric) for Minecraft 1.8.9" is "sodium", which is the point.
 pub fn normalise(raw: &str) -> String {
     const NOISE: [&str; 12] = [
-        "fabric", "forge", "legacy", "mod", "mods", "minecraft", "mc", "port", "unofficial", "fork",
-        "for", "the",
+        "fabric",
+        "forge",
+        "legacy",
+        "mod",
+        "mods",
+        "minecraft",
+        "mc",
+        "port",
+        "unofficial",
+        "fork",
+        "for",
+        "the",
     ];
 
     let lowered = raw.to_ascii_lowercase();
@@ -73,7 +83,10 @@ pub fn normalise(raw: &str) -> String {
     // Everything was noise: fall back to the raw alphanumerics rather than
     // declaring the mod nameless, which would match every other nameless one.
     if out.is_empty() {
-        out = lowered.chars().filter(char::is_ascii_alphanumeric).collect();
+        out = lowered
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect();
     }
     out
 }
@@ -179,7 +192,10 @@ pub fn already_installed(
             return Some((
                 entry.clone(),
                 Duplicate::Same {
-                    reason: format!("{} is already installed; it is the same file", entry.file_name),
+                    reason: format!(
+                        "{} is already installed; it is the same file",
+                        entry.file_name
+                    ),
                 },
             ));
         }
@@ -239,11 +255,10 @@ pub fn already_installed(
     //    a file somebody dropped in by hand.
     let name_key = normalise(&project.name);
     if !name_key.is_empty() {
-        if let Some(entry) = installed
-            .iter()
-            .find(|entry| normalise_file_name(&entry.file_name) == name_key
-                || normalise_file_name(&entry.file_name) == project_key)
-        {
+        if let Some(entry) = installed.iter().find(|entry| {
+            normalise_file_name(&entry.file_name) == name_key
+                || normalise_file_name(&entry.file_name) == project_key
+        }) {
             return Some((
                 entry.clone(),
                 Duplicate::Possible {
@@ -339,8 +354,14 @@ mod tests {
 
     #[test]
     fn a_jar_name_is_reduced_to_the_part_that_identifies_it() {
-        assert_eq!(normalise_file_name("sodium-fabric-0.4.4+1.8.9.jar"), "sodium");
-        assert_eq!(normalise_file_name("BetterSprinting-1.8.9.jar"), "bettersprinting");
+        assert_eq!(
+            normalise_file_name("sodium-fabric-0.4.4+1.8.9.jar"),
+            "sodium"
+        );
+        assert_eq!(
+            normalise_file_name("BetterSprinting-1.8.9.jar"),
+            "bettersprinting"
+        );
         assert_eq!(normalise_file_name("mystery.jar"), "mystery");
     }
 
@@ -413,13 +434,20 @@ mod tests {
             "c".repeat(40),
             "BetterSprinting-1.8.9.jar",
         )];
-        let candidate = project(Provider::Modrinth, "XYZ", "better-sprinting", "Better Sprinting");
+        let candidate = project(
+            Provider::Modrinth,
+            "XYZ",
+            "better-sprinting",
+            "Better Sprinting",
+        );
         let (_, duplicate) = already_installed(&installed, &candidate, None).expect("found");
         assert!(
             !duplicate.is_certain(),
             "a filename match must never be certain: {duplicate:?}"
         );
-        assert!(duplicate.reason().is_some_and(|r| r.contains("BetterSprinting")));
+        assert!(duplicate
+            .reason()
+            .is_some_and(|r| r.contains("BetterSprinting")));
     }
 
     #[test]

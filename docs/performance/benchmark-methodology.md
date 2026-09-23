@@ -145,17 +145,59 @@ reasons.
 **500 frames are discarded before measurement begins** (about eight seconds at
 60 FPS).
 
+### 3.0 The world must be quiet first, and a fixed wait cannot tell you that
+
+JIT warm-up is the smaller half of this. The larger half is that **a world that
+is still generating produces frame times that have nothing to do with
+rendering**, and it does so for far longer than anybody guesses.
+
+Measured 2026-09-17, 1920x1080, render distance 12, same world and camera:
+
+| after joining | worst frame | 1% low | CoV | mean fps (b-pan) |
+| --- | --- | --- | --- | --- |
+| 45 s fixed wait | 125.0 ms | 47.7 fps | 1.175 | 411 |
+| waited for quiet | 5.4 ms | 246.3 fps | 0.130 | 853 |
+
+Every "frame-time spike" in the earlier results was chunk generation. The mean
+frame rate of the panning scenario **doubled**. This is also the explanation for
+the anomaly recorded in `gameplay-optimization-2026-09.md` — "the same still view
+measured 844 fps in one scenario and 1468 fps in another in the same run" — which
+was attributed to machine noise and was not.
+
+So the harness does not use a fixed wait. `PerfBench.settled` requires all of:
+
+1. a minimum elapsed time (`fathom.perfBench.joinSettle`, default 45 s);
+2. **no hitch for 10 continuous seconds** (`fathom.perfBench.joinQuiet`), where a
+   hitch is a frame longer than 4x the recent average or 16 ms, whichever is
+   larger;
+3. a ceiling (`fathom.perfBench.joinSettleMax`, default 300 s) after which it
+   measures anyway **and says so in the log**, so the result is known to be
+   suspect rather than quietly wrong.
+
+A run whose log does not contain `world settled after N s` did not settle, and
+its first scenario should be discarded.
+
 A JIT-cold Minecraft client is measurably slower than a warm one. Without a fixed
 warm-up, every result depends on how long the tester waited before pressing the
 key.
 
-Minecraft needs a longer warm-up than most programs: `performance.md` §5.4 notes
-that several methods exceed HotSpot's 8000-byte `HugeMethodLimit` and therefore
-**never compile at all**. "Warm" is a stranger state here than usual.
+Minecraft needs a longer warm-up than most programs, though **not for the reason
+this section used to give**. `performance.md` §5.4 says several methods exceed
+HotSpot's 8000-byte `HugeMethodLimit` and therefore never compile at all. That
+was checked against the bytecode rather than inherited: every method in
+`minecraft-client.jar` and `minecraft-merged.jar` was measured by its `Code`
+attribute length, and **exactly one** exceeds 8000 bytes — `RecipeDispatcher.
+<init>`, at 8296, which registers crafting recipes once during startup. No
+render-path method is anywhere near the limit.
 
-**The `jvm.compile-huge-methods` experiment needs a longer warm-up than the
-default**, since its entire effect is about what eventually compiles. That is
-recorded in the experiment and must be recorded in any run of it.
+The warm-up requirement stands on its own: a JIT-cold client is measurably
+slower than a warm one, and 1.8.9 has a lot of code to compile. It just is not
+caused by uncompilable methods.
+
+**The `jvm.compile-huge-methods` experiment is therefore expected to measure
+nothing**, and a run of it that shows a difference is measuring noise. It is
+kept as a switch because the fact above is a fact about 1.8.9 and not about a
+future version target.
 
 ---
 

@@ -1,111 +1,68 @@
-# Run Fathom against the Vite dev server, with hot reload.
+# Run the canonical launcher with Vite hot reload.
 #
-#   pwsh tools/dev.ps1            normal
-#   pwsh tools/dev.ps1 -DevAuth   plus the fake development identity
-#
-# `pwsh` is PowerShell 7, which is a separate install from the Windows
-# PowerShell every Windows machine already has. Without it:
-#
-#   powershell -ExecutionPolicy Bypass -File tools\dev.ps1
-#
-# Nothing in here needs 7. Or skip the script entirely and run its two halves
-# yourself, which is all it does:
-#
-#   npm --prefix desktop run dev     (one terminal)
-#   cargo run -p launcher-desktop    (another)
-#
-# WHAT THIS GIVES YOU
-#
-# Edit anything under `desktop/src` and the window updates immediately. No
-# cargo build, no packaging, no `dist/Fathom`. Only a change to Rust needs the
-# binary rebuilt (Ctrl-C and re-run).
-#
-# HOW IT WORKS, AND WHY IT IS THE OPPOSITE OF THE PACKAGING BUG
-#
-# Tauri decides where the interface comes from with a cargo feature, not with
-# debug-vs-release:
-#
-#     dev: cfg!(not(feature = "custom-protocol"))
-#
-# `tools/package-portable.ps1` passes `--features custom-protocol`, which embeds
-# the built bundle into the executable. This script deliberately does NOT, so
-# the same binary loads `devUrl` from tauri.conf.json instead. That is the
-# behaviour that shipped a broken release once; here it is the point.
-#
-# The consequence worth knowing: a dev build with no Vite server running shows
-# "localhost refused to connect". That is not a crash -- start the server, or
-# just re-run this script, which starts it for you.
-#
-# The server is pinned to `--host 127.0.0.1`. Left alone, Vite here binds to
-# `::1` ONLY, and `devUrl` is `http://localhost:5173`: whether that reaches the
-# server then depends on which address the WebView's resolver happens to try
-# first. Binding IPv4 explicitly removes the coin toss.
+# Ordinary `cargo run` builds use Fathom's embedded frontend and never touch a
+# TCP port. This script is the one explicit exception for frontend development.
+# Tauri owns the Vite child, waits for its HTTP readiness response, and does not
+# create WebView2 until that response succeeds.
 
 param(
-    # Compile in the fake development identity. It owns nothing and cannot join
-    # an online-mode server; see crates/launcher-core/src/auth/development.rs.
     [switch] $DevAuth,
-    [int]    $Port = 5173
+    [string] $NodePath = ""
 )
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
+$desktop = Join-Path $root "desktop"
+$shell = Join-Path $root "crates/launcher-desktop"
 
-# Is anything listening, on EITHER address family?
-#
-# The first version of this connected a TcpClient to 127.0.0.1 and gave up after
-# sixty seconds reporting that Vite had not started. Vite had started -- it had
-# bound to `::1` only, so an IPv4 probe never saw it. Asking the OS what is
-# listening avoids having to be right about which family a server chose.
-function Test-Port([int] $number) {
-    $listening = Get-NetTCPConnection -LocalPort $number -State Listen -ErrorAction SilentlyContinue
-    return [bool] $listening
+$node = if ($NodePath) { $NodePath } else {
+    $command = Get-Command node -ErrorAction SilentlyContinue
+    if ($command) { $command.Source } else { "" }
+}
+if (-not $node -or -not (Test-Path -LiteralPath $node -PathType Leaf)) {
+    throw "Node.js is required for frontend development."
 }
 
-# Reuse a server that is already up rather than failing on a taken port: leaving
-# `npm run dev` running in another terminal is the normal way to work.
-$vite = $null
-if (Test-Port $Port) {
-    Write-Host "Vite is already serving on $Port; reusing it."
-} else {
-    Write-Host "Starting Vite on $Port..."
-    $vite = Start-Process -PassThru -WindowStyle Minimized `
-        -FilePath 'cmd.exe' `
-        -ArgumentList '/c', "npm --prefix `"$root\desktop`" run dev -- --host 127.0.0.1 --port $Port"
+$tauri = Join-Path $desktop "node_modules/@tauri-apps/cli/tauri.js"
+$vite = Join-Path $desktop "node_modules/vite/bin/vite.js"
+if (-not (Test-Path -LiteralPath $tauri) -or -not (Test-Path -LiteralPath $vite)) {
+    throw "Frontend dependencies are missing. Run npm ci in desktop first."
+}
 
-    $deadline = (Get-Date).AddSeconds(60)
-    while (-not (Test-Port $Port)) {
-        if ((Get-Date) -gt $deadline) { throw "Vite did not start on port $Port" }
-        if ($vite.HasExited) { throw "Vite exited; run 'npm --prefix desktop run dev' to see why" }
-        Start-Sleep -Milliseconds 300
+# Ask Windows for an unused IPv4 loopback port. Each invocation gets its own,
+# so concurrent developer launchers do not contend for 5173. Vite's strict-port
+# flag turns the tiny release/rebind race into a clean startup failure instead
+# of silently selecting a different URL than WebView2.
+$probe = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+$probe.Start()
+$port = ([Net.IPEndPoint] $probe.LocalEndpoint).Port
+$probe.Stop()
+
+$devUrl = "http://127.0.0.1:$port"
+$viteCommand = "`"$node`" `"$vite`" --host 127.0.0.1 --port $port --strictPort"
+$config = @{
+    build = @{
+        devUrl = $devUrl
+        beforeDevCommand = $viteCommand
     }
-    Write-Host "Vite is up."
-}
+} | ConvertTo-Json -Compress
 
-$featureArgs = @()
+$arguments = @("dev", "--config", $config)
+$previousDevAuth = $env:FATHOM_DEV_AUTH
 if ($DevAuth) {
-    # Two switches, not one: the feature must be compiled in AND the environment
-    # variable set. Neither alone does anything, which is what stops a stray
-    # `--features` in a script producing a build that looks signed in.
-    $env:FATHOM_DEV_AUTH = 'i-understand-this-is-not-real'
-    $featureArgs = @('--features', 'dev-auth')
+    $env:FATHOM_DEV_AUTH = "i-understand-this-is-not-real"
+    $arguments += @("--features", "dev-auth")
     Write-Host "Development identity ENABLED. It is fake and owns nothing."
 }
 
-Write-Host ""
-Write-Host "Running Fathom (debug, hot reload). Ctrl-C to stop."
-Write-Host "Edit desktop/src/** and the window updates without a rebuild."
-Write-Host ""
+Write-Host "Starting Fathom hot reload on an ephemeral loopback port ($port)..."
+Write-Host "The packaged launcher never uses this server."
 
 try {
-    Push-Location $root
-    & cargo run -p launcher-desktop @featureArgs
+    Push-Location $shell
+    & $node $tauri @arguments
+    if ($LASTEXITCODE -ne 0) { throw "Tauri development session failed" }
 } finally {
     Pop-Location
-    # Only stop the server this script started. A server that was already
-    # running belongs to whoever started it.
-    if ($vite -and -not $vite.HasExited) {
-        Write-Host "Stopping the Vite server this script started..."
-        Stop-Process -Id $vite.Id -Force -ErrorAction SilentlyContinue
-    }
+    $env:FATHOM_DEV_AUTH = $previousDevAuth
 }

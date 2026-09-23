@@ -270,10 +270,66 @@ tasks.withType(JavaCompile).configureEach {
     it.options.compilerArgs << '-Xlint:all'
 }
 
+/**
+ * The build identity stamped into the jar.
+ *
+ * <p>Three different jars have been called `fathom-optimizations-0.3.0-hud.jar`
+ * in this checkout's history, and the version string cannot tell them apart. A
+ * commit and a build time can, so the runtime can say which bytes it is and a
+ * stale jar reports itself instead of being mistaken for the new one.
+ *
+ * <p>Read at configuration time rather than baked into a constant: a source file
+ * holding a commit hash would have to be edited by the build and is then a file
+ * that is always dirty.
+ */
+static String gitDescribe(File root) {
+    try {
+        def proc = ['git', 'rev-parse', '--short=12', 'HEAD'].execute(null, root)
+        def head_out = new StringWriter()
+        def head_err = new StringWriter()
+        proc.consumeProcessOutput(head_out, head_err)
+        proc.waitForOrKill(10000)
+        if (proc.exitValue() != 0) {
+            return 'unknown'
+        }
+        def head = head_out.toString().trim()
+        // `git diff --quiet` rather than `git status --porcelain`: it answers with
+        // an exit code and prints nothing. The porcelain form prints a line per
+        // modified file, which on a working tree of any size fills the pipe buffer
+        // and deadlocks a Groovy `execute()` that is not draining it -- the check
+        // then times out and every build quietly reports itself as clean.
+        def dirtyProc = ['git', 'diff', '--quiet', 'HEAD'].execute(null, root)
+        dirtyProc.consumeProcessOutput()
+        dirtyProc.waitForOrKill(10000)
+        def dirty = dirtyProc.exitValue() != 0
+        return dirty ? head + '-dirty' : head
+    } catch (Exception ignored) {
+        // A build from a source archive has no git. That is a legitimate build
+        // and must not fail; it simply cannot name a commit.
+        return 'unknown'
+    }
+}
+
+ext.fathomCommit = gitDescribe(rootProject.projectDir)
+ext.fathomBuiltAt = new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+
 processResources {
     inputs.property 'version', project.version
+    inputs.property 'commit', project.ext.fathomCommit
+    inputs.property 'builtAt', project.ext.fathomBuiltAt
     filesMatching('fabric.mod.json') {
         expand 'version': project.version
+    }
+    // Generated rather than checked in: it describes this build, and a checked-in
+    // copy would describe whichever build last committed it.
+    doLast {
+        def target = new File(destinationDir, 'fathom-build.properties')
+        target.parentFile.mkdirs()
+        target.withWriter('UTF-8') { writer ->
+            writer.writeLine("version=${project.version}")
+            writer.writeLine("commit=${project.ext.fathomCommit}")
+            writer.writeLine("builtAt=${project.ext.fathomBuiltAt}")
+        }
     }
 }
 
@@ -311,6 +367,8 @@ def coreSuites = [
         'net.fathom.optimizations.core.UiTests',
         'net.fathom.optimizations.core.ProfileTests',
         'net.fathom.optimizations.core.ProfileLocationTests',
+        'net.fathom.optimizations.core.AccountTests',
+        'net.fathom.optimizations.core.BenchmarkTests',
 ]
 
 def coreTest = tasks.register('coreTest') {

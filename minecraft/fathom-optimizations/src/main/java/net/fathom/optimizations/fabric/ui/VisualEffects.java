@@ -7,38 +7,30 @@ import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Shadow;
 
 /**
- * Fathom's depth and energy vocabulary.
+ * Fathom's depth and restrained accent vocabulary.
  *
- * <p>Dark, flat materials; red light only where something is active. Hover
- * never produces light -- it moves, brightens a surface a step, and strengthens
- * a border. Glow is a tight 4-6 unit falloff around an active edge or icon, not
- * a bloom around a component, and there is no white decorative lighting.
- *
- * <p>On NanoVG a glow is one box gradient; the compatibility renderer uses its
- * cached falloff atlas. Shadows use the shared {@link Shadow} presets. No
- * helper reads the framebuffer, allocates an image, or creates a texture per
- * frame.
+ * <p>Dark, flat materials; red appears in fills and borders for active state.
+ * Hover brightens a surface a step and strengthens its existing border. There
+ * are deliberately no glow or bloom effects. Shadows use the shared
+ * {@link Shadow} presets; no helper reads the framebuffer, allocates an image,
+ * or creates a texture per frame.
  */
 public final class VisualEffects {
 
     private VisualEffects() {}
 
-    /** Feather of an active component's edge glow. */
-    public static final float GLOW_RADIUS = 6f;
-    /** Maximum opacity of the red energy falloff. */
-    public static final float GLOW_OPACITY = 0.30f;
-    /** Compact controls and markers use a tighter field than cards. */
-    public static final float CONTROL_GLOW_RADIUS = 4f;
     /** Width of the inner red falloff on an energized perimeter. */
     public static final float INNER_ENERGY_WIDTH = 3f;
     /** Card separation and localized icon-light reach. */
     public static final float CARD_SHADOW_SPREAD = 6f;
     public static final float CARD_SHADOW_OPACITY = 0.55f;
-    public static final float ICON_ENERGY_REACH = 34f;
-    /** Hover is motion: a small lift and scale, fast. */
-    public static final float CARD_HOVER_LIFT = 1.5f;
-    public static final float CARD_HOVER_SCALE = 0.005f;
-    public static final float ICON_HOVER_SCALE = 0.03f;
+    /** Hover is colour, border and opacity, never geometry. */
+    // CARD_HOVER_LIFT, CARD_HOVER_SCALE and ICON_HOVER_SCALE were here and are
+    // deliberately gone. They moved and resized a card -- and therefore its
+    // text -- while the pointer was over it, so a title shifted as you reached
+    // for it. Hover is colour, border and opacity; it is not geometry. If a
+    // hover affordance needs strengthening, change `SURFACE_HOVER` or the edge
+    // mix, not the transform.
     /** Enable/disable accent change settles within this interval. */
     public static final float ACTIVATION_PULSE_SECONDS = 0.40f;
     /** Brightness mixed into text, icons and borders at full hover. */
@@ -59,38 +51,7 @@ public final class VisualEffects {
     private static final Shadow MODAL_SHADOW = Shadow.MODAL.withStrength(MODAL_SHADOW_STRENGTH);
     // Mutable paints are intentionally shared: the UI renders on one thread and
     // each is consumed before the next helper mutates it. This avoids a hot-path allocation.
-    private static final Paint ENERGY_PAINT = new Paint();
     private static final Paint PAGE_PAINT = new Paint();
-
-    /** Tight light behind a selected navigation marker. */
-    public static void navigationGlow(Renderer ui, Rect marker, float selected) {
-        glow(ui, marker, Skin.pill(marker), CONTROL_GLOW_RADIUS, selected, 0.90f);
-    }
-
-    /** One small falloff around an enabled switch track. */
-    public static void toggleGlow(Renderer ui, Rect track, float enabled) {
-        glow(ui, track, Skin.pill(track), CONTROL_GLOW_RADIUS, enabled, 0.60f);
-    }
-
-    /** Selected icon controls use the smallest accent falloff in the system. */
-    public static void selectedButtonGlow(Renderer ui, Rect area, float radius, float selected) {
-        glow(ui, area, radius, CONTROL_GLOW_RADIUS, selected, 0.60f);
-    }
-
-    /** A localized active-state light, normally behind an icon or state marker. */
-    public static void stateGlow(Renderer ui, Rect source, float radius, float active) {
-        glow(ui, source, radius, CONTROL_GLOW_RADIUS, active, 0.85f);
-    }
-
-    /** Tiny halo for keyboard focus; pointer hover deliberately does not trigger it. */
-    public static void focusGlow(Renderer ui, Rect area, float radius, float focus) {
-        glow(ui, area, radius, CONTROL_GLOW_RADIUS, clamp(focus), 0.60f);
-    }
-
-    /** Tight edge falloff for enabled, selected or focused components. */
-    public static void energyGlow(Renderer ui, Rect area, float radius, float energy) {
-        glow(ui, area, radius, GLOW_RADIUS, clamp(energy), 0.70f);
-    }
 
     /** A one-shot hairline ring for a meaningful enable/disable event; no bloom. */
     public static void activationPulse(Renderer ui, Rect area, float radius,
@@ -118,24 +79,6 @@ public final class VisualEffects {
                 INNER_ENERGY_WIDTH, Skin.scaleAlpha(Skin.BASE_RED, shown * 0.14f));
     }
 
-    /** Small dark-red radial light contained by a component, behind an active icon. */
-    public static void energyWash(Renderer ui, Rect area, float radius,
-            float centreX, float centreY, float reach, float energy) {
-        float shown = clamp(energy);
-        if (shown <= 0.001f) {
-            return;
-        }
-        int centre = Skin.scaleAlpha(Skin.RED_GLOW, shown * 0.18f);
-        if (ui instanceof FathomRenderer) {
-            ((FathomRenderer) ui).rounded(area.x, area.y, area.right(), area.bottom(),
-                    Skin.radius(radius, area), ENERGY_PAINT.radial(centreX, centreY, 0f,
-                            Math.max(1f, reach), centre, 0x00841C24));
-        } else {
-            float end = Math.min(area.right(), area.x + Math.max(24f, reach));
-            ui.gradient(area.x, area.y, end, area.bottom(), Skin.radius(radius, area),
-                    centre, 0x00841C24);
-        }
-    }
 
     /** Soft top/bottom mask for clipped scrolling content. */
     public static void scrollEdgeFade(Renderer ui, Rect viewport, boolean top, boolean bottom) {
@@ -151,7 +94,7 @@ public final class VisualEffects {
         }
     }
 
-    /** Flat dark material with a slight darkening toward the lower face; hover lifts one step. */
+    /** Flat dark material with a slight darkening toward the lower face; hover brightens one step. */
     public static void layeredSurface(Renderer ui, Rect area, float radius, int face, float hover) {
         int top = Skin.mix(face, 0xFFFFFFFF, clamp(hover) * 0.025f);
         int bottom = Skin.mix(top, 0xFF000000, SURFACE_DEPTH);
@@ -208,21 +151,6 @@ public final class VisualEffects {
         } else {
             ui.shadow(left, top, right, bottom, radius,
                     shadow.blur() * 0.6f, shadow.argb());
-        }
-    }
-
-    private static void glow(Renderer ui, Rect area, float radius, float feather,
-            float strength, float opacityScale) {
-        float alpha = GLOW_OPACITY * opacityScale * clamp(strength);
-        if (alpha <= 0.001f) {
-            return;
-        }
-        int colour = Skin.scaleAlpha(Skin.RED_GLOW, alpha);
-        if (ui instanceof FathomRenderer) {
-            ((FathomRenderer) ui).glow(area.x, area.y, area.right(), area.bottom(), radius, feather, colour);
-        } else {
-            // The compatibility renderer uses its one cached falloff atlas.
-            ui.shadow(area.x, area.y, area.right(), area.bottom(), radius, feather * 0.55f, colour);
         }
     }
 

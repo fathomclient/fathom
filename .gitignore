@@ -12,6 +12,12 @@ hs_err_pid*
 replay_pid*
 *.hprof
 
+# Runtime logs belong in the launcher's data root, never in the repository or
+# underneath Java source packages when a process inherits an unexpected cwd.
+/logs/
+/minecraft/fathom-optimizations/logs/
+/minecraft/fathom-optimizations/src/main/java/**/logs/
+
 # Editor and operating-system metadata.
 .idea/
 .vscode/
@@ -37,3 +43,22 @@ Thumbs.db
 /desktop/node_modules
 /desktop/dist
 /desktop/.vite
+
+# The launcher-ui compatibility wrapper invokes tauri-build only to stamp the
+# Windows manifest. Its schema cache is generated and is not a second UI source.
+/crates/launcher-ui/gen/
+
+# Installer-only first-party resources are staged here by build-installer.ps1.
+/crates/launcher-desktop/bundle/
+
+# The launcher built by tools/build-all.ps1, for launching from the repo root.
+/Fathom.exe
+# Staged build output, not source. `build-all.ps1` writes the client module here
+# because it is the first place the launcher looks and the only one both a
+# packaged and an unpackaged process agree on.
+/resources/
+
+# The interleaved A/B harness builds its own game instance and caches the
+# classpath it read from a real launch.
+/minecraft/fathom-optimizations/run-ab/
+/tools/.bench-classpath.txt

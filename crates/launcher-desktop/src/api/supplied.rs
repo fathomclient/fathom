@@ -59,7 +59,29 @@ pub struct SuppliedView {
     /// Whether it is `OptiFine` specifically, which changes the wording on the
     /// screen and nothing else.
     pub is_optifine: bool,
+    /// Whether the identification came from the jar's own bytecode rather than
+    /// its filename. See `AcceptedJar::verified`.
+    pub verified: bool,
+    /// The component this jar cannot run without, when it has one.
+    ///
+    /// Set for OptiFine, whose bridge is OptiFabric. The screen uses it to say
+    /// what else is needed *before* the file is added, rather than letting the
+    /// launcher refuse at launch time -- by which point the user has left this
+    /// screen and forgotten what they did.
+    pub bridge: Option<BridgeView>,
     pub profiles: Vec<ProfileFitView>,
+}
+
+/// A component something else depends on, and how to get it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeView {
+    /// The component id, for `install_component`.
+    pub id: String,
+    pub name: String,
+    pub summary: String,
+    /// Why it is needed, in one sentence the screen can print verbatim.
+    pub reason: String,
 }
 
 impl SuppliedView {
@@ -77,6 +99,8 @@ impl SuppliedView {
             source: String::new(),
             recognised: false,
             is_optifine: false,
+            verified: false,
+            bridge: None,
             profiles: Vec::new(),
         }
     }
@@ -95,9 +119,29 @@ impl SuppliedView {
             source: accepted.source.label().to_owned(),
             recognised: accepted.recognised,
             is_optifine: accepted.id == "optifine",
+            verified: accepted.verified,
+            bridge: bridge_for(&accepted.id),
             profiles: fits.iter().map(ProfileFitView::of).collect(),
         }
     }
+}
+
+/// The bridge a component needs under Legacy Fabric, described for the screen.
+fn bridge_for(component_id: &str) -> Option<BridgeView> {
+    let component = launcher_core::components::find(component_id)?;
+    let bridge = component.bridge?;
+    let needed = launcher_core::components::find(bridge.component)?;
+    Some(BridgeView {
+        id: needed.id.to_owned(),
+        name: needed.name.to_owned(),
+        summary: needed.summary.to_owned(),
+        reason: format!(
+            "{} is not a {} mod. {} patches it into the game so the loader can run it.",
+            component.name,
+            bridge.loader.label(),
+            needed.name
+        ),
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,6 +152,12 @@ pub struct ProfileFitView {
     pub compatible: bool,
     pub already_present: bool,
     pub note: String,
+    /// Whether this particular profile still needs the bridge.
+    ///
+    /// Per profile rather than per file, because the answer differs: one
+    /// profile may already have OptiFabric and another may not, and a single
+    /// banner saying "you need OptiFabric" would be wrong for the first.
+    pub needs_bridge: bool,
 }
 
 impl ProfileFitView {
@@ -118,12 +168,16 @@ impl ProfileFitView {
             compatible: fit.compatible,
             already_present: fit.already_present,
             note: fit.note.clone(),
+            needs_bridge: fit.needs_bridge,
         }
     }
 }
 
 /// Accept a file and work out where it could go.
-pub fn accept(core: &Launcher, source: &std::path::Path) -> Result<(AcceptedJar, SuppliedView), String> {
+pub fn accept(
+    core: &Launcher,
+    source: &std::path::Path,
+) -> Result<(AcceptedJar, SuppliedView), String> {
     let accepted = launcher_core::mods::supplied::accept(&core.mod_engine(), source)
         .map_err(|error| error.to_string())?;
     let profiles = core.profiles();

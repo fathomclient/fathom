@@ -33,20 +33,38 @@ public abstract class InGameHudMixin {
 
     @Inject(method = "render(F)V", at = @At("RETURN"))
     private void fathom$drawHud(float tickDelta, CallbackInfo info) {
-        FathomHud hud = Runtime.hud();
-        if (hud == null) {
-            return;
-        }
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null || !MinecraftClient.isHudEnabled()) {
+        long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        try {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()) return;
+            FathomHud hud = Runtime.hud();
+            if (hud == null) return;
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null || !MinecraftClient.isHudEnabled()) return;
             // F1 hides the HUD. A HUD Fathom kept drawing through F1 would be a
             // HUD nobody could take a screenshot without.
-            return;
+            if (client.currentScreen instanceof net.fathom.optimizations.fabric.hud.HudEditorScreen) return;
+        // The benchmark's minimal pass switches the whole HUD off here rather
+        // than switching eleven widgets off individually: the question it
+        // answers is what the pass costs, including the frame it opens.
+            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowHudPass()) return;
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.HUD_PASS);
+            hud.render(client, false);
+            if (net.fathom.optimizations.fabric.perf.PerfLayer.stats) {
+                net.fathom.optimizations.fabric.perf.PerfOverlay.draw(client,
+                        net.fathom.optimizations.fabric.gfx.MinecraftGuiSize.get(client).height());
+            }
+            net.fathom.optimizations.fabric.hud.HudCapture.frame(client);
+        } finally {
+            // A HUD-cache sample takes its immediate checkpoint inside
+            // HudLayerCache. This is the third checkpoint: after the rest of
+            // FathomHud and the surrounding InGameHud method have completed.
+            net.fathom.optimizations.fabric.gfx.GlStateAudit.finish(
+                    net.fathom.optimizations.fabric.gfx.GlStateAudit.HUD_CACHE);
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
         }
-        if (client.currentScreen instanceof net.fathom.optimizations.fabric.hud.HudEditorScreen) {
-            return;
-        }
-        hud.render(client, false);
-        net.fathom.optimizations.fabric.hud.HudCapture.frame(client);
     }
 }

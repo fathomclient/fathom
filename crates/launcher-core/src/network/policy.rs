@@ -29,6 +29,9 @@ pub enum Destination {
     XboxXsts,
     /// Minecraft Services: `login_with_xbox`, entitlements, profile.
     MinecraftServices,
+    /// Mojang's skin host. The signed-in account's own skin, fetched once
+    /// after sign-in so the launcher can show the player's head.
+    MinecraftTextures,
     /// Version manifest and per-version JSON.
     PistonMeta,
     /// Mojang's older metadata host. 1.8.9's own version document still points
@@ -88,6 +91,7 @@ impl Destination {
         Destination::XboxUserAuth,
         Destination::XboxXsts,
         Destination::MinecraftServices,
+        Destination::MinecraftTextures,
         Destination::PistonMeta,
         Destination::LauncherMeta,
         Destination::PistonData,
@@ -115,6 +119,7 @@ impl Destination {
             Destination::XboxUserAuth => "user.auth.xboxlive.com",
             Destination::XboxXsts => "xsts.auth.xboxlive.com",
             Destination::MinecraftServices => "api.minecraftservices.com",
+            Destination::MinecraftTextures => "textures.minecraft.net",
             Destination::PistonMeta => "piston-meta.mojang.com",
             Destination::LauncherMeta => "launchermeta.mojang.com",
             Destination::PistonData => "piston-data.mojang.com",
@@ -155,6 +160,9 @@ impl Destination {
             }
             Destination::MinecraftServices => {
                 "Confirms you own Minecraft: Java Edition, and fetches your username and UUID."
+            }
+            Destination::MinecraftTextures => {
+                "Downloads your own Minecraft skin after you sign in, so the launcher and the game                  menu can show your player head. Nothing is sent but the skin's public address."
             }
             Destination::PistonMeta => "Mojang's list of game versions and what each one needs.",
             Destination::LauncherMeta => {

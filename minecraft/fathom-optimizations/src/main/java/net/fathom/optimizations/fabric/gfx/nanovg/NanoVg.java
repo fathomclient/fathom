@@ -87,7 +87,25 @@ public final class NanoVg {
             renderer = null;
             closeLoader();
             failure = problem.getClass().getSimpleName() + ": " + problem.getMessage();
-            System.err.println("[Fathom] NanoVG backend unavailable: " + failure);
+            // Absent is the *normal* state in a shipped client: the NanoVG
+            // source set is a development-only build (`build.gradle`: "Nothing
+            // here is packaged"), so every release build reaches this line and
+            // falls back to the GL renderer exactly as intended.
+            //
+            // It used to say so on stderr, which had two consequences for
+            // people who had never seen a Gradle command: the launcher's game
+            // console treats stderr as something worth showing, so a red line
+            // appeared on an ordinary launch; and the line advised running
+            // `gradle runClient -Pnanovg`, which is not a thing a player can
+            // do. Both were a development diagnostic escaping into a product.
+            //
+            // So it is reported where it is useful and nowhere else: on stdout
+            // for a developer who asked for the backend, and silently otherwise
+            // -- `failure()` still carries the reason for Diagnostics, which is
+            // where somebody investigating would actually look.
+            if (System.getProperty("fathom.nanovg.classpathFile") != null) {
+                System.out.println("[Fathom] NanoVG backend unavailable: " + failure);
+            }
         }
         return renderer;
     }

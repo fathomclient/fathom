@@ -69,6 +69,7 @@
     "rail-width": 56,
     "rail-tray-width": 186,
     "rail-row": 40,
+    "titlebar-height": 32,
     "topbar-height": 46,
     "bottombar-height": 38,
     "hub-header-height": 62,

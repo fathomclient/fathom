@@ -103,12 +103,17 @@ pub fn safe_file_name(name: &str) -> bool {
     if name.contains("..") {
         return false;
     }
-    if !name.chars().all(|c| {
-        c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+' | ' ' | '(' | ')')
-    }) {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+' | ' ' | '(' | ')'))
+    {
         return false;
     }
-    let stem = name.split('.').next().unwrap_or_default().to_ascii_uppercase();
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_uppercase();
     !DEVICES.contains(&stem.as_str())
 }
 
@@ -569,7 +574,9 @@ pub enum InstallState {
     /// Removal was asked for and has not finished.
     RemovalPending,
     /// The last operation failed, with the reason the user was shown.
-    Failed { reason: String },
+    Failed {
+        reason: String,
+    },
 }
 
 impl InstallState {

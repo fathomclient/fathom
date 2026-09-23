@@ -203,7 +203,9 @@ pub fn read_all(game_directory: &Path) -> Vec<Benchmark> {
 
 /// The most recent usable run, if there is one.
 pub fn newest(game_directory: &Path) -> Option<Benchmark> {
-    read_all(game_directory).into_iter().find(Benchmark::is_usable)
+    read_all(game_directory)
+        .into_iter()
+        .find(Benchmark::is_usable)
 }
 
 #[cfg(test)]
@@ -316,7 +318,10 @@ mod tests {
         assert!(headline.contains("101"), "{headline}");
         assert!(headline.contains("1% low"), "{headline}");
         // Never a comparison. There is one run here and no baseline.
-        assert!(!headline.contains('%') || headline.contains("1%"), "{headline}");
+        assert!(
+            !headline.contains('%') || headline.contains("1%"),
+            "{headline}"
+        );
         assert!(!headline.contains('+'), "{headline}");
     }
 

@@ -511,24 +511,21 @@ impl ModDefinition {
     /// `mod-policies.md` §7 lists all three, and the code requires all three.
     pub fn is_launcher_fetchable(&self) -> bool {
         self.redistribution.may_fetch()
-            && self
-                .download
-                .as_ref()
-                .is_some_and(|source| {
-                    // The rule has always been "no download without a hash to
-                    // check it against". What changed is that a hash can now
-                    // arrive with the file instead of being written down here.
-                    //
-                    // For a source that names one exact file, the hash is
-                    // knowable when the catalogue is written and has to be in
-                    // it. For one that names a project, the correct file
-                    // depends on the profile and changes when the project
-                    // publishes; its hash comes back from the API alongside the
-                    // file, and `ModStore::adopt_bytes` refuses bytes that do
-                    // not match. Requiring a catalogue hash there would mean
-                    // pinning every profile to one build for ever.
-                    source.is_fetchable() && (source.carries_its_own_hash() || self.hash.is_some())
-                })
+            && self.download.as_ref().is_some_and(|source| {
+                // The rule has always been "no download without a hash to
+                // check it against". What changed is that a hash can now
+                // arrive with the file instead of being written down here.
+                //
+                // For a source that names one exact file, the hash is
+                // knowable when the catalogue is written and has to be in
+                // it. For one that names a project, the correct file
+                // depends on the profile and changes when the project
+                // publishes; its hash comes back from the API alongside the
+                // file, and `ModStore::adopt_bytes` refuses bytes that do
+                // not match. Requiring a catalogue hash there would mean
+                // pinning every profile to one build for ever.
+                source.is_fetchable() && (source.carries_its_own_hash() || self.hash.is_some())
+            })
     }
 
     /// Why the launcher will not fetch it, if it will not.

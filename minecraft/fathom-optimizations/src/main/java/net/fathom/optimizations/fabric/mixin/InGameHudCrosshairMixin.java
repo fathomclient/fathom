@@ -34,12 +34,17 @@ public abstract class InGameHudCrosshairMixin {
 
     @Inject(method = "showCrosshair()Z", at = @At("RETURN"), cancellable = true)
     private void fathom$hideVanillaCrosshair(CallbackInfoReturnable<Boolean> info) {
-        if (!Boolean.TRUE.equals(info.getReturnValue()) || Runtime.hud() == null) {
-            return;
-        }
-        FathomModule crosshair = Runtime.features().find("crosshair");
-        if (CrosshairPolicy.hidesVanilla(crosshair)) {
-            info.setReturnValue(Boolean.FALSE);
+        long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        try {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()) return;
+            if (!Boolean.TRUE.equals(info.getReturnValue()) || Runtime.hud() == null) return;
+            FathomModule crosshair = Runtime.features().find("crosshair");
+            if (CrosshairPolicy.hidesVanilla(crosshair)) info.setReturnValue(Boolean.FALSE);
+        } finally {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
         }
     }
 }

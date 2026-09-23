@@ -48,6 +48,18 @@ pub enum Defect {
     LoaderVersionUnexpected { loader: super::Loader },
     /// Mods are configured but the loader cannot load them.
     ModsWithoutALoader { count: usize },
+    /// A mod is installed that cannot work alone under this loader, and the
+    /// component it needs is not installed.
+    ///
+    /// OptiFine under Legacy Fabric. The launch gate already refuses this
+    /// (`LaunchRefusal::MissingBridge`), but a profile that cannot launch was
+    /// still reporting **Healthy** here -- so the only way to find out was to
+    /// press Play. A validator that disagrees with the launch gate is worse
+    /// than no validator, because it is trusted.
+    MissingBridge {
+        component: &'static str,
+        bridge: &'static str,
+    },
 
     // -- runtime ---------------------------------------------------------
     /// The explicitly chosen Java executable is not there any more.
@@ -109,6 +121,9 @@ impl Defect {
                 "A loader version is recorded, but {} does not use one. Repair clears it.",
                 loader.label()
             ),
+            Defect::MissingBridge { component, bridge } => format!(
+                "{component} cannot run on its own under this loader. Install {bridge}, or                  remove {component}."
+            ),
             Defect::ModsWithoutALoader { count } => format!(
                 "{count} mod(s) are configured, but Vanilla cannot load mods. Switch to a \
                  loader, or remove them."
@@ -169,6 +184,7 @@ impl Defect {
                 | Defect::JavaMissing { .. }
                 | Defect::RejectedJvmArgument { .. }
                 | Defect::InstallationIncomplete { .. }
+                | Defect::MissingBridge { .. }
         )
     }
 
@@ -184,6 +200,7 @@ impl Defect {
             Defect::LoaderVersionMissing { .. } => "loader-version-missing",
             Defect::LoaderVersionUnexpected { .. } => "loader-version-unexpected",
             Defect::ModsWithoutALoader { .. } => "mods-without-a-loader",
+            Defect::MissingBridge { .. } => "missing-bridge",
             Defect::JavaMissing { .. } => "java-missing",
             Defect::HeapOutOfRange { .. } => "heap-out-of-range",
             Defect::RejectedJvmArgument { .. } => "rejected-jvm-argument",
@@ -424,6 +441,14 @@ fn check_runtime(profile: &Profile, defects: &mut Vec<Defect>) {
 
 /// Every mod entry names a file that is both safe and present.
 fn check_mods(profile: &Profile, dirs: &ProfileDirs, defects: &mut Vec<Defect>) {
+    // The same question the launch gate asks, asked here so the answer is the
+    // same in both places. See `components::missing_bridge`.
+    if let Some((component, bridge)) = crate::components::missing_bridge(profile) {
+        defects.push(Defect::MissingBridge {
+            component: component.name,
+            bridge: bridge.name,
+        });
+    }
     for entry in &profile.mods.mods {
         match dirs.contain_in_game(&format!("mods/{}", entry.file_name)) {
             Err(_) => defects.push(Defect::UnsafeModFileName {

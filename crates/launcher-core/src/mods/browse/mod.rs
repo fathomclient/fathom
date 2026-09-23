@@ -53,9 +53,7 @@ pub use cache::CatalogCache;
 pub use curseforge::{CurseForgeConfig, CurseForgeProvider};
 pub use dependencies::{Blocker, InstallPlan, PlannedMod};
 pub use install::{InstallOptions, InstallProgress, InstallReport, Installer, UninstallPlan};
-pub use model::{
-    CatalogEntry, InstallState, ModFile, ModProject, ProjectRef, Provider, Target,
-};
+pub use model::{CatalogEntry, InstallState, ModFile, ModProject, ProjectRef, Provider, Target};
 pub use modrinth::ModrinthProvider;
 pub use provider::{
     Availability, BrowseError, CatalogProvider, ProviderContext, ProviderStatus, SearchPage,
@@ -193,7 +191,10 @@ impl ModCatalog {
         http: HttpClient,
         paths: DataPaths,
     ) -> Self {
-        let installer = Installer::new(DownloadManager::new(http.clone()), ModStore::new(paths.clone()));
+        let installer = Installer::new(
+            DownloadManager::new(http.clone()),
+            ModStore::new(paths.clone()),
+        );
         Self {
             inner: Arc::new(Inner {
                 providers,
@@ -230,9 +231,10 @@ impl ModCatalog {
         let provider = self.provider(which)?;
         match provider.availability() {
             Availability::Ready => Ok(provider),
-            Availability::NotConfigured { reason } => {
-                Err(BrowseError::NotConfigured { provider: which, reason })
-            }
+            Availability::NotConfigured { reason } => Err(BrowseError::NotConfigured {
+                provider: which,
+                reason,
+            }),
         }
     }
 
@@ -275,9 +277,11 @@ impl ModCatalog {
                 let version = entry.version.as_ref().map(|v| v.as_str().to_owned());
                 match latest {
                     Some(latest)
-                        if entry.origin.version_id.as_deref() != Some(latest.version_id.as_str())
+                        if entry.origin.version_id.as_deref()
+                            != Some(latest.version_id.as_str())
                             && !entry.sha1.eq_ignore_ascii_case(&latest.hash.sha1)
-                            && entry.origin.project.as_deref() == Some(project.reference.id.as_str()) =>
+                            && entry.origin.project.as_deref()
+                                == Some(project.reference.id.as_str()) =>
                     {
                         (
                             InstallState::UpdateAvailable {
@@ -334,7 +338,8 @@ impl ModCatalog {
                         let key = &key;
                         scope.spawn(move || {
                             let which = provider.provider();
-                            if let Availability::NotConfigured { reason } = provider.availability() {
+                            if let Availability::NotConfigured { reason } = provider.availability()
+                            {
                                 return (
                                     which,
                                     Err(BrowseError::NotConfigured {
@@ -543,7 +548,15 @@ impl ModCatalog {
                 ))
             })?,
         };
-        dependencies::plan(&source, target, installed, project, file, chosen_optional, None)
+        dependencies::plan(
+            &source,
+            target,
+            installed,
+            project,
+            file,
+            chosen_optional,
+            None,
+        )
     }
 
     /// Plan updating one managed entry to its newest compatible build.
@@ -568,7 +581,11 @@ impl ModCatalog {
             )
         })?;
         let project = self.project(&reference, grant, cancel)?;
-        let Some(latest) = self.files(&reference, target, grant, cancel)?.into_iter().next() else {
+        let Some(latest) = self
+            .files(&reference, target, grant, cancel)?
+            .into_iter()
+            .next()
+        else {
             return Ok(None);
         };
         if entry.origin.version_id.as_deref() == Some(latest.version_id.as_str())
@@ -581,7 +598,16 @@ impl ModCatalog {
             grant,
             cancel,
         };
-        dependencies::plan(&source, target, installed, project, latest, &[], Some(entry)).map(Some)
+        dependencies::plan(
+            &source,
+            target,
+            installed,
+            project,
+            latest,
+            &[],
+            Some(entry),
+        )
+        .map(Some)
     }
 
     fn reference_of(entry: &ProfileMod) -> Option<ProjectRef> {
@@ -643,7 +669,10 @@ impl ModCatalog {
         cancel: &Cancel,
     ) -> Result<Vec<Identified>, BrowseError> {
         let mut out = Vec::new();
-        for entry in installed.iter().filter(|entry| entry.origin.project.is_none()) {
+        for entry in installed
+            .iter()
+            .filter(|entry| entry.origin.project.is_none())
+        {
             for provider in &self.inner.providers {
                 let ctx = ProviderContext::new(grant, cancel);
                 ctx.check()?;
@@ -651,7 +680,9 @@ impl ModCatalog {
                     continue;
                 }
                 match provider.lookup_by_hash(&entry.sha1, ctx) {
-                    Ok(Some((project, file))) if file.hash.sha1.eq_ignore_ascii_case(&entry.sha1) => {
+                    Ok(Some((project, file)))
+                        if file.hash.sha1.eq_ignore_ascii_case(&entry.sha1) =>
+                    {
                         out.push(Identified {
                             id: entry.id.to_string(),
                             project,
@@ -686,11 +717,9 @@ impl ModCatalog {
     ) -> Result<InstallReport, BrowseError> {
         let key = busy_key(profile, &plan.root.project.reference);
         {
-            let mut busy = self
-                .inner
-                .busy
-                .lock()
-                .map_err(|_| BrowseError::Refused("the mod browser is in a bad state".to_owned()))?;
+            let mut busy = self.inner.busy.lock().map_err(|_| {
+                BrowseError::Refused("the mod browser is in a bad state".to_owned())
+            })?;
             if busy.get(&key).is_some_and(InstallState::is_busy) {
                 return Err(BrowseError::Refused(
                     "that mod is already being installed".to_owned(),
@@ -727,9 +756,10 @@ impl ModCatalog {
             }
         }
         for planned in plan.installs() {
-            self.inner
-                .cache
-                .invalidate_project(planned.project.reference.provider, &planned.project.reference.id);
+            self.inner.cache.invalidate_project(
+                planned.project.reference.provider,
+                &planned.project.reference.id,
+            );
         }
         result
     }
@@ -781,7 +811,12 @@ impl ModCatalog {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -870,7 +905,12 @@ mod tests {
             _: ProviderContext<'_>,
         ) -> Result<Vec<ModFile>, BrowseError> {
             // Deliberately unfiltered: the catalogue must not trust this.
-            Ok(self.files.iter().filter(|f| f.project.id == id).cloned().collect())
+            Ok(self
+                .files
+                .iter()
+                .filter(|f| f.project.id == id)
+                .cloned()
+                .collect())
         }
 
         fn file(
@@ -917,13 +957,21 @@ mod tests {
     #[test]
     fn one_provider_failing_does_not_empty_the_page() {
         let mut modrinth = Fake::new(Provider::Modrinth);
-        modrinth.projects.push(compatible(project(Provider::Modrinth, "a", "sodium")));
+        modrinth
+            .projects
+            .push(compatible(project(Provider::Modrinth, "a", "sodium")));
         let mut curseforge = Fake::new(Provider::CurseForge);
         curseforge.fail = Some(503);
         let (_tmp, catalog) = catalog(vec![Arc::new(modrinth), Arc::new(curseforge)]);
 
         let page = catalog
-            .search("p", &SearchQuery::new(target()), &[], &grant(), &Cancel::new())
+            .search(
+                "p",
+                &SearchQuery::new(target()),
+                &[],
+                &grant(),
+                &Cancel::new(),
+            )
             .unwrap();
         assert_eq!(page.entries.len(), 1);
         let failed = page
@@ -937,32 +985,54 @@ mod tests {
     #[test]
     fn an_unconfigured_curseforge_is_reported_and_modrinth_still_works() {
         let mut modrinth = Fake::new(Provider::Modrinth);
-        modrinth.projects.push(compatible(project(Provider::Modrinth, "a", "sodium")));
+        modrinth
+            .projects
+            .push(compatible(project(Provider::Modrinth, "a", "sodium")));
         let mut curseforge = Fake::new(Provider::CurseForge);
         curseforge.configured = false;
         let curseforge = Arc::new(curseforge);
         let (_tmp, catalog) = catalog(vec![Arc::new(modrinth), curseforge.clone()]);
 
         let page = catalog
-            .search("p", &SearchQuery::new(target()), &[], &grant(), &Cancel::new())
+            .search(
+                "p",
+                &SearchQuery::new(target()),
+                &[],
+                &grant(),
+                &Cancel::new(),
+            )
             .unwrap();
         assert_eq!(page.entries.len(), 1);
-        assert_eq!(curseforge.searches.load(Ordering::SeqCst), 0, "no request without a key");
-        assert!(page.providers.iter().any(|s| matches!(
-            s.availability,
-            Availability::NotConfigured { .. }
-        )));
+        assert_eq!(
+            curseforge.searches.load(Ordering::SeqCst),
+            0,
+            "no request without a key"
+        );
+        assert!(page
+            .providers
+            .iter()
+            .any(|s| matches!(s.availability, Availability::NotConfigured { .. })));
     }
 
     #[test]
     fn the_same_mod_on_both_indexes_is_one_row() {
         let mut modrinth = Fake::new(Provider::Modrinth);
-        modrinth.projects.push(compatible(project(Provider::Modrinth, "a", "sodium")));
+        modrinth
+            .projects
+            .push(compatible(project(Provider::Modrinth, "a", "sodium")));
         let mut curseforge = Fake::new(Provider::CurseForge);
-        curseforge.projects.push(compatible(project(Provider::CurseForge, "1", "sodium")));
+        curseforge
+            .projects
+            .push(compatible(project(Provider::CurseForge, "1", "sodium")));
         let (_tmp, catalog) = catalog(vec![Arc::new(modrinth), Arc::new(curseforge)]);
         let page = catalog
-            .search("p", &SearchQuery::new(target()), &[], &grant(), &Cancel::new())
+            .search(
+                "p",
+                &SearchQuery::new(target()),
+                &[],
+                &grant(),
+                &Cancel::new(),
+            )
             .unwrap();
         assert_eq!(page.entries.len(), 1);
         assert_eq!(page.entries[0].also_on.len(), 1);
@@ -971,12 +1041,16 @@ mod tests {
     #[test]
     fn a_repeated_search_is_served_from_the_cache() {
         let mut modrinth = Fake::new(Provider::Modrinth);
-        modrinth.projects.push(compatible(project(Provider::Modrinth, "a", "sodium")));
+        modrinth
+            .projects
+            .push(compatible(project(Provider::Modrinth, "a", "sodium")));
         let modrinth = Arc::new(modrinth);
         let (_tmp, catalog) = catalog(vec![modrinth.clone()]);
         let query = SearchQuery::new(target()).with_text("sodium");
         for _ in 0..3 {
-            catalog.search("p", &query, &[], &grant(), &Cancel::new()).unwrap();
+            catalog
+                .search("p", &query, &[], &grant(), &Cancel::new())
+                .unwrap();
         }
         assert_eq!(modrinth.searches.load(Ordering::SeqCst), 1);
     }
@@ -996,7 +1070,9 @@ mod tests {
     fn files_the_provider_should_not_have_offered_are_dropped() {
         let reference = ProjectRef::new(Provider::Modrinth, "a");
         let mut modrinth = Fake::new(Provider::Modrinth);
-        modrinth.projects.push(project(Provider::Modrinth, "a", "sodium"));
+        modrinth
+            .projects
+            .push(project(Provider::Modrinth, "a", "sodium"));
         let good = file(&reference, "1", vec![]);
         let mut modern = file(&reference, "2", vec![]);
         modern.game_versions = ["1.21".to_owned()].into_iter().collect();
@@ -1013,7 +1089,9 @@ mod tests {
     fn an_incompatible_project_can_be_inspected_but_not_planned() {
         let reference = ProjectRef::new(Provider::Modrinth, "a");
         let mut modrinth = Fake::new(Provider::Modrinth);
-        modrinth.projects.push(project(Provider::Modrinth, "a", "modern"));
+        modrinth
+            .projects
+            .push(project(Provider::Modrinth, "a", "modern"));
         let mut modern = file(&reference, "1", vec![]);
         modern.game_versions = ["1.21".to_owned()].into_iter().collect();
         modrinth.files = vec![modern];
@@ -1025,12 +1103,28 @@ mod tests {
         assert_eq!(entry.project.name, "modern");
         assert!(files.is_empty());
         assert!(matches!(
-            catalog.plan_install(&reference, None, &target(), &[], &[], &grant(), &Cancel::new()),
+            catalog.plan_install(
+                &reference,
+                None,
+                &target(),
+                &[],
+                &[],
+                &grant(),
+                &Cancel::new()
+            ),
             Err(BrowseError::Incompatible(_))
         ));
         // Naming the incompatible build explicitly does not get around it.
         let plan = catalog
-            .plan_install(&reference, Some("1"), &target(), &[], &[], &grant(), &Cancel::new())
+            .plan_install(
+                &reference,
+                Some("1"),
+                &target(),
+                &[],
+                &[],
+                &grant(),
+                &Cancel::new(),
+            )
             .unwrap();
         assert!(plan.is_blocked());
     }
@@ -1057,13 +1151,17 @@ mod tests {
         let reference = ProjectRef::new(Provider::Modrinth, "a");
         let (_tmp, catalog) = catalog(vec![Arc::new(Fake::new(Provider::Modrinth))]);
         let listing = project(Provider::Modrinth, "a", "sodium");
-        let entry = ProfileMod::new(ModId::new("sodium").unwrap(), "b".repeat(40), "sodium-1.jar")
-            .with_origin(crate::mods::Origin {
-                repository: Some("modrinth".into()),
-                project: Some("a".into()),
-                version_id: Some("1".into()),
-                ..crate::mods::Origin::default()
-            });
+        let entry = ProfileMod::new(
+            ModId::new("sodium").unwrap(),
+            "b".repeat(40),
+            "sodium-1.jar",
+        )
+        .with_origin(crate::mods::Origin {
+            repository: Some("modrinth".into()),
+            project: Some("a".into()),
+            version_id: Some("1".into()),
+            ..crate::mods::Origin::default()
+        });
         let installed = vec![entry];
 
         let (state, _) = catalog.install_state("p", &[], &listing, None);
@@ -1108,7 +1206,9 @@ mod tests {
         let query = SearchQuery::new(target())
             .with_text("legacy fabric api")
             .with_provider(Provider::Modrinth);
-        let page = catalog.search("live", &query, &[], &grant, &cancel).unwrap();
+        let page = catalog
+            .search("live", &query, &[], &grant, &cancel)
+            .unwrap();
         let status = &page.providers[0];
         assert!(status.error.is_none(), "{status:?}");
         let hit = page
@@ -1118,14 +1218,29 @@ mod tests {
             .expect("Legacy Fabric API is on Modrinth");
 
         let (entry, files) = catalog
-            .entry("live", &hit.project.reference, &target(), &[], &grant, &cancel)
+            .entry(
+                "live",
+                &hit.project.reference,
+                &target(),
+                &[],
+                &grant,
+                &cancel,
+            )
             .unwrap();
         assert!(entry.project.detailed);
         assert!(!files.is_empty());
         assert!(files.iter().all(|file| file.supports(&target())));
 
         let plan = catalog
-            .plan_install(&hit.project.reference, None, &target(), &[], &[], &grant, &cancel)
+            .plan_install(
+                &hit.project.reference,
+                None,
+                &target(),
+                &[],
+                &[],
+                &grant,
+                &cancel,
+            )
             .unwrap();
         assert!(!plan.is_blocked(), "{:?}", plan.blockers);
 
@@ -1147,7 +1262,13 @@ mod tests {
 
         // Both providers, together: CurseForge reports itself honestly.
         let both = catalog
-            .search("live", &SearchQuery::new(target()).with_text("sodium"), &[], &grant, &cancel)
+            .search(
+                "live",
+                &SearchQuery::new(target()).with_text("sodium"),
+                &[],
+                &grant,
+                &cancel,
+            )
             .unwrap();
         let curseforge = both
             .providers
@@ -1155,7 +1276,10 @@ mod tests {
             .find(|status| status.provider == Provider::CurseForge)
             .unwrap();
         if std::env::var("FATHOM_CURSEFORGE_API_KEY").is_err() {
-            assert!(matches!(curseforge.availability, Availability::NotConfigured { .. }));
+            assert!(matches!(
+                curseforge.availability,
+                Availability::NotConfigured { .. }
+            ));
         } else {
             assert!(curseforge.error.is_none(), "{curseforge:?}");
         }
@@ -1164,7 +1288,10 @@ mod tests {
             .iter()
             .find(|status| status.provider == Provider::Modrinth)
             .unwrap();
-        assert!(modrinth.error.is_none(), "Modrinth works regardless: {modrinth:?}");
+        assert!(
+            modrinth.error.is_none(),
+            "Modrinth works regardless: {modrinth:?}"
+        );
     }
 
     /// `CurseForge` search and detail, when a key is configured.
@@ -1182,9 +1309,19 @@ mod tests {
             .search("live", &query, &[], &grant(), &Cancel::new())
             .unwrap();
         assert!(page.providers[0].error.is_none(), "{:?}", page.providers[0]);
-        let first = page.entries.first().expect("1.8.9 Fabric mods on CurseForge");
+        let first = page
+            .entries
+            .first()
+            .expect("1.8.9 Fabric mods on CurseForge");
         let (_, files) = catalog
-            .entry("live", &first.project.reference, &target(), &[], &grant(), &Cancel::new())
+            .entry(
+                "live",
+                &first.project.reference,
+                &target(),
+                &[],
+                &grant(),
+                &Cancel::new(),
+            )
             .unwrap();
         assert!(files.iter().all(|file| file.supports(&target())));
     }

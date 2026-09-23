@@ -26,6 +26,9 @@
   import {
     Image as ImageIcon,
     ChevronDown,
+    Minus,
+    Square,
+    X,
   } from '@lucide/svelte';
 
   import './lib/theme.css';
@@ -49,6 +52,7 @@
   import { EASE, FAST, NORMAL } from './lib/motion';
   import {
     background as loadBackground,
+    accountsView,
     cancelLaunch,
     cancelSignIn,
     homeView,
@@ -58,13 +62,21 @@
     settingsView,
     shellStatus,
     signIn,
+    reopenSignInPage,
     signInDevelopment,
     signInProgress,
-    signOut,
+    switchAccount,
+    forgetAccount,
+    windowShow,
+    windowMinimize,
+    windowToggleMaximize,
+    windowToggleFullscreen,
+    windowClose,
     NO_AUTH,
     NO_LAUNCH,
     type AuthProgress,
     type HomeView,
+    type AccountSummary,
     type LaunchProgress,
     type ShellStatus,
   } from './lib/api';
@@ -90,6 +102,7 @@
   let route = 'home';
   let settingsCategory = 'general';
   let home: HomeView | null = null;
+  let accounts: AccountSummary[] = [];
   let status: ShellStatus | null = null;
   let choice = 'bg_5rain';
   let pickerOpen = false;
@@ -117,6 +130,28 @@
     return () => document.removeEventListener('visibilitychange', onVisibility);
   });
 
+  /* The in-game Sign In button. Rust has raised the window and started (or
+     found) the sign-in; open the drawer on it and follow its progress. */
+  onMount(() => {
+    let stop: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        stop = await listen('fathom://show-account', () => {
+          accountOpen = true;
+          void (async () => {
+            auth = await signInProgress();
+            if (auth.active) watchAuth();
+            else await refreshShell();
+          })();
+        });
+      } catch {
+        /* Not in the app shell. */
+      }
+    })();
+    return () => stop?.();
+  });
+
   /* The in-game Hub asking for the launcher's own diagnostics. Rust has already
      raised the window by the time this arrives; all that is left is to be on
      the right page when the user looks at it. */
@@ -138,23 +173,33 @@
 
   onMount(() => {
     void (async () => {
-      [home, status, choice] = await Promise.all([homeView(), shellStatus(), loadBackground()]);
-      const settings = await settingsView();
-      canSignIn = settings.account.canSignIn;
-      developmentAvailable = settings.account.developmentAvailable;
-      credentialStore = settings.account.credentialStore;
+      try {
+        [home, status, choice, accounts] = await Promise.all([
+          homeView(), shellStatus(), loadBackground(), accountsView(),
+        ]);
+        const settings = await settingsView();
+        canSignIn = settings.account.canSignIn;
+        developmentAvailable = settings.account.developmentAvailable;
+        credentialStore = settings.account.credentialStore;
 
-      /* The stored token is tried on a Rust thread as the app starts, so by the
-         time this runs it may already be under way. Adopting it here is what
-         stops the drawer saying "not signed in" over a restore in progress. */
-      auth = await signInProgress();
-      if (auth.active) watchAuth();
+        /* The stored token is tried on a Rust thread as the app starts, so by the
+           time this runs it may already be under way. Adopting it here is what
+           stops the drawer saying "not signed in" over a restore in progress. */
+        auth = await signInProgress();
+        if (auth.active) watchAuth();
 
-      /* A launch outlives the window's script: it runs on a Rust thread, and a
-         reload during development — or a second window opening — must find it
-         rather than show an idle Play button over a running download. */
-      launch = await launchProgress();
-      if (launch.active) watch();
+        /* A launch outlives the window's script: it runs on a Rust thread, and a
+           reload during development — or a second window opening — must find it
+           rather than show an idle Play button over a running download. */
+        launch = await launchProgress();
+        if (launch.active) watch();
+      } finally {
+        /* The native window starts hidden. Showing it only after the real shell
+           state arrives prevents the half-populated fallback composition from
+           flashing before Home is ready. `finally` keeps an unexpected data
+           error from leaving an invisible process behind. */
+        await windowShow();
+      }
     })();
     return () => {
       stopWatching();
@@ -268,7 +313,7 @@
   let epoch = 0;
 
   async function refreshShell() {
-    [home, status] = await Promise.all([homeView(), shellStatus()]);
+    [home, status, accounts] = await Promise.all([homeView(), shellStatus(), accountsView()]);
     epoch += 1;
   }
 
@@ -307,17 +352,69 @@
      every blocker that is not sign-in. */
   $: stateLine =
     launch.phase === 'idle' ? (home?.action.detail ?? '') : launch.headline || launch.detail;
+
+  /**
+   * F11 toggles fullscreen, from any page.
+   *
+   * On `svelte:window` rather than a per-page binding so it works wherever the
+   * user is, which is what a window-level shortcut means. Two things it
+   * deliberately does not do:
+   *
+   * - It does not fire while a text field has focus and the key would mean
+   *   something there. F11 means nothing in an input, but the guard is the same
+   *   one any window shortcut needs and costs nothing to write correctly.
+   * - It does not swallow the key when a modifier is held, so Shift+F11 and the
+   *   like stay available to the browser engine and to anything added later.
+   */
+  function handleGlobalKey(event: KeyboardEvent) {
+    if (event.key !== 'F11' || event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) {
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (target?.isContentEditable) return;
+    const tag = target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    // The WebView has its own F11 handling; ours is the one that should win.
+    event.preventDefault();
+    void windowToggleFullscreen();
+  }
 </script>
 
 <svelte:window
   on:click={() => {
     pickerOpen = false;
   }}
+  on:keydown={handleGlobalKey}
 />
 
 <Background {choice} {playing} />
 
 <div class="shell">
+  <!-- Integrated window chrome. The native Windows strip is disabled so the
+       launcher has one continuous material from its top edge down. -->
+  <div
+    class="titlebar"
+    data-tauri-drag-region
+    role="toolbar"
+    tabindex="-1"
+    aria-label="Window"
+    on:dblclick={() => void windowToggleMaximize()}
+  >
+    <svg class="title-mark" viewBox="0 0 16 16" aria-hidden="true" data-tauri-drag-region>
+      <rect x="1" y="1" width="14" height="3" />
+      <rect x="1" y="4" width="3" height="11" />
+      <rect x="4" y="12" width="7" height="3" />
+      <rect x="12" y="4" width="3" height="7" />
+      <rect class="plane" x="6" y="6" width="4" height="4" />
+    </svg>
+    <span data-tauri-drag-region>Fathom</span>
+    <div class="window-controls">
+      <button aria-label="Minimize" title="Minimize" on:click={() => void windowMinimize()}><Minus size={14} /></button>
+      <button aria-label="Maximize" title="Maximize" on:click={() => void windowToggleMaximize()}><Square size={11} /></button>
+      <button class="window-close" aria-label="Close" title="Close" on:click={() => void windowClose()}><X size={14} /></button>
+    </div>
+  </div>
   <!-- TOP BAR -->
   <header class="topbar">
     <div class="brand">
@@ -345,10 +442,25 @@
     {/if}
 
     <button class="account" on:click|stopPropagation={() => (accountOpen = true)}>
-      <span class="avatar" class:signed={home?.account.signedIn}>
-        {home?.account.name?.[0]?.toUpperCase() ?? '?'}
+      <!-- A remembered account is drawn while its session comes back, subdued
+           rather than absent. Restoring takes several seconds, and showing
+           "Sign in" for them reads as though the launcher forgot the account it
+           is in the middle of restoring. `signed` still marks only a live
+           session, so nothing here claims to be signed in. -->
+      <span
+        class="avatar"
+        class:signed={home?.account.signedIn}
+        class:restoring={home?.account.remembered}
+      >
+        {#if home?.account.avatar}
+          <img class="face" src={home.account.avatar} alt="" draggable="false" />
+        {:else}
+          {home?.account.name?.[0]?.toUpperCase() ?? '?'}
+        {/if}
       </span>
-      <span>{home?.account.name ?? 'Sign in'}</span>
+      <span class:restoring-name={home?.account.remembered}>
+        {home?.account.name ?? 'Sign in'}
+      </span>
       <ChevronDown size={13} strokeWidth={2.2} />
     </button>
   </header>
@@ -501,6 +613,7 @@
 {#if accountOpen && home}
   <AccountDrawer
     account={home.account}
+    {accounts}
     note={home.action.developerNote}
     {canSignIn}
     {developmentAvailable}
@@ -509,7 +622,9 @@
     onSignIn={() => void attempt(signIn)}
     onDevelopment={() => void attempt(signInDevelopment)}
     onCancelSignIn={() => void attempt(cancelSignIn)}
-    onSignOut={() => void attempt(signOut)}
+    onReopenPage={() => void attempt(reopenSignInPage)}
+    onSwitch={(id) => void attempt(() => switchAccount(id))}
+    onForget={(id) => void attempt(() => forgetAccount(id))}
     onClose={() => (accountOpen = false)}
   />
 {/if}
@@ -519,13 +634,58 @@
     position: relative;
     display: grid;
     grid-template-columns: var(--rail-width) 1fr;
-    grid-template-rows: var(--topbar-height) 1fr var(--bottombar-height);
+    grid-template-rows: var(--titlebar-height) var(--topbar-height) 1fr var(--bottombar-height);
     grid-template-areas:
+      'title title'
       'top top'
       'rail main'
       'bottom bottom';
     height: 100%;
   }
+
+  .titlebar {
+    grid-area: title;
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding-left: var(--s-2);
+    color: var(--text-muted);
+    font-size: var(--t-caption);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 70%),
+      var(--midnight-mid);
+    border-bottom: 1px solid var(--chrome-line);
+    user-select: none;
+  }
+
+  .title-mark {
+    width: 16px;
+    height: 16px;
+    fill: var(--text);
+  }
+
+  .title-mark .plane { fill: var(--accent); }
+
+  .window-controls {
+    align-self: stretch;
+    display: flex;
+    margin-left: auto;
+  }
+
+  .window-controls button {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    color: var(--text-muted);
+    transition: background var(--m-fast) var(--ease), color var(--m-fast) var(--ease);
+  }
+
+  .window-controls button:hover {
+    color: var(--text);
+    background: var(--fill-hover);
+  }
+
+  .window-controls .window-close:hover { background: #c42b3a; }
 
   /* -- top bar ----------------------------------------------------------- */
   .topbar {
@@ -583,6 +743,27 @@
     color: var(--text-faint);
   }
 
+  /* Restoring: present but not yet usable. A slow pulse rather than a spinner,
+     because this resolves on its own in a few seconds and a spinner would ask
+     to be watched. */
+  .avatar.restoring,
+  .restoring-name {
+    opacity: 0.55;
+    animation: account-restoring 1.6s var(--ease) infinite;
+  }
+
+  @keyframes account-restoring {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 0.75; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .avatar.restoring,
+    .restoring-name {
+      animation: none;
+    }
+  }
+
   .account {
     display: flex;
     align-items: center;
@@ -618,6 +799,16 @@
   .avatar.signed {
     background: linear-gradient(160deg, var(--accent-strong), var(--accent-deep));
     color: #fff;
+  }
+
+  /* The player's head, cut from their skin. Eight pixels of art, so it is
+     scaled without smoothing, and clipped to the same circle as the initial. */
+  .face {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    image-rendering: pixelated;
+    object-fit: cover;
   }
 
   /* -- rail -------------------------------------------------------------- */

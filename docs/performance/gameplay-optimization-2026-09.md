@@ -46,7 +46,18 @@ view (particle spawning proved unreliable in this save; see "Limitations").
 
 The first attempt compared separate runs and could not be trusted: the same
 still view measured 844 fps in one scenario and 1468 fps in another in the same
-run. Two controls replaced it:
+run.
+
+> **Cause found, 2026-09-17.** This was not machine noise. The harness waited a
+> fixed 45 seconds after joining the world, and at render distance 12 that is not
+> long enough for chunk generation to finish — so the early scenarios were
+> measuring world generation. Waiting for the frame rate to go quiet instead took
+> the still scene's worst frame from 125 ms to 5.4 ms, its 1% low from 48 to 246
+> fps, and doubled the panning scenario's mean. Everything below was measured
+> under the old fixed wait; the interleaved A/B results survive it (both arms
+> were contaminated equally, inside one session) but **the absolute frame rates
+> and every 1% low and worst-frame figure on this page are too pessimistic**. See
+> `benchmark-methodology.md` §3.0. Two controls replaced it:
 
 1. **Interleaved A/B.** Switches alternate in ABBA order, three cycles, 4–5 s
    windows, inside one session and one world state, so drift cancels and each

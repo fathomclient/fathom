@@ -1,8 +1,9 @@
 # Architecture
 
-Status: **foundation**. The launcher signs in, verifies entitlement, resolves and
-downloads game files on a background thread, and builds a launch command. It
-does not yet implement a mod loader or self-update.
+Status: **canonical Tauri/Svelte launcher**. The launcher signs in, verifies
+entitlement, installs Legacy Fabric and Fathom's client module, and launches an
+isolated managed instance. The historical iced details below are retained as a
+decision record only; they do not describe a second runnable application.
 
 This document describes what exists. Where something is missing it says so.
 `docs/research/` holds the research this is built on; where the two disagree, the
@@ -13,18 +14,11 @@ research is the reasoning and this file is the record of what was actually done.
 ## 1. Shape
 
 ```
-crates/launcher-ui        Rust + iced 0.13 (GPU, software fallback)
-    app.rs                one window, eight screens, one process
-    style.rs              every colour, size, weight and radius; nothing hard-coded elsewhere
-    icons.rs              the SVG icon set, addressed by enum so no stray glyph can appear
-    motion.rs             the animation system; its clock runs only while something moves
-    background.rs         full-window gameplay footage; see docs/backgrounds.md
-    screens/              home, profiles, mods, performance, privacy, recovery, account, settings
-    worker.rs             a thread per background job; the window never blocks
-    - prepare / install / verify / repair all run here, never on the window
-    - holds no credentials, builds no commands, opens no sockets
+crates/launcher-ui        compatibility command; calls launcher_desktop::run()
+crates/launcher-desktop   canonical Tauri shell and typed command boundary
+desktop/                  canonical Svelte frontend; embedded for production
                  |
-                 |  direct calls into a library, same process
+                 |  typed calls into a library, same process
                  v
 crates/launcher-core      Rust library, no UI dependency
     services.rs           the facade the UI is allowed to touch
@@ -91,9 +85,10 @@ crates/launcher-core      Rust library, no UI dependency
 JVM (Java 8)              net.minecraft.client.main.Main
 ```
 
-`crates/launcher-ui` produces **`fathom.exe`**, a `WINDOWS_GUI` binary a user
-double-clicks. No console appears behind it, nothing is resolved relative to the
-working directory, and a failure before the window opens produces a window
+`crates/launcher-desktop` produces the `WINDOWS_GUI` launcher packaged by the
+NSIS release pipeline. `crates/launcher-ui` is only a source-compatible command
+alias. No console appears behind the installed launcher, nothing is resolved
+relative to the working directory, and a failure before the window opens produces a window
 saying why rather than an `eprintln!` nobody can see. `docs/reliability.md`
 covers the build, the data locations, startup recovery and the operation
 locking.

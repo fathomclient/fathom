@@ -65,9 +65,13 @@ fn browse_error(error: ModrinthError) -> BrowseError {
             "{} is not on the download allowlist",
             clip(&host, 80)
         )),
-        ModrinthError::NoCompatibleVersion { name, minecraft } => BrowseError::Incompatible(
-            format!("{} has no build for Minecraft {}", clip(&name, 80), clip(&minecraft, 20)),
-        ),
+        ModrinthError::NoCompatibleVersion { name, minecraft } => {
+            BrowseError::Incompatible(format!(
+                "{} has no build for Minecraft {}",
+                clip(&name, 80),
+                clip(&minecraft, 20)
+            ))
+        }
         ModrinthError::Store(store) => BrowseError::Refused(store.to_string()),
     }
 }
@@ -76,7 +80,12 @@ fn browse_error(error: ModrinthError) -> BrowseError {
 /// becoming part of a request path, even though the client encodes it too.
 fn project_id(id: &str) -> Result<&str, BrowseError> {
     let id = id.trim();
-    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if id.is_empty()
+        || id.len() > 64
+        || !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(BrowseError::Refused(format!(
             "{:?} is not a Modrinth project id",
             clip(id, 40)
@@ -125,7 +134,10 @@ pub(super) fn from_hit(hit: Hit) -> Option<ModProject> {
         summary: clip(&hit.summary, limits::SUMMARY),
         description: None,
         authors: capped(hit.author, limits::LIST),
-        icon: hit.icon_url.as_deref().and_then(|url| ImageRef::new(url, None)),
+        icon: hit
+            .icon_url
+            .as_deref()
+            .and_then(|url| ImageRef::new(url, None)),
         gallery: Vec::new(),
         downloads: hit.downloads,
         categories: capped(hit.categories, limits::LIST),
@@ -154,7 +166,10 @@ pub(super) fn from_project(project: Project, authors: Vec<String>) -> Option<Mod
         // Markdown, rendered by the interface as text. Never as HTML.
         description: Some(clip(&project.body, limits::DESCRIPTION)).filter(|body| !body.is_empty()),
         authors: capped(authors, limits::LIST),
-        icon: project.icon_url.as_deref().and_then(|url| ImageRef::new(url, None)),
+        icon: project
+            .icon_url
+            .as_deref()
+            .and_then(|url| ImageRef::new(url, None)),
         gallery: project
             .gallery
             .into_iter()
@@ -166,7 +181,11 @@ pub(super) fn from_project(project: Project, authors: Vec<String>) -> Option<Mod
         source_url: safe_link(project.source_url.as_deref()),
         issues_url: safe_link(project.issues_url.as_deref()),
         license: licence(project.license.as_deref()),
-        minecraft_versions: project.game_versions.into_iter().take(limits::FACETS).collect(),
+        minecraft_versions: project
+            .game_versions
+            .into_iter()
+            .take(limits::FACETS)
+            .collect(),
         loaders: project.loaders.into_iter().take(limits::FACETS).collect(),
         updated: project.updated.map(|when| clip(&when, 40)),
         distribution: Distribution::Allowed,
@@ -185,16 +204,17 @@ pub(super) fn from_version(version: Version) -> Option<ModFile> {
     }
     // The URL has to be one we would fetch. Checked here so the interface does
     // not offer an install the downloader would then refuse.
-    let download = if descriptor_from_url(&version.url, Purpose::DownloadMod, Feature::ModBrowse)
-        .is_ok()
-    {
-        FileDownload::Url { url: version.url }
-    } else {
-        tracing::warn!("Modrinth offered a download off the allowlist; the file is not installable");
-        FileDownload::Withheld {
-            where_to_get: page_for("", &project),
-        }
-    };
+    let download =
+        if descriptor_from_url(&version.url, Purpose::DownloadMod, Feature::ModBrowse).is_ok() {
+            FileDownload::Url { url: version.url }
+        } else {
+            tracing::warn!(
+                "Modrinth offered a download off the allowlist; the file is not installable"
+            );
+            FileDownload::Withheld {
+                where_to_get: page_for("", &project),
+            }
+        };
     let dependencies = version
         .dependencies
         .into_iter()
@@ -211,9 +231,7 @@ pub(super) fn from_version(version: Version) -> Option<ModFile> {
                 .as_deref()
                 .and_then(|id| project_id(id).ok())
                 .map(|id| ProjectRef::new(Provider::Modrinth, id)),
-            version_id: dependency
-                .version_id
-                .filter(|id| project_id(id).is_ok()),
+            version_id: dependency.version_id.filter(|id| project_id(id).is_ok()),
         })
         .collect();
     Some(ModFile {
@@ -227,7 +245,11 @@ pub(super) fn from_version(version: Version) -> Option<ModFile> {
             Channel::Alpha => ReleaseChannel::Alpha,
         },
         loaders: version.loaders.into_iter().take(limits::FACETS).collect(),
-        game_versions: version.game_versions.into_iter().take(limits::FACETS).collect(),
+        game_versions: version
+            .game_versions
+            .into_iter()
+            .take(limits::FACETS)
+            .collect(),
         file_name: version.file_name,
         download,
         hash: version.hash,
@@ -373,7 +395,12 @@ impl CatalogProvider for ModrinthProvider {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 mod tests {
     use super::*;
     use crate::mods::definition::ArtifactHash;
@@ -436,12 +463,17 @@ mod tests {
             "https://cdn.modrinth.com/data/x/evil.jar"
         ))
         .is_none());
-        assert!(from_version(version("evil.exe", "https://cdn.modrinth.com/data/x/evil.exe")).is_none());
+        assert!(from_version(version(
+            "evil.exe",
+            "https://cdn.modrinth.com/data/x/evil.exe"
+        ))
+        .is_none());
     }
 
     #[test]
     fn a_download_off_the_allowlist_is_withheld_rather_than_fetched() {
-        let file = from_version(version("ok.jar", "https://evil.example.com/ok.jar")).expect("a file");
+        let file =
+            from_version(version("ok.jar", "https://evil.example.com/ok.jar")).expect("a file");
         assert!(!file.is_downloadable());
     }
 

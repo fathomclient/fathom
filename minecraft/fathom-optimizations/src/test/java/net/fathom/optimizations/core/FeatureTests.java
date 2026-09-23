@@ -552,7 +552,11 @@ public final class FeatureTests {
         written.set(Keybind.mouse(1));
 
         ClientPrefs prefs = new ClientPrefs();
-        prefs.setScaleChoice(3);
+        // By label, not by index. What this test is about is that a changed
+        // scale survives a restart; which position "115%" happens to occupy is
+        // not part of that, and pinning it here meant adding a scale option
+        // broke a test about persistence.
+        prefs.setScaleLabel("115%");
         prefs.setHighQualityUi(false);
 
         ModuleStore store = new ModuleStore();
@@ -568,7 +572,7 @@ public final class FeatureTests {
         check(read.key() == Keybind.mouse(1), "the mouse hub key survived");
         // Anything the interface lets somebody change has to survive a restart
         // or it should not be offered.
-        check("110%".equals(readPrefs.scaleLabel()), "the interface scale survived, got " + readPrefs.scaleLabel());
+        check("115%".equals(readPrefs.scaleLabel()), "the interface scale survived, got " + readPrefs.scaleLabel());
         check(!readPrefs.highQualityUi(), "the UI rendering quality survived");
         check("Right Click".equals(read.keyName()), "and renders with a name, got " + read.keyName());
 
@@ -660,16 +664,21 @@ public final class FeatureTests {
         check(Math.abs(prefs.uiScale() - 1f) < 0.001f, "which multiplies the automatic scale by one");
         check(!prefs.scaleChangedFromDefault(), "and a default is not written to the file");
 
-        prefs.setScaleChoice(4);
+        // Chosen by label throughout. The property under test is that a label
+        // and a multiplier agree and survive the file; which index a label sits
+        // at is an implementation detail, and asserting it here meant that
+        // adding a scale option broke tests that had nothing to do with it.
+        prefs.setScaleLabel("125%");
         check("125%".equals(prefs.scaleLabel()), "the label round-trips, got " + prefs.scaleLabel());
         check(Math.abs(prefs.uiScale() - 1.25f) < 0.001f, "and means what it says");
         check(prefs.scaleChangedFromDefault(), "a change is worth writing down");
 
         ClientPrefs read = new ClientPrefs();
-        read.setScaleLabel("110%");
-        check(read.scaleChoice() == 3, "a label from the file selects the choice");
+        read.setScaleLabel("115%");
+        int fromFile = read.scaleChoice();
+        check("115%".equals(read.scaleLabel()), "a label from the file selects the choice");
         read.setScaleLabel("nonsense from a hand-edited file");
-        check(read.scaleChoice() == 3, "and an unrecognised one changes nothing");
+        check(read.scaleChoice() == fromFile, "and an unrecognised one changes nothing");
         pass("the interface scale is a choice and not a number");
     }
 

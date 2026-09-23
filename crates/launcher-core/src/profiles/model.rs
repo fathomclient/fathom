@@ -599,10 +599,13 @@ pub struct JvmOptimizations {
     /// change. SAFE in the matrix.
     #[serde(default = "default_true")]
     pub disable_explicit_gc: bool,
-    /// `-XX:-DontCompileHugeMethods` plus a larger code cache. Lets `HotSpot` JIT
-    /// the Minecraft methods that exceed the 8000-byte limit and otherwise run
-    /// interpreted forever. OPTIONAL in the matrix — promising, but off until
-    /// we have our own measurements.
+    /// `-XX:-DontCompileHugeMethods` plus a larger code cache.
+    ///
+    /// **Measured, and it does nothing on 1.8.9.** Exactly one method in the
+    /// game exceeds HotSpot's 8000-byte `HugeMethodLimit`:
+    /// `RecipeDispatcher.<init>` at 8296 bytes, which runs once at startup.
+    /// There is no hot render method for this flag to unblock — see
+    /// `minecraft_runtime::jvm_args`. Off, and it stays off.
     #[serde(default)]
     pub compile_huge_methods: bool,
 }

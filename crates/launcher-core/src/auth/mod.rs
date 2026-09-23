@@ -19,6 +19,7 @@
 //! - **No offline mode, no fallback, no bypass.** If the entitlement check
 //!   cannot complete, we do not launch.
 
+pub mod account;
 pub mod entitlement;
 pub mod provider;
 pub mod session;
@@ -163,10 +164,54 @@ pub struct Session {
 }
 
 /// Public account information. Safe to persist: it is what other players see.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+///
+/// Exactly the shape of `GET /minecraft/profile`, minus nothing sensitive
+/// because the endpoint returns nothing sensitive: a UUID, a username, and the
+/// public addresses of the skins and capes other players already download.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct AccountProfile {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub skins: Vec<ProfileTexture>,
+    #[serde(default)]
+    pub capes: Vec<ProfileTexture>,
+}
+
+/// One skin or cape on a Minecraft profile.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct ProfileTexture {
+    #[serde(default)]
+    pub id: String,
+    /// `ACTIVE` for the one being worn.
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub url: String,
+    /// `CLASSIC` or `SLIM`, for skins.
+    #[serde(default)]
+    pub variant: Option<String>,
+    /// A cape's name, e.g. `Migrator`.
+    #[serde(default)]
+    pub alias: Option<String>,
+}
+
+impl ProfileTexture {
+    pub fn is_active(&self) -> bool {
+        self.state.eq_ignore_ascii_case("active")
+    }
+}
+
+impl AccountProfile {
+    /// The skin currently worn, if the profile has one. A profile with none
+    /// wears the default Steve or Alex, which is drawn from the UUID instead.
+    pub fn active_skin(&self) -> Option<&ProfileTexture> {
+        self.skins.iter().find(|skin| skin.is_active())
+    }
+
+    pub fn active_cape(&self) -> Option<&ProfileTexture> {
+        self.capes.iter().find(|cape| cape.is_active())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -614,6 +659,35 @@ impl AuthService {
     }
 }
 
+impl AuthService {
+    /// Download a skin image from Mojang's texture host.
+    ///
+    /// Takes the URL from the profile response, which is untrusted input: it
+    /// must name `textures.minecraft.net` and a hex texture id, or nothing is
+    /// fetched. No credential is sent — skins are public.
+    pub fn fetch_skin(&self, url: &str, feature: Feature) -> Result<Vec<u8>, AuthError> {
+        let path = account::texture_path(url).ok_or(AuthError::MinecraftService { status: 0 })?;
+        let request = RequestDescriptor::new(
+            Destination::MinecraftTextures,
+            Purpose::FetchProfile,
+            feature,
+            path,
+        );
+        let response = self
+            .http
+            .send(&request, None, Method::Get, Body::Empty, &[])?;
+        if !response.is_success() {
+            return Err(AuthError::MinecraftService {
+                status: response.status,
+            });
+        }
+        if response.body.len() > account::MAX_SKIN_BYTES {
+            return Err(AuthError::MinecraftService { status: 0 });
+        }
+        Ok(response.body)
+    }
+}
+
 fn interpret_token_response(parsed: TokenResponse) -> Result<PollOutcome, AuthError> {
     if let Some(error) = parsed.error.as_deref() {
         return match error {
@@ -802,6 +876,7 @@ mod tests {
         let profile = AccountProfile {
             id: "986dec87b7ec47ff89ff033fdb95c4b5".into(),
             name: "Steve".into(),
+            ..AccountProfile::default()
         };
         remember_session(&store, &profile, &Secret::new("the-refresh-token")).unwrap();
 
@@ -843,5 +918,47 @@ mod tests {
             client_id: Some("00000000-0000-0000-0000-000000000000".into())
         }
         .is_configured());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod live {
+    use super::*;
+    use crate::network::{NetworkJournal, NetworkPolicy};
+
+    /// Asks Microsoft for a device code with this build's application id and
+    /// checks the answer has the shape the launcher opens. Polls nothing, so
+    /// no sign-in happens; the code simply expires.
+    ///
+    /// Run with `cargo test -p launcher-core -- --ignored device_code_live`.
+    #[test]
+    #[ignore = "reaches login.microsoftonline.com; needs FATHOM_AZURE_CLIENT_ID"]
+    fn device_code_live_request_is_accepted() {
+        let app = AzureApp::from_env();
+        if !app.is_configured() {
+            eprintln!("skipped: no client id");
+            return;
+        }
+        let service = AuthService::new(
+            HttpClient::new(
+                NetworkPolicy::default(),
+                NetworkJournal::new(),
+                "fathom-test",
+            ),
+            app,
+        );
+        let prompt = service
+            .begin_device_code(Feature::AccountSignIn)
+            .expect("a device code");
+        assert!(prompt.verification_uri.starts_with("https://"));
+        assert!(prompt.expires_in_secs >= 60);
+        assert!(!prompt.user_code.is_empty());
+        eprintln!(
+            "verification page host ok: {}; code length {}; expires in {}s",
+            prompt.verification_uri,
+            prompt.user_code.len(),
+            prompt.expires_in_secs
+        );
     }
 }

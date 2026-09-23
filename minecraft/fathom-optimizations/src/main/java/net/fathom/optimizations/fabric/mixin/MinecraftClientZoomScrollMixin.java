@@ -24,6 +24,12 @@ public abstract class MinecraftClientZoomScrollMixin {
     @Redirect(method = "tick()V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/PlayerInventory;scrollInHotbar(I)V"))
     private void fathom$zoomScroll(PlayerInventory inventory, int wheel) {
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
+            inventory.scrollInHotbar(wheel);
+            return;
+        }
         if (!Zoom.scroll(wheel)) {
             inventory.scrollInHotbar(wheel);
         }

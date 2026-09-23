@@ -68,6 +68,12 @@ public abstract class ClientChunkProviderMixin {
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/util/collection/LongObjectStorage;get(J)Ljava/lang/Object;"))
     private Object fathom$cachedLookup(LongObjectStorage<?> storage, long key) {
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()
+                || !net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowOptifineOverlapHooks()) {
+            return storage.get(key);
+        }
         if (!Runtime.chunkLookupCache || Thread.currentThread() != fathom$owner) {
             return storage.get(key);
         }

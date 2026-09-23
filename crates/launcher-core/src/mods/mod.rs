@@ -48,6 +48,7 @@ pub mod config;
 pub mod definition;
 pub mod identify;
 pub mod jar;
+pub mod optifine;
 pub mod modrinth;
 pub mod resolve;
 pub mod store;
@@ -59,13 +60,13 @@ use crate::fs_safety::FsError;
 use crate::profiles::ProfileDirs;
 
 pub use config::{DisabledReason, ModSource, Origin, ProfileMod, ProfileModConfiguration};
-pub use identify::Identified;
-pub use modrinth::{Modrinth, ModrinthError};
 pub use definition::{
     ArtifactHash, Conflict, ConflictKind, Dependency, DownloadSource, License,
     MinecraftCompatibility, ModDefinition, ModId, ModIdError, ModVersion, PrivacyClassification,
     Provenance, RedistributionPolicy,
 };
+pub use identify::Identified;
+pub use modrinth::{Modrinth, ModrinthError};
 pub use resolve::{Candidate, NameLookup, Problem, Resolution, ResolvedMod, Severity};
 pub use store::{materialize, InstalledMod, Materialization, ModStore, StoredMod};
 

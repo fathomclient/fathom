@@ -25,6 +25,7 @@ import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.FathomOptimizationsClient;
+import net.fathom.optimizations.fabric.bridge.LauncherAccount;
 import net.fathom.optimizations.fabric.gfx.FathomScreen;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Gfx;
@@ -78,11 +79,12 @@ import net.fathom.optimizations.fabric.hud.HudEditorScreen;
  *
  * <h2>What it does not offer</h2>
  *
- * <p>Accounts. The game process holds a session it was handed at launch and has
- * no way to sign in or out; a button here could only open the launcher, which is
- * what the Fathom button already does. An "Accounts" button that turned out to
- * mean "open the launcher" would be the decorative-control problem again, in the
- * one place where the subject is somebody's Microsoft login.
+ * <p>A second sign-in. The account button shows the player's username and head
+ * and opens a textured account picker that can switch remembered accounts or
+ * start the launcher's Microsoft sign-in through the bridge (see
+ * {@code LauncherAccount}). The game never sees
+ * a password, a code or a token; it learns the public username and UUID when the
+ * launcher is done.
  */
 public final class FathomMenuScreen extends Screen implements FathomScreen {
 
@@ -235,6 +237,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private Motion scenesFade;
     /** Whether the scene picker is up. Same rule: it owns the pointer. */
     private boolean scenesOpen;
+    /** Textured account manager shown without redirecting to the launcher. */
+    private boolean accountOpen;
+    private Motion accountFade;
     private float openedAt;
     private int captureFrames;
     private boolean captured;
@@ -247,6 +252,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private float lockupTop;
     /** What the account button last did, and when it said so. */
     private String notice;
+    /** The last account notice already shown, so each is shown once. */
+    private int accountNoticeSerial;
     private float noticeAt;
     private Screen pendingScreen;
     private boolean pendingHub;
@@ -269,6 +276,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             return;
         }
         attached = true;
+        // Who the launcher has signed in, asked off the render thread. Only
+        // matters for a game Fathom did not start; the answer is ready a
+        // quarter-second later at worst.
+        LauncherAccount launcherAccount = account();
+        accountNoticeSerial = launcherAccount.noticeSerial();
+        launcherAccount.check();
         Gfx.restartClock();
         float now = Gfx.clock().seconds();
         if (transition == null) {
@@ -276,14 +289,17 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             dockOpening = new Motion(0f, Timing.STANDARD);
             creditsFade = new Motion(0f, Timing.PANEL);
             scenesFade = new Motion(0f, Timing.PANEL);
+            accountFade = new Motion(0f, Timing.PANEL);
             dockMark = Spring.accent(0f);
         }
         transition.open(now);
         dockOpening.set(0f, now);
         creditsFade.set(0f, now);
         scenesFade.set(0f, now);
+        accountFade.set(0f, now);
         creditsOpen = false;
         scenesOpen = false;
+        accountOpen = false;
         openedAt = now;
         pendingScreen = null;
         pendingHub = false;
@@ -364,7 +380,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             // Presses the account button, so the gate can photograph what it
             // says back. In a development client there is no launcher on the
             // other end, which is the case worth seeing.
-            openAccount(true);
+            openAccount(Runtime.bridge().startedByLauncher(), account());
         } else if ("nanovg".equalsIgnoreCase(target) || "nanovg-live".equalsIgnoreCase(target)) {
             // The renderer showcase. Development only: it needs the isolated
             // classpath `gradle runClient -PcaptureUi=nanovg[-live]` provides.
@@ -480,6 +496,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         notices(ui);
         scenes(ui);
         credits(ui);
+        accountPanel(ui);
 
         controls.drawOverlays(ui);
         ui.popTransform();
@@ -517,18 +534,55 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 CRUMB, Skin.TEXT_FAINT);
 
         String username = client.getSession() == null ? "" : client.getSession().getUsername();
-        String account = username.isEmpty() || username.startsWith("Player") ? "Sign in" : username;
+        String sessionUuid = client.getSession() == null ? "" : client.getSession().getUuid();
+        LauncherAccount launcherAccount = account();
+        if (launcherAccount.noticeSerial() != accountNoticeSerial) {
+            accountNoticeSerial = launcherAccount.noticeSerial();
+            if (launcherAccount.notice() != null) {
+                notice(launcherAccount.notice());
+            }
+        }
+        // The game's own session when it is a real account -- always, when
+        // Fathom started the game -- otherwise whoever the launcher has signed in.
+        boolean realSession = Runtime.bridge().startedByLauncher()
+                || Runtime.bridge().session().present()
+                || !LauncherAccount.isPlaceholder(username);
+        String account;
+        String headUuid;
+        if (realSession) {
+            account = username;
+            headUuid = sessionUuid;
+        } else if (launcherAccount.phase() == LauncherAccount.Phase.SIGNED_IN) {
+            account = launcherAccount.name();
+            headUuid = launcherAccount.uuid();
+        } else if (launcherAccount.phase() == LauncherAccount.Phase.SIGNING_IN
+                || launcherAccount.working()) {
+            account = "Signing in…";
+            headUuid = "";
+        } else {
+            account = "Sign in";
+            headUuid = "";
+        }
+        int head = AccountHead.texture(launcherAccount.launcherRoot(), headUuid);
         float accountWidth = Math.max(70f,
                 ui.measure(account, Type.CAPTION) + 13f + Skin.S2 * 3f);
         float versionWidth = ui.measure("1.8.9", Type.CAPTION) + Skin.S3 * 2f;
         Rect right = Skin.pixelAligned(ui,
                 new Rect(ui.width() - Skin.S3 - accountWidth - versionWidth,
                         Skin.S3, accountWidth + versionWidth, TOPBAR_HEIGHT - Skin.S2));
-        glassCluster(ui, right);
+        // The cluster wraps the account control alone. `1.8.9` is a fact, not a
+        // button, and it used to sit inside this same outlined rectangle -- so
+        // the version read as a control that ignored every click. `right` still
+        // measures both, because the version's right edge is positioned from
+        // the account's left edge and the pair must stay put.
+        // No `glassCluster` around this one. `chromeAction` already draws a
+        // filled, outlined, fully-round control; a cluster hugging it put a
+        // second border two pixels outside the first, which read as a box
+        // inside a box. One control, one container.
         Rect accountArea = new Rect(right.right() - accountWidth, right.y,
                 accountWidth, right.height);
-        if (chromeAction(ui, accountArea, account)) {
-            openAccount(username.isEmpty() || username.startsWith("Player"));
+        if (chromeAction(ui, accountArea, account, head)) {
+            openAccount(realSession, launcherAccount);
         }
         ui.textRight("1.8.9", accountArea.x - Skin.S2,
                 Controls.baseline(ui, right, Type.CAPTION),
@@ -545,22 +599,35 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // the launcher draws everything of that shape -- its rail items, its
         // switches, its icon controls -- at `--r-pill`. Half the height is the
         // whole way round.
-        float round = Skin.R_MEDIUM;
-        ui.shadow(area.x, area.y, area.right(), area.bottom(), round, 9f,
-                Skin.scaleAlpha(Skin.SHADOW, 0.54f));
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), round, Skin.fade(Skin.BACKGROUND, 0.82f));
-        ui.outline(area.x, area.y, area.right(), area.bottom(), round,
-                Skin.HAIRLINE, Skin.EDGE_SURFACE);
+        // `Skin.pill`, not `R_MEDIUM`. The paragraph above has always said these
+        // are drawn fully round like the launcher's own bar-height strips; the
+        // code said otherwise, which is why these clusters were a little
+        // squarer than everything around them.
+        float round = Skin.pill(area);
+        // A shadow or stroked ring this close to a shallow pill reads as a
+        // doubled, uneven outline at the rounded ends. The translucent fill is
+        // enough separation for top chrome; do not draw another edge around it.
+        // `fade` replaces alpha rather than scaling it, so this number is the
+        // whole story for the menu chrome -- it does not inherit the alpha on
+        // `BACKGROUND`. 0.82 was near-solid against the panorama; 0.62 matches
+        // the glass the Hub's panels now use, so the two screens read as the
+        // same material.
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), round, Skin.fade(Skin.BACKGROUND, 0.62f));
     }
 
-    private boolean chromeAction(Renderer ui, Rect area, String label) {
+    private boolean chromeAction(Renderer ui, Rect area, String label, int headTexture) {
         String id = "menu.account";
         Controls.State state = controls.state(id, area, !modal());
-        // A pill, like every other icon-led control here and in the launcher,
-        // inset from the cluster so its curve sits inside the cluster's own
-        // rather than running along it.
-        Rect pill = new Rect(area.x + 2f, area.y + 2f, area.width - 4f, area.height - 4f);
-        float round = Skin.innerRadius(Skin.R_MEDIUM, area, 2f);
+        // A pill, like every other icon-led control here and in the launcher.
+        //
+        // It used to be inset two pixels so its curve sat inside a surrounding
+        // cluster's. There is no surrounding cluster any more, so the inset
+        // only produced a visible gap between two borders -- and the radius was
+        // still being derived from `R_MEDIUM` after the cluster moved to
+        // `Skin.pill`, so the two curves did not even nest. It fills its area
+        // and is fully round, full stop.
+        Rect pill = area;
+        float round = Skin.pill(area);
         float press = tactilePress(state);
         float sink = Skin.snap(ui, press);
         // Drawn at rest, not only under the pointer. `--fill` is the launcher's
@@ -570,16 +637,29 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // label, and a label is not a control.
         int face = Skin.mix(Skin.mix(Skin.FILL, Skin.FILL_HOVER, state.hover),
                 Skin.FILL_PRESSED, press);
+        // The glass the cluster used to provide, now carried by the control
+        // itself: `--fill` alone is white at 4.5% and disappears against bright
+        // footage, which is exactly the readability the cluster was there for.
+        // Keep the account control on the same fill-only treatment as the route
+        // cluster. Shadows and explicit strokes both turn into an outer ring at
+        // this height.
+        ui.rounded(pill.x, pill.y + sink, pill.right(), pill.bottom() + sink, round,
+                Skin.fade(Skin.BACKGROUND, 0.62f));
         ui.rounded(pill.x, pill.y + sink, pill.right(), pill.bottom() + sink, round, face);
-        ui.outline(pill.x, pill.y + sink, pill.right(), pill.bottom() + sink, round, Skin.HAIRLINE,
-                Skin.mix(Skin.GLASS_EDGE, Skin.GLASS_EDGE_STRONG, state.hover));
         float focus = controls.towards(id + "#menu-focus", state.focused, Timing.HOVER_IN);
         float light = Math.max(state.hover, focus);
         float iconSize = 14f;
         float iconX = Skin.snap(ui, area.x + Skin.S2);
         float iconY = Skin.snap(ui, area.centreY() + sink - iconSize / 2f);
-        ui.icon(Icon.USER, iconX, iconY, iconSize,
-                VisualEffects.hoverBrighten(Skin.TEXT_FAINT, light));
+        if (headTexture > 0 && ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
+            // The player's face where the generic user glyph would be: same
+            // square, same place, a hair of rounding so it sits in the pill.
+            ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).image(headTexture, iconX, iconY,
+                    iconX + iconSize, iconY + iconSize, 2f, 1f, Skin.fade(Skin.BACKGROUND, 0.82f));
+        } else {
+            ui.icon(Icon.USER, iconX, iconY, iconSize,
+                    VisualEffects.hoverBrighten(Skin.TEXT_FAINT, light));
+        }
         ui.text(label, area.x + Skin.S2 * 2f + iconSize,
                 Controls.baseline(ui, area, Type.CAPTION) + sink, Type.CAPTION,
                 VisualEffects.hoverBrighten(Skin.TEXT_MUTED, light));
@@ -588,41 +668,131 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     }
 
     /**
-     * The account button: raise the launcher, and say what happened.
+     * The account button.
      *
-     * <p>There is no sign-in here and there cannot be one. The game process was
-     * handed a session at launch and has no way to obtain another; signing in is
-     * the launcher's job, and Microsoft's. So the button does the one useful
-     * thing available to it -- brings the launcher to the front, starting it if
-     * it is installed and closed -- and then reports the outcome.
+     * <p>When this game has no real account, it signs in: the launcher runs its
+     * own Microsoft sign-in, opening Microsoft's page in the browser, and the
+     * button follows it to the end through {@code LauncherAccount}. No second
+     * authentication implementation exists in the game, and nothing secret
+     * reaches it.
      *
-     * <p>Reporting it is the point. This button used to call
-     * {@code bridge.open()} when a bridge existed and nothing at all when one
-     * did not, which meant that in a game not started by Fathom -- a development
-     * client, for instance -- pressing "Sign in" did nothing and said nothing.
-     * {@code DiagnosticsSection} puts the rule plainly: a button that silently
-     * does nothing is the thing this client spent a milestone removing.
+     * <p>When it does have one -- always, when Fathom started it -- the button
+     * brings the launcher forward on its account, starting it if it is
+     * installed and closed.
+     *
+     * <p>Every press says what happened. A button that silently does nothing is
+     * the thing this client spent a milestone removing, and this one was exactly
+     * that for a game Fathom had not started.
      */
-    private void openAccount(boolean signedOut) {
-        net.fathom.optimizations.fabric.bridge.LauncherBridge bridge = Runtime.bridge();
-        if (bridge == null) {
-            notice(signedOut
-                    ? "Sign in from the Fathom launcher. This game was not started by one."
-                    : "Fathom is not attached to this game.");
+    private void openAccount(boolean realSession, LauncherAccount launcherAccount) {
+        accountOpen = true;
+        accountFade.to(1f, Gfx.clock().seconds());
+        launcherAccount.check();
+    }
+
+    private void closeAccount() {
+        accountOpen = false;
+        accountFade.to(0f, Gfx.clock().seconds(), Timing.SCREEN_EXIT, Ease.Curve.EXIT);
+    }
+
+    /**
+     * Account management without leaving the game. Tokens remain entirely in
+     * the launcher; this panel receives only public Minecraft profiles and the
+     * short device code Microsoft asks the player to type.
+     */
+    private void accountPanel(Renderer ui) {
+        float shown = accountFade.value(Gfx.clock().seconds());
+        if (shown <= 0.001f) {
             return;
         }
-        if (!bridge.open()) {
-            notice("The Fathom launcher did not answer. Start it and sign in there.");
-            return;
+        ui.pushAlpha(shown);
+        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.fade(0x000000, 0.62f));
+
+        LauncherAccount state = account();
+        net.fathom.optimizations.fabric.bridge.LauncherBridge.SavedAccount[] saved =
+                state.savedAccounts();
+        int visibleAccounts = Math.min(saved.length, 6);
+        float width = Math.min(390f, ui.width() - Skin.S8 * 2f);
+        float row = 42f;
+        float codeHeight = state.userCode().isEmpty() ? 0f : 62f;
+        float height = Skin.S5 + ui.lineHeight(Type.TITLE) + Skin.S4
+                + ui.lineHeight(Type.CAPTION) + Skin.S3 + codeHeight
+                + visibleAccounts * (row + Skin.S2) + Skin.S4 + Skin.H_MD + Skin.S5;
+        Rect panel = new Rect(Math.round((ui.width() - width) / 2f),
+                Math.round((ui.height() - height) / 2f), width, height);
+        VisualEffects.modalShadow(ui, panel, Skin.R_MEDIUM);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
+        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM,
+                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.BASE_RED, 0.45f));
+
+        float x = panel.x + Skin.S5;
+        float y = panel.y + Skin.S5;
+        float inner = panel.width - Skin.S5 * 2f;
+        ui.text("Account", x, y + ui.ascent(Type.TITLE), Type.TITLE, Skin.TEXT);
+        y += ui.lineHeight(Type.TITLE) + Skin.S4;
+        String summary = state.phase() == LauncherAccount.Phase.SIGNED_IN
+                ? "Signed in as " + state.name() + ". Changes apply to the next launch."
+                : state.working() ? "Waiting for Microsoft…" : "Choose an account or add one.";
+        ui.text(Text.fit(ui, summary, Type.CAPTION, inner), x,
+                y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_MUTED);
+        y += ui.lineHeight(Type.CAPTION) + Skin.S3;
+
+        if (!state.userCode().isEmpty()) {
+            ui.text("Paste this copied code at microsoft.com/link", x,
+                    y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_FAINT);
+            ui.text(state.userCode(), x, y + ui.lineHeight(Type.CAPTION)
+                    + ui.ascent(Type.TITLE), Type.TITLE, Skin.TEXT);
+            y += codeHeight;
         }
-        String detail = bridge.detail();
-        if (detail != null && !detail.isEmpty() && !"Connected.".equals(detail)) {
-            // The bridge says "Fathom is starting..." while it waits out its own
-            // cooldown, which is more use than anything this screen could invent.
-            notice(detail);
-        } else {
-            notice(signedOut ? "Opening Fathom. Sign in there." : "Opening Fathom.");
+
+        for (int index = 0; index < visibleAccounts; index++) {
+            net.fathom.optimizations.fabric.bridge.LauncherBridge.SavedAccount savedAccount = saved[index];
+            Rect area = new Rect(x, y, inner, row);
+            Controls.State choice = controls.state("menu.account.saved." + index, area,
+                    !state.working() && !savedAccount.active);
+            ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
+                    savedAccount.active ? Skin.FILL_PRESSED
+                            : Skin.mix(Skin.FILL, Skin.FILL_HOVER, choice.hover));
+            ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
+                    Skin.HAIRLINE, savedAccount.active ? Skin.ACCENT : Skin.GLASS_EDGE);
+            int head = AccountHead.texture(state.launcherRoot(), savedAccount.uuid);
+            float avatar = 26f;
+            if (head > 0 && ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
+                ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).image(head,
+                        area.x + Skin.S2, area.centreY() - avatar / 2f,
+                        area.x + Skin.S2 + avatar, area.centreY() + avatar / 2f,
+                        3f, 1f, Skin.FILL_SUNKEN);
+            } else {
+                ui.icon(Icon.USER, area.x + Skin.S2 + 5f, area.centreY() - 8f,
+                        16f, Skin.TEXT_FAINT);
+            }
+            ui.text(savedAccount.name, area.x + Skin.S2 * 2f + avatar,
+                    Controls.baseline(ui, area, Type.BODY_STRONG), Type.BODY_STRONG, Skin.TEXT);
+            ui.textRight(savedAccount.active ? "Active" : "Switch",
+                    area.right() - Skin.S3, Controls.baseline(ui, area, Type.CAPTION),
+                    Type.CAPTION, savedAccount.active ? Skin.ACCENT_STRONG : Skin.TEXT_FAINT);
+            if (choice.clicked) {
+                state.switchTo(savedAccount.uuid);
+            }
+            y += row + Skin.S2;
         }
+
+        Rect add = new Rect(x, panel.bottom() - Skin.S5 - Skin.H_MD,
+                Math.max(170f, inner - 96f - Skin.S2), Skin.H_MD);
+        if (controls.primary(ui, "menu.account.add", add,
+                saved.length == 0 ? "Sign in with Microsoft" : "Add Microsoft account",
+                !state.working())) {
+            state.signIn();
+        }
+        Rect close = new Rect(panel.right() - Skin.S5 - 88f, add.y, 88f, Skin.H_MD);
+        if (controls.secondary(ui, "menu.account.close", close, "Close", true)) {
+            closeAccount();
+        }
+        ui.popAlpha();
+    }
+
+    private static LauncherAccount account() {
+        return LauncherAccount.get(Runtime.bridge().gameDirectory());
     }
 
     private void notice(String message) {
@@ -814,9 +984,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     /** Whether a panel is over the screen, in which case nothing under it answers. */
     private boolean modal() {
         float now = Gfx.clock().seconds();
-        return creditsOpen || scenesOpen
+        return creditsOpen || scenesOpen || accountOpen
                 || creditsFade.value(now) > 0.001f
-                || scenesFade.value(now) > 0.001f;
+                || scenesFade.value(now) > 0.001f
+                || accountFade.value(now) > 0.001f;
     }
 
     /** Give the first observed down-frame a visible answer, even at low FPS. */
@@ -870,14 +1041,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         int face = Skin.mix(Skin.mix(MENU_GLASS, MENU_GLASS_HOVER, state.hover),
                 MENU_GLASS_PRESSED, press);
         int edge = Skin.mix(Skin.EDGE_SURFACE, Skin.scaleAlpha(Skin.ACTIVE_RED, 0.85f), emphasis);
-        // Rises a step under the pointer and presses into the surface, the
-        // press winning while held. Motion carries the hover, not light.
-        float lift = press * 1.2f - state.hover * 1.5f * (1f - press);
+        // Hover is colour and border only. This used to lift the entire visual
+        // by 1.5 units, including its label, as the pointer arrived.
+        float lift = press * 1.2f;
         float inset = press * 0.70f;
         Rect visual = Skin.pixelAligned(ui, Rect.of(area.x + inset, area.y + lift + inset * 0.18f,
                 area.right() - inset, area.bottom() + lift - inset * 0.18f));
-        // Rounded, but a rounded rectangle rather than a capsule.
-        float radius = Skin.R_MEDIUM;
+        float radius = Skin.pill(visual);
         ui.shadow(visual.x, visual.y, visual.right(), visual.bottom(), radius,
                 8f * (1f - press * 0.5f), Skin.scaleAlpha(Skin.SHADOW, 0.70f * (1f - press * 0.7f)));
         ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), radius, face);
@@ -885,10 +1055,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 Skin.BORDER_STANDARD, edge);
         float chevron = 12f;
         ui.icon(Icon.CHEVRON_RIGHT,
-                visual.right() - Skin.S4 - chevron - (1f - emphasis) * 6f,
+                visual.right() - Skin.S4 - chevron,
                 visual.centreY() - chevron / 2f, chevron,
                 Skin.scaleAlpha(Skin.HOT_RED, emphasis));
-        ui.textCentred(label, visual.centreX() + emphasis * 2f,
+        ui.textCentred(label, visual.centreX(),
                 Controls.baseline(ui, visual, Type.ROW_TITLE),
                 Type.ROW_TITLE, Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, emphasis));
         controls.focusRing(ui, state, area, radius);
@@ -921,7 +1091,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // No hover lift on these. The launcher's plain button does not rise
         // under the pointer either -- only its one big destination does -- and
         // five small things lifting in a row reads as the dock twitching.
-        VisualEffects.selectedButtonGlow(ui, visual, round, selected);
         ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), round, face);
         int hoverEdge = fathom ? Skin.fade(Skin.ACTIVE_RED, 0.78f) : Skin.EDGE_ELEVATED;
         int edge = Skin.mix(Skin.GLASS_EDGE, hoverEdge, state.hover);
@@ -1224,7 +1393,14 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         Rect bar = Skin.pixelAligned(ui, new Rect(Skin.S3, top + Skin.S1,
                 Skin.S3 + dot + Skin.S2 + lineWidth + statusWidth + Skin.S3,
                 FOOTER_HEIGHT - Skin.S2));
-        glassCluster(ui, bar);
+        // Deliberately no `glassCluster` here. Nothing in this cluster can be
+        // clicked -- it is a build number and a connection state -- and an
+        // outlined, shadowed, filled rounded rectangle is the shape this
+        // interface uses for things that *can* be. Drawing one around static
+        // text invites a click that does nothing, which is a worse outcome than
+        // the text being slightly harder to read against the footage. The
+        // geometry below is unchanged, so nothing moves; only the container is
+        // gone.
         float baseline = Controls.baseline(ui, bar, Type.CAPTION);
         float dotX = bar.x + Skin.S3;
         Rect statusDot = Rect.of(dotX, bar.centreY() - dot / 2f,
@@ -1325,6 +1501,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 closeCredits();
             } else if (scenesOpen) {
                 closeScenes();
+            } else if (accountOpen) {
+                closeAccount();
             }
             return true;
         }

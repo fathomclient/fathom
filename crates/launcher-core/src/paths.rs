@@ -61,6 +61,10 @@ pub enum PathError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataPaths {
     root: PathBuf,
+    /// The source checkout this build came from, when it is a development build
+    /// running out of that checkout's `target` directory. See
+    /// [`DataPaths::development_checkout`].
+    checkout: Option<PathBuf>,
 }
 
 impl DataPaths {
@@ -70,13 +74,44 @@ impl DataPaths {
             .ok_or(PathError::NoDataDirectory)?;
         Ok(Self {
             root: dirs.data_local_dir().to_path_buf(),
+            checkout: detect_development_checkout(),
         })
     }
 
     /// Point the layout at an explicit directory. Used by tests and by a
     /// portable install.
     pub fn rooted_at(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            checkout: None,
+        }
+    }
+
+    /// The same layout, treated as running from a development checkout at
+    /// `checkout`. For tests of the development artifact rules.
+    #[must_use]
+    pub fn with_development_checkout(mut self, checkout: impl Into<PathBuf>) -> Self {
+        self.checkout = Some(checkout.into());
+        self
+    }
+
+    /// The source checkout this executable was built from, if it is a
+    /// development build running from that checkout.
+    ///
+    /// # Why this exists
+    ///
+    /// A development build has no `resources/` beside it -- `target/debug` is
+    /// not a portable directory -- so it used to fall back to whatever jar was
+    /// last copied into application data by hand. Three different jars all
+    /// named `fathom-optimizations-0.3.0-hud.jar` ended up being launched that
+    /// way, none of them the one the Gradle build had just produced. A
+    /// development build now takes Fathom's client module from the checkout's
+    /// own build output and nowhere else.
+    ///
+    /// `None` in release builds, always, and for any executable that is not
+    /// under the checkout's `target` directory.
+    pub fn development_checkout(&self) -> Option<&Path> {
+        self.checkout.as_deref()
     }
 
     pub fn root(&self) -> &Path {
@@ -91,6 +126,22 @@ impl DataPaths {
     /// Parent of all profiles.
     pub fn profiles_dir(&self) -> PathBuf {
         self.root.join("profiles")
+    }
+
+    /// Encrypted account metadata and non-secret profile cache.
+    /// Access tokens themselves remain in the operating-system credential store.
+    pub fn accounts_dir(&self) -> PathBuf {
+        self.root.join("accounts")
+    }
+
+    /// Content-addressed and user-supplied mod storage shared by profiles.
+    pub fn mods_dir(&self) -> PathBuf {
+        self.root.join("mods")
+    }
+
+    /// First-party components installed by an updater rather than the installer.
+    pub fn resources_dir(&self) -> PathBuf {
+        self.root.join("resources")
     }
 
     /// The Fathom Profile collection: loadouts, one `<id>.json` each, plus
@@ -210,7 +261,7 @@ impl DataPaths {
                 return Some(beside);
             }
         }
-        let in_data = self.root.join("resources").join(relative);
+        let in_data = self.resources_dir().join(relative);
         in_data.is_file().then_some(in_data)
     }
 
@@ -219,6 +270,9 @@ impl DataPaths {
         for dir in [
             self.root.clone(),
             self.profiles_dir(),
+            self.accounts_dir(),
+            self.mods_dir(),
+            self.resources_dir(),
             self.libraries_dir(),
             self.asset_objects_dir(),
             self.asset_indexes_dir(),
@@ -227,6 +281,8 @@ impl DataPaths {
             self.cache_dir(),
             self.metadata_cache_dir(),
             self.temp_dir(),
+            self.java_dir(),
+            self.trash_dir(),
         ] {
             std::fs::create_dir_all(&dir).map_err(|source| PathError::Io {
                 path: dir.display().to_string(),
@@ -260,6 +316,26 @@ pub fn asset_object_relative(sha1: &str) -> Option<PathBuf> {
     }
     let prefix = sha1.get(..2)?;
     Some(PathBuf::from(prefix).join(sha1))
+}
+
+/// See [`DataPaths::development_checkout`].
+fn detect_development_checkout() -> Option<PathBuf> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    // `crates/launcher-core` -> the workspace root. A compile-time path, so it
+    // names the checkout this binary was built from rather than guessing.
+    let checkout = Path::new(env!("CARGO_MANIFEST_DIR")).parent()?.parent()?;
+    let checkout = std::fs::canonicalize(checkout).ok()?;
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|exe| std::fs::canonicalize(exe).ok())?;
+    let from_target = exe.starts_with(checkout.join("target"));
+    let has_module = checkout
+        .join("minecraft")
+        .join("fathom-optimizations")
+        .is_dir();
+    (from_target && has_module).then_some(checkout)
 }
 
 #[cfg(test)]
@@ -297,8 +373,13 @@ mod tests {
         let p = DataPaths::rooted_at(tmp.path().join("nested"));
         p.ensure().unwrap();
         assert!(p.profiles_dir().is_dir());
+        assert!(p.accounts_dir().is_dir());
+        assert!(p.mods_dir().is_dir());
+        assert!(p.resources_dir().is_dir());
         assert!(p.asset_objects_dir().is_dir());
         assert!(p.versions_dir().is_dir());
+        assert!(p.java_dir().is_dir());
+        assert!(p.trash_dir().is_dir());
     }
 
     #[test]

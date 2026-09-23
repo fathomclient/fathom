@@ -484,6 +484,7 @@ mod tests {
             profile: AccountProfile {
                 id: "uuid-1".into(),
                 name: "Steve".into(),
+                ..AccountProfile::default()
             },
             access_token: Secret::new("token"),
             kind,

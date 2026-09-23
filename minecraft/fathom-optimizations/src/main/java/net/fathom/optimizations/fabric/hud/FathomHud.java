@@ -382,9 +382,31 @@ public final class FathomHud {
             // the fresh/default configuration that is every textual widget, so
             // the Fathom renderer does not open a frame the player did not ask
             // for. This also lets resource packs retain ownership of the font.
+            //
+            // With HUD caching on, the slow-changing ones are drawn as one
+            // recorded layer (see HudLayerCache) and only the realtime ones --
+            // input feedback -- are drawn from Java every frame.
+            boolean cached = !editing && net.fathom.optimizations.fabric.perf.PerfLayer.hudCache;
+            if (cached) {
+                long signature = layerSignature(client, screenWidth, screenHeight);
+                if (signature != 0L
+                        && net.fathom.optimizations.fabric.perf.HudLayerCache.beginFrame(signature, System.nanoTime())) {
+                    try {
+                        for (int index = 0; index < drawing.size(); index++) {
+                            Drawable each = drawing.get(index);
+                            if (!usesFathom(each.owner) && layered(each)) {
+                                drawOne(client, minecraftFont, each.renderer, each.placement,
+                                        screenWidth, screenHeight, false);
+                            }
+                        }
+                    } finally {
+                        net.fathom.optimizations.fabric.perf.HudLayerCache.endRecording();
+                    }
+                }
+            }
             for (int index = 0; index < drawing.size(); index++) {
                 Drawable each = drawing.get(index);
-                if (!usesFathom(each.owner)) {
+                if (!usesFathom(each.owner) && !(cached && layered(each))) {
                     drawOne(client, minecraftFont, each.renderer, each.placement,
                             screenWidth, screenHeight, editing);
                 }
@@ -419,6 +441,42 @@ public final class FathomHud {
                 net.fathom.optimizations.core.instrument.Probe.Section.HUD, probe);
     }
 
+    /** Whether a drawable belongs in the cached layer rather than the realtime pass. */
+    private static boolean layered(Drawable each) {
+        return net.fathom.optimizations.fabric.perf.HudLayerCache.cacheable(each.renderer.id());
+    }
+
+    /**
+     * Everything the cached layer's content depends on besides time: which
+     * widgets are in it and where (placements are immutable, so a move is a
+     * new object), the window and GUI size, the layout, and every setting.
+     * Zero when the layer would be empty.
+     */
+    private long layerSignature(MinecraftClient client, int screenWidth, int screenHeight) {
+        long hash = 0xcbf29ce484222325L;
+        int members = 0;
+        for (int index = 0; index < drawing.size(); index++) {
+            Drawable each = drawing.get(index);
+            if (usesFathom(each.owner) || !layered(each)) {
+                continue;
+            }
+            members++;
+            hash = (hash ^ System.identityHashCode(each.renderer)) * 0x100000001b3L;
+            hash = (hash ^ System.identityHashCode(each.placement)) * 0x100000001b3L;
+        }
+        if (members == 0) {
+            return 0L;
+        }
+        hash = (hash ^ screenWidth) * 0x100000001b3L;
+        hash = (hash ^ screenHeight) * 0x100000001b3L;
+        hash = (hash ^ client.width) * 0x100000001b3L;
+        hash = (hash ^ client.height) * 0x100000001b3L;
+        hash = (hash ^ System.identityHashCode(layout)) * 0x100000001b3L;
+        hash = (hash ^ net.fathom.optimizations.core.module.Setting.revision()) * 0x100000001b3L;
+        hash = (hash ^ Float.floatToIntBits(interfaceScale())) * 0x100000001b3L;
+        return hash == 0L ? 1L : hash;
+    }
+
     /** A widget that is going to be drawn, and where. */
     private static final class Drawable {
         HudWidget renderer;
@@ -440,6 +498,11 @@ public final class FathomHud {
         // Read once at class load: this is asked per widget, per frame.
         if (FONT_OVERRIDE != null) {
             return FONT_OVERRIDE.booleanValue();
+        }
+        // The benchmark isolates the typeface: with it off, every widget draws
+        // through Minecraft's renderer and no Fathom frame is opened for text.
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowFathomFont()) {
+            return false;
         }
         return HudStyle.fontIsFathom(module);
     }
@@ -495,7 +558,7 @@ public final class FathomHud {
             boolean editing) {
         long profiled = WidgetProfile.start();
         Snap.Box box = box(client, font, renderer, placement, screenWidth, screenHeight);
-        float scale = placement.scale();
+        float scale = placement.scale() * interfaceScale();
 
         GlStateManager.pushMatrix();
         // Scale about the widget's own top-left rather than the screen origin, so
@@ -576,7 +639,8 @@ public final class FathomHud {
             int screenWidth,
             int screenHeight) {
         renderer.align(placement.anchor().horizontal());
-        float scale = placement.scale();
+        float interfaceScale = interfaceScale();
+        float scale = placement.scale() * interfaceScale;
         int width;
         int height;
         if (renderer.visible(client)) {
@@ -590,8 +654,10 @@ public final class FathomHud {
             width = Math.round((placeholderWidth(font, renderer)) * scale);
             height = Math.round((placeholderHeight(font)) * scale);
         }
-        int x = placement.anchor().x(screenWidth, width, placement.offsetX());
-        int y = placement.anchor().y(screenHeight, height, placement.offsetY());
+        int x = placement.anchor().x(
+                screenWidth, width, Math.round(placement.offsetX() * interfaceScale));
+        int y = placement.anchor().y(
+                screenHeight, height, Math.round(placement.offsetY() * interfaceScale));
         if (width <= screenWidth) {
             x = Math.max(0, Math.min(x, screenWidth - width));
         }
@@ -599,6 +665,19 @@ public final class FathomHud {
             y = Math.max(0, Math.min(y, screenHeight - height));
         }
         return new Snap.Box(x, y, width, height);
+    }
+
+    /**
+     * The one global multiplier for Fathom-owned HUD geometry.
+     *
+     * <p>Widget placements remain stored in their unscaled, Minecraft-GUI coordinate
+     * space. Applying the preference here, where both drawing and hit-box measurement
+     * pass, keeps anchors, text, plates and editor interaction on the same transform and
+     * prevents a scale change from being written back into the saved layout.
+     */
+    private static float interfaceScale() {
+        float scale = net.fathom.optimizations.fabric.Runtime.uiScale();
+        return Float.isNaN(scale) || scale <= 0f ? 1f : scale;
     }
 
     /** Every enabled widget's rectangle, newest on top, for hit testing and snapping. */

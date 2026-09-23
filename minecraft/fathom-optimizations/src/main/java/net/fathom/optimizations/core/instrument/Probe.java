@@ -59,7 +59,41 @@ public final class Probe {
         /** Optimization hooks: the frame cap policy, the font metrics cache. */
         HOOKS,
         /** Everything else Fathom does in a frame, for the arithmetic to close. */
-        OTHER
+        OTHER,
+        /**
+         * Sections below were added for the automated benchmark.
+         *
+         * <p>They are deliberately coarse. A section only exists where there is
+         * a single place to open and close it: a section spread over several
+         * call sites ends up measuring whichever ones somebody remembered, and
+         * reports the rest as free.
+         */
+        /** Opening and closing a NanoVG frame, including its GL state guard. */
+        NANOVG,
+        /** Fathom's own glyph rasterisation and text drawing. */
+        FONT,
+        /** Vanilla's HUD pass, for scale against Fathom's. */
+        VANILLA_HUD,
+        /** The whole world render pass. */
+        WORLD,
+        /** One client tick. */
+        TICK,
+        /** The complete MinecraftClient.runGameLoop boundary. */
+        GAME_LOOP,
+        /** EntityRenderer.updateCameraAndRender (GameRenderer.render in Yarn). */
+        CAMERA_AND_RENDER,
+        /** RenderGlobal.renderEntities (WorldRenderer.renderEntities in Yarn). */
+        RENDER_ENTITIES,
+        /** RenderGlobal.sortAndRender / the chunk-layer path. */
+        CHUNK_RENDER,
+        /** RenderManager.doRenderEntity / the outer entity dispatch. */
+        RENDER_ENTITY,
+        /** Time spent inside Fathom callbacks entered from Minecraft Mixins. */
+        MIXIN_CALLBACKS,
+        /** Direct Fathom dispatch from injected frame/tick methods. */
+        EVENT_DISPATCH,
+        /** Fathom GL state capture/restore and frame wrappers. */
+        GL_WRAPPERS
     }
 
     private static final int COUNT = Section.values().length;

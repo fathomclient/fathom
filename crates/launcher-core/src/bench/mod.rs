@@ -175,8 +175,16 @@ pub fn differences(baseline: &RunReport, candidate: &RunReport) -> Vec<String> {
         if was != now {
             out.push(format!(
                 "{field}: {} → {}",
-                if was.is_empty() { "(not recorded)" } else { was },
-                if now.is_empty() { "(not recorded)" } else { now }
+                if was.is_empty() {
+                    "(not recorded)"
+                } else {
+                    was
+                },
+                if now.is_empty() {
+                    "(not recorded)"
+                } else {
+                    now
+                }
             ));
         }
     }
@@ -305,7 +313,9 @@ pub fn summarise(runs: &[RunReport]) -> String {
 
 /// The headline: what Fathom costs with everything switched off.
 fn write_overhead(out: &mut String, runs: &[RunReport], baseline: Option<&RunReport>) {
-    let candidate = runs.iter().find(|run| run.configuration == "d-performance-off");
+    let candidate = runs
+        .iter()
+        .find(|run| run.configuration == "d-performance-off");
     let overhead = match (baseline, candidate) {
         (Some(base), Some(run)) => {
             let delta = compare(base, run);
@@ -344,15 +354,23 @@ fn write_runs(out: &mut String, runs: &[RunReport]) {
          | --- | --- | --- | --- | --- | --- | --- | --- |\n",
     );
     for run in runs {
-        let fathom = run
-            .fathom
-            .as_ref()
-            .map_or_else(|| "—".to_owned(), |cost| format!("{:.3}", cost.millis_per_frame));
+        let fathom = run.fathom.as_ref().map_or_else(
+            || "—".to_owned(),
+            |cost| format!("{:.3}", cost.millis_per_frame),
+        );
         let _ = writeln!(
             out,
             "| {} | {} | {} | {:.2} | {:.2} | {:.2} | {:.1} | {fathom} |",
-            if run.configuration.is_empty() { "(unnamed)" } else { &run.configuration },
-            if run.scenario.is_empty() { "—" } else { &run.scenario },
+            if run.configuration.is_empty() {
+                "(unnamed)"
+            } else {
+                &run.configuration
+            },
+            if run.scenario.is_empty() {
+                "—"
+            } else {
+                &run.scenario
+            },
             run.frames.sample_count,
             run.frames.mean_frame_time_millis,
             run.frames.p95_frame_time_millis,
@@ -395,7 +413,10 @@ fn write_deltas(out: &mut String, runs: &[RunReport], baseline: &RunReport) {
     if !blocked.is_empty() {
         out.push_str("### Not comparable\n\n");
         for (configuration, reasons) in blocked {
-            let _ = writeln!(out, "**{configuration}** — settings differ from the baseline:\n");
+            let _ = writeln!(
+                out,
+                "**{configuration}** — settings differ from the baseline:\n"
+            );
             for reason in reasons {
                 let _ = writeln!(out, "- {reason}");
             }
@@ -408,7 +429,11 @@ fn write_deltas(out: &mut String, runs: &[RunReport], baseline: &RunReport) {
 fn write_sections(out: &mut String, runs: &[RunReport]) {
     let with_sections: Vec<&RunReport> = runs
         .iter()
-        .filter(|run| run.fathom.as_ref().is_some_and(|cost| !cost.sections.is_empty()))
+        .filter(|run| {
+            run.fathom
+                .as_ref()
+                .is_some_and(|cost| !cost.sections.is_empty())
+        })
         .collect();
     let Some(first) = with_sections.first() else {
         return;
@@ -438,7 +463,11 @@ fn write_sections(out: &mut String, runs: &[RunReport]) {
         };
         let _ = write!(out, "| {} | ", run.configuration);
         for name in &names {
-            let _ = write!(out, "{:.3} | ", cost.sections.get(*name).copied().unwrap_or(0.0));
+            let _ = write!(
+                out,
+                "{:.3} | ",
+                cost.sections.get(*name).copied().unwrap_or(0.0)
+            );
         }
         let _ = writeln!(out, "{:.2} |", cost.worst_frame_millis);
     }
@@ -520,7 +549,10 @@ mod tests {
 
     #[test]
     fn overhead_is_the_gap_between_the_loader_and_fathom_with_everything_off() {
-        let runs = vec![run("b-loader", 5.00, "8"), run("d-performance-off", 5.10, "8")];
+        let runs = vec![
+            run("b-loader", 5.00, "8"),
+            run("d-performance-off", 5.10, "8"),
+        ];
         let summary = summarise(&runs);
         // 2% is inside the 3% target.
         assert!(summary.contains("+2.0%"), "{summary}");
@@ -529,7 +561,10 @@ mod tests {
 
     #[test]
     fn overhead_above_the_limit_says_stop() {
-        let runs = vec![run("b-loader", 5.00, "8"), run("d-performance-off", 5.50, "8")];
+        let runs = vec![
+            run("b-loader", 5.00, "8"),
+            run("d-performance-off", 5.50, "8"),
+        ];
         let summary = summarise(&runs);
         assert!(summary.contains("ABOVE LIMIT"), "{summary}");
     }
@@ -538,12 +573,18 @@ mod tests {
     fn a_settings_difference_refuses_the_comparison_rather_than_reporting_it() {
         // The rule the whole module exists for: two runs at different render
         // distances are two measurements of render distance.
-        let runs = vec![run("b-loader", 5.00, "8"), run("d-performance-off", 4.00, "4")];
+        let runs = vec![
+            run("b-loader", 5.00, "8"),
+            run("d-performance-off", 4.00, "4"),
+        ];
         let summary = summarise(&runs);
         assert!(summary.contains("Not measured"), "{summary}");
         assert!(summary.contains("not comparable"), "{summary}");
         assert!(summary.contains("renderDistance: 8 → 4"), "{summary}");
-        assert!(!summary.contains("-20.0%"), "a delta must not be printed: {summary}");
+        assert!(
+            !summary.contains("-20.0%"),
+            "a delta must not be printed: {summary}"
+        );
     }
 
     #[test]
@@ -584,7 +625,9 @@ mod tests {
         assert_eq!(cost.sections.len(), 2);
 
         let summary = write_summary(directory.path()).unwrap();
-        assert!(std::fs::read_to_string(summary).unwrap().contains("Where Fathom's time went"));
+        assert!(std::fs::read_to_string(summary)
+            .unwrap()
+            .contains("Where Fathom's time went"));
     }
 
     #[test]

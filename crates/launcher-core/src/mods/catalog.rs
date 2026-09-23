@@ -53,6 +53,18 @@ pub const FATHOM_OPTIMIZATIONS: &str = "fathom-optimizations";
 /// installing whatever now occupies the slug.
 pub const MODRINTH_FABRIC_API: &str = "legacy-fabric-api";
 
+/// Legacy OptiFabric on Modrinth: the compatibility bridge that lets an
+/// OptiFine jar run under Legacy Fabric.
+///
+/// MPL-2.0, so unlike OptiFine itself this one *may* be distributed and
+/// fetched. Verified 2026-09-17 against `api.modrinth.com`: the
+/// `2.3.6+1.3.1-1.13.2` build is tagged for the `legacy-fabric` loader, lists
+/// 1.8.9 among its game versions, and declares `fabricloader >=0.15.4` — Fathom
+/// ships 0.19.3. Its changelog for that build is "fix deadlock on loader 0.17+
+/// (mixin 0.16.0+)", which is why an older build must not be pinned here: 2.2.0
+/// predates the fix for the loader generation Fathom actually runs.
+pub const MODRINTH_OPTIFABRIC: &str = "legacy-optifabric";
+
 fn id(raw: &str) -> ModId {
     // Every literal in this file is checked by a test, so a panic here would be
     // a compile-time-shaped bug rather than a runtime one.
@@ -201,8 +213,7 @@ fn fathom_optimizations() -> ModDefinition {
                     .into(),
             },
         ],
-        summary: "Fathom's own 1.8.9 module: optimizations, the in-game hub and the HUD."
-            .into(),
+        summary: "Fathom's own 1.8.9 module: optimizations, the in-game hub and the HUD.".into(),
         homepage: None,
     }
 }
@@ -539,7 +550,9 @@ mod tests {
             .lines()
             .find_map(|line| line.trim().strip_prefix("mod_version="))
             .expect("gradle.properties declares a version");
-        let catalogued = find(&id(FATHOM_OPTIMIZATIONS)).expect("our own entry").version;
+        let catalogued = find(&id(FATHOM_OPTIMIZATIONS))
+            .expect("our own entry")
+            .version;
         assert_eq!(
             catalogued.as_str(),
             built.trim(),

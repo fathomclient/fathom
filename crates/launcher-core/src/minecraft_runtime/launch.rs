@@ -437,6 +437,47 @@ const SUPPRESSED_ENVIRONMENT: [&str; 8] = [
 ///
 /// `spec.jvm_args` comes from [`super::jvm_args::build_jvm_args`], which has
 /// already dropped anything the policy refuses.
+/// The JVM to launch the game with: `javaw.exe` when there is one beside the
+/// `java.exe` we resolved.
+///
+/// # Why this is not just `CREATE_NO_WINDOW`
+///
+/// The child is already created with `CREATE_NO_WINDOW` (see
+/// `process::suppress_console_window`), and on a machine whose default terminal
+/// is the classic console host that is enough. It is not enough everywhere:
+/// with Windows Terminal set as the default terminal application, launching a
+/// **console-subsystem** binary can still bring up a terminal window, because
+/// the decision about whether to draw one moved out of that flag's reach.
+///
+/// `java.exe` is a console-subsystem binary. `javaw.exe` is the same JVM built
+/// as a GUI-subsystem one, ships beside it in every JDK and JRE, and is what
+/// Minecraft launchers have used for this reason for as long as there have been
+/// Minecraft launchers. Redirected stdout and stderr still work -- the pipes
+/// `process::spawn` installs are inherited exactly as before -- so nothing is
+/// lost from the log or from the game console window.
+///
+/// Falls back to whatever was resolved when there is no `javaw.exe` beside it,
+/// which is every non-Windows platform and an unusual Windows runtime. A
+/// missing `javaw.exe` must never stop a launch that would otherwise work.
+fn windowless_java(resolved: &Path) -> PathBuf {
+    if !cfg!(windows) {
+        return resolved.to_path_buf();
+    }
+    let Some(name) = resolved.file_name().and_then(|name| name.to_str()) else {
+        return resolved.to_path_buf();
+    };
+    // Only ever java.exe -> javaw.exe. Anything else was chosen deliberately.
+    if !name.eq_ignore_ascii_case("java.exe") {
+        return resolved.to_path_buf();
+    }
+    let windowless = resolved.with_file_name("javaw.exe");
+    if windowless.is_file() {
+        windowless
+    } else {
+        resolved.to_path_buf()
+    }
+}
+
 pub fn build_plan(
     spec: &LaunchSpec<'_>,
     context: &LaunchContext,
@@ -463,7 +504,7 @@ pub fn build_plan(
     }
 
     Ok(LaunchPlan {
-        java: spec.java.to_path_buf(),
+        java: windowless_java(spec.java),
         java_major: spec.java_major,
         working_dir: context.game_dir.clone(),
         profile_dir: spec.profile_dir.to_path_buf(),
@@ -592,6 +633,42 @@ mod tests {
     /// A loader's game arguments are appended, in order, after the vanilla
     /// ones. Order matters: Fabric reads its arguments positionally in places,
     /// and prepending them would put them where the game expects a username.
+    /// The launcher used to run `java.exe`, which is a console-subsystem
+    /// binary; on a machine whose default terminal is Windows Terminal that can
+    /// put a terminal window on screen at every launch even with
+    /// `CREATE_NO_WINDOW` set.
+    #[test]
+    #[cfg(windows)]
+    fn a_windows_launch_prefers_javaw_when_it_is_there() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let java = directory.path().join("java.exe");
+        std::fs::write(&java, b"stub").expect("java.exe");
+
+        // No javaw.exe beside it: the resolved runtime stands, because a
+        // missing javaw must never stop a launch that would otherwise work.
+        assert_eq!(windowless_java(&java), java);
+
+        std::fs::write(directory.path().join("javaw.exe"), b"stub").expect("javaw.exe");
+        assert_eq!(
+            windowless_java(&java),
+            directory.path().join("javaw.exe"),
+            "javaw.exe beside java.exe should be preferred"
+        );
+    }
+
+    /// Only that one substitution. A runtime somebody named something else was
+    /// chosen deliberately and is not ours to second-guess.
+    #[test]
+    #[cfg(windows)]
+    fn no_other_runtime_name_is_rewritten() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let odd = directory.path().join("jre-custom.exe");
+        std::fs::write(&odd, b"stub").expect("the runtime");
+        std::fs::write(directory.path().join("javaw.exe"), b"stub").expect("javaw.exe");
+
+        assert_eq!(windowless_java(&odd), odd);
+    }
+
     #[test]
     fn loader_game_arguments_are_appended_after_the_vanilla_ones() {
         let cp = classpath();

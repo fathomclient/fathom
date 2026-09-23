@@ -1,6 +1,7 @@
 [package]
 name = "launcher-ui"
-description = "Desktop interface for the launcher."
+description = "Compatibility command for Fathom's canonical desktop launcher."
+build = "build.rs"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,64 +10,23 @@ repository.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "fathom"
+name = "fathom-ui"
 path = "src/main.rs"
 
 [features]
-default = []
-# Forwards to launcher-core's dev-auth. Compiles a fake local identity so the
-# interface and install pipeline can be built while Microsoft application
-# approval is pending. NEVER enable for a release build: launcher-core's
-# `auth/development.rs` turns that combination into a compile error.
-dev-auth = ["launcher-core/dev-auth"]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol", "launcher-desktop/custom-protocol"]
+dev-auth = ["launcher-desktop/dev-auth"]
 
 [dependencies]
-launcher-core.workspace = true
-# Pinned to 0.13: the architecture research flagged iced API churn as its main
-# risk, and 0.13 is the widely-exercised release. Moving to 0.14 is a
-# deliberate, reviewed change, not a drive-by bump.
-#
-# Both renderers are compiled in, and iced picks at runtime: `wgpu` first,
-# `tiny-skia` if no adapter can be created (a VM, a remote desktop session, a
-# driver that will not start). ARCHITECTURE.md 2.2 reserved exactly this move
-# for "something that genuinely needs a GPU", and the full-window animated
-# background is it. Measured on the tiny-skia path, one bilinear full-window
-# blit of the background costs 21.7 ms at 1920x1010 and 39.2 ms at 2560x1380 --
-# the *destination* pixel count is the whole cost, so no amount of shrinking the
-# footage helps. That single number is why the previous build ran at 6 fps and
-# 384x216. On the GPU the same scale-and-composite is free, and the crossfade
-# between two backgrounds -- which doubles the blit on the CPU path -- costs
-# nothing.
-iced = { version = "0.13", default-features = false, features = [
-    "wgpu",
-    "tiny-skia",
-    "image-without-codecs",
-    # Icons are SVG, drawn from `assets/icons`. Vector rather than a glyph font
-    # because the icon set is meant to be replaced with custom artwork later,
-    # and swapping a file must not mean re-fitting a font or touching any page.
-    "svg",
-] }
-iced_futures = { version = "0.13", features = ["thread-pool"] }
-# Native file picker, used only for "choose a mod jar". No default features:
-# on Windows and macOS this is a thin wrapper over the OS dialog.
-rfd = { version = "0.17", default-features = false }
-tracing.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-# Background source footage is preprocessed at build time. Runtime decoding is
-# limited to small embedded JPEG frames for the one selected background.
-image = { version = "0.24", default-features = false, features = ["jpeg", "png"] }
+# This command runs without Vite, so it embeds the same production bundle.
+launcher-desktop = { path = "../launcher-desktop" }
+# Directly declared for tauri-build's manifest/resource validation. Runtime
+# code remains entirely in launcher-desktop.
+tauri = { version = "2", features = [] }
 
-[dev-dependencies]
-tempfile.workspace = true
-# Test-only, and never linked into a shipped binary. It is the same parser iced
-# uses for the icon set, pinned to the version iced resolves, so the test that
-# checks every icon parses is checking it the way the renderer will.
-usvg = { version = "0.42", default-features = false }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-# On Linux the portal backend is needed; it uses pollster, not an async runtime.
-rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
 
 [lints.rust]
 unsafe_code = "forbid"

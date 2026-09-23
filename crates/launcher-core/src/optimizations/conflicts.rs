@@ -196,7 +196,7 @@ pub fn as_map(standdowns: &[Standdown]) -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mods::{ModId, ProfileMod, ModSource};
+    use crate::mods::{ModId, ModSource, ProfileMod};
     use crate::profiles::ProfileId;
 
     fn profile_with(mod_id: &str, enabled: bool) -> Profile {

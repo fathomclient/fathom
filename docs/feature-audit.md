@@ -69,7 +69,7 @@ Recovery, the config bridge and the four page rebuilds.
 | --- | --- | --- |
 | Preset (None / Safe defaults / Custom) | WORKING | Rewrites the switch map; toggling anything moves the profile to Custom. |
 | `jvm.disable-explicit-gc` toggle | WORKING | Emits `-XX:+DisableExplicitGC`. Tested. |
-| `jvm.compile-huge-methods` toggle | WORKING | Emits `-XX:-DontCompileHugeMethods` plus a larger code cache. Tested. |
+| `jvm.compile-huge-methods` toggle | WORKING, **but inert on 1.8.9** | Emits `-XX:-DontCompileHugeMethods` plus a larger code cache. Tested. The flags are passed correctly; they just have nothing to act on — one method in the game exceeds the 8000-byte limit and it runs once at startup. Measured 2026-09-17; see `docs/performance/benchmark-methodology.md` §3. |
 | 18 game-side optimizations | **NOT CONTROLS** | Rendered as rows with a status (`Core written` / `Planned`) and the word "Unavailable" where a toggle would be. They cannot act until the module ships, so they are not offered as switches. |
 | Memory / Java summary | WORKING | Read-only; edits link to Profiles. |
 

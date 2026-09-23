@@ -62,6 +62,12 @@ public abstract class MinecraftClientMenuMixin {
 
     @ModifyVariable(method = "setScreen(Lnet/minecraft/client/gui/screen/Screen;)V", at = @At("HEAD"), argsOnly = true)
     private Screen fathom$ownMenu(Screen screen) {
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.OPTIFINE_OVERLAP_HOOK);
+        if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowCoreHooks()
+                || !net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowOptifineOverlapHooks()) {
+            return screen;
+        }
         if (!fathom$enabled()) {
             return screen;
         }

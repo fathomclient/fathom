@@ -548,9 +548,8 @@ fn migrate_v3_to_v4(mut value: serde_json::Value) -> serde_json::Value {
         return value;
     };
 
-    rendering.retain(|id, _| {
-        crate::optimizations::find(id).is_some_and(|entry| entry.is_actionable())
-    });
+    rendering
+        .retain(|id, _| crate::optimizations::find(id).is_some_and(|entry| entry.is_actionable()));
 
     value
 }
@@ -948,7 +947,10 @@ mod tests {
         assert!(migrated["mods"]["mods"][0].get("source").is_none());
 
         // The module, but under a loader that cannot load it.
-        assert_eq!(migrate_v4_to_v5(v4("vanilla", &module_entry()))["kind"], "custom");
+        assert_eq!(
+            migrate_v4_to_v5(v4("vanilla", &module_entry()))["kind"],
+            "custom"
+        );
 
         // Nothing at all.
         assert_eq!(migrate_v4_to_v5(v4("vanilla", ""))["kind"], "custom");

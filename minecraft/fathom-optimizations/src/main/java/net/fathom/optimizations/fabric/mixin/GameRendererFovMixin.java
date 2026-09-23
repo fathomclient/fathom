@@ -42,34 +42,73 @@ public abstract class GameRendererFovMixin {
 
     @Inject(method = "getFov(FZ)F", at = @At("RETURN"), cancellable = true)
     private void fathom$zoom(float tickDelta, boolean changingFov, CallbackInfoReturnable<Float> info) {
-        if (!changingFov || Runtime.hud() == null) {
-            return;
+        long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        try {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()) return;
+            if (!changingFov || Runtime.hud() == null) return;
+            float factor = Zoom.factor();
+            if (factor > 1f) info.setReturnValue(Float.valueOf(info.getReturnValueF() / factor));
+        } finally {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
         }
-        float factor = Zoom.factor();
-        if (factor <= 1f) {
-            return;
-        }
-        info.setReturnValue(Float.valueOf(info.getReturnValueF() / factor));
     }
 
     @Redirect(method = {"render(FJ)V", "tick()V"},
             at = @At(value = "FIELD", target = "Lnet/minecraft/client/option/GameOptions;sensitivity:F",
                     opcode = org.objectweb.asm.Opcodes.GETFIELD))
     private float fathom$zoomSensitivity(GameOptions options) {
-        return Zoom.sensitivity(options.sensitivity);
+        long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        try {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.OPTIFINE_OVERLAP_HOOK);
+            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()
+                    || !net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowOptifineOverlapHooks()) {
+                return options.sensitivity;
+            }
+            return Zoom.sensitivity(options.sensitivity);
+        } finally {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
+        }
     }
 
     @Redirect(method = {"render(FJ)V", "tick()V"},
             at = @At(value = "FIELD", target = "Lnet/minecraft/client/option/GameOptions;smoothCameraEnabled:Z",
                     opcode = org.objectweb.asm.Opcodes.GETFIELD))
     private boolean fathom$zoomSmoothCamera(GameOptions options) {
-        return Zoom.smoothCamera(options.smoothCameraEnabled);
+        long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        try {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.OPTIFINE_OVERLAP_HOOK);
+            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()
+                    || !net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowOptifineOverlapHooks()) {
+                return options.smoothCameraEnabled;
+            }
+            return Zoom.smoothCamera(options.smoothCameraEnabled);
+        } finally {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
+        }
     }
 
     @Inject(method = "renderHand(FI)V", at = @At("HEAD"), cancellable = true)
     private void fathom$hideHandWhileZoomed(float tickDelta, int anaglyphFilter, CallbackInfo info) {
-        if (Zoom.hideHand()) {
-            info.cancel();
+        long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
+        try {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
+                    net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
+            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()) return;
+            if (Zoom.hideHand()) info.cancel();
+        } finally {
+            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
+                    net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
         }
     }
 }

@@ -345,6 +345,7 @@ pub fn spawn(plan: &LaunchPlan) -> Result<GameProcess, ProcessError> {
     let log = open_log(plan.log_file())?;
 
     let mut command = Command::new(plan.java());
+    suppress_console_window(&mut command);
     command
         .args(plan.argv_exposing_secrets())
         .current_dir(plan.working_dir())
@@ -415,6 +416,19 @@ pub fn spawn(plan: &LaunchPlan) -> Result<GameProcess, ProcessError> {
         tail,
     })
 }
+
+/// Minecraft's output is already captured into Fathom's log/console window.
+/// Prevent Windows from creating a second, native terminal for the Java child.
+#[cfg(windows)]
+fn suppress_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt as _;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn suppress_console_window(_command: &mut Command) {}
 
 fn open_log(path: &Path) -> Result<File, ProcessError> {
     if let Some(parent) = path.parent() {

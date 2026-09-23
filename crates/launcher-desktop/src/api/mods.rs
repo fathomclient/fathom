@@ -316,7 +316,6 @@ fn warning_for(reason: &DisabledReason) -> Option<String> {
     }
 }
 
-
 /// The result of importing a jar the user chose.
 ///
 /// `cancelled` is a first-class answer rather than an error: closing a file
@@ -389,7 +388,6 @@ pub fn view(core: &Launcher, profile: &Profile) -> ModsView {
             // Do we still have the bytes at all? This is the one that decides
             // whether something is actually wrong.
             let in_store = core.mod_engine().store().contains(&entry.sha1);
-
 
             ModRow {
                 id: entry.id.as_str().to_owned(),
@@ -521,9 +519,7 @@ fn components_for(core: &Launcher, profile: &Profile) -> Vec<ComponentRow> {
             //
             // A CORE component that is absent genuinely is missing: the profile
             // promised it. That is the only case that keeps the word.
-            None if matches!(component.supply, Supply::UserSupplied { .. }) => {
-                ("Not added", "—")
-            }
+            None if matches!(component.supply, Supply::UserSupplied { .. }) => ("Not added", "—"),
             None if component.tier == Tier::Core => ("Missing", "—"),
             None => ("Not added", "—"),
         };
