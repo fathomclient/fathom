@@ -1,195 +1,233 @@
-# Fathom's design system
+# Fathom's design system: golden-hour glass
 
-Everything visual lives in `crates/launcher-ui/src/style.rs`, `icons.rs` and
-`motion.rs`. A screen composes tokens from those; it does not invent a colour, a
-size or a duration. This document is why the tokens are what they are.
+One manifest, three outputs. Everything visual in the launcher, and eventually
+in the game, comes from [`assets/theme/fathom-theme.json`](../assets/theme/fathom-theme.json):
 
-## 1. The one idea
+```
+node tools/generate-fathom-theme.mjs
+```
 
-**The chrome is black and the centre is not.**
-
-The navigation rail, the top bar and the bottom bar are true `#000`. The central
-content region is the only place gameplay footage shows through. That single
-rule produces the whole layout: the chrome reads as a frame around the game
-rather than as panels floating on top of it.
-
-The previous palette was navy-tinted throughout at 55–74% opacity, which made
-the bars look like translucent blue-grey boxes — the "gray chrome" and "random
-dark-blue boxes" this replaced. Once the bars became opaque, the background
-scrim could drop from 0.72/0.88 at the edges to 0.34–0.50, because it no longer
-had to keep bar text legible. The footage is substantially more visible now than
-it was, and the interface is *more* readable, not less.
-
-## 2. Colour
-
-| Token | Value | Used for |
-| --- | --- | --- |
-| `CHROME` | `#000000` | Rail, top bar, bottom bar. Actually black. |
-| `VOID` | `#05060 9` | Deepest content tone, scrim base |
-| `MIDNIGHT` | `#0B0D12` | Static background's upper tone |
-| `SURFACE` | `#0E1015` | Panels |
-| `SURFACE_RAISED` | `#16181E` | Controls |
-| `SURFACE_SELECTED` | `#24181B` | Selected rows — warm, because selection is the accent's job |
-| `ACCENT` | `#C4303C` | The one hue in the product |
-| `ACCENT_STRONG` | `#DC4A55` | Hover |
-| `ACCENT_DEEP` | `#8C1F27` | Pressed, gradient base |
-| `GOOD` / `WARN` / `BAD` | green / amber / `#E87272` | Status only |
-
-The accent is a **dark red**: deep enough to sit on black without glowing, clear
-enough to still read as red rather than as maroon or brown. It is used for
-selection, the launch control, and destructive intent — and nothing else.
-Restraint is what makes it mean something.
-
-`BAD` is deliberately a *different* red from `ACCENT`. If the accent were also
-the error colour, a selected row and a broken one would look the same.
-
-Borders are hairlines at 7% and 14% white. They separate structural regions —
-the rail from the content, one bar from another — and never fence off content.
-Contrast comes from surfaces.
-
-## 3. Typography
-
-Two faces, with a hard line between them.
-
-**Interface: Segoe UI Variable.** Windows 11's refinement of Segoe UI — better
-spacing at small sizes, and a real optical size for headings (`Text` for body,
-`Display` for large). On Windows 10 the Variable families do not exist and the
-shaper falls back; no layout depends on the difference.
-
-Weights are always requested as a *weight on the base family*, never by naming
-the weighted family. Windows registers these clipped to 31 characters — the
-semibold display face is `Segoe UI Variable Display Semib`, not `...Semibold` —
-so a full name looks correct in source, silently fails to match, and falls back
-to some other font. This was caught before it shipped and is worth remembering.
-
-**Display: none bundled.** The wordmark and the launch control use
-`style::FONT_DISPLAY`, which is currently the interface bold. The display face
-Fathom used to bundle had no verifiable licence and was removed before public
-release.
-
-`style::display_safe` still checks every string before it reaches
-`FONT_DISPLAY` — letters, digits and space only — so a display face with limited
-glyph coverage can be reintroduced without `MINECRAFT 1.8.9` rendering as
-`MINECRAFT 1` and three tofu boxes. Any face added here needs a licence that
-permits redistribution, recorded in [`ATTRIBUTION.md`](../ATTRIBUTION.md).
-
-### The scale
-
-Named by role, never by size. A screen asks for `text::ROW_TITLE`, not for `13`.
-
-| Token | px | Role |
-| --- | --- | --- |
-| `DISPLAY` | 32 | Home's version line |
-| `PAGE_TITLE` | 21 | The screen you are on |
-| `SECTION_TITLE` | 15 | A group heading inside a page |
-| `ROW_TITLE` | 13 | First line of a list row |
-| `BODY` | 13 | Running prose |
-| `METADATA` | 12 | Second line of a row |
-| `CAPTION` | 11 | Supporting notes |
-| `BUTTON` | 12 | Text inside a control |
-| `BADGE` | 10 | Uppercase chips and eyebrows |
-
-Adding a size means adding a *role* and saying what it is for.
-
-## 4. Icons
-
-22 SVGs in `crates/launcher-ui/assets/icons`, drawn to one specification: a
-24×24 grid, 1.75 stroke, round caps and joins, no fills except two intentional
-dots, and `stroke="currentColor"` so a single style decides the colour.
-
-They are authored in-house rather than vendored. That sidesteps the licence
-question entirely and guarantees the set is coherent, which a set assembled from
-three sources never is. They are placeholders for real artwork.
-
-**Pages reference `Icon::Home`, never a file path.** `Icon` is an enum, so there
-is no way to draw an icon that is not part of the set — which is the mechanism,
-not just the convention, that keeps a stray emoji or system symbol out. Replacing
-the artwork means editing `icons.rs` and the asset directory, and touching no
-page code.
-
-Three tests enforce it: every icon parses as SVG through the same parser the
-renderer uses, every file declares the family grid and stroke, and no two
-variants point at the same file.
-
-### Why not a glyph font
-
-The previous build drew navigation with Unicode characters (`⌂`, `▦`, `◇`) in
-whatever font happened to have them. Three problems: the shapes came from
-different type designers and did not look like a set, the weights did not match
-the interface, and a missing glyph renders as a hollow box — which is exactly
-what happened to the background switcher's tick mark. `style::FONT_ICON` no
-longer exists; that constant's existence was what made reaching for an arbitrary
-glyph easy.
-
-## 5. Motion
-
-`motion.rs`. Three durations and one curve:
-
-| Token | ms | Used for |
-| --- | --- | --- |
-| `FAST` | 110 | Selection marks, toggles, hovers |
-| `NORMAL` | 160 | Page changes, popovers, status |
-| `SLOW` | 220 | Background crossfades, and nothing else without a reason |
-
-The curve is a **cubic ease-out**, not ease-in-out. A transition the user
-*caused* should begin at full speed: they already know it started, they pressed
-the thing. Easing in as well adds a delay before anything visibly happens, which
-reads as lag. Nothing bounces, overshoots or springs.
-
-`Animated` tracks progress separately from its eased output, so **retargeting
-mid-flight is continuous** — a value interrupted half-way carries on from where
-it visually is rather than snapping back to the start of a new curve. That is
-what keeps fast clicking from looking broken. Retargeting somewhere it is
-already going is ignored, so a message that repeats every frame cannot freeze
-the value at its first step.
-
-### The rule that matters most
-
-**The clock only runs while something is moving.** `is_moving()` gates the tick
-subscription, so an idle launcher sitting on a menu requests no redraws at all.
-An animation system that repaints at 60 Hz forever is a laptop battery problem,
-not a polished interface.
-
-Currently driven: the page-change transition (content rises 10 px and settles)
-and the background crossfade (420 ms, its own timer predating this module).
-
-## 6. What a screen may and may not do
-
-May: compose `style::*` tokens, `icons::icon(...)`, `components::*`.
-
-May not: write a hex colour, a raw font size, a raw duration, or a Unicode
-symbol used as an icon. If a screen needs something the system does not have,
-the system gains a token — with a name that says what it is for.
-
-## 7. Page primitives
-
-Home is a composition and owns its whole canvas. Every other screen is a
-document, and they are all built from four components in `src/lib/ui/` rather
-than from bespoke markup:
-
-| Component | What it is |
+| Output | Consumer |
 | --- | --- |
-| `Page` | Title, one line of state, an actions slot, a capped 720px column |
-| `Section` | A labelled group, optionally collapsible, with a summary that survives collapsing |
-| `Row` | Short title, **one** line of detail, a control, and a disclosure for anything longer |
-| `Switch` / `Button` | The two controls. Three button variants, and no more |
+| `desktop/src/lib/theme.generated.css` | Launcher: custom properties, the four `.material-*` classes, the `.type-*` roles, the accessibility-mode swaps |
+| `desktop/src/lib/motion.generated.ts` | Launcher: durations and bezier control points for Svelte transitions |
+| `minecraft/.../generated/FathomTheme.java` | Game: legacy constants (consumed by `Skin`) and `FathomTheme.Tokens` (not yet consumed) |
 
-The column is capped and centred rather than stretched. A settings row 1600px
-wide has its label at one end of the monitor and its switch at the other.
+The generator runs as part of the build, so the outputs cannot drift from the
+manifest:
 
-### The copy rule, made structural
+- `npm run build` and `npm run dev` in `desktop/` run it first (`npm run tokens`).
+- Gradle's `compileJava` depends on `generateThemeTokens`, so the in-game module
+  never compiles against stale constants. This also covers `tools/build-all.ps1`,
+  which builds the module before the launcher.
+- `npm run check` runs it with `--check`, which writes nothing and fails if any
+  output is out of date.
 
-`Row` has nowhere to put a paragraph. `detail` is one line and it truncates with
-an ellipsis; the only place a longer explanation can go is the `details` slot,
-which sits behind a disclosure. This is deliberate: a component that made it
-easy to write four sentences would get four sentences, on every row, forever.
-The layout enforces the rule so that nobody has to remember it.
+Outputs are rewritten only when their content changes. Commit them with the
+manifest.
 
-A collapsed `Section` keeps its summary — "3 of 5 on". A disclosure that hides
-both the content and any indication of what is inside is just a thing to click.
+## 1. The idea
 
-### Rows, not cards
+**The background is the palette.** Surfaces are glass that borrows its colour
+from the photograph behind it. There is no decorative accent colour, no glow,
+no neon, and almost nothing fully opaque.
 
-Rows inside a `Section` share one panel with hairlines between them, rather than
-each being a separately bordered card. Cards would put a rectangle around every
-individual setting, which is how a settings page becomes a wall of boxes.
+**Hierarchy is density.** A more important surface is *denser* glass -- less of
+the photograph gets through -- not a different hue. The only hues that carry
+meaning are the three status tones.
+
+## 2. Two generations, for now
+
+The manifest's top-level `colors`, `dimensions`, `typography`, `motion` and
+`css` sections are the previous dark system (`--text`, `--accent`, `--r-*`,
+`--m-*`, `.glass`). Screens that have not been rebuilt still use them and
+render exactly as before. The game's `Skin` reads them too.
+
+Everything new lives under `system` and uses these names only:
+
+| Prefix | What |
+| --- | --- |
+| `--palette-*` | Primitives: ivory, champagne, sand, bronze, olive, umber, and the three status hues. Never used by a component directly |
+| `--color-*` | Roles: `text`, `text-secondary`, `text-tertiary`, `text-disabled`, `text-inverse`, `danger`/`success`/`warning` (+ `-text`, `-tint`, `-rim`), `focus`, `prominent` |
+| `--mat-{level}-*` | Material levels (below) |
+| `--shadow-*` | `none`, `sm`, `md`, `lg`: warm, soft, low opacity |
+| `--radius-*` | `xs` 6, `sm` 10, `md` 14, `lg` 20, `xl` 26, `2xl` 32, `pill`; `inner-min` 6 |
+| `--space-*` | 4px steps: 1–6, 8, 10, 12, 16, 20 |
+| `--layout-*` | Page padding, gaps, column widths |
+| `--type-{role}-*` | Size, weight, leading, tracking per role |
+| `--motion-*`, `--ease-*` | Durations by role; `standard` and `exit` curves |
+| `--backdrop-*` | Base colour, warm fallback, scrims, image filter, text shadows |
+
+When a rebuilt screen no longer needs a legacy token, delete the token.
+
+## 3. Materials
+
+```html
+<div class="material-standard">…</div>
+<Glass level="dense" radius="xl" inset={4}>…</Glass>
+```
+
+| Level | For | Tint | Blur | Rim | Shadow |
+| --- | --- | --- | --- | --- | --- |
+| `clear` | Chips and icon buttons on the photograph | ivory, 5% | 10px | top only | none |
+| `light` | Quiet grouping | champagne, 14% | 20px | soft | sm |
+| `standard` | The default pane: groups, popovers, platters | umber, 32% | 28px | medium | md |
+| `dense` | Drawers, dialogs, the primary control, important status | umber, 56% | 34px | deep lip | md |
+
+Each level has three fills: the normal `tint`, a `tint-noblur` for reduced blur
+(denser, because a sharp photograph behind text needs more cover than a blurred
+one), and a `tint-solid` for reduced transparency. The generated rule reads the
+resolved `--mat-{level}-fill` and `--mat-{level}-filter`, and the modes swap only
+those. **No component ever branches on a mode.**
+
+**Rim lighting.** Three inset shadows: a brighter top edge, a faint even edge
+all round, and a darker lip underneath on the denser levels. Inset shadows follow
+the corner radius, so the highlight curves into the corners and fades. There are
+no borders.
+
+**Interaction.** `.material-interactive` adds a hover veil (an ivory layer
+already reserved in the material's box-shadow, so it interpolates), a 0.985
+press compression, and an ivory focus ring. No glow, no lift.
+
+**Status.** `.tone-danger`, `.tone-success`, `.tone-warning` are a wash and a
+rim in the status hue: the one place a hue means something.
+
+## 4. Geometry
+
+Generous and concentric. A container that owns its shape sets
+`--surface-radius` and `--surface-inset`; a `.concentric` child gets
+`max(inner-min, outer − inset)`. This works one level deep. A deeper nest sets
+its own variables.
+
+## 5. Typography
+
+Geist, already vendored under SIL OFL 1.1 in both the launcher and the game. It
+was kept: it holds heavy display weights well, has tabular figures, and needs no
+new licence. Roles, used as `class="type-heading"` or through the variables:
+
+| Role | Size | Weight | Colour |
+| --- | --- | --- | --- |
+| `display` | fluid 36–64 | 600 | text |
+| `title` | 28 | 600 | text |
+| `heading` | 18 | 600 | text |
+| `body` | 14 | 400 | text |
+| `secondary` | 13 | 400 | text-secondary |
+| `label` | 12 | 500 | text-secondary |
+| `button` | 14 | 500 | text |
+| `caption` | 12 | 400 | text-tertiary |
+| `stat` | 32 | 500, tabular | text |
+
+Sentence case throughout. The old uppercase tracked eyebrow labels belong to the
+previous system.
+
+## 6. Motion
+
+Quick, smooth, quiet. `press` 90, `hover` 160, `state` 180, `page` 200,
+`surface` 220, `exit` 150 ms; `backdrop` 420 ms for background crossfades only.
+One entrance curve, `cubic-bezier(0.2, 0.8, 0.2, 1)`, identical in CSS
+(`--ease-standard`), Svelte (`EASE`, which now evaluates the bezier rather than
+approximating it) and Java (`Ease`). Nothing bounces or springs. The global
+reduced-motion rule still applies.
+
+## 7. The background
+
+[`Background.svelte`](../desktop/src/lib/Background.svelte) is the only place
+a backdrop is drawn. It layers the warm fallback (always painted), the approved
+photograph, and the warm scrim.
+
+The policy is curated: [`backgrounds.ts`](../desktop/src/lib/backgrounds.ts)
+lists the approved images, and today that is only `golden-hour`. The chain is
+exactly **approved image → warm fallback**. The fallback is a failure-state
+substrate, not a choice. Any other id, including every retired recording, is
+shown as the default and is migrated to it in `appearance.json` on start
+(`migrate_appearance` in `crates/launcher-desktop/src/lib.rs`, which leaves the
+accessibility switches alone).
+
+Video backgrounds are retired: the path renders `<img>` only. The picker shows
+itself only when there is more than one approved background
+(`PICKER_AVAILABLE`), so adding a second image is a one-line change in each of
+the two lists. The photograph is shown as supplied (`--backdrop-image-filter`
+is `none`).
+
+## 7a. The shell and the shared controls
+
+**The shell** ([`App.svelte`](../desktop/src/App.svelte)) paints no bars. The
+photograph fills the window; the header row (brand, page, account, window
+controls; the whole row is the drag region), the two navigation capsules and
+the status line are glass and legible type laid onto it. The current page is
+the denser pill in the rail, not a coloured marker. Shell dimensions are
+`--layout-shell-*` and `--layout-rail-*`.
+
+**Two surface families.** A control *on the photograph* combines a shape with a
+material and brings its own blur: `class="ui-capsule material-clear
+material-interactive"`. A control *inside a pane* uses the shape alone and gets
+a flat `--control-*` fill, because a second blur under the first is wasted
+work.
+
+| Primitive | Where | What |
+| --- | --- | --- |
+| `.ui-capsule` (`.small`) | `controls.css` | The secondary control: translucent pill, density on hover |
+| `.ui-icon-button` (`.small`, `.danger`) | `controls.css` | Round icon-only control |
+| `.ui-popover`, `-item`, `-note` | `controls.css` | Menus and dropdown lists: dense glass |
+| `.ui-field` | `controls.css` | Text inputs, selects, text areas: sunken, rim brightens on focus |
+| `input[type=range]` | `controls.css` | Every slider: sunken channel, ivory knob |
+| `use:tooltip` | `tooltip.ts` | Replaces `title` on icon-only controls |
+| `Button` | `lib/ui` | `normal`, `primary` (denser, never coloured), `caution` |
+| `Switch`, `Segmented` | `lib/ui` | Selection is champagne luminance or a denser pill |
+| `Section`, `Row` | `lib/ui` | Standard-glass panel; rows wrap instead of truncating |
+| `Page` | `lib/ui` | Document frame with an edgeless readability veil |
+| `Sheet` | `lib/ui` | The one modal: inset dense glass, scrim, Escape closes |
+| `Notice` | `lib/ui` | The notification surface (inline; no toasts by design) |
+| `Progress`, `Spinner` | `lib/ui` | Loading states; still under reduced motion |
+
+**Legacy aliases.** In the launcher the previous dark system's CSS variables
+(`--text*`, `--accent*`, `--fill*`, `--glass-*`, `--chrome*`, `--r-*`) and the
+`.glass` classes are answered by these tokens (`theme.css`), so screens not yet
+rebuilt sit in the same palette. The manifest's legacy values are untouched
+because the game's `Skin` still reads them.
+
+## 7b. The brand
+
+The Surface wordmark, the offset ring and the Sounding Line are drawn from one
+construction in [`desktop/src/lib/brand/surface.ts`](../desktop/src/lib/brand/surface.ts),
+with their colours and construction numbers in the manifest (`system.brand`,
+emitted to CSS as `--brand-*`, to `brand.generated.ts`, and to Java as
+`FathomTheme.Tokens.BRAND_*`). The launcher renders them as components
+(`Wordmark`, `BrandRing`, `SoundingLine` in `lib/brand/`); the icon files are
+rendered from the same geometry by `assets/brand/build-brand.mjs`. See
+[`assets/brand/README.md`](../assets/brand/README.md) for the rules.
+
+- The header shows the wordmark at a 20px cap (the reduced tier). It reveals
+  once after the window appears: the lower band of each letter steps into its
+  whole-pixel displacement as an implied pane passes left to right, about a
+  second in all. Reduced motion: a 200ms fade.
+- The Sounding Line is the loading symbol. Nothing in the brand spins.
+- Editing a brand colour means running `node assets/brand/build-brand.mjs` as
+  well as the theme generator, so the icon files follow.
+
+## 8. Accessibility
+
+| Mode | How it is set | Effect |
+| --- | --- | --- |
+| Reduce transparency | Settings → Appearance, or Windows' "Transparency effects" off (`prefers-reduced-transparency`) | `tint-solid` fills, no backdrop filter anywhere, flat scrim |
+| Reduce blur | Settings → Appearance | `tint-noblur` fills, no backdrop filter anywhere |
+
+Both are stored in `appearance.json` beside the background (merge-written, so
+neither writer resets the other) and applied as `data-transparency` /
+`data-blur` on `<html>` in both windows. The kill switch also covers the
+remaining legacy components that still declare their own `backdrop-filter`.
+
+## 9. The game is not the launcher
+
+The launcher uses real backdrop blur. The game must not copy that. Nothing in
+the in-game renderer reads the framebuffer, and HUD widgets are replayed from
+display lists. `FathomTheme.Tokens` therefore gives the game each level as its
+**no-blur** fill plus the three rim colours as separate ARGB values, which a
+plate can draw as spans. Full-screen menus may later add one blurred world
+snapshot, taken once when the screen opens. HUD modules never get a live blur.
+
+## 10. What a component may not do
+
+It may not write a hex colour, an rgba fill, a `backdrop-filter`, a border
+colour, a raw font size, a raw radius or a raw duration. If it needs something
+the system lacks, the manifest gains a token whose name says what it is for.

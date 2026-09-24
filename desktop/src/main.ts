@@ -15,8 +15,14 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import Console from './routes/Console.svelte';
 import { windowLabel } from './lib/api';
+import { restoreAppearanceModes } from './lib/appearance';
 
 const target = document.getElementById('app');
 if (!target) throw new Error('#app is missing from index.html');
+
+// Both windows honour the glass accessibility modes. The main window stays
+// hidden until its shell data arrives, which takes longer than this read, so
+// it is never seen with the wrong material.
+void restoreAppearanceModes();
 
 export default mount(windowLabel === 'console' ? Console : App, { target });

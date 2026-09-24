@@ -1,24 +1,25 @@
 <!--
   The shell.
 
-  ┌──────────────────────────────────────────┐
-  │ TOP BAR      wordmark · route │ version  │
-  ├─────┬────────────────────────────────────┤
-  │ NAV │           MAIN CONTENT             │
-  ├─────┴────────────────────────────────────┤
-  │ BOTTOM BAR   state │ profile │ controls  │
-  └──────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────┐
+  │ FATHOM  Home              1.8.9  (account) ─□× │   header row: type + glass
+  │ ╭──╮                                          │
+  │ │⌂ │            MAIN CONTENT                  │   the photograph continues
+  │ │▦ │                                          │   behind everything
+  │ ╰──╯                                          │
+  │ ● state · Fathom 0.1.0   (install)  (switch) │   status line: type + glass
+  └──────────────────────────────────────────────┘
 
-  All three bars are pure black. That is the composition: the chrome FRAMES the
-  gameplay rather than floating on it, and the centre is the only place the
-  video shows through.
+  ONE PHOTOGRAPHIC ENVIRONMENT. There are no bars. The photograph fills the
+  window, and the header row, the navigation and the status line are pieces of
+  glass and legible type laid onto it -- so the window reads as one scene with
+  an interface in it, not as a frame around a picture.
 
   THE RAIL EXPANDS AS AN OVERLAY, NEVER AS LAYOUT.
 
-  Hovering the navigation floats a labelled tray out over the content. The grid
-  column stays 56px wide the whole time, so nothing reflows because a pointer
-  crossed the edge of the window — a nav that resizes the page it is navigating
-  makes every screen jump when you reach for it.
+  Hovering the navigation widens its capsules to show labels over the content.
+  The grid column keeps its width the whole time, so nothing reflows because a
+  pointer crossed the edge of the window.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -47,9 +48,11 @@
   import ProfileSwitcher from './lib/ui/ProfileSwitcher.svelte';
   import BackgroundPicker from './lib/ui/BackgroundPicker.svelte';
   import FathomIcon from './lib/ui/FathomIcon.svelte';
+  import Wordmark from './lib/brand/Wordmark.svelte';
   import { FATHOM_ICONS } from './lib/icons.generated';
-  import { BACKGROUNDS } from './lib/backgrounds';
-  import { EASE, FAST, NORMAL } from './lib/motion';
+  import { BACKGROUNDS, DEFAULT_BACKGROUND, PICKER_AVAILABLE } from './lib/backgrounds';
+  import { EASE, MOTION_PAGE, MOTION_SURFACE } from './lib/motion';
+  import { tooltip } from './lib/tooltip';
   import {
     background as loadBackground,
     accountsView,
@@ -104,31 +107,21 @@
   let home: HomeView | null = null;
   let accounts: AccountSummary[] = [];
   let status: ShellStatus | null = null;
-  let choice = 'bg_5rain';
+  let choice = DEFAULT_BACKGROUND;
   let pickerOpen = false;
   let accountOpen = false;
   let railOpen = false;
+  /** The window is on screen: the wordmark's one-time reveal may run. */
+  let revealed = false;
   /** The launch in flight, if any. `NO_LAUNCH` the rest of the time. */
   let launch: LaunchProgress = NO_LAUNCH;
   let poll: ReturnType<typeof setInterval> | null = null;
-  /** Set while Minecraft runs, so the video stops competing with the game. */
-  let gameRunning = false;
-  let windowVisible = true;
   let canSignIn = false;
   let developmentAvailable = false;
   let credentialStore = '';
   /** The sign-in in flight, if any. */
   let auth: AuthProgress = NO_AUTH;
   let authPoll: ReturnType<typeof setInterval> | null = null;
-
-  $: playing = windowVisible && !gameRunning;
-  $: gameRunning = launch.phase === 'running';
-
-  onMount(() => {
-    const onVisibility = () => (windowVisible = document.visibilityState === 'visible');
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  });
 
   /* The in-game Sign In button. Rust has raised the window and started (or
      found) the sign-in; open the drawer on it and follow its progress. */
@@ -199,6 +192,7 @@
            flashing before Home is ready. `finally` keeps an unexpected data
            error from leaving an invisible process behind. */
         await windowShow();
+        revealed = true;
       }
     })();
     return () => {
@@ -388,60 +382,46 @@
   on:keydown={handleGlobalKey}
 />
 
-<Background {choice} {playing} />
+<Background {choice} />
 
+<!-- One photographic environment. Nothing below paints a bar: the header row,
+     the navigation and the status line are pieces of glass and type laid onto
+     the photograph, which continues behind all of them. -->
 <div class="shell">
-  <!-- Integrated window chrome. The native Windows strip is disabled so the
-       launcher has one continuous material from its top edge down. -->
-  <div
-    class="titlebar"
+  <!-- The header row: brand, where you are, the account, and the window's own
+       controls. The native strip is disabled; this whole row is the drag
+       region, and only its interactive pieces opt out of it. -->
+  <header
+    class="header"
     data-tauri-drag-region
     role="toolbar"
     tabindex="-1"
     aria-label="Window"
     on:dblclick={() => void windowToggleMaximize()}
   >
-    <svg class="title-mark" viewBox="0 0 16 16" aria-hidden="true" data-tauri-drag-region>
-      <rect x="1" y="1" width="14" height="3" />
-      <rect x="1" y="4" width="3" height="11" />
-      <rect x="4" y="12" width="7" height="3" />
-      <rect x="12" y="4" width="3" height="7" />
-      <rect class="plane" x="6" y="6" width="4" height="4" />
-    </svg>
-    <span data-tauri-drag-region>Fathom</span>
-    <div class="window-controls">
-      <button aria-label="Minimize" title="Minimize" on:click={() => void windowMinimize()}><Minus size={14} /></button>
-      <button aria-label="Maximize" title="Maximize" on:click={() => void windowToggleMaximize()}><Square size={11} /></button>
-      <button class="window-close" aria-label="Close" title="Close" on:click={() => void windowClose()}><X size={14} /></button>
+    <div class="brand" data-tauri-drag-region>
+      <!-- The Surface wordmark at a 20px cap: the reduced tier, with a 1px
+           displacement and both densities. It reveals once, after the window
+           is on screen. It takes no pointer events, so a press on it lands on
+           this drag region like the rest of the row. -->
+      <span class="brand-mark" data-tauri-drag-region>
+        <Wordmark height={20} reveal start={revealed} />
+      </span>
+      <span class="crumb legible" data-tauri-drag-region>{activeLabel}</span>
     </div>
-  </div>
-  <!-- TOP BAR -->
-  <header class="topbar">
-    <div class="brand">
-      <!-- The mark, inline rather than fetched. It is five rectangles; an
-           <img> would cost a request to say the same thing, and the file it
-           fetched would be this. The 24-unit viewBox is the hand-drawn 24px
-           grid from `assets/brand/small/mark-24.svg`, so every bar lands on a
-           whole pixel at 1x. Decorative: the wordmark beside it already names
-           the product to a screen reader. -->
-      <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="4" />
-        <rect x="3" y="7" width="4" height="14" />
-        <rect x="7" y="17" width="8" height="4" />
-        <rect x="17" y="7" width="4" height="8" />
-        <rect class="plane" x="10" y="10" width="5" height="5" />
-      </svg>
-      <span class="wordmark">FATHOM</span>
-    </div>
-    <span class="crumb">{activeLabel}</span>
 
-    <div class="spacer"></div>
+    <div class="spacer" data-tauri-drag-region></div>
 
     {#if home?.profile}
-      <span class="version tnum">{home.profile.version}</span>
+      <span class="version tnum legible" data-tauri-drag-region>{home.profile.version}</span>
     {/if}
 
-    <button class="account" on:click|stopPropagation={() => (accountOpen = true)}>
+    <button
+      class="account ui-capsule material-clear material-interactive"
+      aria-haspopup="dialog"
+      aria-expanded={accountOpen}
+      on:click|stopPropagation={() => (accountOpen = true)}
+    >
       <!-- A remembered account is drawn while its session comes back, subdued
            rather than absent. Restoring takes several seconds, and showing
            "Sign in" for them reads as though the launcher forgot the account it
@@ -458,58 +438,74 @@
           {home?.account.name?.[0]?.toUpperCase() ?? '?'}
         {/if}
       </span>
-      <span class:restoring-name={home?.account.remembered}>
+      <!-- Never cut: a Minecraft name is at most sixteen characters. -->
+      <span class="account-name" class:restoring-name={home?.account.remembered}>
         {home?.account.name ?? 'Sign in'}
       </span>
-      <ChevronDown size={13} strokeWidth={2.2} />
+      <ChevronDown size={14} strokeWidth={2.2} />
     </button>
+
+    <div class="window-controls">
+      <button class="ui-icon-button small" aria-label="Minimize" use:tooltip={'Minimize'} on:click={() => void windowMinimize()}>
+        <Minus size={15} strokeWidth={2} />
+      </button>
+      <button class="ui-icon-button small" aria-label="Maximize" use:tooltip={'Maximize'} on:click={() => void windowToggleMaximize()}>
+        <Square size={12} strokeWidth={2} />
+      </button>
+      <button class="ui-icon-button small danger" aria-label="Close" use:tooltip={'Close'} on:click={() => void windowClose()}>
+        <X size={15} strokeWidth={2} />
+      </button>
+    </div>
   </header>
 
-  <!-- LEFT RAIL -->
+  <!-- NAVIGATION. Two floating capsules of standard glass: the pages, and the two
+       utilities at the foot. Hovering widens them to show labels as an
+       overlay, never as layout, so the page never reflows because a pointer
+       crossed the edge of the window. The current page is the denser pill,
+       not a coloured bar. -->
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
   <nav
     class="rail"
+    aria-label="Pages"
     on:mouseenter={() => (railOpen = true)}
     on:mouseleave={() => (railOpen = false)}
   >
-    <div class="rail-inner" class:open={railOpen}>
-      <div class="rail-group">
-        {#each ROUTES as item}
-          <button
-            class="nav"
-            class:active={route === item.id}
-            title={railOpen ? '' : item.label}
-            aria-label={item.label}
-            on:click={() => go(item.id)}
-          >
-            <span class="marker"></span>
-            <span class="glyph"><FathomIcon source={item.icon} size={19} /></span>
-            <span class="nav-label">{item.label}</span>
-          </button>
-        {/each}
-      </div>
-      <div class="rail-group">
-        {#each UTILITY as item}
-          <button
-            class="nav"
-            class:active={route === item.id}
-            title={railOpen ? '' : item.label}
-            aria-label={item.label}
-            on:click={() => go(item.id)}
-          >
-            <span class="marker"></span>
-            <span class="glyph"><FathomIcon source={item.icon} size={19} /></span>
-            <span class="nav-label">{item.label}</span>
-          </button>
-        {/each}
-      </div>
+    <div class="rail-group top material-standard" class:open={railOpen}>
+      {#each ROUTES as item}
+        <button
+          class="nav"
+          class:active={route === item.id}
+          aria-current={route === item.id ? 'page' : undefined}
+          aria-label={item.label}
+          use:tooltip={railOpen ? '' : item.label}
+          on:click={() => go(item.id)}
+        >
+          <span class="glyph"><FathomIcon source={item.icon} size={19} /></span>
+          <span class="nav-label">{item.label}</span>
+        </button>
+      {/each}
+    </div>
+    <div class="rail-group bottom material-standard" class:open={railOpen}>
+      {#each UTILITY as item}
+        <button
+          class="nav"
+          class:active={route === item.id}
+          aria-current={route === item.id ? 'page' : undefined}
+          aria-label={item.label}
+          use:tooltip={railOpen ? '' : item.label}
+          on:click={() => go(item.id)}
+        >
+          <span class="glyph"><FathomIcon source={item.icon} size={19} /></span>
+          <span class="nav-label">{item.label}</span>
+        </button>
+      {/each}
     </div>
   </nav>
 
   <!-- MAIN -->
   <main class="content">
     {#key route}
-      <div class="page" in:fade={{ duration: FAST, easing: EASE }}>
+      <div class="page" in:fade={{ duration: MOTION_PAGE, easing: EASE }}>
         {#if route === 'home' && home}
           <Home
             view={home}
@@ -549,18 +545,22 @@
     {/key}
   </main>
 
-  <!-- BOTTOM BAR -->
-  <footer class="bottombar">
-    <div class="zone left">
-      <span class="dot" class:ready={ready && launch.phase === 'idle'}></span>
+  <!-- THE STATUS LINE. Type on the photograph and a few capsules, not a bar. -->
+  <footer class="status">
+    <div class="zone left legible">
+      <span class="dot" class:ready={ready && launch.phase === 'idle'} aria-hidden="true"></span>
       <span class="state">{stateLine}</span>
-      <span class="sep">·</span>
-      <span class="muted tnum">Fathom {status?.version ?? ''}</span>
-      <span class="muted">{status?.offline ? 'Offline' : 'Online'}</span>
+      <span class="sep" aria-hidden="true">·</span>
+      <span class="meta tnum">Fathom {status?.version ?? ''}</span>
+      <span class="meta">{status?.offline ? 'Offline' : 'Online'}</span>
     </div>
 
-    <button class="zone centre" on:click={() => go('installations')} title="Change installation">
-      <span class="tnum">{status?.summary ?? ''}</span>
+    <button
+      class="zone centre ui-capsule small material-clear material-interactive"
+      use:tooltip={'Change installation'}
+      on:click={() => go('installations')}
+    >
+      <span class="tnum summary">{status?.summary ?? ''}</span>
     </button>
 
     <div class="zone right">
@@ -569,40 +569,45 @@
            possible on exactly one screen. -->
       <ProfileSwitcher {epoch} onChanged={refreshShell} />
 
-      <div class="picker-anchor">
-        <button
-          class="bar-button"
-          class:active={pickerOpen}
-          on:click|stopPropagation={() => (pickerOpen = !pickerOpen)}
-        >
-          <ImageIcon size={13} strokeWidth={2} />
-          <span>{backgroundLabel}</span>
-        </button>
-
-        {#if pickerOpen}
-          <div
-            class="picker glass-strong"
-            transition:fly={{ y: 6, duration: NORMAL, easing: EASE }}
-            on:click|stopPropagation
-            on:keydown={(event) => event.key === 'Escape' && (pickerOpen = false)}
-            role="menu"
-            tabindex="-1"
+      <!-- Only offered when there is a choice to make. With one approved
+           background a picker would be a control that does nothing. -->
+      {#if PICKER_AVAILABLE}
+        <div class="picker-anchor">
+          <button
+            class="ui-capsule small material-clear material-interactive"
+            aria-haspopup="menu"
+            aria-expanded={pickerOpen}
+            on:click|stopPropagation={() => (pickerOpen = !pickerOpen)}
           >
-            <span class="picker-title">Background</span>
-            <!-- The list is taller than the window has room for, so it scrolls
-                 and the title stays put. -->
-            <div class="picker-scroll">
-              <BackgroundPicker
-                options={BACKGROUNDS}
-                value={choice}
-                onChoose={chooseBackground}
-              />
-            </div>
-          </div>
-        {/if}
-      </div>
+            <ImageIcon size={13} strokeWidth={2} />
+            <span>{backgroundLabel}</span>
+          </button>
 
-      <button class="bar-button" on:click={() => go('logs')}>
+          {#if pickerOpen}
+            <div
+              class="picker ui-popover"
+              transition:fly={{ y: 6, duration: MOTION_SURFACE, easing: EASE }}
+              on:click|stopPropagation
+              on:keydown={(event) => event.key === 'Escape' && (pickerOpen = false)}
+              role="menu"
+              tabindex="-1"
+            >
+              <span class="picker-title">Background</span>
+              <!-- The list is taller than the window has room for, so it scrolls
+                   and the title stays put. -->
+              <div class="picker-scroll">
+                <BackgroundPicker
+                  options={BACKGROUNDS}
+                  value={choice}
+                  onChoose={chooseBackground}
+                />
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <button class="ui-capsule small material-clear material-interactive" on:click={() => go('logs')}>
         <FathomIcon source={FATHOM_ICONS.logs} size={13} />
         <span>Logs</span>
       </button>
@@ -633,172 +638,89 @@
   .shell {
     position: relative;
     display: grid;
-    grid-template-columns: var(--rail-width) 1fr;
-    grid-template-rows: var(--titlebar-height) var(--topbar-height) 1fr var(--bottombar-height);
+    grid-template-columns: var(--layout-shell-rail) minmax(0, 1fr);
+    grid-template-rows: var(--layout-shell-header) minmax(0, 1fr) var(--layout-shell-status);
     grid-template-areas:
-      'title title'
       'top top'
       'rail main'
       'bottom bottom';
     height: 100%;
   }
 
-  .titlebar {
-    grid-area: title;
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    padding-left: var(--s-2);
-    color: var(--text-muted);
-    font-size: var(--t-caption);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 70%),
-      var(--midnight-mid);
-    border-bottom: 1px solid var(--chrome-line);
-    user-select: none;
-  }
-
-  .title-mark {
-    width: 16px;
-    height: 16px;
-    fill: var(--text);
-  }
-
-  .title-mark .plane { fill: var(--accent); }
-
-  .window-controls {
-    align-self: stretch;
-    display: flex;
-    margin-left: auto;
-  }
-
-  .window-controls button {
-    display: grid;
-    place-items: center;
-    width: 46px;
-    color: var(--text-muted);
-    transition: background var(--m-fast) var(--ease), color var(--m-fast) var(--ease);
-  }
-
-  .window-controls button:hover {
-    color: var(--text);
-    background: var(--fill-hover);
-  }
-
-  .window-controls .window-close:hover { background: #c42b3a; }
-
-  /* -- top bar ----------------------------------------------------------- */
-  .topbar {
+  /* -- header row -------------------------------------------------------- */
+  .header {
     grid-area: top;
     display: flex;
     align-items: center;
-    gap: var(--s-3);
-    padding: 0 var(--s-3);
-    background: var(--chrome);
-    border-bottom: 1px solid var(--chrome-line);
+    gap: var(--space-3);
+    min-width: 0;
+    padding: 0 var(--space-3) 0 var(--space-5);
+    user-select: none;
   }
 
   .brand {
     display: flex;
     align-items: center;
-    gap: var(--s-2);
+    gap: var(--space-3);
+    min-width: 0;
   }
 
-  /* The frame takes the bar's own ink and only the suspended plane is
-     coloured, which is the whole construction of the mark: one accent, and the
-     gap between the two planes doing the work. No tile behind it -- the top
-     bar is already the black the app icon puts under it. */
-  .mark {
-    display: block;
-    width: 24px;
-    height: 24px;
-    color: var(--text);
-    fill: currentColor;
+  /* A tight dark edge keeps the ivory letters defined where the sky behind
+     them is brightest. Darker than the photograph, never a glow. */
+  .brand-mark {
+    display: flex;
+    filter: var(--backdrop-mark-shadow);
   }
 
-  .mark .plane {
-    fill: var(--accent);
-  }
-
-  .wordmark {
-    font-size: var(--t-body);
-    font-weight: var(--w-bold);
-    letter-spacing: 0.16em;
+  .brand-mark :global(svg) {
+    pointer-events: none;
   }
 
   .crumb {
-    font-size: var(--t-caption);
-    font-weight: var(--w-medium);
-    color: var(--text-faint);
-    padding-left: var(--s-3);
-    border-left: 1px solid var(--chrome-line);
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--control-hairline-strong);
+    font-size: var(--type-secondary-size);
+    font-weight: var(--type-button-weight);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
   }
 
   .spacer {
     flex: 1;
+    align-self: stretch;
   }
 
   .version {
-    font-size: var(--t-caption);
-    color: var(--text-faint);
-  }
-
-  /* Restoring: present but not yet usable. A slow pulse rather than a spinner,
-     because this resolves on its own in a few seconds and a spinner would ask
-     to be watched. */
-  .avatar.restoring,
-  .restoring-name {
-    opacity: 0.55;
-    animation: account-restoring 1.6s var(--ease) infinite;
-  }
-
-  @keyframes account-restoring {
-    0%, 100% { opacity: 0.45; }
-    50% { opacity: 0.75; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .avatar.restoring,
-    .restoring-name {
-      animation: none;
-    }
+    font-size: var(--type-caption-size);
+    color: var(--color-text-secondary);
   }
 
   .account {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    height: var(--h-sm);
-    padding: 0 var(--s-2) 0 var(--s-1);
-    border-radius: var(--r-pill);
-    font-size: var(--t-caption);
-    font-weight: var(--w-medium);
-    color: var(--text-muted);
-    transition:
-      background var(--m-fast) var(--ease),
-      color var(--m-fast) var(--ease);
+    gap: var(--space-2);
+    padding: 0 var(--space-3) 0 5px;
   }
 
-  .account:hover {
-    background: var(--fill-hover);
-    color: var(--text);
+  .account-name {
+    font-size: var(--type-secondary-size);
   }
 
   .avatar {
     display: grid;
     place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: var(--r-pill);
-    background: var(--fill-active);
-    font-size: 10px;
-    font-weight: var(--w-semibold);
-    color: var(--text);
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background-color: var(--control-fill-selected);
+    box-shadow: var(--control-rim);
+    font-size: var(--type-caption-size);
+    font-weight: var(--type-heading-weight);
+    color: var(--color-text);
   }
 
   .avatar.signed {
-    background: linear-gradient(160deg, var(--accent-strong), var(--accent-deep));
-    color: #fff;
+    box-shadow: var(--control-rim-strong);
   }
 
   /* The player's head, cut from their skin. Eight pixels of art, so it is
@@ -806,77 +728,115 @@
   .face {
     width: 100%;
     height: 100%;
-    border-radius: inherit;
     image-rendering: pixelated;
     object-fit: cover;
   }
 
-  /* -- rail -------------------------------------------------------------- */
+  /* Restoring: present but not yet usable. A slow pulse rather than a spinner,
+     because this resolves on its own in a few seconds and a spinner would ask
+     to be watched. */
+  .avatar.restoring,
+  .restoring-name {
+    animation: account-restoring 1.6s var(--ease-standard) infinite;
+  }
+
+  @keyframes account-restoring {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 0.8;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .avatar.restoring,
+    .restoring-name {
+      animation: none;
+      opacity: 0.6;
+    }
+  }
+
+  .window-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: var(--space-1);
+  }
+
+  /* -- navigation ------------------------------------------------------------ */
   .rail {
     grid-area: rail;
     position: relative;
-    background: var(--chrome);
-    border-right: 1px solid var(--chrome-line);
     z-index: 30;
   }
 
-  /* The tray. Absolutely positioned inside a 56px column, so widening it
-     covers the content instead of moving it. */
-  .rail-inner {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: var(--rail-width);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: var(--s-2) var(--s-2) var(--s-2) 0;
-    overflow: hidden;
-    background: var(--chrome);
-    border-right: 1px solid transparent;
-    transition:
-      width var(--m-normal) var(--ease),
-      box-shadow var(--m-normal) var(--ease),
-      border-color var(--m-normal) var(--ease);
-  }
-
-  .rail-inner.open {
-    width: var(--rail-tray-width);
-    border-right-color: var(--chrome-line);
-    box-shadow: 12px 0 34px rgba(0, 0, 0, 0.55);
-  }
-
+  /* Each group is a capsule of light glass sized to its contents, anchored to
+     the top or the foot of the column. Widening it is an overlay: the column
+     itself never changes width. */
   .rail-group {
+    --surface-radius: var(--radius-xl);
+    --surface-inset: 6px;
+    position: absolute;
+    left: var(--space-3);
+    width: var(--layout-rail-width);
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
+    padding: 6px;
+    overflow: hidden;
+    transition:
+      width var(--motion-surface) var(--ease-standard),
+      box-shadow var(--motion-surface) var(--ease-standard);
+  }
+
+  .rail-group.top {
+    top: var(--space-1);
+  }
+
+  .rail-group.bottom {
+    bottom: var(--space-1);
+  }
+
+  .rail-group.open {
+    width: var(--layout-rail-tray);
+    box-shadow: var(--mat-standard-rim), var(--shadow-md);
   }
 
   .nav {
     position: relative;
     display: flex;
     align-items: center;
-    gap: var(--s-3);
+    gap: var(--space-3);
     height: 40px;
-    /* The glyph stays at the same x whether the tray is open or closed, so the
-       icons do not slide sideways when the label appears. */
-    padding-left: 10px;
-    margin-left: var(--s-2);
-    border-radius: var(--r-md);
-    color: var(--text-faint);
+    /* The glyph stays at the same x whether the capsule is open or closed, so
+       the icons do not slide sideways when the labels appear. */
+    padding-left: 8px;
+    border-radius: calc(var(--radius-xl) - 6px);
+    color: var(--color-text-secondary);
     white-space: nowrap;
     transition:
-      color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease);
+      color var(--motion-hover) var(--ease-standard),
+      background-color var(--motion-hover) var(--ease-standard),
+      box-shadow var(--motion-hover) var(--ease-standard);
   }
 
   .nav:hover {
-    color: var(--text);
-    background: var(--fill-hover);
+    color: var(--color-text);
+    background-color: var(--control-fill);
   }
 
+  /* The current page is the denser, brighter-rimmed pill. */
   .nav.active {
-    color: var(--text);
-    background: var(--fill-active);
+    color: var(--color-text);
+    background-color: var(--control-fill-selected);
+    box-shadow: var(--control-rim-strong);
+  }
+
+  .nav:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
   }
 
   .glyph {
@@ -887,37 +847,21 @@
   }
 
   .nav-label {
-    font-size: var(--t-body-lg);
-    font-weight: var(--w-medium);
+    font-size: var(--type-body-size);
+    font-weight: var(--type-button-weight);
     opacity: 0;
     transform: translateX(-4px);
     transition:
-      opacity var(--m-fast) var(--ease),
-      transform var(--m-normal) var(--ease);
+      opacity var(--motion-hover) var(--ease-standard),
+      transform var(--motion-state) var(--ease-standard);
   }
 
-  .rail-inner.open .nav-label {
+  .rail-group.open .nav-label {
     opacity: 1;
     transform: none;
   }
 
-  /* The selection mark sits on the window's edge, the way a real rail does. */
-  .marker {
-    position: absolute;
-    left: -10px;
-    width: 3px;
-    height: 0;
-    border-radius: var(--r-pill);
-    background: var(--accent-strong);
-    box-shadow: 0 0 10px var(--accent-glow);
-    transition: height var(--m-normal) var(--ease);
-  }
-
-  .nav.active .marker {
-    height: 22px;
-  }
-
-  /* -- content ----------------------------------------------------------- */
+  /* -- content ------------------------------------------------------------- */
   .content {
     grid-area: main;
     position: relative;
@@ -929,128 +873,93 @@
     inset: 0;
   }
 
-  /* -- bottom bar -------------------------------------------------------- */
-  .bottombar {
+  /* -- status line --------------------------------------------------------- */
+  .status {
     grid-area: bottom;
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: var(--s-3);
-    padding: 0 var(--s-3);
-    background: var(--chrome);
-    border-top: 1px solid var(--chrome-line);
-    font-size: var(--t-meta);
+    gap: var(--space-3);
+    padding: 0 var(--space-4) 0 var(--space-5);
+    font-size: var(--type-caption-size);
   }
 
   .zone {
     display: flex;
     align-items: center;
-    gap: var(--s-2);
+    gap: var(--space-2);
+    min-width: 0;
   }
 
   .zone.right {
     justify-content: flex-end;
   }
 
-  .centre {
+  .zone.centre {
     justify-self: center;
-    padding: 0 var(--s-2);
-    height: var(--h-sm);
-    border-radius: var(--r-xs);
-    font-size: var(--t-caption);
-    color: var(--text-muted);
-    transition:
-      background var(--m-fast) var(--ease),
-      color var(--m-fast) var(--ease);
+    max-width: 100%;
   }
 
-  .centre:hover {
-    background: var(--fill-hover);
-    color: var(--text);
+  .summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .dot {
     width: 7px;
     height: 7px;
-    border-radius: var(--r-pill);
-    background: var(--warn);
-    box-shadow: 0 0 8px currentColor;
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    background-color: var(--color-warning-text);
   }
 
   .dot.ready {
-    background: var(--good);
+    background-color: var(--color-success-text);
   }
 
   .state {
-    font-weight: var(--w-medium);
-    color: var(--text-muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: var(--type-button-weight);
+    color: var(--color-text);
   }
 
-  .muted {
-    color: var(--text-disabled);
-  }
-
+  .meta,
   .sep {
-    color: var(--text-disabled);
+    flex-shrink: 0;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
   }
 
-  .bar-button {
-    display: flex;
-    align-items: center;
-    gap: var(--s-1);
-    height: var(--h-sm);
-    padding: 0 var(--s-2);
-    border-radius: var(--r-xs);
-    font-size: var(--t-meta);
-    color: var(--text-faint);
-    transition:
-      background var(--m-fast) var(--ease),
-      color var(--m-fast) var(--ease);
-  }
-
-  .bar-button:hover,
-  .bar-button.active {
-    background: var(--fill-hover);
-    color: var(--text);
-  }
-
-  /* -- background popover ------------------------------------------------ */
+  /* -- background popover (shown only when there is more than one) --------- */
   .picker-anchor {
     position: relative;
   }
 
   .picker {
     position: absolute;
-    bottom: calc(100% + var(--s-2));
+    bottom: calc(100% + var(--space-2));
     right: 0;
-    width: 300px;
-    padding: var(--s-3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-2);
     z-index: 20;
-    /* Never taller than the window it opens into. The popover grows upward from
-       the bottom bar, so without a ceiling a long list runs off the top of the
-       screen and the entries up there cannot be reached at all. */
-    max-height: calc(100vh - var(--bottombar-height) - var(--s-6));
+    width: 300px;
+    padding: var(--space-3);
+    gap: var(--space-2);
+    /* Never taller than the window it opens into. */
+    max-height: calc(100vh - var(--layout-shell-status) - var(--space-6));
   }
 
   .picker-scroll {
     overflow-y: auto;
-    /* Scrolling to the end of this list must not then scroll the page behind
-       it. */
     overscroll-behavior: contain;
-    /* The tiles scale slightly on hover; the padding is the room that grows
-       into, and the negative margin keeps the grid its full width regardless. */
-    margin: 0 calc(var(--s-1) * -1);
-    padding: 2px var(--s-1);
+    margin: 0 calc(var(--space-1) * -1);
+    padding: 2px var(--space-1);
   }
 
   .picker-title {
-    font-size: var(--t-meta);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--text-faint);
+    font-size: var(--type-label-size);
+    font-weight: var(--type-heading-weight);
+    color: var(--color-text-secondary);
   }
 </style>

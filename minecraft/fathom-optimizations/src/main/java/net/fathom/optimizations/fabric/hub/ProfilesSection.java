@@ -14,6 +14,7 @@ import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.profile.ProfileRuntime;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 
 /**
@@ -217,10 +218,9 @@ final class ProfilesSection implements Section {
     private void card(HubContext context, ProfileRuntime runtime, FathomProfile profile, int total, Rect card) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, Skin.FILL);
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
-        Rect inner = card.inset(Skin.S4, Skin.S4);
         boolean live = profile.id().equals(runtime.liveId());
+        FathomComponents.card(ui, card, 0f, live ? 1f : 0f);
+        Rect inner = card.inset(Skin.CARD_PADDING, Skin.CARD_PADDING);
         boolean renaming = profile.id().equals(renamingId);
 
         float cursor = inner.y;

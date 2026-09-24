@@ -8,6 +8,7 @@ import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.bridge.LauncherBridge;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 
 /**
@@ -68,8 +69,7 @@ final class LauncherSection implements Section {
 
         // -- state card -------------------------------------------------------
         Rect card = area.top(84f);
-        ui.rounded(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, Skin.FILL);
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
+        FathomComponents.card(ui, card, 0f, 0f);
         Rect inner = card.inset(Skin.S4, Skin.S4);
 
         int dot = state == LauncherBridge.State.READY

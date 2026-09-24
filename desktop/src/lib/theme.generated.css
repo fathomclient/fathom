@@ -119,3 +119,368 @@
   --s4: var(--s-4);
   --s5: var(--s-5);
 }
+
+:root {
+  --palette-ivory-50: #fcf6ea;
+  --palette-ivory-100: #f6ecd8;
+  --palette-champagne-200: #eadcbd;
+  --palette-champagne-300: #d9c59c;
+  --palette-sand-400: #c2a878;
+  --palette-sand-500: #a98a58;
+  --palette-bronze-500: #94693c;
+  --palette-bronze-600: #76512d;
+  --palette-olive-500: #7b7447;
+  --palette-olive-700: #4d4829;
+  --palette-umber-700: #4a321b;
+  --palette-umber-800: #33220f;
+  --palette-umber-900: #21160a;
+  --palette-terracotta-300: #f0b29b;
+  --palette-terracotta-500: #c9694e;
+  --palette-sage-300: #c3d0a0;
+  --palette-sage-500: #8e9f68;
+  --palette-amber-300: #efcf8e;
+  --palette-amber-500: #c99a4c;
+  --palette-brand-ivory: #f4ebd9;
+  --palette-brand-ivory-beneath: #e9dac0;
+  --palette-brand-champagne: #e6d3ae;
+  --palette-brand-sand: #cdb48a;
+  --palette-brand-bronze: #8c5f32;
+  --palette-brand-deep: #3a2016;
+  --palette-brand-deep-beneath: #2a160e;
+  --color-text: #fcf6ea;
+  --color-text-secondary: #eadcbd;
+  --color-text-tertiary: rgba(234, 220, 189, 0.66);
+  --color-text-disabled: rgba(234, 220, 189, 0.40);
+  --color-text-inverse: #21160a;
+  --color-danger: #c9694e;
+  --color-danger-text: #f0b29b;
+  --color-danger-tint: rgba(201, 105, 78, 0.22);
+  --color-danger-rim: rgba(240, 178, 155, 0.34);
+  --color-success: #8e9f68;
+  --color-success-text: #c3d0a0;
+  --color-success-tint: rgba(142, 159, 104, 0.22);
+  --color-success-rim: rgba(195, 208, 160, 0.34);
+  --color-warning: #c99a4c;
+  --color-warning-text: #efcf8e;
+  --color-warning-tint: rgba(201, 154, 76, 0.22);
+  --color-warning-rim: rgba(239, 207, 142, 0.34);
+  --color-focus: rgba(252, 246, 234, 0.72);
+  --color-prominent: rgba(252, 246, 234, 0.92);
+  --color-prominent-text: #21160a;
+  --color-rim-light: #fff4de;
+  --color-rim-shade: #1a1006;
+  --color-shadow: #22140a;
+  --shadow-none: 0 0 0 0 transparent;
+  --shadow-sm: 0 1px 2px rgba(34, 20, 10, 0.10), 0 4px 14px rgba(34, 20, 10, 0.10);
+  --shadow-md: 0 2px 4px rgba(34, 20, 10, 0.10), 0 12px 32px rgba(34, 20, 10, 0.16);
+  --shadow-lg: 0 4px 8px rgba(34, 20, 10, 0.12), 0 22px 56px rgba(34, 20, 10, 0.22);
+  --shadow-knob: 0 1px 3px rgba(26, 16, 6, 0.42), inset 0 -1px 0 rgba(26, 16, 6, 0.10);
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 26px;
+  --radius-2xl: 32px;
+  --radius-pill: 999px;
+  --radius-inner-min: 6px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --layout-shell-header: 56px;
+  --layout-shell-status: 52px;
+  --layout-shell-rail: 76px;
+  --layout-rail-width: 48px;
+  --layout-rail-tray: 200px;
+  --layout-page-pad-x: 40px;
+  --layout-page-pad-y: 32px;
+  --layout-page-gap: 32px;
+  --layout-section-gap: 20px;
+  --layout-column: 800px;
+  --layout-column-wide: 1040px;
+  --control-fill-faint: rgba(255, 244, 222, 0.045);
+  --control-fill: rgba(255, 244, 222, 0.09);
+  --control-fill-hover: rgba(255, 244, 222, 0.14);
+  --control-fill-pressed: rgba(255, 244, 222, 0.06);
+  --control-fill-selected: rgba(255, 244, 222, 0.19);
+  --control-fill-sunken: rgba(26, 16, 6, 0.26);
+  --control-fill-sunken-hover: rgba(26, 16, 6, 0.32);
+  --control-prominent: rgba(33, 22, 10, 0.60);
+  --control-prominent-hover: rgba(33, 22, 10, 0.70);
+  --control-hairline: rgba(255, 244, 222, 0.09);
+  --control-hairline-strong: rgba(255, 244, 222, 0.15);
+  --control-rim: inset 0 1px 0 0 rgba(255, 244, 222, 0.20), inset 0 0 0 1px rgba(255, 244, 222, 0.09);
+  --control-rim-strong: inset 0 1px 0 0 rgba(255, 244, 222, 0.30), inset 0 0 0 1px rgba(255, 244, 222, 0.14), inset 0 -1px 0 0 rgba(26, 16, 6, 0.20);
+  --control-height-sm: 28px;
+  --control-height-md: 34px;
+  --control-height-lg: 40px;
+  --type-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --type-display-size: clamp(36px, 2.8vw + 16px, 64px);
+  --type-display-weight: 600;
+  --type-display-leading: 1.02;
+  --type-display-tracking: -0.032em;
+  --type-title-size: 28px;
+  --type-title-weight: 600;
+  --type-title-leading: 1.12;
+  --type-title-tracking: -0.022em;
+  --type-heading-size: 18px;
+  --type-heading-weight: 600;
+  --type-heading-leading: 1.25;
+  --type-heading-tracking: -0.012em;
+  --type-body-size: 14px;
+  --type-body-weight: 400;
+  --type-body-leading: 1.5;
+  --type-body-tracking: -0.003em;
+  --type-secondary-size: 13px;
+  --type-secondary-weight: 400;
+  --type-secondary-leading: 1.45;
+  --type-secondary-tracking: 0em;
+  --type-label-size: 12px;
+  --type-label-weight: 500;
+  --type-label-leading: 1.3;
+  --type-label-tracking: 0.01em;
+  --type-button-size: 14px;
+  --type-button-weight: 500;
+  --type-button-leading: 1;
+  --type-button-tracking: -0.005em;
+  --type-caption-size: 12px;
+  --type-caption-weight: 400;
+  --type-caption-leading: 1.35;
+  --type-caption-tracking: 0.005em;
+  --type-stat-size: 32px;
+  --type-stat-weight: 500;
+  --type-stat-leading: 1;
+  --type-stat-tracking: -0.02em;
+  --motion-press: 90ms;
+  --motion-hover: 160ms;
+  --motion-state: 180ms;
+  --motion-page: 200ms;
+  --motion-surface: 220ms;
+  --motion-exit: 150ms;
+  --motion-backdrop: 420ms;
+  --motion-stagger: 24ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --press-scale: 0.985;
+  --backdrop-base: #2a1c0e;
+  --backdrop-fallback: radial-gradient(60% 40% at 50% 60%, rgba(238, 196, 128, 0.32), rgba(238, 196, 128, 0) 72%), linear-gradient(180deg, #6d6843 0%, #857750 28%, #9c7f4f 52%, #74532f 76%, #2a1c0e 100%);
+  --backdrop-scrim: linear-gradient(to bottom, rgba(26, 16, 6, 0.30) 0%, rgba(26, 16, 6, 0.08) 22%, rgba(26, 16, 6, 0.03) 50%, rgba(26, 16, 6, 0.12) 78%, rgba(26, 16, 6, 0.40) 100%), radial-gradient(130% 100% at 50% 42%, rgba(26, 16, 6, 0) 52%, rgba(26, 16, 6, 0.22) 100%);
+  --backdrop-scrim-reduced: linear-gradient(rgba(26, 16, 6, 0.30), rgba(26, 16, 6, 0.30));
+  --backdrop-document: linear-gradient(180deg, rgba(22, 14, 6, 0.44) 0%, rgba(22, 14, 6, 0.36) 45%, rgba(22, 14, 6, 0.18) 100%);
+  --backdrop-modal-scrim: rgba(22, 14, 6, 0.34);
+  --backdrop-image-filter: none;
+  --backdrop-text-shadow: 0 1px 2px rgba(26, 16, 6, 0.55), 0 2px 16px rgba(26, 16, 6, 0.45);
+  --backdrop-text-shadow-glass: 0 1px 1px rgba(26, 16, 6, 0.28);
+  --backdrop-mark-shadow: drop-shadow(0 1px 2px rgba(26, 16, 6, 0.45));
+  --brand-cap: 100;
+  --brand-surface: 42;
+  --brand-stem: 15;
+  --brand-bar: 12;
+  --brand-corner-outer: 5;
+  --brand-corner-inner: 2;
+  --brand-shift: 2.5;
+  --brand-ring-drop: 4;
+  --brand-ring-side: 15;
+  --brand-air: #f4ebd9;
+  --brand-air-opacity: 0.88;
+  --brand-beneath: #e9dac0;
+  --brand-beneath-opacity: 0.9;
+  --brand-edge: #8c5f32;
+  --brand-tile: #3a2016;
+  --brand-tile-beneath: #2a160e;
+  --brand-dark-air: #3a2016;
+  --brand-dark-beneath: #2a160e;
+  --brand-dark-edge: #cdb48a;
+  --brand-tier-full: 48;
+  --brand-tier-reduced: 20;
+  --brand-reveal: 1000;
+  --brand-reveal-fade: 200;
+  --brand-veil: rgba(26, 16, 6, 0.18);
+  --mat-clear-tint: rgba(255, 246, 228, 0.05);
+  --mat-clear-tint-noblur: rgba(40, 26, 12, 0.22);
+  --mat-clear-tint-solid: rgba(51, 34, 15, 0.86);
+  --mat-clear-blur: 10px;
+  --mat-clear-rim: inset 0 1px 0 0 rgba(255, 244, 222, 0.32), inset 0 0 0 1px rgba(255, 244, 222, 0.1), inset 0 -1px 0 0 rgba(26, 16, 6, 0);
+  --mat-clear-shadow: var(--shadow-none);
+  --mat-clear-fill: var(--mat-clear-tint);
+  --mat-clear-filter: blur(var(--mat-clear-blur)) saturate(1.15) brightness(1);
+  --mat-light-tint: rgba(246, 232, 204, 0.14);
+  --mat-light-tint-noblur: rgba(48, 32, 15, 0.40);
+  --mat-light-tint-solid: rgba(66, 46, 24, 0.94);
+  --mat-light-blur: 20px;
+  --mat-light-rim: inset 0 1px 0 0 rgba(255, 244, 222, 0.36), inset 0 0 0 1px rgba(255, 244, 222, 0.13), inset 0 -1px 0 0 rgba(26, 16, 6, 0.06);
+  --mat-light-shadow: var(--shadow-sm);
+  --mat-light-fill: var(--mat-light-tint);
+  --mat-light-filter: blur(var(--mat-light-blur)) saturate(1.3) brightness(0.98);
+  --mat-standard-tint: rgba(70, 48, 24, 0.32);
+  --mat-standard-tint-noblur: rgba(44, 29, 13, 0.58);
+  --mat-standard-tint-solid: rgba(56, 38, 19, 0.96);
+  --mat-standard-blur: 28px;
+  --mat-standard-rim: inset 0 1px 0 0 rgba(255, 244, 222, 0.3), inset 0 0 0 1px rgba(255, 244, 222, 0.12), inset 0 -1px 0 0 rgba(26, 16, 6, 0.1);
+  --mat-standard-shadow: var(--shadow-md);
+  --mat-standard-fill: var(--mat-standard-tint);
+  --mat-standard-filter: blur(var(--mat-standard-blur)) saturate(1.25) brightness(0.88);
+  --mat-dense-tint: rgba(40, 26, 12, 0.56);
+  --mat-dense-tint-noblur: rgba(33, 22, 10, 0.78);
+  --mat-dense-tint-solid: rgba(38, 25, 12, 0.98);
+  --mat-dense-blur: 34px;
+  --mat-dense-rim: inset 0 1px 0 0 rgba(255, 244, 222, 0.24), inset 0 0 0 1px rgba(255, 244, 222, 0.1), inset 0 -1px 0 0 rgba(26, 16, 6, 0.14);
+  --mat-dense-shadow: var(--shadow-md);
+  --mat-dense-fill: var(--mat-dense-tint);
+  --mat-dense-filter: blur(var(--mat-dense-blur)) saturate(1.2) brightness(0.78);
+}
+
+.material-clear {
+  background-color: var(--mat-clear-fill);
+  -webkit-backdrop-filter: var(--mat-clear-filter);
+  backdrop-filter: var(--mat-clear-filter);
+  box-shadow: var(--mat-clear-rim), inset 0 0 0 100vmax var(--mat-veil, transparent), var(--mat-clear-shadow);
+  border-radius: var(--surface-radius, var(--radius-lg));
+  color: var(--color-text);
+}
+.material-light {
+  background-color: var(--mat-light-fill);
+  -webkit-backdrop-filter: var(--mat-light-filter);
+  backdrop-filter: var(--mat-light-filter);
+  box-shadow: var(--mat-light-rim), inset 0 0 0 100vmax var(--mat-veil, transparent), var(--mat-light-shadow);
+  border-radius: var(--surface-radius, var(--radius-lg));
+  color: var(--color-text);
+}
+.material-standard {
+  background-color: var(--mat-standard-fill);
+  -webkit-backdrop-filter: var(--mat-standard-filter);
+  backdrop-filter: var(--mat-standard-filter);
+  box-shadow: var(--mat-standard-rim), inset 0 0 0 100vmax var(--mat-veil, transparent), var(--mat-standard-shadow);
+  border-radius: var(--surface-radius, var(--radius-lg));
+  color: var(--color-text);
+}
+.material-dense {
+  background-color: var(--mat-dense-fill);
+  -webkit-backdrop-filter: var(--mat-dense-filter);
+  backdrop-filter: var(--mat-dense-filter);
+  box-shadow: var(--mat-dense-rim), inset 0 0 0 100vmax var(--mat-veil, transparent), var(--mat-dense-shadow);
+  border-radius: var(--surface-radius, var(--radius-lg));
+  color: var(--color-text);
+}
+
+.type-display {
+  font-family: var(--type-family);
+  font-size: var(--type-display-size);
+  font-weight: var(--type-display-weight);
+  line-height: var(--type-display-leading);
+  letter-spacing: var(--type-display-tracking);
+  color: var(--color-text);
+}
+.type-title {
+  font-family: var(--type-family);
+  font-size: var(--type-title-size);
+  font-weight: var(--type-title-weight);
+  line-height: var(--type-title-leading);
+  letter-spacing: var(--type-title-tracking);
+  color: var(--color-text);
+}
+.type-heading {
+  font-family: var(--type-family);
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  line-height: var(--type-heading-leading);
+  letter-spacing: var(--type-heading-tracking);
+  color: var(--color-text);
+}
+.type-body {
+  font-family: var(--type-family);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  line-height: var(--type-body-leading);
+  letter-spacing: var(--type-body-tracking);
+  color: var(--color-text);
+}
+.type-secondary {
+  font-family: var(--type-family);
+  font-size: var(--type-secondary-size);
+  font-weight: var(--type-secondary-weight);
+  line-height: var(--type-secondary-leading);
+  letter-spacing: var(--type-secondary-tracking);
+  color: var(--color-text-secondary);
+}
+.type-label {
+  font-family: var(--type-family);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-leading);
+  letter-spacing: var(--type-label-tracking);
+  color: var(--color-text-secondary);
+}
+.type-button {
+  font-family: var(--type-family);
+  font-size: var(--type-button-size);
+  font-weight: var(--type-button-weight);
+  line-height: var(--type-button-leading);
+  letter-spacing: var(--type-button-tracking);
+  color: var(--color-text);
+}
+.type-caption {
+  font-family: var(--type-family);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+  letter-spacing: var(--type-caption-tracking);
+  color: var(--color-text-tertiary);
+}
+.type-stat {
+  font-family: var(--type-family);
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
+  line-height: var(--type-stat-leading);
+  letter-spacing: var(--type-stat-tracking);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-blur="off"] {
+  --mat-clear-fill: var(--mat-clear-tint-noblur);
+  --mat-clear-filter: none;
+  --mat-light-fill: var(--mat-light-tint-noblur);
+  --mat-light-filter: none;
+  --mat-standard-fill: var(--mat-standard-tint-noblur);
+  --mat-standard-filter: none;
+  --mat-dense-fill: var(--mat-dense-tint-noblur);
+  --mat-dense-filter: none;
+  --glass-blur: 0px;
+  --glass-blur-strong: 0px;
+}
+:root[data-transparency="reduced"] {
+  --mat-clear-fill: var(--mat-clear-tint-solid);
+  --mat-clear-filter: none;
+  --mat-light-fill: var(--mat-light-tint-solid);
+  --mat-light-filter: none;
+  --mat-standard-fill: var(--mat-standard-tint-solid);
+  --mat-standard-filter: none;
+  --mat-dense-fill: var(--mat-dense-tint-solid);
+  --mat-dense-filter: none;
+  --glass-fill: var(--glass-fill-solid);
+  --glass-fill-strong: var(--glass-fill-solid);
+  --backdrop-scrim: var(--backdrop-scrim-reduced);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root, :root[data-blur="off"] {
+    --mat-clear-fill: var(--mat-clear-tint-solid);
+    --mat-clear-filter: none;
+    --mat-light-fill: var(--mat-light-tint-solid);
+    --mat-light-filter: none;
+    --mat-standard-fill: var(--mat-standard-tint-solid);
+    --mat-standard-filter: none;
+    --mat-dense-fill: var(--mat-dense-tint-solid);
+    --mat-dense-filter: none;
+    --glass-fill: var(--glass-fill-solid);
+    --glass-fill-strong: var(--glass-fill-solid);
+    --backdrop-scrim: var(--backdrop-scrim-reduced);
+  }
+}

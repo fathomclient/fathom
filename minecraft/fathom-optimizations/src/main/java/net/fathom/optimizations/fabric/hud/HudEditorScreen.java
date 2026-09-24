@@ -27,6 +27,7 @@ import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 import net.fathom.optimizations.fabric.ui.VisualEffects;
 
@@ -664,8 +665,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private void inspectorBody(GlRenderer ui, Widget widget, Rect panel) {
         Placement placement = hud.placement(widget.id());
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
-        ui.rounded(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.RAISED);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
+        FathomComponents.panel(ui, panel);
 
         Rect inner = panel.inset(Skin.S4, Skin.S4);
         ui.text(Text.fit(ui, widget.name(), Type.ROW_TITLE, inner.width), inner.x,

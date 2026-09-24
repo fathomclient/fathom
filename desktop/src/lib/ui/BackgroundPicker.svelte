@@ -6,26 +6,26 @@
   previously two separate implementations that drifted, which is the specific
   problem this milestone exists to remove.
 
-  Thumbnails are the real poster frames — `tools/prepare-background-video.ps1`
-  writes a JPEG beside every WebM from the same graded, defocused source, so what
-  you see here is a frame of the clip you are choosing, not an illustration of
-  it.
+  Thumbnails are the approved images themselves, so what you see here is the
+  background you are choosing, not an illustration of it.
+
+  Not shown while there is only one approved background (`PICKER_AVAILABLE`);
+  it is kept so a small curated set can be offered again without new work.
 -->
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import { Check } from '@lucide/svelte';
   import { FAST, EASE } from '../motion';
-  import { creditFor } from '../credits';
-  import { openPage } from '../api';
+  import { imageFor, type BackgroundOption } from '../backgrounds';
 
-  export let options: { id: string; label: string }[] = [];
+  export let options: BackgroundOption[] = [];
   export let value: string;
   export let size: 'compact' | 'large' = 'compact';
   export let onChoose: (id: string) => void;
 
-  /* Shown here rather than only in Settings, because this is where footage
-     recorded in someone else's world is actually chosen. */
-  $: credit = creditFor(value);
+  /* Shown here rather than only in Settings, because this is where someone
+     else's photograph is actually chosen. */
+  $: credit = options.find((option) => option.id === value)?.credit ?? '';
 </script>
 
 <div class="grid" class:large={size === 'large'}>
@@ -36,12 +36,12 @@
       aria-pressed={option.id === value}
       on:click={() => onChoose(option.id)}
     >
+      <!-- The image sits over the warm fallback, so a thumbnail whose file is
+           missing shows the same substrate the background itself would, rather
+           than an empty tile. -->
       <span
         class="thumb"
-        class:midnight={option.id === 'static'}
-        style={option.id === 'static'
-          ? ''
-          : `background-image:url(/backgrounds/${option.id}.jpg)`}
+        style={`background-image:url(${imageFor(option.id)}), var(--backdrop-fallback)`}
       >
         {#if option.id === value}
           <span class="tick" transition:fade={{ duration: FAST, easing: EASE }}>
@@ -55,14 +55,8 @@
 </div>
 
 {#if credit}
-  <!-- The world and its creator are the link. A credit that says who made
-       something and then makes you go and find them is half a credit. -->
   <p class="credit" class:large={size === 'large'} transition:fade={{ duration: FAST, easing: EASE }}>
-    Recorded in <button class="link" on:click={() => void openPage(credit.worldPage)}
-      >{credit.world}</button
-    >, a world by <button class="link" on:click={() => void openPage(credit.creatorPage)}
-      >{credit.creator}</button
-    >
+    {credit}
   </p>
 {/if}
 
@@ -90,6 +84,7 @@
     display: block;
     aspect-ratio: 16 / 9;
     border-radius: var(--r-sm);
+    background: var(--backdrop-fallback);
     background-size: cover;
     background-position: center;
     border: 1px solid var(--chrome-line-strong);
@@ -119,9 +114,6 @@
       0 0 20px var(--accent-glow);
   }
 
-  .thumb.midnight {
-    background: linear-gradient(160deg, var(--midnight-top), var(--midnight-bottom));
-  }
 
   .tick {
     position: absolute;
@@ -168,26 +160,5 @@
   .credit.large {
     margin-top: var(--s-3);
     font-size: var(--t-caption);
-  }
-
-  /* A link, not a button that looks like one: it is inside a sentence, it takes
-     its size from the sentence, and the underline is what says it is clickable
-     without putting a box in the middle of a line of prose. */
-  .link {
-    display: inline;
-    padding: 0;
-    font: inherit;
-    color: var(--text-muted);
-    text-decoration: underline;
-    text-decoration-color: rgba(255, 255, 255, 0.28);
-    text-underline-offset: 3px;
-    transition:
-      color var(--m-fast) var(--ease),
-      text-decoration-color var(--m-fast) var(--ease);
-  }
-
-  .link:hover {
-    color: var(--text);
-    text-decoration-color: var(--accent);
   }
 </style>

@@ -1,9 +1,11 @@
 /*
- * Creator credits for background footage.
+ * Creator credits for the gameplay footage recorded in community worlds.
  *
- * Some backgrounds were recorded in community-made worlds whose creators allow
- * use with credit, so wherever that footage can be chosen, the credit is shown.
- * ATTRIBUTION.md is the full record; keep the two in step.
+ * The launcher no longer offers that footage as a background, but it is still
+ * in the repository and the in-game main menu still plays it, so the credit
+ * stays in Settings → Appearance. ATTRIBUTION.md is the full record; keep the
+ * two in step. The launcher's own photograph is credited from
+ * `backgrounds.ts`.
  *
  * Links are page ids, not URLs. The WebView cannot open a URL, only the pages
  * `crates/launcher-desktop/src/pages.rs` lists.
@@ -14,8 +16,6 @@ export interface WorldCredit {
   creator: string;
   worldPage: string;
   creatorPage: string;
-  /** Background ids recorded in this world. */
-  backgrounds: string[];
 }
 
 export const WORLD_CREDITS: WorldCredit[] = [
@@ -24,26 +24,11 @@ export const WORLD_CREDITS: WorldCredit[] = [
     creator: 'milkshake_mp3',
     worldPage: 'credit-tideworn',
     creatorPage: 'credit-milkshake-mp3',
-    backgrounds: ['bg_5rain', 'bg_5noraintickfrozen', 'bg_5noraintickunfrozen'],
   },
   {
     world: 'Tokyo Inspired City',
     creator: 'CoinCoffer',
     worldPage: 'credit-tokyo-inspired-city',
     creatorPage: 'credit-coincoffer',
-    backgrounds: [
-      'bg_6midnight',
-      'bg_6clear',
-      'bg_6pull_city-overlook',
-      'bg_6pull_moon-tower',
-      'bg_6pull_red-tower',
-      'bg_6pull_storm-panorama',
-      'bg_6pull_neon-grid',
-    ],
   },
 ];
-
-/** The credit owed for a background, if it was recorded in someone's world. */
-export function creditFor(background: string): WorldCredit | undefined {
-  return WORLD_CREDITS.find((credit) => credit.backgrounds.includes(background));
-}

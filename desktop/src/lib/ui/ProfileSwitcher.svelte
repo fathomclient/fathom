@@ -22,7 +22,8 @@
   import { fly } from 'svelte/transition';
   import { Check, ChevronDown, Layers } from '@lucide/svelte';
 
-  import { EASE, NORMAL } from '../motion';
+  import { EASE, MOTION_SURFACE } from '../motion';
+  import { tooltip } from '../tooltip';
   import { profilesView, selectProfile, type ProfileRow } from '../api';
 
   /** `bar` is the compact bottom-bar trigger; `hero` is the one on Home. */
@@ -78,28 +79,39 @@
 <svelte:window on:click={() => (open = false)} />
 
 <div class="anchor {size}">
+  <!-- On the photograph in both places it appears, so it is clear glass: the
+       capsule brings its own blur and rim rather than a flat fill. -->
   <button
-    class="trigger {size}"
+    class="trigger ui-capsule material-clear material-interactive {size}"
+    class:small={size === 'bar'}
     class:active={open}
-    title="Switch installation"
+    aria-haspopup="menu"
+    aria-expanded={open}
+    use:tooltip={open ? '' : 'Switch installation'}
     on:click|stopPropagation={() => void toggle()}
   >
-    <Layers size={size === 'hero' ? 14 : 13} strokeWidth={2} />
+    <Layers size={size === 'hero' ? 15 : 13} strokeWidth={2} />
     <span class="label">{label}</span>
-    <ChevronDown size={12} strokeWidth={2.2} />
+    <span class="chevron" class:open><ChevronDown size={13} strokeWidth={2.2} /></span>
   </button>
 
   {#if open}
     <div
-      class="menu glass-strong {align}"
-      transition:fly={{ y: align === 'up' ? 6 : -6, duration: NORMAL, easing: EASE }}
+      class="menu ui-popover {align}"
+      transition:fly={{ y: align === 'up' ? 6 : -6, duration: MOTION_SURFACE, easing: EASE }}
       on:click|stopPropagation
       on:keydown={(event) => event.key === 'Escape' && (open = false)}
       role="menu"
       tabindex="-1"
     >
       {#each rows as row}
-        <button class="entry" class:selected={row.selected} on:click={() => void choose(row.id)}>
+        <button
+          class="entry ui-popover-item"
+          class:selected={row.selected}
+          role="menuitemradio"
+          aria-checked={row.selected}
+          on:click={() => void choose(row.id)}
+        >
           <span class="tick">
             {#if row.selected}<Check size={13} strokeWidth={2.8} />{/if}
           </span>
@@ -113,9 +125,9 @@
       {/each}
 
       {#if rows.length === 0}
-        <p class="none">No installations yet.</p>
+        <p class="ui-popover-note">No installations yet.</p>
       {:else}
-        <p class="note">Applies next launch.</p>
+        <p class="ui-popover-note">Applies next launch.</p>
       {/if}
     </div>
   {/if}
@@ -127,128 +139,88 @@
   }
 
   .trigger {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    color: var(--text-muted);
-    transition:
-      color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease);
-  }
-
-  .trigger.bar {
-    height: var(--h-sm);
-    padding: 0 var(--s-2);
-    border-radius: var(--r-sm);
-    font-size: var(--t-caption);
+    color: var(--color-text);
   }
 
   .trigger.hero {
-    height: var(--h-md);
-    padding: 0 var(--s-3);
-    border-radius: var(--r-pill);
-    font-size: var(--t-body);
-    color: #cfd4dd;
-    background: rgba(12, 14, 19, 0.55);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid var(--glass-edge);
+    height: var(--control-height-lg);
+    padding: 0 var(--space-4);
+    font-size: var(--type-body-size);
   }
 
-  .trigger:hover,
   .trigger.active {
-    color: var(--text);
-    background: var(--fill-hover);
-  }
-
-  .trigger.hero:hover,
-  .trigger.hero.active {
-    background: rgba(12, 14, 19, 0.75);
+    --mat-veil: var(--control-fill);
   }
 
   .label {
     /* Content-sized, with a cap that only bites when the name genuinely has
-       nowhere to go. The cap used to be a flat 180px, which ellipsised ordinary
-       profile names on a wide window with empty space beside them -- an
-       arbitrary pixel count standing in for "is there room". `ch` ties it to the
-       text instead, and `min-width: 0` lets the flex parent shrink it further
-       when the bar really is tight, so the ellipsis appears only then. */
+       nowhere to go: `ch` ties it to the text rather than to an arbitrary pixel
+       count, and `min-width: 0` lets the flex parent shrink it further only
+       when the space really is tight. */
     min-width: 0;
-    max-width: 28ch;
+    max-width: 32ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: var(--w-medium);
+  }
+
+  .chevron {
+    display: grid;
+    place-items: center;
+    color: var(--color-text-secondary);
+    transition: transform var(--motion-state) var(--ease-standard);
+  }
+
+  .chevron.open {
+    transform: rotate(180deg);
   }
 
   .menu {
     position: absolute;
     z-index: 30;
-    min-width: 260px;
-    max-height: 320px;
+    min-width: 280px;
+    max-width: min(420px, 90vw);
+    max-height: 360px;
     overflow-y: auto;
-    padding: var(--s-2);
-    border-radius: var(--r-md);
   }
 
   .menu.up {
-    bottom: calc(100% + 8px);
+    bottom: calc(100% + var(--space-2));
     right: 0;
   }
 
   .menu.down {
-    top: calc(100% + 8px);
+    top: calc(100% + var(--space-2));
     left: 50%;
     transform: translateX(-50%);
-  }
-
-  .entry {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    width: 100%;
-    padding: var(--s-2);
-    border-radius: var(--r-sm);
-    text-align: left;
-    transition: background var(--m-fast) var(--ease);
-  }
-
-  .entry:hover {
-    background: var(--fill-hover);
   }
 
   .tick {
     display: grid;
     place-items: center;
-    width: 14px;
-    color: var(--accent);
+    width: 16px;
+    flex-shrink: 0;
+    color: var(--color-text);
   }
 
   .text {
     display: flex;
     flex-direction: column;
+    gap: 2px;
     min-width: 0;
   }
 
+  /* Names wrap inside the menu rather than being cut: the menu is where you
+     go to read them. */
   .name {
-    font-size: var(--t-body);
-    font-weight: var(--w-medium);
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: var(--type-body-size);
+    font-weight: var(--type-button-weight);
+    color: var(--color-text);
+    overflow-wrap: anywhere;
   }
 
   .facts {
-    font-size: var(--t-meta);
-    color: var(--text-faint);
-  }
-
-  .note,
-  .none {
-    margin: var(--s-2) 0 2px;
-    padding: 0 var(--s-2);
-    font-size: var(--t-meta);
-    color: var(--text-disabled);
+    font-size: var(--type-caption-size);
+    color: var(--color-text-tertiary);
   }
 </style>

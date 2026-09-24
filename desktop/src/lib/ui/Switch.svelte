@@ -6,9 +6,10 @@
   most-repeated interaction in the product, which is exactly why it gets a real
   transition and a real material instead of a coloured rectangle.
 
-  The knob is a physical object: it has a highlight on top, a shadow under it,
-  and it compresses slightly while held. The off track is sunken, the on track
-  is lit. Both are what make it read as a control rather than a div.
+  Off is a sunken channel; on is the same channel filled with champagne light.
+  That is a change in luminance, not a switch to a saturated colour, and it is
+  still unmistakable at a glance. The knob is ivory in both states, compresses
+  slightly while held, and never glows.
 -->
 <script lang="ts">
   export let checked: boolean;
@@ -32,72 +33,66 @@
 <style>
   .switch {
     position: relative;
-    width: 38px;
-    height: 22px;
-    border-radius: var(--r-pill);
-    background: var(--fill-sunken);
-    border: 1px solid var(--chrome-line-strong);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+    width: 42px;
+    height: 24px;
     flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    background-color: var(--control-fill-sunken);
+    box-shadow: var(--control-rim);
     transition:
-      background var(--m-normal) var(--ease),
-      border-color var(--m-normal) var(--ease),
-      box-shadow var(--m-normal) var(--ease);
+      background-color var(--motion-state) var(--ease-standard),
+      box-shadow var(--motion-state) var(--ease-standard);
   }
 
-  .switch:not(:disabled):hover {
-    border-color: rgba(255, 255, 255, 0.2);
+  .switch:hover:not(:disabled) {
+    background-color: var(--control-fill-sunken-hover);
   }
 
   .switch.on {
-    background: linear-gradient(180deg, var(--accent-strong), var(--accent));
-    border-color: rgba(224, 80, 92, 0.6);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.22),
-      0 0 16px var(--accent-glow);
+    background-color: var(--palette-champagne-300);
+    box-shadow: var(--control-rim-strong);
   }
 
-  .switch.on:not(:disabled):hover {
-    filter: brightness(1.08);
+  .switch.on:hover:not(:disabled) {
+    background-color: var(--palette-champagne-200);
   }
 
   .switch:disabled {
-    opacity: 0.4;
+    opacity: 0.45;
     cursor: default;
+  }
+
+  .switch:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
   }
 
   .knob {
     position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 16px;
-    height: 16px;
-    border-radius: var(--r-pill);
-    background: linear-gradient(180deg, #ffffff, #dfe3ea);
-    box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--radius-pill);
+    background-color: var(--palette-ivory-50);
+    box-shadow: var(--shadow-knob);
     transition:
-      transform var(--m-normal) var(--ease),
-      width var(--m-fast) var(--ease);
+      transform var(--motion-state) var(--ease-standard),
+      width var(--motion-press) var(--ease-standard);
   }
 
   .switch.on .knob {
-    transform: translateX(16px);
+    transform: translateX(18px);
   }
 
   /* Squashes while held, like a real switch under a thumb. The `on` variant
      shifts its origin so the knob stretches backwards from the right edge
      rather than sliding past it. */
   .switch:not(:disabled):active .knob {
-    width: 20px;
+    width: 22px;
   }
 
   .switch.on:not(:disabled):active .knob {
-    transform: translateX(12px);
-  }
-
-  .switch:focus-visible {
-    border-color: var(--accent-strong);
+    transform: translateX(14px);
   }
 </style>

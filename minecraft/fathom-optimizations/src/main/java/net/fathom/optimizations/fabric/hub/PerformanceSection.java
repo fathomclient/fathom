@@ -19,6 +19,7 @@ import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.perf.PerfLayer;
+import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 
 /**
@@ -344,8 +345,7 @@ final class PerformanceSection implements Section {
 
     private void meter(HubContext context, Rect area, String label, String value, String unit) {
         Renderer ui = context.ui();
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CARD, Skin.FILL);
-        ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE);
+        FathomComponents.card(ui, area, 0f, 0f);
         Controls.label(ui, label, area.x + Skin.S3, area.y + Skin.S3);
         float baseline = area.bottom() - Skin.S4;
         float width = ui.text(value, area.x + Skin.S3, baseline, Type.DISPLAY, Skin.TEXT);

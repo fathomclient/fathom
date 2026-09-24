@@ -20,7 +20,7 @@
   export let summary = '';
   export let collapsible = false;
   export let open = true;
-  /** Wrap the rows in glass. For status that must float, not for grouping. */
+  /** Wrap the rows in a pane of standard glass. */
   export let material = false;
 </script>
 
@@ -44,7 +44,7 @@
     <div
       class="rows"
       class:material
-      class:glass={material}
+      class:material-standard={material}
       transition:slide={{ duration: NORMAL, easing: EASE }}
     >
       <slot />
@@ -61,57 +61,60 @@
   .head {
     display: flex;
     align-items: center;
-    gap: var(--s-2);
+    gap: var(--space-2);
     width: 100%;
-    padding: 0 2px 9px;
+    padding: 0 var(--space-1) var(--space-2);
     text-align: left;
     color: inherit;
   }
 
   .head.interactive:hover .label,
   .head.interactive:hover .chevron {
-    color: var(--text);
+    color: var(--color-text);
   }
 
+  /* Sentence case, on the photograph, with the warm edge that keeps it legible
+     over bright sky. */
   .label {
-    font-size: var(--t-meta);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--text-label);
-    transition: color var(--m-fast) var(--ease);
+    font-size: var(--type-label-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-label-tracking);
+    color: var(--color-text-secondary);
+    transition: color var(--motion-hover) var(--ease-standard);
   }
 
   .summary {
     margin-left: auto;
-    font-size: var(--t-meta);
-    color: var(--text-label);
+    font-size: var(--type-label-size);
+    color: var(--color-text-tertiary);
   }
 
   .chevron {
     display: grid;
     place-items: center;
-    color: var(--text-disabled);
+    color: var(--color-text-tertiary);
     /* Rotation rather than swapping two glyphs: one element that turns reads
        as the same thing changing state. */
     transition:
-      transform var(--m-normal) var(--ease),
-      color var(--m-fast) var(--ease);
+      transform var(--motion-state) var(--ease-standard),
+      color var(--motion-hover) var(--ease-standard);
   }
 
   .chevron.open {
     transform: rotate(90deg);
   }
 
-  /* Rows sit directly on the background, separated by hairlines. The section
-     has no border and no fill of its own. */
   .rows {
     display: flex;
     flex-direction: column;
   }
 
+  /* The pane. Its radius is published so the rows inside round concentrically
+     with it. */
   .rows.material {
-    padding: 2px 0;
+    --surface-radius: var(--radius-lg);
+    --surface-inset: 2px;
+    padding: 2px;
     overflow: hidden;
   }
 </style>

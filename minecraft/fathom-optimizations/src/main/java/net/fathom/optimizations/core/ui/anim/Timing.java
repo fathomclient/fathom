@@ -22,6 +22,8 @@ public final class Timing {
     public static final float TOGGLE = FathomTheme.MOTION_TOGGLE;
     /** Tabs, segmented markers and navigation selection. */
     public static final float NAVIGATION = 0.190f;
+    /** Moving between a browser and one dedicated detail page. */
+    public static final float DETAIL = 0.155f;
     /** Ordinary component and status transitions. */
     public static final float STANDARD = FathomTheme.MOTION_NORMAL;
     /** Drawers and modal panels. */

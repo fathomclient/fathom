@@ -47,6 +47,14 @@ public interface Section {
     String subtitle();
 
     /**
+     * Whether this section currently supplies its own page heading.
+     * Detail pages use the whole content region for their breadcrumb and hero.
+     */
+    default boolean ownsHeading() {
+        return false;
+    }
+
+    /**
      * Draw the page, and act on anything the user does to it.
      *
      * @param area the content rectangle, in logical units, already inset

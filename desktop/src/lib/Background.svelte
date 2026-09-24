@@ -1,49 +1,48 @@
 <!--
   The background.
 
-  Gameplay footage behind the whole application. This is the piece that decides
-  whether Fathom looks like a client or like a settings dialog, so it is treated
-  as part of the composition rather than as wallpaper.
+  The one place the launcher's backdrop is decided. In the golden-hour system
+  the background is the palette -- every glass surface borrows its colour from
+  what is drawn here -- so nothing else in the interface paints a backdrop of
+  its own.
 
-  HOW THE CROSSFADE WORKS
+  WHAT IS DRAWN, BOTTOM TO TOP
 
-  Two <video> elements, not one. Switching assigns the incoming clip to
-  whichever slot is hidden, waits for it to actually have frames, and only then
-  fades the opacity across. A single element would leave a gap between `src`
-  changing and the first frame decoding, which is the black flash this exists to
-  avoid. The outgoing clip is paused once invisible, so only one video decodes
-  at rest.
+  1. The warm fallback (`--backdrop-fallback`), always painted. It is the
+     failure-state substrate, not a choice: if the approved image cannot load,
+     this is what shows, and no state can produce a black or empty window.
+  2. The approved photograph, in one of two slots.
+  3. The scrim, which only deepens the photograph where the window's edge
+     meets it.
 
-  A slot with no clip renders no element at all. A media element with src="" is
-  not an empty one: the empty string resolves against the document URL and the
-  element tries to decode the HTML page.
+  The chain is exactly that: approved image, then the warm fallback. An id
+  that is not approved (a retired background left in an old preference) is
+  shown as the default image, never as nothing.
 
-  WHAT IS BAKED AND WHAT IS CSS
+  WHY TWO SLOTS FOR ONE IMAGE
 
-  The blur and the per-clip grade are encoded into the files (see
-  tools/prepare-background-video.ps1), because a full-screen blur every frame is
-  real work on integrated graphics and this costs nothing once. The darkening
-  scrim and the saturation trim are CSS, because those are the parts most likely
-  to need adjusting against real interface colours, and re-encoding every video
-  to try a different scrim would be absurd.
+  So a switch between curated images can crossfade without a gap, if the set
+  grows again. The incoming image loads in the hidden slot and only fades in
+  once it has decoded. With one image this runs once, fading the photograph in
+  over the fallback on start.
+
+  Video backgrounds are retired. There is no <video> element on this path, so
+  no decoder starts, and nothing needs pausing while the game runs.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { kindOf, sourceFor } from './backgrounds';
+  import { onMount, tick } from 'svelte';
+  import { approvedOrDefault, DEFAULT_BACKGROUND, imageFor } from './backgrounds';
+  import { MOTION_BACKDROP } from './motion';
 
-  export let choice: string = 'bg_5rain';
-  /** False while Minecraft runs or the window is hidden. */
-  export let playing: boolean = true;
+  export let choice: string = DEFAULT_BACKGROUND;
 
-  /* `still` decides which element the slot renders. A still is one <img>: the
-     same crossfade, without a decoder to start or stop. */
-  type Slot = { src: string; visible: boolean; still: boolean };
+  type Slot = { src: string; visible: boolean };
 
   let slots: [Slot, Slot] = [
-    { src: '', visible: false, still: false },
-    { src: '', visible: false, still: false },
+    { src: '', visible: false },
+    { src: '', visible: false },
   ];
-  let elements: (HTMLVideoElement | HTMLImageElement | null)[] = [null, null];
+  let elements: (HTMLImageElement | null)[] = [null, null];
   let front = 0;
   /* The reactive statement below runs once before the DOM exists. Without this
      guard it would set `current` while both elements are still null, and the
@@ -53,108 +52,94 @@
      snaps. See the note on `transition-duration` in the markup. */
   let docVisible = true;
 
-  const isStatic = (value: string) => kindOf(value) === 'gradient';
-
-  /* Only a video can be told to play. Asking an <img> would be a runtime error
-     in the one place this component exists to keep quiet. */
-  const asVideo = (element: HTMLVideoElement | HTMLImageElement | null) =>
-    element instanceof HTMLVideoElement ? element : null;
+  /* An outgoing image is released only once it has finished fading out. */
+  const RELEASE_AFTER = MOTION_BACKDROP + 120;
 
   let current = '';
 
-  async function show(value: string) {
-    if (value === current) return;
-    current = value;
-
-    if (isStatic(value)) {
-      // Fade the footage out to reveal the midnight surface underneath, then
-      // stop decoding it.
-      slots[front].visible = false;
-      slots = slots;
-      window.setTimeout(() => {
-        if (!isStatic(current)) return;
-        asVideo(elements[front])?.pause();
-        slots[front].src = '';
-        slots = slots;
-      }, 280);
-      return;
-    }
-
-    const back = front === 0 ? 1 : 0;
-    slots[back].still = kindOf(value) === 'still';
-    slots[back].src = sourceFor(value);
-    slots = slots;
-
-    // Wait for real frames before crossing over, so the incoming slot never
-    // fades in while still empty.
-    await new Promise<void>((resolve) => {
+  /**
+   * Wait until a slot's image has decoded, or has failed.
+   *
+   * A stall is treated as ready: an image that is merely slow must not leave
+   * the background stuck mid-switch. Only a real error counts as failure.
+   */
+  function decoded(index: number): Promise<'ready' | 'failed'> {
+    return new Promise((resolve) => {
       let settled = false;
-      const done = () => {
+      const finish = (result: 'ready' | 'failed') => {
         if (settled) return;
         settled = true;
-        resolve();
+        resolve(result);
       };
-      // The element appears on the next flush, because a slot with no source
-      // renders nothing. Poll for it rather than assuming it is already there.
       const started = Date.now();
       const attach = () => {
         if (settled) return;
-        const element = elements[back];
-        if (element) {
-          // A decoded video frame and a decoded image are the same question
-          // asked of two different elements: `readyState` for one, `complete`
-          // for the other.
-          const video = asVideo(element);
-          if (video ? video.readyState >= 2 : (element as HTMLImageElement).complete) {
-            done();
-            return;
-          }
-          element.addEventListener(video ? 'canplay' : 'load', done, { once: true });
-          element.addEventListener('error', done, { once: true });
+        const image = elements[index];
+        if (image) {
+          // An error that happened before this listener existed is read off
+          // the element: a completed image with no width did not decode.
+          if (image.complete) return finish(image.naturalWidth > 0 ? 'ready' : 'failed');
+          image.addEventListener('load', () => finish('ready'), { once: true });
+          image.addEventListener('error', () => finish('failed'), { once: true });
           return;
         }
-        if (Date.now() - started > 1000) {
-          done();
-          return;
-        }
+        if (Date.now() - started > 1000) return finish('ready');
         requestAnimationFrame(attach);
       };
       attach();
-      // A stall must not leave the background stuck mid-fade.
-      window.setTimeout(done, 1500);
+      window.setTimeout(() => finish('ready'), 1500);
     });
+  }
 
+  /** Fade the front slot out to the fallback, then release it. */
+  function revealFallback() {
+    slots[front].visible = false;
+    slots = slots;
+    const hidden = front;
+    const expected = current;
+    window.setTimeout(() => {
+      if (current !== expected || slots[hidden].visible) return;
+      slots[hidden].src = '';
+      slots = slots;
+    }, RELEASE_AFTER);
+  }
+
+  async function show(requested: string) {
+    const value = approvedOrDefault(requested);
+    if (value === current) return;
+    current = value;
+
+    const back = front === 0 ? 1 : 0;
+    slots[back].src = imageFor(value);
+    slots = slots;
+    await tick();
+
+    const result = await decoded(back);
     if (current !== value) return; // superseded while loading
-    if (playing) void asVideo(elements[back])?.play().catch(() => {});
+
+    if (result === 'failed') {
+      // The approved image is missing or unreadable. Say so once and leave the
+      // warm fallback showing: the one thing this must never do is go black.
+      console.warn(`[background] ${imageFor(value)} could not be shown; using the warm fallback`);
+      slots[back].src = '';
+      slots = slots;
+      revealFallback();
+      return;
+    }
 
     slots[back].visible = true;
     slots[front].visible = false;
     slots = slots;
-
     const outgoing = front;
     front = back;
-
-    // Release the previous decoder once it is fully hidden. Only one clip
-    // decodes at rest, which is the whole reason for two slots.
     window.setTimeout(() => {
       if (front === outgoing) return;
-      asVideo(elements[outgoing])?.pause();
       slots[outgoing].src = '';
       slots = slots;
-    }, 320);
+    }, RELEASE_AFTER);
   }
 
   $: if (mounted) void show(choice);
-
-  $: {
-    // Pausing is not politeness: a decoding video is GPU and power the game
-    // should have while it is running.
-    const element = asVideo(elements[front]);
-    if (element && slots[front].src) {
-      if (playing) void element.play().catch(() => {});
-      else element.pause();
-    }
-  }
 
   onMount(() => {
     mounted = true;
@@ -167,9 +152,7 @@
 </script>
 
 <div class="backdrop">
-  <!-- Always painted, under everything. This is why no state can produce a
-       black window: there is never a moment with nothing drawn. -->
-  <div class="midnight"></div>
+  <div class="fallback"></div>
 
   {#each slots as slot, index}
     {#if slot.src}
@@ -178,42 +161,23 @@
 
            Both halves matter. Chromium freezes a running CSS transition in a
            hidden document at currentTime 0 and does not resume it when the
-           document becomes visible again, so the fade stays stuck and the
-           background is black forever. This fade fires at startup, so any
-           launch into an unfocused or minimised window hit it. With a zero
-           duration there is no transition to freeze. -->
-      {#if slot.still}
-        <img
-          bind:this={elements[index]}
-          class="footage"
-          style="opacity: {slot.visible ? 1 : 0}; transition-duration: {docVisible
-            ? 'var(--m-slow)'
-            : '0ms'}"
-          src={slot.src}
-          alt=""
-          aria-hidden="true"
-        />
-      {:else}
-        <video
-          bind:this={elements[index]}
-          class="footage"
-          style="opacity: {slot.visible ? 1 : 0}; transition-duration: {docVisible
-            ? 'var(--m-slow)'
-            : '0ms'}"
-          src={slot.src}
-          muted
-          loop
-          playsinline
-          preload="auto"
-          aria-hidden="true"
-        ></video>
-      {/if}
+           document becomes visible again, so the fade stays stuck. This fade
+           fires at startup, so any launch into an unfocused or minimised window
+           hit it. With a zero duration there is no transition to freeze. -->
+      <img
+        bind:this={elements[index]}
+        class="image"
+        style="opacity: {slot.visible ? 1 : 0}; transition-duration: {docVisible
+          ? `${MOTION_BACKDROP}ms`
+          : '0ms'}"
+        src={slot.src}
+        alt=""
+        aria-hidden="true"
+        draggable="false"
+      />
     {/if}
   {/each}
 
-  <!-- The scrim. A vertical fall-off rather than a flat wash: the middle is
-       where the launch composition sits and where the gameplay should be most
-       visible, and the edges meet black chrome. -->
   <div class="scrim"></div>
 </div>
 
@@ -222,65 +186,32 @@
     position: absolute;
     inset: 0;
     overflow: hidden;
-    background: var(--chrome);
+    background: var(--backdrop-base);
   }
 
-  .midnight {
+  .fallback {
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-      170deg,
-      var(--midnight-top) 0%,
-      var(--midnight-mid) 55%,
-      var(--midnight-bottom) 100%
-    );
+    background: var(--backdrop-fallback);
   }
 
-  .footage {
+  .image {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    /* Cover, never stretch: scales to the larger axis and lets the other
-       overflow, so a 16:9 clip in a 4:3 window loses its edges instead of
-       becoming squashed. */
+    /* Cover, never stretch: a 16:9 photograph in a 4:3 window loses its edges
+       instead of becoming squashed. */
     object-fit: cover;
-    /* Opacity and duration come from the inline style above; only the property
-       and the curve live here. */
     transition-property: opacity;
-    transition-timing-function: var(--ease);
-    /* The runtime treatment, deliberately light.
-       The previous values desaturated the footage on top of a baked
-       gblur=sigma=10, and the combination is what turned recognisable
-       Minecraft scenes into coloured blobs. Saturation now goes UP slightly:
-       the blur already washes colour out, and the scene needs to be
-       identifiable as Minecraft to be worth showing at all. */
-    filter: saturate(1.08) contrast(1.06) brightness(1.04);
+    transition-timing-function: var(--ease-standard);
+    filter: var(--backdrop-image-filter);
   }
 
   .scrim {
     position: absolute;
     inset: 0;
-    background:
-      /* Darkest where the chrome meets the canvas and lightest through the
-         middle, so the footage is most visible exactly where the composition
-         sits. Every stop is lighter than the previous build's: readability is
-         now the foreground material's job, not the scrim's. */
-      linear-gradient(
-        to bottom,
-        rgba(3, 4, 8, 0.5) 0%,
-        rgba(3, 4, 8, 0.2) 24%,
-        rgba(3, 4, 8, 0.14) 52%,
-        rgba(3, 4, 8, 0.26) 80%,
-        rgba(3, 4, 8, 0.56) 100%
-      ),
-      /* A gentle vignette. Pulls the eye to the centre, which is where the
-         launch control is. */
-      radial-gradient(
-        125% 95% at 50% 46%,
-        rgba(0, 0, 0, 0) 45%,
-        rgba(0, 0, 0, 0.3) 100%
-      );
+    background: var(--backdrop-scrim);
     pointer-events: none;
   }
 </style>

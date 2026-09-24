@@ -12,7 +12,26 @@ it.
 
 ---
 
+## Launcher background
+
+### golden-hour
+
+| | |
+|---|---|
+| Image | Palm Tree Sunset Water |
+| Credited to | showtime, at Wallpapers.com |
+| Source | <https://wallpapers.com/wallpapers/palm-tree-sunset-water-63gj3uifdzlwg9vh.html> |
+| Licence | **Not yet confirmed.** Wallpapers.com hosts user uploads; the uploader is not necessarily the photographer, and the site does not grant redistribution rights by default. Confirm the terms, or replace the image, before a public release. |
+
+- `desktop/public/backgrounds/golden-hour.jpg` — the launcher's default and
+  currently only background. Credited in the launcher under Settings →
+  Appearance.
+
 ## Background footage
+
+The launcher no longer offers these recordings as backgrounds; the files are
+retired in place and not loaded. The in-game main menu still uses the bg_5 and
+bg_6 material listed below.
 
 All background footage was recorded in Minecraft by the Fathom project owner.
 Some recordings were made in vanilla worlds. Others were made in community-made

@@ -11,6 +11,7 @@
  * the page cannot show a switch as on after the core declined to turn it on.
  */
 import { invoke } from '@tauri-apps/api/core';
+import { DEFAULT_BACKGROUND } from './backgrounds';
 
 export interface ProfileSummary {
   id: string;
@@ -794,13 +795,38 @@ export async function shellStatus(): Promise<ShellStatus> {
 }
 
 export async function background(): Promise<string> {
-  if (!inTauri) return 'bg_5rain';
+  if (!inTauri) return DEFAULT_BACKGROUND;
   return invoke<string>('background');
 }
 
 export async function setBackground(choice: string): Promise<void> {
   if (!inTauri) return;
   await invoke('set_background', { choice });
+}
+
+/**
+ * The launcher's own accessibility switches for the glass. Stored beside the
+ * background in `appearance.json`; Windows' "Transparency effects" setting
+ * applies on top of these through the media query, whatever they say.
+ */
+export interface AppearanceModes {
+  reduceTransparency: boolean;
+  reduceBlur: boolean;
+}
+
+export const DEFAULT_APPEARANCE_MODES: AppearanceModes = {
+  reduceTransparency: false,
+  reduceBlur: false,
+};
+
+export async function appearanceModes(): Promise<AppearanceModes> {
+  if (!inTauri) return DEFAULT_APPEARANCE_MODES;
+  return invoke<AppearanceModes>('appearance_modes');
+}
+
+export async function setAppearanceModes(modes: AppearanceModes): Promise<void> {
+  if (!inTauri) return;
+  await invoke('set_appearance_modes', { modes });
 }
 
 /* -- profiles ------------------------------------------------------------ */

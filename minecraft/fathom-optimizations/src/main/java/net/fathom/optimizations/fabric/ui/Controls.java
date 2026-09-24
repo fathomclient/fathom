@@ -664,16 +664,9 @@ public final class Controls {
             ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.pill(row),
                     Skin.mix(Skin.scaleAlpha(Skin.SURFACE_HOVER, hover), Skin.ELEVATED, on));
         }
-        if (on > 0.01f) {
-            float bar = row.height * 0.36f * on;
-            Rect marker = Rect.of(row.x, row.centreY() - bar / 2f,
-                    row.x + 3f, row.centreY() + bar / 2f);
-            ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker),
-                    Skin.scaleAlpha(Skin.HOT_RED, on));
-        }
         float iconSize = 16f;
         int tint = Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover), Skin.TEXT, on);
-        float x = row.x + Skin.S3 + 2f;
+        float x = row.x + Skin.S4;
         ui.icon(icon, x, row.centreY() - iconSize / 2f, iconSize, Skin.mix(tint, Skin.ACCENT_STRONG, on * 0.85f));
         x += iconSize + Skin.S3;
         middle(ui, label, x, row, row.right() - x - Skin.S2, current ? Type.BODY_STRONG : Type.BODY, tint);
@@ -719,22 +712,18 @@ public final class Controls {
         ui.outline(box.x, box.y, box.right(), box.bottom(), radius, Skin.BORDER_STANDARD,
                 Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover),
                         Skin.scaleAlpha(Skin.HOT_RED, 0.62f + s.hover * 0.20f), t));
-        if (enabled && t > 0.01f) {
-            VisualEffects.innerEnergy(ui, box, radius, t * 0.36f);
-        }
         focusRing(ui, s, box, radius);
 
         float inset = 3f;
         float knob = box.height - inset * 2f;
-        float stretch = s.press * 3f;
-        float travel = box.width - knob - inset * 2f - stretch;
+        float travel = box.width - knob - inset * 2f;
         float knobX = box.x + inset + travel * t;
         int face = enabled
                 ? Skin.mix(0xFF9AA1AC, 0xFFFFFFFF, Math.min(1f, t * 0.86f + s.hover * 0.30f))
                 : 0xFFB9BFC9;
-        ui.shadow(knobX, box.y + inset, knobX + knob + stretch, box.y + inset + knob, knob / 2f, 2.5f,
+        ui.shadow(knobX, box.y + inset, knobX + knob, box.y + inset + knob, knob / 2f, 2.5f,
                 Skin.fade(0x000000, 0.35f));
-        Rect thumb = new Rect(knobX, box.y + inset, knob + stretch, knob);
+        Rect thumb = new Rect(knobX, box.y + inset, knob, knob);
         ui.rounded(thumb.x, thumb.y, thumb.right(), thumb.bottom(), Skin.pill(thumb), face);
         return s.clicked;
     }

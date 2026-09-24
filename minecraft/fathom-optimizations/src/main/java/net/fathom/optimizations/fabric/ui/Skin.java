@@ -224,15 +224,15 @@ public final class Skin {
     // -----------------------------------------------------------------------
 
     /** Small inset shapes: swatches, tags and compact tooltips. */
-    public static final float R_SMALL = 6f;
+    public static final float R_SMALL = 8f;
     /** Ordinary buttons, fields and navigation rows. */
-    public static final float R_CONTROL = 8f;
+    public static final float R_CONTROL = 11f;
     /** Search, top controls, icon containers, segmented controls and popovers. */
-    public static final float R_MEDIUM = 10f;
+    public static final float R_MEDIUM = 14f;
     /** Cards, drawers and substantial overlays. */
-    public static final float R_CARD = 12f;
+    public static final float R_CARD = 16f;
     /** The outer application panel. */
-    public static final float R_PANEL = 16f;
+    public static final float R_PANEL = 22f;
 
     /** A hovered card rises this far before press compression wins. */
     public static final float HOVER_ELEVATION = 1.25f;
@@ -274,6 +274,15 @@ public final class Skin {
     public static final float RAIL_TRAY_WIDTH = FathomTheme.DIM_RAIL_TRAY_WIDTH;
     public static final float RAIL_ROW = FathomTheme.DIM_RAIL_ROW;
     public static final float ROW_HEIGHT = 52f;
+
+    /** In-game composition tokens; pages use these rather than local guesses. */
+    public static final float SIDEBAR_WIDTH = 172f;
+    public static final float PAGE_INSET_X = 28f;
+    public static final float PAGE_INSET_Y = 24f;
+    public static final float CARD_PADDING = 16f;
+    public static final float CARD_GAP = 16f;
+    public static final float SECTION_GAP = 20f;
+    public static final float ROW_GAP = 12f;
 
     /**
      * How much of the screen the hub takes.

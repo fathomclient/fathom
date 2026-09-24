@@ -32,6 +32,8 @@
     TriangleAlert,
     ScrollText,
     Terminal,
+    Layers,
+    Droplets,
   } from '@lucide/svelte';
 
   import Section from '../lib/ui/Section.svelte';
@@ -42,20 +44,28 @@
   import BackgroundPicker from '../lib/ui/BackgroundPicker.svelte';
   import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
   import { WORLD_CREDITS } from '../lib/credits';
-  import { kindOf } from '../lib/backgrounds';
+  import {
+    BACKGROUNDS,
+    DEFAULT_BACKGROUND,
+    PICKER_AVAILABLE,
+    type BackgroundOption,
+  } from '../lib/backgrounds';
+  import { changeAppearanceModes, restoreAppearanceModes } from '../lib/appearance';
   import {
     openPage,
     recoveryView,
     setChoice,
     setSetting,
     settingsView,
+    DEFAULT_APPEARANCE_MODES,
+    type AppearanceModes,
     type RecoveryView,
     type SettingsView,
   } from '../lib/api';
 
   export let category = 'general';
-  export let choice = 'bg_5rain';
-  export let backgrounds: { id: string; label: string }[] = [];
+  export let choice = DEFAULT_BACKGROUND;
+  export let backgrounds: BackgroundOption[] = [];
   export let onBackground: (id: string) => void;
   export let onNavigate: (route: string, category?: string) => void = () => {};
 
@@ -79,7 +89,23 @@
     void (async () => {
       [view, recovery] = await Promise.all([settingsView(), recoveryView()]);
     })();
+    void (async () => {
+      modes = await restoreAppearanceModes();
+    })();
   });
+
+  /* The glass accessibility switches. Applied before they are saved, so the
+     window answers the click even if the write is slow. */
+  let modes: AppearanceModes = DEFAULT_APPEARANCE_MODES;
+
+  async function changeModes(next: AppearanceModes) {
+    modes = next;
+    try {
+      await changeAppearanceModes(next);
+    } catch (cause) {
+      error = String(cause);
+    }
+  }
 
   async function toggle(id: string, value: boolean) {
     if (busy) return;
@@ -135,7 +161,6 @@
         );
 
   $: cacheAction = recovery?.actions.find((action) => action.id === 'clear-cache');
-  $: animated = kindOf(choice) === 'video';
   $: activeLabel = CATEGORIES.find((c) => c.id === category)?.label ?? 'Settings';
 </script>
 
@@ -198,28 +223,44 @@
 
           <!-- APPEARANCE -->
           {#if category === 'appearance'}
-            <Section material>
-              <Row title="Animated background" detail="Play gameplay footage behind Fathom.">
-                <span slot="icon"><Palette size={15} strokeWidth={1.9} /></span>
+            <!-- Accessibility for the glass itself. Windows' own "Transparency
+                 effects" switch also reduces transparency, whatever these say. -->
+            <Section label="Glass" material>
+              <Row title="Reduce transparency" detail="Nearly opaque panels. Windows' own setting also applies.">
+                <span slot="icon"><Layers size={15} strokeWidth={1.9} /></span>
                 <svelte:fragment slot="control">
                   <Switch
-                    checked={animated}
-                    label="Animated background"
-                    onChange={(value) => onBackground(value ? 'bg_5rain' : 'static')}
+                    checked={modes.reduceTransparency}
+                    label="Reduce transparency"
+                    onChange={(value) => void changeModes({ ...modes, reduceTransparency: value })}
+                  />
+                </svelte:fragment>
+              </Row>
+              <Row title="Reduce blur" detail="No blur behind panels; they get denser to stay readable.">
+                <span slot="icon"><Droplets size={15} strokeWidth={1.9} /></span>
+                <svelte:fragment slot="control">
+                  <Switch
+                    checked={modes.reduceBlur}
+                    label="Reduce blur"
+                    onChange={(value) => void changeModes({ ...modes, reduceBlur: value })}
                   />
                 </svelte:fragment>
               </Row>
             </Section>
 
-            <Section label="Background">
-              <!-- The same component the bottom bar uses, at a larger size. -->
-              <BackgroundPicker
-                options={backgrounds}
-                value={choice}
-                size="large"
-                onChoose={onBackground}
-              />
-            </Section>
+            <!-- Only when there is a choice to make: with one approved
+                 background a picker would be a control that does nothing. The
+                 same component the bottom bar uses, at a larger size. -->
+            {#if PICKER_AVAILABLE}
+              <Section label="Background">
+                <BackgroundPicker
+                  options={backgrounds}
+                  value={choice}
+                  size="large"
+                  onChoose={onBackground}
+                />
+              </Section>
+            {/if}
 
             <!-- Their creators allow the footage to be used with credit.
                  The world and the creator are the links, rather than a pair of
@@ -227,6 +268,15 @@
                  is the thing you would click, and a credit whose subject is not
                  the link makes you read a label to find out where it goes. -->
             <Section label="Background credits" material>
+              <!-- The launcher's photograph. Plain text: the WebView can only
+                   open the pages `pages.rs` allows, and this credit does not
+                   need a new outbound host to be complete. -->
+              {#each BACKGROUNDS as option}
+                <div class="credit-row">
+                  <p class="credit-title">{option.label}</p>
+                  <p class="credit-by">{option.credit}</p>
+                </div>
+              {/each}
               {#each WORLD_CREDITS as credit}
                 <div class="credit-row">
                   <button class="credit-world" on:click={() => void openPage(credit.worldPage)}>
@@ -418,6 +468,14 @@
     background: var(--fill);
   }
 
+  .credit-title {
+    margin: 0;
+    font-size: var(--t-row);
+    font-weight: var(--w-semibold);
+    letter-spacing: var(--track-snug);
+    color: var(--text);
+  }
+
   .credit-world {
     display: block;
     padding: 0;
@@ -579,12 +637,7 @@
     padding: var(--page-pad-y) var(--page-pad-x) var(--s-10);
     /* The same readability substrate `Page` uses, because this pane is its own
        scroller and does not go through that component. */
-    background: linear-gradient(
-      180deg,
-      rgba(5, 6, 10, 0.66) 0%,
-      rgba(5, 6, 10, 0.58) 45%,
-      rgba(5, 6, 10, 0.4) 100%
-    );
+    background: var(--backdrop-document);
   }
 
   .pane-inner {

@@ -9,7 +9,6 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.util.ScreenshotUtils;
 
 import net.fathom.optimizations.core.input.KeybindCaptureState;
-import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
 import net.fathom.optimizations.core.ui.anim.Spring;
 import net.fathom.optimizations.core.ui.anim.Timing;
@@ -17,7 +16,6 @@ import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
-import net.fathom.optimizations.core.ui.render.FathomRenderer;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
@@ -28,6 +26,7 @@ import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.hud.FathomHud;
 import net.fathom.optimizations.fabric.ui.BrandMark;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 import net.fathom.optimizations.fabric.ui.VisualEffects;
 
@@ -44,11 +43,11 @@ import net.fathom.optimizations.fabric.ui.VisualEffects;
  * <pre>
  *   +-------------------------------------------------------+
  *   | [F] Fathom   Session                 Search        x   |  black
- *   +----+--------------------------------------------------+
- *   | [] |  Heading                                         |
- *   | () |  subtitle                                        |
- *   | <> |  content                         (labels on hover) |
- *   +----+--------------------------------------------------+
+ *   +-------------+-----------------------------------------+
+ *   | [ ] Mods    |  Heading                                |
+ *   | [ ] HUD     |  subtitle                               |
+ *   | [ ] Profile |  content                                |
+ *   +-------------+-----------------------------------------+
  * </pre>
  *
  * <h2>It takes the screen</h2>
@@ -78,11 +77,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     private static final String SEARCH_ID = "hub.search";
 
-    /** Units beside a rail icon below which a label is not worth drawing. */
-    private static final float LABEL_MIN_ROOM = 30f;
-    /** And the travel over which it fades up once it is. */
-    private static final float LABEL_FADE_ROOM = 36f;
-
     private final FathomHud hud;
     private final Controls controls = new Controls();
     private final Pointer pointer = new Pointer();
@@ -95,13 +89,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private Spring railMark;
     /** How far through a page change we are, for the content's slide. */
     private Motion pageSwap;
-    /** Width of the label tray beyond the always-visible icon rail. */
-    private Motion railTray;
-
     private int current;
     private int previous;
     private boolean closing;
-    private boolean railPinned;
     private int captureFrames;
     private boolean captured;
     private float qaReplayAt = -1f;
@@ -133,14 +123,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             transition.open(now);
             openedAtNs = System.nanoTime();
             railMark = Spring.accent(0f);
-            railTray = new Motion(0f, Timing.NAVIGATION);
             pageSwap = new Motion(1f, Timing.NAVIGATION);
             sections.get(0).opened(context);
             selectCaptureSection();
-            // Visual QA for the label tray. A capture is a still, and the tray
-            // is the one part of the hub whose interesting state only exists
-            // while a pointer is on it, so the gate can ask for it pinned.
-            railPinned = Boolean.getBoolean("fathom.captureRail");
         }
         // Also reset on return from a child screen. A release that happened in
         // the editor must not click a Hub control on the first frame back.
@@ -342,28 +327,21 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         ui.pushTransform(0f, (1f - open) * 8f + exit * 3f,
                 scale, panel.centreX(), panel.centreY());
 
-        VisualEffects.panelShadow(ui, panel, Skin.R_PANEL);
-        VisualEffects.layeredSurface(ui, panel, Skin.R_PANEL, Skin.BACKGROUND, 0f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_PANEL,
-                Skin.BORDER_STANDARD, Skin.EDGE_SURFACE);
+        FathomComponents.window(ui, panel);
 
         Rect header = panel.top(Skin.HEADER_HEIGHT);
         Rect body = panel.belowTop(Skin.HEADER_HEIGHT);
-        Rect rail = body.left(Skin.RAIL_WIDTH);
-        Rect content = body.rightOf(Skin.RAIL_WIDTH);
+        float sidebarWidth = Math.min(Skin.SIDEBAR_WIDTH,
+                Math.max(148f, panel.width * 0.18f));
+        Rect rail = body.left(sidebarWidth);
+        Rect content = body.rightOf(sidebarWidth);
 
         chrome(ui, header, rail);
         VisualEffects.pageDepth(ui, content, Skin.R_PANEL);
         header(ui, header);
 
-        // The tray is decided before the page draws and drawn after it. Decided
-        // first so the page it covers can be shielded from the pointer; drawn
-        // last so it is on top. Opening navigation never reflows the page.
-        Rect tray = railTray(rail);
-        controls.shield(tray);
+        rail(ui, rail);
         content(ui, content);
-        controls.clearShield();
-        rail(ui, rail, tray);
 
         // Popovers last, and inside the panel's transform: a dropdown drawn
         // outside it would sit a pixel or two from the control that opened it
@@ -376,28 +354,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     /** The black frame: a header bar and a rail, with the panel's own corners. */
     private void chrome(Renderer ui, Rect header, Rect rail) {
-        int chrome = Skin.BACKGROUND;
-        if (ui instanceof FathomRenderer) {
-            ((FathomRenderer) ui).rounded(header.x, header.y, header.right(), header.bottom(),
-                    Skin.R_PANEL, Skin.R_PANEL, 0f, 0f, chrome);
-        } else {
-            ui.rounded(header.x, header.y, header.right(), header.y + Skin.R_PANEL * 2f,
-                    Skin.R_PANEL, chrome);
-            ui.fill(header.x, header.y + Skin.R_PANEL, header.right(), header.bottom(), chrome);
-        }
-        ui.fill(header.x, header.bottom(), header.right(), header.bottom() + Skin.HAIRLINE, Skin.CHROME_LINE_STRONG);
-
-        int railFill = Skin.RECESSED;
-        if (ui instanceof FathomRenderer) {
-            ((FathomRenderer) ui).rounded(rail.x, rail.y, rail.right(), rail.bottom(),
-                    0f, 0f, 0f, Skin.R_PANEL, railFill);
-        } else {
-            ui.fill(rail.x, rail.y, rail.right(), rail.bottom() - Skin.R_PANEL, railFill);
-            ui.rounded(rail.x, rail.bottom() - Skin.R_PANEL * 2f, rail.right(), rail.bottom(),
-                    Skin.R_PANEL, railFill);
-        }
-        ui.fill(rail.right() - Skin.HAIRLINE, rail.y, rail.right(),
-                rail.bottom() - Skin.R_PANEL, Skin.CHROME_LINE);
+        FathomComponents.topBar(ui, header);
+        FathomComponents.sidebar(ui, rail);
     }
 
     private void header(Renderer ui, Rect header) {
@@ -426,16 +384,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         searchBox = searchable
                 ? inner.vcentreRight(rightOffset, searchWidth, Skin.H_MD)
                 : new Rect(0f, 0f, 0f, 0f);
-
-        // One toolbar, not three loose controls: a flat recessed tray holds them,
-        // its radius concentric with the controls inside.
-        float trayLeft = (searchable ? searchBox.x : hudEditor.x) - Skin.S1 - 1f;
-        Rect toolbar = Skin.pixelAligned(ui, Rect.of(trayLeft, hudEditor.y - Skin.S1 - 1f,
-                close.right() + Skin.S1 + 1f, hudEditor.bottom() + Skin.S1 + 1f));
-        float trayRadius = Skin.R_MEDIUM + Skin.S1 + 1f;
-        ui.rounded(toolbar.x, toolbar.y, toolbar.right(), toolbar.bottom(), trayRadius, Skin.RECESSED);
-        ui.outline(toolbar.x, toolbar.y, toolbar.right(), toolbar.bottom(), trayRadius,
-                Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
 
         if (controls.iconButton(ui, "hub.close", close, Icon.CLOSE, false, true)) {
             beginClose();
@@ -561,112 +509,35 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         }
     }
 
-    /**
-     * How wide the rail is this frame, and where the pointer stands on it.
-     *
-     * <p>The hit area is whatever is <em>drawn</em>, not whatever the tray is
-     * heading towards: a tray caught mid-close still occupies the pixels it is
-     * still painting, and a cursor sitting on a label that is visibly there
-     * should keep it open rather than watch it retreat out from under itself.
-     */
-    private Rect railTray(Rect rail) {
+    private void rail(Renderer ui, Rect rail) {
         float now = Gfx.clock().seconds();
-        float drawnWidth = Skin.RAIL_WIDTH
-                + (Skin.RAIL_TRAY_WIDTH - Skin.RAIL_WIDTH) * railTray.value(now);
-        float hitWidth = Math.max(Skin.RAIL_WIDTH, drawnWidth);
-        boolean overRail = new Rect(rail.x, rail.y, hitWidth, rail.height)
-                .contains(pointer.x(), pointer.y());
-        if (railPinned && pointer.pressed(0) && !overRail) {
-            railPinned = false;
-        }
-        railTray.to(railPinned || overRail ? 1f : 0f, now);
-        // Sampled again after retargeting, so a tray that just began opening is
-        // already opening in the rectangle this frame uses.
-        float openWidth = Skin.RAIL_WIDTH
-                + (Skin.RAIL_TRAY_WIDTH - Skin.RAIL_WIDTH) * railTray.value(now);
-        return new Rect(rail.x, rail.y, openWidth, rail.height);
-    }
-
-    private void rail(Renderer ui, Rect rail, Rect tray) {
-        float now = Gfx.clock().seconds();
-        float openWidth = tray.width;
-        int trayFill = Skin.RECESSED;
-        // Only once it is over something: a shadow under the resting icon rail
-        // would be a shadow cast onto the panel edge it is flush with.
-        float lift = Math.max(0f, (openWidth - Skin.RAIL_WIDTH)
-                / Math.max(1f, Skin.RAIL_TRAY_WIDTH - Skin.RAIL_WIDTH));
-        if (lift > 0.01f) {
-            ui.shadow(tray.x, tray.y, tray.right(), tray.bottom(), Skin.R_PANEL, 18f,
-                    Skin.scaleAlpha(Skin.SHADOW, lift * VisualEffects.SHADOW_STRENGTH));
-        }
-        float trailingRadius = Skin.R_PANEL * lift;
-        if (ui instanceof FathomRenderer) {
-            ((FathomRenderer) ui).rounded(tray.x, tray.y, tray.right(), tray.bottom(),
-                    0f, 0f, trailingRadius, Skin.R_PANEL, trayFill);
-        } else {
-            ui.fill(tray.x, tray.y, tray.right(), tray.bottom() - Skin.R_PANEL, trayFill);
-            ui.rounded(tray.x, tray.bottom() - Skin.R_PANEL * 2f, tray.right(), tray.bottom(),
-                    Skin.R_PANEL, trayFill);
-        }
-        // A centred/full-height edge used to continue through the tray's curved
-        // lower-right corner. Stop it where that curve begins.
-        ui.fill(tray.right() - Skin.HAIRLINE, tray.y, tray.right(),
-                tray.bottom() - trailingRadius, Skin.CHROME_LINE_STRONG);
-
-        float rowHeight = Math.min(Skin.RAIL_ROW, (rail.height - Skin.S4) / sections.size());
+        Rect inner = rail.inset(Skin.S3, Skin.S4);
+        ui.text("NAVIGATION", inner.x + Skin.S2, inner.y + ui.ascent(Type.LABEL),
+                Type.LABEL, Skin.TEXT_DISABLED);
+        float startY = inner.y + 28f;
+        float groupGap = Skin.S4;
+        float rowHeight = Math.min(46f,
+                (inner.height - 28f - groupGap) / sections.size());
         // The selection marker slides between sections instead of being replaced.
-        float markerX = Skin.snap(ui, rail.x + 5f);
-        float markY = rail.y + Skin.S3 + railMark.update(current, context.delta()) * rowHeight;
-        Rect marker = Rect.of(markerX, markY + rowHeight * 0.28f,
-                markerX + 3f, markY + rowHeight * 0.72f);
-        ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker), Skin.HOT_RED);
+        float markerX = Skin.snap(ui, inner.x);
+        float markY = startY + railMark.update(current, context.delta()) * rowHeight
+                + (current >= 4 ? groupGap : 0f);
+        Rect marker = Rect.of(markerX, markY + rowHeight * 0.29f,
+                markerX + 3f, markY + rowHeight * 0.71f);
+        ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker),
+                Skin.HOT_RED);
 
+        float y = startY;
         for (int index = 0; index < sections.size(); index++) {
             Section section = sections.get(index);
-            Rect row = new Rect(tray.x + Skin.S3, tray.y + Skin.S3 + index * rowHeight,
-                    tray.width - Skin.S4, rowHeight - 2f);
-            Controls.State s = controls.state("rail." + index, row, true);
-            boolean active = index == current;
-
-            float on = controls.towards("rail." + index + "#on", active, Timing.NAVIGATION);
-            if (s.hover > 0.01f || on > 0.01f) {
-                // Selected: a stronger dark face, a red edge and a small light
-                // behind the icon. Hover: a surface step only.
-                float rowRadius = Skin.pill(row);
-                ui.rounded(row.x, row.y, row.right(), row.bottom(), rowRadius,
-                        Skin.mix(Skin.scaleAlpha(Skin.SURFACE_HOVER, s.hover), Skin.ELEVATED, on));
-                if (on > 0.01f) {
-                    ui.outline(row.x, row.y, row.right(), row.bottom(), rowRadius,
-                            Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.BASE_RED, on));
-                }
+            if (index == 4) {
+                y += groupGap;
+                FathomComponents.divider(ui, inner.x + Skin.S2, inner.right() - Skin.S2,
+                        y - groupGap / 2f);
             }
-
-            float iconSize = 17f;
-            int tint = Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover), Skin.TEXT, on);
-            ui.icon(section.icon(), row.x + Skin.S3, row.centreY() - iconSize / 2f, iconSize,
-                    Skin.mix(VisualEffects.hoverBrighten(tint, s.hover), Skin.HOT_RED, on * 0.86f));
-            // Faded in on the room there actually is for a word, not on how far
-            // the tray has travelled. Keyed to travel, the first tenth of the
-            // animation left about nine units beside each icon, which is enough
-            // for an ellipsis and nothing else — so a tray caught opening drew a
-            // column of "…" down the rail. A label that cannot show a letter
-            // should not be on screen.
-            float labelRoom = row.width - Skin.S3 - iconSize - Skin.S5;
-            float labelAlpha = Ease.clamp01((labelRoom - LABEL_MIN_ROOM) / LABEL_FADE_ROOM);
-            if (labelAlpha > 0.01f) {
-                ui.clip(row.x + Skin.S3 + iconSize + Skin.S2, row.y, row.right(), row.bottom());
-                ui.pushAlpha(labelAlpha);
-                ui.text(Text.fit(ui, section.title(), Type.ROW_TITLE, labelRoom),
-                        row.x + Skin.S3 + iconSize + Skin.S3,
-                        Controls.baseline(ui, row, Type.ROW_TITLE), Type.ROW_TITLE, tint);
-                ui.popAlpha();
-                ui.unclip();
-            }
-            if (Text.overflows(ui, section.title(), Type.ROW_TITLE, labelRoom)) {
-                controls.tooltip(s, row, section.title());
-            }
-
-            if (s.clicked && index != current) {
+            Rect row = new Rect(inner.x, y, inner.width, rowHeight - 4f);
+            if (controls.navItem(ui, "rail." + index, row, section.icon(), section.title(),
+                    index == current) && index != current) {
                 previous = current;
                 current = index;
                 pageSwap.set(0f, now);
@@ -675,21 +546,13 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                 context.keybindCapture().cancel();
                 sections.get(current).opened(context);
             }
-        }
-
-        if (openWidth > Skin.RAIL_WIDTH + 36f) {
-            Rect pin = new Rect(tray.right() - Skin.S3 - Controls.ICON_BUTTON,
-                    tray.bottom() - Skin.S3 - Controls.ICON_BUTTON,
-                    Controls.ICON_BUTTON, Controls.ICON_BUTTON);
-            if (controls.iconButton(ui, "rail.pin", pin, Icon.PIN, railPinned, true)) {
-                railPinned = !railPinned;
-            }
+            y += rowHeight;
         }
     }
 
     private void content(Renderer ui, Rect content) {
         Section section = sections.get(current);
-        Rect inner = content.inset(Skin.S6, Skin.S5);
+        Rect inner = content.inset(Skin.PAGE_INSET_X, Skin.PAGE_INSET_Y);
 
         // The page slides in from the direction the rail moved, which makes a
         // section change read as movement between pages rather than a redraw.
@@ -702,18 +565,13 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         ui.pushTransform(slide, 0f, 0.994f + swap * 0.006f,
                 content.centreX(), content.centreY());
 
-        Rect heading = inner.top(section.subtitle() == null ? 30f : 50f);
-        ui.text(section.title(), heading.x, heading.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
-        if (section.subtitle() != null) {
-            ui.text(
-                    Text.fit(ui, section.subtitle(), Type.SMALL, heading.width),
-                    heading.x,
-                    heading.y + 28f + ui.ascent(Type.SMALL),
-                    Type.SMALL,
-                    Skin.TEXT_FAINT);
+        Rect body;
+        if (section.ownsHeading()) {
+            body = inner;
+        } else {
+            Rect heading = FathomComponents.sectionHeader(ui, inner, section.title(), section.subtitle());
+            body = inner.belowTop(heading.height + Skin.SECTION_GAP);
         }
-
-        Rect body = inner.belowTop(heading.height + Skin.S3);
         section.render(context, body);
 
         ui.popTransform();

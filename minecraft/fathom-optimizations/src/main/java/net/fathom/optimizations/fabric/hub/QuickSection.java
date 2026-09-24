@@ -11,6 +11,7 @@ import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.core.ui.VideoOptionDomain;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 
 /**
@@ -114,50 +115,63 @@ final class QuickSection implements Section {
         // arm's length of nothing between the two — while the slider tracks,
         // which had their own 360-unit cap, ended a third of the way across and
         // read as broken rather than as short.
-        float width = Math.min(Skin.COLUMN, area.width - Skin.S4);
+        float width = Math.min(Skin.COLUMN_WIDE, area.width - Skin.S4);
         float labelStep = ui.lineHeight(Type.LABEL) + Skin.S2;
 
         // Every height here is a constant, so the page can be measured before it
         // is drawn rather than after. It has to be: at 1280x720 the last two
         // rows fall past the bottom of the panel, and until this page had a
         // scroller they were simply unreachable.
-        float footer = Skin.S4 + ui.lineHeight(Type.SMALL);
-        float contentHeight = labelStep * 3f + ROW * 5f + SLIDER_ROW * 4f
-                + Skin.S4 * 2f + footer;
+        float groupPad = Skin.CARD_PADDING;
+        float fathomHeight = groupPad * 2f + labelStep + ROW * 2f;
+        float videoHeight = groupPad * 2f + labelStep + SLIDER_ROW * 4f;
+        float displayHeight = groupPad * 2f + labelStep + ROW * 3f;
+        float footer = Skin.SECTION_GAP + ui.lineHeight(Type.SMALL);
+        float contentHeight = fathomHeight + videoHeight + displayHeight
+                + Skin.SECTION_GAP * 2f + footer;
         float offset = scroller.offset(context.delta(), contentHeight, area.height);
 
         ui.clip(area.x, area.y, area.right(), area.bottom());
         float y = area.y - offset;
-        Controls.label(ui, "Fathom", area.x, y);
-        y += labelStep;
-        y = hubKeyRow(context, new Rect(area.x, y, width, ROW));
-        y = scaleRow(context, new Rect(area.x, y, width, ROW));
+        Rect fathom = new Rect(area.x, y, width, fathomHeight);
+        FathomComponents.panel(ui, fathom);
+        Rect group = fathom.inset(groupPad, groupPad);
+        Controls.label(ui, "Fathom", group.x, group.y);
+        float rowY = group.y + labelStep;
+        rowY = hubKeyRow(context, new Rect(group.x, rowY, group.width, ROW));
+        scaleRow(context, new Rect(group.x, rowY, group.width, ROW));
 
-        y += Skin.S4;
-        Controls.label(ui, "Video", area.x, y);
-        y += labelStep;
-        y = slider(context, new Rect(area.x, y, width, SLIDER_ROW), "quick.distance", "Render distance",
+        y = fathom.bottom() + Skin.SECTION_GAP;
+        Rect video = new Rect(area.x, y, width, videoHeight);
+        FathomComponents.panel(ui, video);
+        group = video.inset(groupPad, groupPad);
+        Controls.label(ui, "Video", group.x, group.y);
+        rowY = group.y + labelStep;
+        rowY = slider(context, new Rect(group.x, rowY, group.width, SLIDER_ROW), "quick.distance", "Render distance",
                 options.viewDistance + " chunks", fraction(options.viewDistance, 2, 16),
                 VideoSetting.VIEW_DISTANCE);
-        y = slider(context, new Rect(area.x, y, width, SLIDER_ROW), "quick.fps", "Frame limit",
+        rowY = slider(context, new Rect(group.x, rowY, group.width, SLIDER_ROW), "quick.fps", "Frame limit",
                 frameLimit(options.maxFramerate), fraction(options.maxFramerate, 10, 260),
                 VideoSetting.FRAME_LIMIT);
-        y = slider(context, new Rect(area.x, y, width, SLIDER_ROW), "quick.fov", "Field of view",
+        rowY = slider(context, new Rect(group.x, rowY, group.width, SLIDER_ROW), "quick.fov", "Field of view",
                 fov(options.fov), VideoOptionDomain.fovFraction(options.fov),
                 VideoSetting.FOV);
-        y = slider(context, new Rect(area.x, y, width, SLIDER_ROW), "quick.gamma", "Brightness",
+        slider(context, new Rect(group.x, rowY, group.width, SLIDER_ROW), "quick.gamma", "Brightness",
                 brightness(options.gamma), options.gamma, VideoSetting.GAMMA);
 
-        y += Skin.S4;
-        Controls.label(ui, "Display", area.x, y);
-        y += labelStep;
-        y = toggle(context, new Rect(area.x, y, width, ROW), "quick.vsync", "VSync", options.vsync);
-        y = toggle(context, new Rect(area.x, y, width, ROW), "quick.bob", "View bobbing", options.bobView);
-        y = toggle(context, new Rect(area.x, y, width, ROW), "quick.shadows", "Entity shadows",
+        y = video.bottom() + Skin.SECTION_GAP;
+        Rect display = new Rect(area.x, y, width, displayHeight);
+        FathomComponents.panel(ui, display);
+        group = display.inset(groupPad, groupPad);
+        Controls.label(ui, "Display", group.x, group.y);
+        rowY = group.y + labelStep;
+        rowY = toggle(context, new Rect(group.x, rowY, group.width, ROW), "quick.vsync", "VSync", options.vsync);
+        rowY = toggle(context, new Rect(group.x, rowY, group.width, ROW), "quick.bob", "View bobbing", options.bobView);
+        toggle(context, new Rect(group.x, rowY, group.width, ROW), "quick.shadows", "Entity shadows",
                 options.entityShadows);
 
-        y += Skin.S4;
-        ui.text("Changes apply instantly.", area.x, y + ui.ascent(Type.SMALL),
+        y = display.bottom() + Skin.SECTION_GAP;
+        ui.text("Changes apply instantly.", area.x + Skin.S1, y + ui.ascent(Type.SMALL),
                 Type.SMALL, Skin.TEXT_DISABLED);
 
         ui.unclip();

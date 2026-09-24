@@ -1,56 +1,62 @@
 /*
- * The background catalogue.
+ * The approved backgrounds.
  *
- * One list, because three things have to agree about it: the picker that offers
- * them, the player that has to know whether an id is a video or a still, and
- * `crates/launcher-desktop/src/main.rs`, whose allowlist decides which ids the
- * WebView may ask for at all. Those last two drifted once -- the picker offered
- * five recordings Rust refused -- so a test over there reads this file and fails
- * if the two lists stop matching.
+ * Fathom's backgrounds are curated, not collected: every entry here is a
+ * photograph the golden-hour system is tuned against. Right now there is
+ * exactly one. The list stays a list so that a small curated set can be added
+ * later without touching the player or the shell -- the picker reappears on its
+ * own once there is more than one entry (`PICKER_AVAILABLE`).
  *
- * A `video` needs `<id>.webm` and a `<id>.jpg` poster in
- * `desktop/public/backgrounds`; a `still` needs only the jpg. The picker uses
- * the jpg as its thumbnail either way, which is why both live beside each other.
+ * Three things have to agree about this list: the picker, the player, and
+ * `crates/launcher-desktop/src/lib.rs`, whose allowlist decides which ids the
+ * WebView may ask for at all. A test over there reads this file and fails if
+ * the two stop matching.
  *
- * Ordered alphabetically by label, because that is the order the picker shows
- * them in and a list of fifteen thumbnails is something people scan for a name
- * rather than read top to bottom. Midnight -- the plain gradient, the one
- * without footage -- sorts into the middle with everything else rather than
- * being pinned to the front.
+ * Every entry is a still image at `desktop/public/backgrounds/<id>.jpg`, which
+ * is also its picker thumbnail. Video backgrounds are retired: the gameplay
+ * clips and their poster frames are still in that folder, unlisted, and nothing
+ * on the active path loads them. The warm gradient that shows when an image
+ * cannot load (`--backdrop-fallback`) is a failure-state substrate, not a
+ * choice, so it is not in this list.
  */
-
-export type BackgroundKind = 'gradient' | 'video' | 'still';
 
 export interface BackgroundOption {
   id: string;
   label: string;
-  kind: BackgroundKind;
+  /** Plain-text credit shown in Settings; the full record is ATTRIBUTION.md. */
+  credit: string;
 }
 
 export const BACKGROUNDS: BackgroundOption[] = [
-  { id: 'bg_1', label: 'Cherry Grove', kind: 'video' },
-  { id: 'bg_6pull_city-overlook', label: 'City Overlook', kind: 'still' },
-  { id: 'bg_6clear', label: 'Metropolis', kind: 'video' },
-  { id: 'static', label: 'Midnight', kind: 'gradient' },
-  { id: 'bg_3', label: 'Midnight Coast', kind: 'video' },
-  { id: 'bg_6midnight', label: 'Midnight Metropolis', kind: 'video' },
-  { id: 'bg_6pull_moon-tower', label: 'Moon Tower', kind: 'still' },
-  { id: 'bg_6pull_neon-grid', label: 'Neon Grid', kind: 'still' },
-  { id: 'bg_5noraintickunfrozen', label: 'Rainforest Drift', kind: 'video' },
-  { id: 'bg_5rain', label: 'Rainforest Storm', kind: 'video' },
-  { id: 'bg_5noraintickfrozen', label: 'Rainforest Twilight', kind: 'video' },
-  { id: 'bg_6pull_red-tower', label: 'Red Tower', kind: 'still' },
-  { id: 'bg_4', label: 'Savanna', kind: 'video' },
-  { id: 'bg_2', label: 'Snowfall', kind: 'video' },
-  { id: 'bg_6pull_storm-panorama', label: 'Storm Panorama', kind: 'still' },
+  {
+    id: 'golden-hour',
+    label: 'Golden Hour',
+    credit: '“Palm Tree Sunset Water” by showtime, via Wallpapers.com',
+  },
 ];
 
-/** Unknown ids are treated as video, which is what every id was before stills. */
-export function kindOf(id: string): BackgroundKind {
-  return BACKGROUNDS.find((option) => option.id === id)?.kind ?? 'video';
+/**
+ * What a first run shows, and what any retired or unknown id becomes. Rust owns
+ * the stored preference and has the same default (`DEFAULT_BACKGROUND` in
+ * `crates/launcher-desktop/src/lib.rs`); this one is only what the window paints
+ * before that answer arrives.
+ */
+export const DEFAULT_BACKGROUND = 'golden-hour';
+
+/** A picker with one entry is a control that does nothing, so there is none. */
+export const PICKER_AVAILABLE = BACKGROUNDS.length > 1;
+
+/** Whether an id is one of the approved backgrounds. */
+export function isApproved(id: string): boolean {
+  return BACKGROUNDS.some((option) => option.id === id);
 }
 
-/** The asset behind a background. A still is the same jpg the picker shows. */
-export function sourceFor(id: string): string {
-  return kindOf(id) === 'still' ? `/backgrounds/${id}.jpg` : `/backgrounds/${id}.webm`;
+/** The approved id to show for a stored preference: itself, or the default. */
+export function approvedOrDefault(id: string): string {
+  return isApproved(id) ? id : DEFAULT_BACKGROUND;
+}
+
+/** The image behind a background, which is also its picker thumbnail. */
+export function imageFor(id: string): string {
+  return `/backgrounds/${id}.jpg`;
 }

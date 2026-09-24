@@ -16,11 +16,12 @@
 
   THE LAUNCH CONTROL
 
-  It is glass, not a filled rectangle. A dark translucent slab with a lit top
-  edge, a real blur, and the footage visible through it — so it reads as an
-  object resting on the scene rather than a button drawn over it. When launch is
-  possible it takes the accent; when it is not, it stays neutral and says what
-  is missing. Same object, two states, never two different controls.
+  The most important object on the screen, and still made of the same glass as
+  everything else. Its importance comes from scale, position, type and density,
+  not from a colour: when launch is possible it is the densest glass in the
+  window with a brighter rim and full ivory type; when it is not, it thins to
+  standard glass and says what is missing. Same object, two states, never two
+  different controls, and never a solid gold slab.
 
   Implementation detail stays out of the composition entirely. "This build has
   no Microsoft application id" is true, useful to exactly one person, and
@@ -33,6 +34,9 @@
   import { Info, Play, X } from '@lucide/svelte';
   import { NO_LAUNCH, type HomeView, type LaunchProgress } from '../lib/api';
   import ProfileSwitcher from '../lib/ui/ProfileSwitcher.svelte';
+  import Progress from '../lib/ui/Progress.svelte';
+  import Notice from '../lib/ui/Notice.svelte';
+  import { tooltip } from '../lib/tooltip';
   import FathomProfilePicker from '../lib/ui/FathomProfilePicker.svelte';
   import { EASE, FAST, NORMAL } from '../lib/motion';
 
@@ -104,7 +108,9 @@
 
       <div class="launch-wrap" in:fly={{ y: 16, duration: NORMAL, delay: 120, easing: EASE }}>
         <button
-          class="launch"
+          class="launch material-interactive"
+          class:material-dense={(action.ready && !busy) || busy}
+          class:material-standard={!action.ready && !busy}
           class:ready={action.ready && !busy}
           class:busy
           disabled={busy || !action.command}
@@ -118,16 +124,9 @@
           {#if busy}
             <!-- Sits inside the slab rather than under it: the bar is the
                  button filling up, not a second object that appeared. An
-                 unmeasurable stage gets the sweep instead of a number, because
+                 unmeasurable stage drifts instead of showing a number, because
                  a bar parked at a made-up percentage is worse than no bar. -->
-            <span class="bar" class:indeterminate={launch.fraction === null}>
-              <span
-                class="fill"
-                style={launch.fraction === null
-                  ? ''
-                  : `width: ${Math.round(launch.fraction * 100)}%`}
-              ></span>
-            </span>
+            <Progress variant="inset" value={launch.fraction} label={launch.headline || 'Launching'} />
           {/if}
         </button>
       </div>
@@ -140,19 +139,20 @@
         <span>{line}</span>
 
         {#if launch.cancellable}
-          <button class="stop" on:click|stopPropagation={onCancel}>Stop</button>
+          <button class="ui-capsule small material-clear material-interactive" on:click|stopPropagation={onCancel}>Stop</button>
         {/if}
 
         {#if settled}
-          <button class="note-toggle" title="Dismiss" on:click|stopPropagation={onDismiss}>
+          <button class="ui-icon-button small" aria-label="Dismiss" use:tooltip={'Dismiss'} on:click|stopPropagation={onDismiss}>
             <X size={13} strokeWidth={2.2} />
           </button>
         {/if}
 
         {#if action.developerNote && !busy && !settled}
           <button
-            class="note-toggle"
-            title="Developer detail"
+            class="ui-icon-button small"
+            aria-label="Developer detail"
+            use:tooltip={'Developer detail'}
             on:click|stopPropagation={() => (noteOpen = !noteOpen)}
           >
             <Info size={13} strokeWidth={2.2} />
@@ -161,8 +161,8 @@
       </div>
 
       {#if noteOpen && action.developerNote}
-        <div class="note glass" transition:fade={{ duration: FAST }}>
-          {action.developerNote}
+        <div class="note" transition:fade={{ duration: FAST }}>
+          <Notice floating>{action.developerNote}</Notice>
         </div>
       {/if}
     </div>
@@ -196,232 +196,116 @@
   }
 
   .hero {
-    margin: 10px 0 0;
+    margin: var(--space-3) 0 0;
     /* Scales with the window. A composition fixed in pixels is sized for one
        monitor: at 1366 it fills the canvas and at 1920 it strands the launch
-       control in an empty field. The clamp keeps it sensible in either
-       direction, and the ceiling keeps it from becoming a poster. */
-    font-size: clamp(38px, 3.9vw, 60px);
-    font-weight: var(--w-bold);
-    letter-spacing: var(--track-tight);
-    line-height: 1;
-    color: #fff;
-    text-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.5),
-      0 8px 40px rgba(0, 0, 0, 0.7);
+       control in an empty field. */
+    font-size: var(--type-display-size);
+    font-weight: var(--type-display-weight);
+    letter-spacing: var(--type-display-tracking);
+    line-height: var(--type-display-leading);
+    color: var(--color-text);
+    overflow-wrap: anywhere;
   }
 
   .facts {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     align-items: center;
-    gap: var(--s-2);
-    margin-top: var(--s-3);
-    font-size: var(--t-body-lg);
-    font-weight: var(--w-medium);
-    /* Brighter than `muted`: this line sits directly on footage with no
-       material behind it. */
-    color: #cfd4dd;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    font-size: var(--type-body-size);
+    font-weight: var(--type-button-weight);
+    color: var(--color-text-secondary);
   }
 
   .dot {
-    color: var(--text-disabled);
+    color: var(--color-text-tertiary);
   }
 
-  /* -- the launch control -------------------------------------------------
-     Glass, sized generously, and the strongest object on the screen. */
+  /* -- the launch control ------------------------------------------------- */
   .launch-wrap {
-    margin-top: clamp(28px, 3.4vh, 48px);
+    margin-top: clamp(28px, 3.6vh, 52px);
   }
 
   .launch {
+    --surface-radius: var(--radius-2xl);
     position: relative;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--s-3);
-    min-width: clamp(280px, 23vw, 380px);
-    padding: clamp(16px, 1.4vw, 21px) clamp(40px, 3.4vw, 60px);
-    border-radius: var(--r-xl);
-    font-size: clamp(19px, 1.45vw, 25px);
-    font-weight: var(--w-bold);
-    letter-spacing: 0.02em;
-    color: var(--text);
-
-    /* The material. Neutral state: dark glass over the footage.
-       Deliberately lighter than `--glass-fill-strong`: at 0.80 the slab was so
-       opaque that the blur behind it could not be seen, which makes an
-       expensive material look like a flat rectangle. */
-    background: rgba(12, 14, 19, 0.68);
-    backdrop-filter: blur(var(--glass-blur-strong)) saturate(1.3);
-    -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(1.3);
-    border: 1px solid var(--glass-edge-strong);
-    box-shadow:
-      var(--glass-sheen-strong),
-      var(--glass-shadow-strong);
-
-    transition:
-      transform var(--m-fast) var(--ease),
-      box-shadow var(--m-normal) var(--ease),
-      background var(--m-normal) var(--ease),
-      border-color var(--m-normal) var(--ease),
-      filter var(--m-fast) var(--ease);
+    gap: var(--space-3);
+    min-width: clamp(280px, 22vw, 360px);
+    max-width: min(560px, 80vw);
+    min-height: clamp(58px, 4.6vw, 68px);
+    padding: 0 clamp(36px, 3vw, 52px);
+    font-size: clamp(17px, 1.3vw, 21px);
+    font-weight: var(--type-title-weight);
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
   }
 
-  /* Ready: the same slab, tinted. Not a different button -- a state change of
-     one object, which is why the transition above covers background and border
-     rather than swapping a class of styles. */
+  /* Ready: the densest glass in the window, with a brighter lit edge, a
+     deeper shadow and full ivory type. Restrained luminance, not colour. */
   .launch.ready {
-    color: #fff;
-    background: linear-gradient(180deg, rgba(224, 80, 92, 0.88), rgba(132, 28, 36, 0.9));
-    border-color: rgba(255, 160, 168, 0.4);
+    color: var(--color-text);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.28),
-      0 20px 54px rgba(0, 0, 0, 0.5),
-      0 0 60px var(--accent-glow);
+      var(--control-rim-strong),
+      inset 0 0 0 100vmax var(--mat-veil, transparent),
+      var(--shadow-lg);
   }
 
-  .launch:not(:disabled):hover {
-    transform: translateY(-1px);
-    filter: brightness(1.09);
-  }
-
-  /* Presses down and loses its lift for the duration -- the one place a
-     physical response is worth the pixels. */
-  .launch:not(:disabled):active {
-    transform: translateY(1px);
-    filter: brightness(0.96);
-    box-shadow:
-      inset 0 2px 8px rgba(0, 0, 0, 0.45),
-      0 4px 12px rgba(0, 0, 0, 0.4);
-  }
-
+  /* Not ready: thinner glass, and the label is the thing to read, so it stays
+     legible rather than greying out. */
   .launch:disabled {
     cursor: default;
-    color: var(--text-muted);
+    color: var(--color-text-secondary);
+    transform: none;
   }
 
-  /* Working. Not clickable, but not greyed either: the label is live
-     information about what is happening, and dimming it would make the one
-     thing worth reading the hardest thing to read. Source order after
-     `:disabled` on purpose -- the two have equal specificity. */
+  /* Working. Not clickable, but not dimmed either: the label is live
+     information about what is happening. Source order after `:disabled` on
+     purpose -- the two have equal specificity. */
   .launch.busy {
-    color: var(--text);
+    color: var(--color-text);
     cursor: progress;
   }
 
   .launch-label {
     display: block;
-    line-height: 1;
-  }
-
-
-  /* The progress bar, inside the slab. */
-  .bar {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 3px;
-    overflow: hidden;
-    border-radius: 0 0 var(--r-xl) var(--r-xl);
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .fill {
-    display: block;
-    height: 100%;
-    background: var(--accent);
-    transition: width var(--m-normal) var(--ease);
-  }
-
-  /* No number to show, so the bar says "working" instead of lying about how
-     far along it is. */
-  .bar.indeterminate .fill {
-    width: 34%;
-    animation: sweep 1.4s var(--ease) infinite;
-  }
-
-  @keyframes sweep {
-    from {
-      transform: translateX(-110%);
-    }
-    to {
-      transform: translateX(310%);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .bar.indeterminate .fill {
-      width: 100%;
-      animation: none;
-      opacity: 0.5;
-    }
-  }
-
-  .stop {
-    height: 22px;
-    padding: 0 10px;
-    border-radius: var(--r-pill);
-    font-size: var(--t-caption);
-    font-weight: var(--w-medium);
-    color: var(--text-muted);
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid var(--chrome-line-strong);
-    transition:
-      color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease);
-  }
-
-  .stop:hover {
-    color: var(--text);
-    background: rgba(255, 255, 255, 0.14);
+    line-height: 1.1;
+    text-align: center;
   }
 
   .status {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     align-items: center;
-    gap: var(--s-2);
-    margin-top: clamp(15px, 1.7vh, 24px);
-    font-size: var(--t-body-lg);
-    color: var(--text-muted);
+    gap: var(--space-2);
+    max-width: min(640px, 90vw);
+    margin-top: clamp(14px, 1.8vh, 24px);
+    font-size: var(--type-body-size);
+    color: var(--color-text-secondary);
   }
 
   .status.warn {
-    color: var(--warn);
-  }
-
-  .note-toggle {
-    display: grid;
-    place-items: center;
-    width: 21px;
-    height: 21px;
-    border-radius: var(--r-pill);
-    color: var(--text-faint);
-    transition:
-      color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease);
-  }
-
-  .note-toggle:hover {
-    color: var(--text);
-    background: var(--fill-hover);
+    color: var(--color-warning-text);
   }
 
   .note {
-    max-width: 430px;
-    margin-top: var(--s-4);
-    padding: 11px 14px;
-    font-size: var(--t-body);
-    color: var(--text-muted);
+    max-width: 460px;
+    margin-top: var(--space-4);
     text-align: left;
-    line-height: 1.5;
   }
+
   /* Installation and profile side by side, wrapping on a narrow window. */
   .switcher {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: var(--s-2);
+    gap: var(--space-2);
   }
 </style>

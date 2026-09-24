@@ -21,10 +21,14 @@
   everyone else.
 -->
 <script lang="ts">
-  import { fly, fade, slide } from 'svelte/transition';
+  import { slide } from 'svelte/transition';
   import { X, ChevronDown, ShieldCheck, TriangleAlert, Plus, Check, LogIn } from '@lucide/svelte';
   import Button from './Button.svelte';
-  import { EASE, FAST, NORMAL } from '../motion';
+  import Sheet from './Sheet.svelte';
+  import Notice from './Notice.svelte';
+  import SoundingLine from '../brand/SoundingLine.svelte';
+  import { tooltip } from '../tooltip';
+  import { EASE, NORMAL } from '../motion';
   import { NO_AUTH, type AccountSummary, type AuthProgress } from '../api';
 
   export let account: AccountSummary;
@@ -51,23 +55,7 @@
   $: failed = auth.phase === 'failed';
 </script>
 
-<div
-  class="scrim"
-  role="button"
-  tabindex="-1"
-  aria-label="Close"
-  on:click={onClose}
-  on:keydown={(event) => event.key === 'Escape' && onClose()}
-  transition:fade={{ duration: FAST }}
-></div>
-
-<aside class="drawer glass-strong" transition:fly={{ x: 340, duration: NORMAL, easing: EASE }}>
-  <header>
-    <h2>Account</h2>
-    <button class="close" title="Close" on:click={onClose}>
-      <X size={15} strokeWidth={2.2} />
-    </button>
-  </header>
+<Sheet title="Account" width={380} {onClose}>
 
   {#if account.signedIn}
     <div class="identity">
@@ -93,9 +81,7 @@
     </div>
 
     {#if account.development}
-      <p class="warn">
-        Not a real account. It owns nothing and cannot join servers.
-      </p>
+      <Notice tone="warning">Not a real account. It owns nothing and cannot join servers.</Notice>
     {/if}
 
     <div class="actions">
@@ -111,7 +97,7 @@
          another, and burying it under a paragraph is how it gets mistyped. -->
     <div class="signin">
       <span class="provider">Microsoft</span>
-      <h3>{auth.headline}</h3>
+      <h3 class="working"><SoundingLine height={16} value={null} label="Signing in" /> {auth.headline}</h3>
 
       {#if auth.userCode}
         {#if auth.browserOpened}
@@ -139,7 +125,7 @@
       <h3>Sign in to play Minecraft</h3>
 
       {#if failed}
-        <p class="warn">{auth.failure}</p>
+        <Notice tone="danger">{auth.failure}</Notice>
       {/if}
 
       <Button
@@ -173,7 +159,7 @@
           <button
             class="account-choice"
             disabled={saved.signedIn || !saved.uuid}
-            title={saved.signedIn ? 'Currently active' : `Switch to ${saved.name}`}
+            use:tooltip={saved.signedIn ? 'Currently active' : `Switch to ${saved.name}`}
             on:click={() => saved.uuid && onSwitch(saved.uuid)}
           >
             <span class="mini-avatar" class:has-face={!!saved.avatar}>
@@ -191,8 +177,8 @@
             {/if}
           </button>
           <button
-            class="forget"
-            title={`Forget ${saved.name}`}
+            class="forget ui-icon-button danger"
+            use:tooltip={`Forget ${saved.name}`}
             aria-label={`Forget ${saved.name}`}
             disabled={!saved.uuid}
             on:click={() => saved.uuid && onForget(saved.uuid)}
@@ -204,7 +190,7 @@
 
   <div class="spacer"></div>
 
-  <button class="disclose" on:click={() => (detailsOpen = !detailsOpen)}>
+  <button class="disclose" aria-expanded={detailsOpen} on:click={() => (detailsOpen = !detailsOpen)}>
     <span>Authentication details</span>
     <span class="chevron" class:open={detailsOpen}>
       <ChevronDown size={14} strokeWidth={2.2} />
@@ -226,114 +212,62 @@
       {/if}
     </div>
   {/if}
-</aside>
+</Sheet>
 
 <style>
-
   /* The device code. Large, monospace, and selectable -- somebody may want to
      copy it rather than read it aloud. Letter-spaced because the codes contain
      characters that are easy to confuse at a normal tracking. */
   .code {
-    padding: var(--s-3);
-    border-radius: var(--r-sm);
-    background: var(--fill-sunken);
-    border: 1px solid var(--chrome-line-strong);
+    padding: var(--space-4) var(--space-3);
+    border-radius: var(--radius-md);
+    background-color: var(--control-fill-sunken);
+    box-shadow: var(--control-rim);
     font-family: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
-    font-size: 25px;
-    font-weight: var(--w-semibold);
+    font-size: var(--type-title-size);
+    font-weight: var(--type-heading-weight);
     letter-spacing: 0.12em;
     text-align: center;
-    color: var(--text);
+    color: var(--color-text);
     user-select: text;
   }
 
   .uri {
-    color: var(--text);
+    color: var(--color-text);
     user-select: text;
   }
 
   .dev {
-    margin-top: var(--s-4);
-    padding-top: var(--s-4);
-    border-top: 1px solid var(--chrome-line);
-  }
-  .scrim {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 40;
-  }
-
-  .drawer {
-    position: fixed;
-    top: calc(var(--titlebar-height) + var(--topbar-height));
-    right: 0;
-    bottom: var(--bottombar-height);
-    width: 340px;
     display: flex;
     flex-direction: column;
-    gap: var(--s-4);
-    padding: var(--s-5);
-    border-radius: 0;
-    border-top: none;
-    border-right: none;
-    border-bottom: none;
-    overflow-y: auto;
-    z-index: 41;
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-  }
-
-  h2 {
-    flex: 1;
-    margin: 0;
-    font-size: var(--t-section);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
-  }
-
-  .close {
-    display: grid;
-    place-items: center;
-    width: var(--h-sm);
-    height: var(--h-sm);
-    border-radius: var(--r-xs);
-    color: var(--text-faint);
-    transition:
-      color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease);
-  }
-
-  .close:hover {
-    color: var(--text);
-    background: var(--fill-hover);
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    padding-top: var(--space-4);
+    box-shadow: 0 -1px 0 var(--control-hairline);
   }
 
   /* -- signed in --------------------------------------------------------- */
   .identity {
     display: flex;
     align-items: center;
-    gap: var(--s-3);
+    gap: var(--space-3);
   }
 
   .avatar {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
-    border-radius: var(--r-md);
-    background: linear-gradient(160deg, var(--accent-strong), var(--accent-deep));
-    color: #fff;
-    font-size: var(--t-section);
-    font-weight: var(--w-bold);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    background-color: var(--control-fill-selected);
+    box-shadow: var(--control-rim-strong);
+    color: var(--color-text);
+    font-size: var(--type-heading-size);
+    font-weight: var(--type-title-weight);
   }
 
-  /* The player's head. The gradient stays behind it for the frame it takes
-     to decode, and the pixels are kept square rather than smoothed. */
+  /* The player's head. The pixels are kept square rather than smoothed. */
   .avatar.has-face {
     overflow: hidden;
     padding: 0;
@@ -349,124 +283,142 @@
   .who {
     display: flex;
     flex-direction: column;
-    gap: var(--s-1);
+    gap: var(--space-1);
     min-width: 0;
   }
 
+  /* A Minecraft name is at most sixteen characters; it always fits, so it is
+     never cut. */
   .name {
-    font-size: var(--t-row);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
+    font-size: var(--type-heading-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
+    overflow-wrap: anywhere;
   }
 
   .kind {
     display: flex;
     align-items: center;
-    gap: var(--s-1);
-    font-size: var(--t-caption);
-    color: var(--good);
+    gap: var(--space-1);
+    font-size: var(--type-caption-size);
+    color: var(--color-success-text);
   }
 
   .kind.dev {
-    color: var(--warn);
-  }
-
-  .warn {
-    margin: 0;
-    padding: var(--s-2) var(--s-3);
-    border-radius: var(--r-sm);
-    background: rgba(224, 174, 87, 0.1);
-    border: 1px solid rgba(224, 174, 87, 0.26);
-    color: var(--warn);
-    font-size: var(--t-caption);
+    color: var(--color-warning-text);
   }
 
   .actions {
     display: flex;
     flex-direction: column;
-    gap: var(--s-2);
+    gap: var(--space-2);
   }
 
   .account-list {
     display: flex;
     flex-direction: column;
-    gap: var(--s-2);
-    padding-top: var(--s-1);
+    gap: var(--space-2);
+    padding-top: var(--space-1);
   }
 
   .account-row {
     display: grid;
-    grid-template-columns: 1fr var(--h-md);
-    gap: var(--s-1);
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--space-1);
   }
 
   .account-choice {
     min-width: 0;
-    height: var(--h-lg);
+    height: var(--control-height-lg);
     display: flex;
     align-items: center;
-    gap: var(--s-2);
-    padding: 0 var(--s-2);
-    border-radius: var(--r-sm);
-    color: var(--text-muted);
-    background: var(--fill);
-    border: 1px solid var(--chrome-line);
+    gap: var(--space-3);
+    padding: 0 var(--space-3) 0 var(--space-2);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    background-color: var(--control-fill);
+    box-shadow: var(--control-rim);
+    transition:
+      background-color var(--motion-hover) var(--ease-standard),
+      color var(--motion-hover) var(--ease-standard);
   }
 
-  .account-choice:hover:not(:disabled) { background: var(--fill-hover); color: var(--text); }
-  .account-row.current .account-choice { color: var(--text); border-color: var(--glass-edge-strong); }
+  .account-choice:hover:not(:disabled) {
+    background-color: var(--control-fill-hover);
+    color: var(--color-text);
+  }
+
+  .account-choice:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  /* The active account is the denser row, not a coloured one. */
+  .account-row.current .account-choice {
+    color: var(--color-text);
+    background-color: var(--control-fill-selected);
+    box-shadow: var(--control-rim-strong);
+    cursor: default;
+  }
 
   .mini-avatar {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     display: grid;
     place-items: center;
     flex: 0 0 auto;
     overflow: hidden;
-    border-radius: var(--r-xs);
-    background: var(--fill-active);
-    color: var(--text);
-    font-size: 10px;
-    font-weight: var(--w-semibold);
+    border-radius: var(--radius-xs);
+    background-color: var(--control-fill-selected);
+    color: var(--color-text);
+    font-size: var(--type-caption-size);
+    font-weight: var(--type-heading-weight);
   }
 
-  .saved-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-
-  .forget {
-    display: grid;
-    place-items: center;
-    border-radius: var(--r-sm);
-    color: var(--text-faint);
+  .saved-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-size: var(--type-body-size);
   }
-
-  .forget:hover:not(:disabled) { color: var(--bad); background: rgba(232, 114, 114, 0.1); }
 
   /* -- signed out -------------------------------------------------------- */
   .signin {
     display: flex;
     flex-direction: column;
-    gap: var(--s-3);
+    gap: var(--space-3);
   }
 
   .provider {
-    font-size: var(--t-meta);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--text-faint);
+    font-size: var(--type-label-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-label-tracking);
+    color: var(--color-text-tertiary);
   }
 
   h3 {
     margin: 0;
-    font-size: var(--t-emphasis, 16px);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
+    font-size: var(--type-heading-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
+    line-height: var(--type-heading-leading);
+  }
+
+  h3.working {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .fine {
     margin: 0;
-    font-size: var(--t-caption);
-    color: var(--text-faint);
+    font-size: var(--type-caption-size);
+    line-height: var(--type-caption-leading);
+    color: var(--color-text-tertiary);
   }
 
   .spacer {
@@ -478,21 +430,21 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--s-2) 0;
-    font-size: var(--t-body);
-    color: var(--text-muted);
-    border-top: 1px solid var(--chrome-line);
-    transition: color var(--m-fast) var(--ease);
+    padding: var(--space-3) 0 var(--space-1);
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
+    box-shadow: 0 -1px 0 var(--control-hairline);
+    transition: color var(--motion-hover) var(--ease-standard);
   }
 
   .disclose:hover {
-    color: var(--text);
+    color: var(--color-text);
   }
 
   .chevron {
     display: grid;
     place-items: center;
-    transition: transform var(--m-normal) var(--ease);
+    transition: transform var(--motion-state) var(--ease-standard);
   }
 
   .chevron.open {
@@ -500,26 +452,26 @@
   }
 
   .details {
-    font-size: var(--t-caption);
-    color: var(--text-muted);
+    font-size: var(--type-caption-size);
+    color: var(--color-text-secondary);
   }
 
   dl {
     display: flex;
     flex-direction: column;
-    gap: var(--s-1);
+    gap: var(--space-1);
     margin: 0;
   }
 
   dl div {
     display: flex;
-    gap: var(--s-2);
+    gap: var(--space-2);
   }
 
   dt {
     width: 76px;
     flex-shrink: 0;
-    color: var(--text-faint);
+    color: var(--color-text-tertiary);
   }
 
   dd {
@@ -528,11 +480,11 @@
   }
 
   .note {
-    margin: var(--s-2) 0 0;
-    padding: var(--s-2);
-    border-radius: var(--r-xs);
-    background: var(--fill-sunken);
-    border: 1px solid var(--chrome-line);
+    margin: var(--space-2) 0 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background-color: var(--control-fill-sunken);
+    box-shadow: var(--control-rim);
     line-height: 1.5;
   }
 </style>

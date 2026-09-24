@@ -263,6 +263,29 @@ java {
     withSourcesJar()
 }
 
+/**
+ * The shared theme constants, regenerated from the manifest before Java compiles.
+ *
+ * <p>`generated/FathomTheme.java` and the launcher's CSS and TypeScript come from
+ * one manifest through one script. Running it here means an edited manifest
+ * cannot ship a jar compiled against stale constants; the script rewrites a file
+ * only when its content changes, so an unchanged manifest leaves this up to date.
+ * Node is already required to build the launcher.
+ */
+def repoRoot = rootProject.projectDir.parentFile.parentFile
+def generateThemeTokens = tasks.register('generateThemeTokens', Exec) {
+    inputs.file(new File(repoRoot, 'assets/theme/fathom-theme.json'))
+    inputs.file(new File(repoRoot, 'tools/generate-fathom-theme.mjs'))
+    outputs.file('src/main/java/net/fathom/optimizations/generated/FathomTheme.java')
+    workingDir repoRoot
+    commandLine 'node', 'tools/generate-fathom-theme.mjs'
+}
+
+// Both tasks read `src/main/java`, which contains the generated file, so both
+// must run after it; Gradle refuses the build otherwise.
+tasks.named('compileJava').configure { dependsOn generateThemeTokens }
+tasks.named('sourcesJar').configure { dependsOn generateThemeTokens }
+
 tasks.withType(JavaCompile).configureEach {
     it.options.encoding = 'UTF-8'
     // -Xlint:all with no -Werror: a warning here should be read, not fatal, because the

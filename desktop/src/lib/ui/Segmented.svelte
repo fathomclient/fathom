@@ -83,60 +83,60 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: var(--s-1);
+    gap: 2px;
     padding: 3px;
-    border-radius: var(--r-md);
-    background: var(--fill-sunken);
-    border: 1px solid var(--chrome-line);
+    border-radius: var(--radius-pill);
+    background-color: var(--control-fill-sunken);
+    box-shadow: var(--control-rim);
   }
 
+  /* The selection is a lighter pane inside the channel: denser, brighter glass
+     with its own rim, never a coloured slab. */
   .indicator {
     position: absolute;
     top: 3px;
     bottom: 3px;
     left: 0;
-    border-radius: var(--r-sm);
-    /* The selected segment is the one place a small amount of accent goes a
-       long way: a filled red pill would shout, a red-tinted surface with a lit
-       edge reads as "this one". */
-    background: linear-gradient(180deg, rgba(224, 80, 92, 0.30), rgba(132, 28, 36, 0.30));
-    border: 1px solid rgba(224, 80, 92, 0.42);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      0 2px 10px rgba(0, 0, 0, 0.35);
+    border-radius: var(--radius-pill);
+    background-color: var(--control-fill-selected);
+    box-shadow: var(--control-rim-strong), var(--shadow-sm);
     pointer-events: none;
   }
 
   .indicator.ready {
     transition:
-      transform var(--m-normal) var(--ease),
-      width var(--m-normal) var(--ease);
+      transform var(--motion-state) var(--ease-standard),
+      width var(--motion-state) var(--ease-standard);
   }
 
   .segment {
     position: relative;
     z-index: 1;
-    padding: 0 14px;
-    height: 28px;
-    border-radius: var(--r-sm);
-    font-size: var(--t-body);
-    font-weight: var(--w-medium);
-    color: var(--text-muted);
+    height: var(--control-height-sm);
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-pill);
+    font-size: var(--type-secondary-size);
+    font-weight: var(--type-button-weight);
+    color: var(--color-text-secondary);
     white-space: nowrap;
-    transition: color var(--m-fast) var(--ease);
+    transition: color var(--motion-hover) var(--ease-standard);
   }
 
   .segment:hover:not(:disabled):not(.selected) {
-    color: var(--text);
+    color: var(--color-text);
   }
 
   .segment.selected {
-    color: var(--text);
-    font-weight: var(--w-semibold);
+    color: var(--color-text);
+  }
+
+  .segment:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 1px;
   }
 
   .segment:disabled {
     cursor: default;
-    opacity: 0.5;
+    color: var(--color-text-disabled);
   }
 </style>

@@ -1,9 +1,7 @@
 package net.fathom.optimizations.fabric.hub;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.lwjgl.input.Keyboard;
 
@@ -24,6 +22,7 @@ import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 import net.fathom.optimizations.fabric.ui.VisualEffects;
 
@@ -33,7 +32,7 @@ import net.fathom.optimizations.fabric.ui.VisualEffects;
  * <h2>Responsive cards, not a settings document</h2>
  *
  * <p>Icon, name, state, description and the two actions that matter are visible
- * without leaving the browser. The grid chooses one to four columns from the
+ * without leaving the browser. The grid chooses one to three columns from the
  * available width, so opening the settings drawer narrows the same browser
  * rather than covering or scaling it.
  *
@@ -71,11 +70,11 @@ final class ModsSection implements Section {
     /** Visual-QA only: exercise a full grid of lit cards without changing saved module state. */
     private static final boolean FORCE_ENABLED_QA = Boolean.getBoolean("fathom.qaAllModules");
 
-    private static final float CARD_HEIGHT = 128f;
-    private static final float CARD_GAP = 12f;
+    private static final float CARD_HEIGHT = 148f;
+    private static final float CARD_GAP = Skin.CARD_GAP;
     /** Space inside the scroller for shadows and press feedback. */
-    private static final float CARD_FIELD_PAD = 12f;
-    private static final float MIN_CARD_WIDTH = 190f;
+    private static final float CARD_FIELD_PAD = Skin.CARD_PADDING;
+    private static final float MIN_CARD_WIDTH = 236f;
     private static final float ICON = 22f;
     private static final float ACTION = 26f;
     private static final float SETTING_ROW = 40f;
@@ -85,15 +84,6 @@ final class ModsSection implements Section {
     private final Scroller scroller = new Scroller();
     private final Scroller drawerScroll = new Scroller();
     private final Motion drawer = new Motion(0f, Timing.PANEL);
-    /** Fixed-size per-module event state; entries are created once, never per frame. */
-    private final Map<FathomModule, CardEnergy> cardEnergy = new HashMap<FathomModule, CardEnergy>();
-
-    private static final class CardEnergy {
-        boolean enabled;
-        boolean activating;
-        float changedAt = -10f;
-    }
-
     /** The text setting being typed into, or null. */
     private Setting.Text editing;
 
@@ -151,10 +141,7 @@ final class ModsSection implements Section {
 
     @Override
     public void qaReplay(HubContext context) {
-        for (CardEnergy memory : cardEnergy.values()) {
-            memory.activating = true;
-            memory.changedAt = context.now();
-        }
+        cardsEnteredAt = context.now();
     }
 
     @Override
@@ -174,7 +161,7 @@ final class ModsSection implements Section {
                 workspace.width - (drawerWidth + Skin.S5) * drawn, workspace.height);
         List<FathomModule> cards = visible(context);
         float gridWidth = Math.max(1f, body.width - CARD_FIELD_PAD * 2f);
-        int columns = ResponsiveGrid.columns(gridWidth, MIN_CARD_WIDTH, CARD_GAP, 4);
+        int columns = ResponsiveGrid.columns(gridWidth, MIN_CARD_WIDTH, CARD_GAP, 3);
         float cardWidth = ResponsiveGrid.cellWidth(gridWidth, CARD_GAP, columns);
         float contentHeight = ResponsiveGrid.contentHeight(cards.size(), columns, CARD_HEIGHT, CARD_GAP)
                 + CARD_FIELD_PAD * 2f;
@@ -274,128 +261,59 @@ final class ModsSection implements Section {
         Rect card = area;
         Controls.State surface = controls.state("mod.card." + feature.id(), card, true);
         boolean visuallyEnabled = feature.enabled() || FORCE_ENABLED_QA;
-        CardEnergy memory = cardEnergy.get(feature);
-        if (memory == null) {
-            memory = new CardEnergy();
-            memory.enabled = feature.enabled();
-            cardEnergy.put(feature, memory);
-        } else if (memory.enabled != feature.enabled()) {
-            memory.enabled = feature.enabled();
-            memory.activating = feature.enabled();
-            memory.changedAt = context.now();
-        }
-        float pulseProgress = Ease.clamp01((context.now() - memory.changedAt)
-                / VisualEffects.ACTIVATION_PULSE_SECONDS);
         float enabled = controls.towards("mod.card." + feature.id() + "#enabled",
                 visuallyEnabled, Timing.TOGGLE);
         float selected = controls.towards("mod.card." + feature.id() + "#selected",
                 feature == open && !drawerClosing, Timing.NAVIGATION);
-        float lit = Math.max(enabled, selected);
-        // Hover changes colour, never geometry.
-        //
-        // This used to scale the card by `CARD_HOVER_SCALE` and lift it by
-        // `CARD_HOVER_LIFT`, through a transform that wraps the whole card --
-        // face, border, icon and *text*. A 0.5% scale about the card's centre
-        // moves a title several pixels at the far edge, and a 1.5px lift moves
-        // every line in the card. The result was text that visibly jumped when
-        // the pointer crossed a card, which is the one thing a hover state must
-        // not do: it makes the row you are reading move as you reach for it.
-        //
-        // Press is still allowed to move the card. That is a momentary,
-        // deliberate acknowledgement of a click that ends when the button comes
-        // up, and it is the affordance that says the surface is tactile.
-        float scale = 1f - surface.press * 0.008f;
-        float lift = surface.press * 0.80f;
-        ui.pushTransform(0f, lift, scale, card.centreX(), card.centreY());
+        FathomComponents.card(ui, card, surface.hover, Math.max(enabled * 0.82f, selected));
 
-        // Enabled cards stay dark: the state is the red edge, notch and icon,
-        // never a red face or a bloom around the card.
-        int resting = Skin.mix(Skin.SURFACE, Skin.ELEVATED, selected * 0.60f);
-        int face = Skin.mix(resting, Skin.SURFACE_HOVER, surface.hover);
-        ui.shadow(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD,
-                VisualEffects.CARD_SHADOW_SPREAD, Skin.scaleAlpha(Skin.SHADOW,
-                        VisualEffects.CARD_SHADOW_OPACITY * (0.80f + surface.hover * 0.20f)));
-        VisualEffects.activationPulse(ui, card, Skin.R_CARD, pulseProgress, memory.activating);
-        VisualEffects.layeredSurface(ui, card, Skin.R_CARD, face, surface.hover);
-        cardFooterSurface(ui, card);
-
-        int energizedEdge = Skin.mix(Skin.BASE_RED, Skin.HOT_RED, selected * 0.80f + surface.hover * 0.35f);
-        int neutralEdge = Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, surface.hover);
-        int edge = Skin.mix(neutralEdge, energizedEdge, Math.max(enabled, selected));
-        ui.outline(card.x, card.y, card.right(), card.bottom(), Skin.R_CARD,
-                Skin.BORDER_STANDARD
-                        + enabled * (Skin.BORDER_ENERGIZED - Skin.BORDER_STANDARD)
-                        + selected * (Skin.BORDER_SELECTED - Skin.BORDER_ENERGIZED),
-                edge);
-
-        Rect iconBox = new Rect(card.x + Skin.S3, card.y + Skin.S3, 40f, 40f);
-        // Same rule for the icon: the activation pulse may scale it, because that
-        // is a one-shot response to a click, but hover may not -- a 3% icon
-        // scale shifted the glyph under the pointer every time it arrived.
-        float iconScale = 1f
-                + (1f - pulseProgress) * (memory.activating ? 0.05f : -0.02f);
-        ui.pushTransform(0f, 0f, iconScale, iconBox.centreX(), iconBox.centreY());
-        // The one light on an enabled card: a tight falloff around its icon.
-        int iconFace = Skin.mix(Skin.RECESSED, Skin.BASE_RED, enabled * 0.22f + selected * 0.10f);
-        VisualEffects.layeredSurface(ui, iconBox, Skin.R_MEDIUM, iconFace, 0f);
-        ui.outline(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(), Skin.R_MEDIUM,
-                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_SURFACE, Skin.ACTIVE_RED, lit));
+        Rect iconBox = new Rect(card.x + Skin.CARD_PADDING, card.y + Skin.CARD_PADDING, 40f, 40f);
+        int iconFace = Skin.mix(Skin.RECESSED, Skin.BASE_RED, enabled * 0.18f);
+        ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(),
+                Skin.R_MEDIUM, iconFace);
         int icon = Skin.mix(Skin.TEXT_FAINT, Skin.HOT_RED, enabled);
         ui.icon(Icon.of(feature.icon()), iconBox.centreX() - ICON / 2f,
                 iconBox.centreY() - ICON / 2f, ICON,
                 VisualEffects.hoverBrighten(icon, surface.hover));
-        ui.popTransform();
 
         float titleX = iconBox.right() + Skin.S3;
-        float titleRoom = card.right() - Skin.S3 - titleX;
+        float titleRoom = card.right() - Skin.CARD_PADDING - titleX;
         ui.text(Text.fit(ui, feature.name(), Type.ROW_TITLE, titleRoom), titleX,
-                card.y + Skin.S3 + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE,
+                card.y + Skin.CARD_PADDING + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE,
                 Skin.mix(Skin.TEXT_MUTED, Skin.TEXT,
                         Math.max(Math.max(enabled, selected * 0.82f), surface.hover * 0.85f)));
         if (Text.overflows(ui, feature.name(), Type.ROW_TITLE, titleRoom)) {
             controls.tooltip(surface, card, feature.name());
         }
-        statusRail(ui, titleX, card.y + 34f, visuallyEnabled, enabled, surface.hover);
 
-        String badge = compactBadge(feature);
-        float footerTop = card.bottom() - 38f;
-        Rect footer = new Rect(card.x + Skin.S3, footerTop + 6f,
-                card.width - Skin.S6, 26f);
+        Rect description = new Rect(card.x + Skin.CARD_PADDING, card.y + 68f,
+                card.width - Skin.CARD_PADDING * 2f, 20f);
+        ui.text(Text.fit(ui, feature.description(), Type.SMALL, description.width),
+                description.x, Controls.baseline(ui, description, Type.SMALL), Type.SMALL,
+                Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, surface.hover * 0.42f));
+
+        Rect footer = new Rect(card.x + Skin.CARD_PADDING, card.bottom() - Skin.CARD_PADDING - 26f,
+                card.width - Skin.CARD_PADDING * 2f, 26f);
         boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
-        Rect options = configurable
-                ? new Rect(footer.x, footer.y, Math.min(88f, Math.max(82f, footer.width * 0.44f)), footer.height)
-                : new Rect(footer.x, footer.y, 0f, footer.height);
         Rect toggle = feature.switchable()
                 ? footer.vcentreRight(0f, Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT)
                 : new Rect(footer.right(), footer.y, 0f, footer.height);
-        float implementationWidth = feature.switchable()
-                ? 0f : Controls.badgeWidth(ui, feature.implementation().label());
-
-        float metadataLeft = configurable ? options.right() + Skin.S2 : footer.x;
-        float metadataRight = feature.switchable()
-                ? toggle.x - Skin.S2 : footer.right() - implementationWidth - Skin.S2;
-        float badgeWidth = badge.isEmpty() ? 0f : Controls.badgeWidth(ui, badge);
-        boolean badgeInFooter = !badge.isEmpty() && metadataRight - metadataLeft >= badgeWidth;
-        float descriptionRight = card.right() - Skin.S3;
-        if (!badge.isEmpty() && !badgeInFooter) {
-            float width = Math.min(badgeWidth, card.width * 0.42f);
-            Rect metadata = new Rect(card.right() - Skin.S3 - width, card.y + 62f, width, 18f);
-            controls.badge(ui, "mod.badge." + feature.id(), badge, metadata,
-                    unmet(feature) ? Skin.TEXT_MUTED : Skin.WARN);
-            descriptionRight = metadata.x - Skin.S2;
-        }
-        Rect description = new Rect(card.x + Skin.S3, card.y + 62f,
-                Math.max(24f, descriptionRight - card.x - Skin.S3), 18f);
-        ui.text(Text.fit(ui, feature.description(), Type.SMALL, description.width),
-                description.x, Controls.baseline(ui, description, Type.SMALL), Type.SMALL,
-                Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED,
-                        enabled * 0.52f + surface.hover * 0.38f));
-
-        if (badgeInFooter) {
-            controls.badge(ui, "mod.badge." + feature.id(), badge,
-                    new Rect(metadataLeft, footer.y, badgeWidth, footer.height),
-                    unmet(feature) ? Skin.TEXT_MUTED : Skin.WARN);
-        }
+        Rect options = configurable
+                ? new Rect(toggle.x - Skin.S2 - 76f, footer.y, 76f, footer.height)
+                : new Rect(toggle.x, footer.y, 0f, footer.height);
+        float metadataRight = configurable ? options.x - Skin.S2 : toggle.x - Skin.S2;
+        String badge = compactBadge(feature);
+        String metadata = (visuallyEnabled ? "Enabled" : "Disabled") + "  ·  "
+                + feature.category().label()
+                + (badge.isEmpty() ? "" : "  ·  " + badge);
+        float dot = 5f;
+        ui.rounded(footer.x, footer.centreY() - dot / 2f,
+                footer.x + dot, footer.centreY() + dot / 2f, dot / 2f,
+                visuallyEnabled ? Skin.HOT_RED : Skin.TEXT_DISABLED);
+        ui.text(Text.fit(ui, metadata, Type.CAPTION,
+                        Math.max(0f, metadataRight - footer.x - dot - Skin.S2)),
+                footer.x + dot + Skin.S2, Controls.baseline(ui, footer, Type.CAPTION),
+                Type.CAPTION, visuallyEnabled ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
         if (configurable) {
             if (controls.recessedAction(ui, "mod.options." + feature.id(), options, "Options", true)) {
                 openDrawer(context, feature);
@@ -406,53 +324,16 @@ final class ModsSection implements Section {
                 context.setFeatureEnabled(feature, !feature.enabled());
             }
         } else {
-            float width = implementationWidth;
+            float width = Controls.badgeWidth(ui, feature.implementation().label());
             controls.badge(ui, "mod.implementation." + feature.id(), feature.implementation().label(),
                     footer.vcentreRight(0f, width, 20f), Skin.WARN);
         }
-
-        ui.popTransform();
 
         // Clicking unused card space is an Options shortcut; action controls
         // above have separate bounds and therefore retain their own behavior.
         if (configurable && surface.clicked) {
             openDrawer(context, feature);
         }
-    }
-
-    /** Bottom action well, with only its owning lower corners rounded. */
-    private static void cardFooterSurface(Renderer ui, Rect card) {
-        float inset = 1f;
-        float top = card.bottom() - 38f;
-        float radius = Skin.innerRadius(Skin.R_CARD, card, inset);
-        int face = Skin.scaleAlpha(Skin.BACKGROUND, 0.58f);
-        if (ui instanceof net.fathom.optimizations.core.ui.render.FathomRenderer) {
-            ((net.fathom.optimizations.core.ui.render.FathomRenderer) ui).rounded(
-                    card.x + inset, top, card.right() - inset, card.bottom() - inset,
-                    0f, 0f, radius, radius, face);
-        } else {
-            ui.rounded(card.x + inset, top, card.right() - inset, card.bottom() - inset,
-                    Skin.R_MEDIUM, face);
-        }
-        ui.fill(card.x + Skin.S3, top, card.right() - Skin.S3, top + Skin.HAIRLINE,
-                Skin.EDGE_RECESSED);
-    }
-
-    /** A compact state pill: a dot and a word, on a dark face. */
-    private static void statusRail(Renderer ui, float x, float y,
-            boolean on, float enabled, float hover) {
-        String label = on ? "ENABLED" : "DISABLED";
-        float width = ui.measure(label, Type.CAPTION) + 19f;
-        Rect rail = Skin.pixelAligned(ui, new Rect(x, y, width, 16f));
-        int face = on ? Skin.mix(Skin.RECESSED, Skin.BASE_RED, 0.16f) : Skin.RECESSED;
-        ui.rounded(rail.x, rail.y, rail.right(), rail.bottom(), Skin.pill(rail), face);
-        ui.outline(rail.x, rail.y, rail.right(), rail.bottom(), Skin.pill(rail),
-                Skin.BORDER_STANDARD,
-                on ? Skin.scaleAlpha(Skin.BASE_RED, 0.90f) : Skin.EDGE_RECESSED);
-        ui.rounded(rail.x + 5f, rail.centreY() - 2f, rail.x + 9f, rail.centreY() + 2f, 2f,
-                on ? Skin.scaleAlpha(Skin.HOT_RED, Math.max(0.56f, enabled)) : Skin.TEXT_DISABLED);
-        ui.text(label, rail.x + 12f, Controls.baseline(ui, rail, Type.CAPTION), Type.CAPTION,
-                on ? VisualEffects.hoverBrighten(Skin.HOT_RED, hover) : Skin.TEXT_DISABLED);
     }
 
     /**
@@ -516,10 +397,7 @@ final class ModsSection implements Section {
         Rect panel = area.offset((1f - shown) * 28f, 0f);
 
         ui.pushAlpha(shown);
-        VisualEffects.overlayShadow(ui, panel, Skin.R_CARD);
-        VisualEffects.layeredSurface(ui, panel, Skin.R_CARD, Skin.FLOATING, 0f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD,
-                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.BASE_RED, 0.55f));
+        FathomComponents.floatingPanel(ui, panel);
 
         Rect inner = panel.inset(Skin.S5, Skin.S5);
         Rect head = inner.top(52f);

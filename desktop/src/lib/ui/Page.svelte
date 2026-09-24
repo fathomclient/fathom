@@ -28,81 +28,99 @@
   export let full = false;
 </script>
 
-<div class="scroll">
-  <div class="column" class:wide class:full>
-    <header in:fly={{ y: 6, duration: NORMAL, easing: EASE }}>
-      <h1 class="on-footage">{title}</h1>
-      {#if summary}
-        <span class="summary on-footage">{summary}</span>
-      {/if}
-      <div class="spacer"></div>
-      <div class="actions"><slot name="actions" /></div>
-    </header>
+<div class="frame">
+  <!-- The readability veil, behind the scroller rather than on it, so its edges
+       can fade into the photograph without fading the content with them. -->
+  <div class="veil" aria-hidden="true"></div>
+  <div class="scroll">
+    <div class="column" class:wide class:full>
+      <header in:fly={{ y: 6, duration: NORMAL, easing: EASE }}>
+        <h1 class="on-footage">{title}</h1>
+        {#if summary}
+          <span class="summary on-footage">{summary}</span>
+        {/if}
+        <div class="spacer"></div>
+        <div class="actions"><slot name="actions" /></div>
+      </header>
 
-    <div class="body" in:fly={{ y: 10, duration: NORMAL, delay: 30, easing: EASE }}>
-      <slot />
+      <div class="body" in:fly={{ y: 10, duration: NORMAL, delay: 30, easing: EASE }}>
+        <slot />
+      </div>
     </div>
   </div>
 </div>
 
 <style>
+  .frame {
+    position: relative;
+    height: 100%;
+  }
+
+  /* THE READABILITY VEIL.
+     Document pages are text, and parts of the photograph are bright sky, so a
+     page gets a warm deepening behind its column. It is a veil and not a
+     panel: it has no edge. It fades out at every side of the content area, so
+     the photograph continues around it and the page does not become a
+     rectangle inside the window. Home does not use `Page`, because Home IS the
+     photograph. */
+  .veil {
+    position: absolute;
+    inset: 0;
+    background: var(--backdrop-document);
+    -webkit-mask-image:
+      linear-gradient(to right, transparent, #000 var(--space-20), #000 calc(100% - var(--space-20)), transparent),
+      linear-gradient(to bottom, transparent, #000 var(--space-16));
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(to right, transparent, #000 var(--space-20), #000 calc(100% - var(--space-20)), transparent),
+      linear-gradient(to bottom, transparent, #000 var(--space-16));
+    mask-composite: intersect;
+    pointer-events: none;
+  }
+
   .scroll {
+    position: relative;
     height: 100%;
     overflow-y: auto;
-    /* Room at the bottom so the last row is not welded to the bottom bar. */
-    padding: 26px 30px 44px;
-
-    /* THE READABILITY SUBSTRATE.
-       The background is deliberately only lightly blurred now, which means
-       parts of it are bright -- sunlit grass in bg_1, snow in bg_2 -- and a
-       faint uppercase label over sunlit grass is invisible. Verified: the first
-       capture of this build had unreadable section labels on every document
-       page.
-       Home does not get this, because Home IS the footage. Document pages do,
-       because they are text. The gradient weakens toward the bottom so the
-       lower half of the scene stays visible below the content. */
-    background: linear-gradient(
-      180deg,
-      rgba(5, 6, 10, 0.66) 0%,
-      rgba(5, 6, 10, 0.58) 45%,
-      rgba(5, 6, 10, 0.4) 100%
-    );
+    /* Room at the bottom so the last row is not welded to the window's edge. */
+    padding: var(--space-6) var(--layout-page-pad-x) var(--space-12);
   }
 
   .column {
-    max-width: 760px;
+    max-width: var(--layout-column);
     margin: 0 auto;
   }
 
   .column.wide {
-    max-width: 980px;
+    max-width: var(--layout-column-wide);
   }
 
   .column.full {
     max-width: none;
   }
 
-  /* Title, state and actions on ONE line. The old layout put the summary on
-     its own row under the title and the actions on a third, which turned every
-     page header into three lines of nothing before the content began. */
+  /* Title, state and actions on ONE line, wrapping when the window is narrow
+     rather than squeezing the title. */
   header {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: var(--s-3);
-    margin-bottom: var(--s-5);
+    gap: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-6);
   }
 
   h1 {
     margin: 0;
-    font-size: var(--t-page);
-    font-weight: var(--w-bold);
-    letter-spacing: var(--track-tight);
-    line-height: 1.15;
+    font-size: var(--type-title-size);
+    font-weight: var(--type-title-weight);
+    letter-spacing: var(--type-title-tracking);
+    line-height: var(--type-title-leading);
+    color: var(--color-text);
   }
 
   .summary {
-    font-size: var(--t-body);
-    color: var(--text-muted);
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
     /* Pushed down a touch so it sits on the title's baseline rather than
        floating level with its cap height. */
     position: relative;
@@ -115,9 +133,9 @@
 
   .actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--s-2);
-    flex-shrink: 0;
+    gap: var(--space-2);
     /* Actions align to the control's centre, not the title's baseline. */
     align-self: center;
   }
@@ -125,6 +143,6 @@
   .body {
     display: flex;
     flex-direction: column;
-    gap: var(--s-6);
+    gap: var(--layout-section-gap);
   }
 </style>

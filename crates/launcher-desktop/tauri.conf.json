@@ -20,7 +20,7 @@
         "resizable": true,
         "center": true,
         "theme": "Dark",
-        "backgroundColor": "#000000",
+        "backgroundColor": "#2a1c0e",
         "decorations": false,
         "visible": false,
         "label": "main"

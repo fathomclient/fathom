@@ -159,68 +159,30 @@ fn background(state: tauri::State<'_, State>) -> Result<String, String> {
     Ok(choice.clone())
 }
 
-/// The background ids the frontend may ask for.
+/// The background ids the frontend may ask for: the approved backgrounds.
 ///
 /// These are also asset filenames, which is why nothing else is accepted: the
 /// value ends up inside a URL, and "the WebView asked for it" is not a reason
 /// to trust a string.
 ///
+/// Fathom's backgrounds are curated, and right now there is one. The gameplay
+/// recordings, their stills, and the plain gradient that used to be listed here
+/// are retired: a preference naming one of them is migrated to the default when
+/// it is read (`migrate_appearance`), and this list refuses them if asked.
+///
 /// Every id here must appear in `desktop/src/lib/backgrounds.ts`, which is the
-/// catalogue the interface offers and says what each id's asset is. The two
-/// lists drifted once: the picker offered the bg_5 and bg_6 recordings while
-/// this list still ended at `bg_4`, so choosing one was refused here and the
-/// window kept the background it already had, with nothing on screen to say so.
-/// The test at the bottom of this file reads that catalogue and fails if they
-/// disagree again.
-const BACKGROUNDS: [&str; 15] = [
-    "static",
-    "bg_1",
-    "bg_2",
-    "bg_3",
-    "bg_4",
-    "bg_5rain",
-    "bg_5noraintickfrozen",
-    "bg_5noraintickunfrozen",
-    "bg_6midnight",
-    "bg_6clear",
-    "bg_6pull_city-overlook",
-    "bg_6pull_moon-tower",
-    "bg_6pull_red-tower",
-    "bg_6pull_storm-panorama",
-    "bg_6pull_neon-grid",
-];
+/// catalogue the interface offers. The test at the bottom of this file reads
+/// that catalogue and fails if the two disagree.
+const BACKGROUNDS: [&str; 1] = ["golden-hour"];
 
-/// Whether a background decodes video, for the interface's "Animated
-/// background" switch.
-///
-/// Three kinds, two answers: the midnight gradient and the still frames are not
-/// animated, and everything else is a clip. Spelled as a prefix rather than a
-/// second list because the stills are all crops of one recording and are named
-/// for it.
-fn animated(choice: &str) -> bool {
-    choice != "static" && !choice.starts_with("bg_6pull_")
-}
+/// What a first run shows, and what any retired, unknown or unreadable
+/// preference becomes. `desktop/src/lib/backgrounds.ts` carries the same
+/// default for the moment before this answer arrives.
+const DEFAULT_BACKGROUND: &str = "golden-hour";
 
-/// What a first run shows, and what an unreadable preference falls back to.
-const DEFAULT_BACKGROUND: &str = "bg_5rain";
-
-/// Accept an id written by an older build.
-///
-/// The previous interface serialised its choice through serde's `snake_case`
-/// rename, which turns `Bg1` into `bg1` -- no underscore. The asset files are
-/// `bg_1.webp`, so a preference file written by that build produces a URL that
-/// 404s. Nothing reported an error: the launcher asked for a background that
-/// did not exist and got an HTML error page, which the image and media decoders
-/// both refused, and the window simply stayed black. Normalising here means one
-/// spelling exists past this point.
+/// The approved id a stored or requested value names, if it names one.
 fn normalise(raw: &str) -> Option<&'static str> {
-    let candidate = match raw.trim() {
-        "bg1" => "bg_1",
-        "bg2" => "bg_2",
-        "bg3" => "bg_3",
-        "bg4" => "bg_4",
-        other => other,
-    };
+    let candidate = raw.trim();
     BACKGROUNDS
         .iter()
         .find(|allowed| **allowed == candidate)
@@ -240,49 +202,152 @@ fn set_background(state: tauri::State<'_, State>, choice: String) -> Result<(), 
         .map_err(|_| "background state is poisoned")?;
     current.clone_from(&choice);
 
-    if let Ok(paths) = DataPaths::discover() {
-        let path = paths.root().join("appearance.json");
-        let body = serde_json::json!({
-            "background": choice,
-            "animated_background": animated(&choice),
-        });
-        if let Err(error) = std::fs::write(&path, body.to_string()) {
-            // Not fatal. The background changed for this session; only the
-            // memory of it is lost, and refusing the change would be worse.
-            tracing::warn!(%error, "could not save the background preference");
-        }
+    let mut stored = read_appearance();
+    stored.insert(
+        "background".to_owned(),
+        serde_json::Value::from(choice.clone()),
+    );
+    stored.remove(RETIRED_ANIMATED_KEY);
+    if let Err(error) = write_appearance(stored) {
+        // Not fatal. The background changed for this session; only the
+        // memory of it is lost, and refusing the change would be worse.
+        tracing::warn!(%error, "could not save the background preference");
     }
     Ok(())
 }
 
-fn stored_background() -> String {
-    let Ok(paths) = DataPaths::discover() else {
-        return DEFAULT_BACKGROUND.to_owned();
-    };
-    let Ok(raw) = std::fs::read_to_string(paths.root().join("appearance.json")) else {
-        return DEFAULT_BACKGROUND.to_owned();
-    };
+/// The glass accessibility switches: see `desktop/src/lib/appearance.ts`.
+///
+/// Purely visual. They are stored beside the background in `appearance.json`
+/// and nothing outside the interface reads them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppearanceModes {
+    reduce_transparency: bool,
+    reduce_blur: bool,
+}
+
+impl AppearanceModes {
+    /// Missing or mistyped keys read as off: full glass is the default.
+    fn from_stored(stored: &serde_json::Map<String, serde_json::Value>) -> Self {
+        let flag = |key: &str| stored.get(key).and_then(serde_json::Value::as_bool) == Some(true);
+        Self {
+            reduce_transparency: flag("reduce_transparency"),
+            reduce_blur: flag("reduce_blur"),
+        }
+    }
+
+    fn store_into(self, stored: &mut serde_json::Map<String, serde_json::Value>) {
+        stored.insert(
+            "reduce_transparency".to_owned(),
+            serde_json::Value::Bool(self.reduce_transparency),
+        );
+        stored.insert(
+            "reduce_blur".to_owned(),
+            serde_json::Value::Bool(self.reduce_blur),
+        );
+    }
+}
+
+#[tauri::command]
+fn appearance_modes() -> AppearanceModes {
+    AppearanceModes::from_stored(&read_appearance())
+}
+
+#[tauri::command]
+fn set_appearance_modes(modes: AppearanceModes) -> Result<(), String> {
+    let mut stored = read_appearance();
+    modes.store_into(&mut stored);
+    write_appearance(stored).map_err(|error| {
+        tracing::warn!(%error, "could not save the appearance modes");
+        format!("could not save the appearance setting: {error}")
+    })
+}
+
+/// Parse `appearance.json`. Anything unreadable is an empty object.
+fn parse_appearance(raw: &str) -> serde_json::Map<String, serde_json::Value> {
     // A byte-order mark is what a hand-edit in Notepad leaves behind, and
     // serde_json treats one as a syntax error.
     let raw = raw.trim_start_matches('\u{feff}');
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+    match serde_json::from_str::<serde_json::Value>(raw) {
+        Ok(serde_json::Value::Object(map)) => map,
+        _ => serde_json::Map::new(),
+    }
+}
+
+/// The whole of `appearance.json`, so that each writer replaces only its own
+/// keys. It used to be written whole by the background picker alone; with a
+/// second writer, rewriting it from scratch would silently reset the other
+/// one's settings.
+fn read_appearance() -> serde_json::Map<String, serde_json::Value> {
+    DataPaths::discover()
+        .ok()
+        .and_then(|paths| std::fs::read_to_string(paths.root().join("appearance.json")).ok())
+        .map(|raw| parse_appearance(&raw))
+        .unwrap_or_default()
+}
+
+fn write_appearance(stored: serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
+    let paths = DataPaths::discover().map_err(|error| error.to_string())?;
+    std::fs::write(
+        paths.root().join("appearance.json"),
+        serde_json::Value::Object(stored).to_string(),
+    )
+    .map_err(|error| error.to_string())
+}
+
+/// The retired "Animated background" flag. Only ever removed now.
+const RETIRED_ANIMATED_KEY: &str = "animated_background";
+
+/// Bring a stored `appearance.json` onto the current background policy.
+///
+/// A background that is not approved -- a retired recording, the old gradient,
+/// the pre-underscore `bg1` spellings, or anything unreadable -- becomes the
+/// default, and the retired animation flag is dropped. Every other key is left
+/// exactly as it was, so the glass accessibility switches survive. Returns
+/// whether anything changed.
+fn migrate_appearance(stored: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    let approved = stored
+        .get("background")
+        .and_then(serde_json::Value::as_str)
+        .and_then(normalise);
+    let mut changed = false;
+    if approved.is_none() {
+        stored.insert(
+            "background".to_owned(),
+            serde_json::Value::from(DEFAULT_BACKGROUND),
+        );
+        changed = true;
+    }
+    if stored.remove(RETIRED_ANIMATED_KEY).is_some() {
+        changed = true;
+    }
+    changed
+}
+
+/// The background to show, migrating the stored preference first.
+///
+/// A first run has no file and writes none. A file that exists but names a
+/// retired background is rewritten once, in place, so the next read is already
+/// clean and nothing downstream ever sees the old id.
+fn stored_background() -> String {
+    let mut stored = read_appearance();
+    if stored.is_empty() {
         return DEFAULT_BACKGROUND.to_owned();
-    };
-    // The id wins when there is one. The flag is only consulted when there is
-    // not: a still frame is saved as `animated_background: false` and is still a
-    // background, so reading the flag first would turn every saved still back
-    // into the midnight gradient on the next launch.
-    if let Some(id) = value
+    }
+    if migrate_appearance(&mut stored) {
+        if let Err(error) = write_appearance(stored.clone()) {
+            // Not fatal: the default is shown this session either way, and the
+            // migration runs again next start.
+            tracing::warn!(%error, "could not migrate the background preference");
+        }
+    }
+    stored
         .get("background")
         .and_then(serde_json::Value::as_str)
         .and_then(normalise)
-    {
-        return id.to_owned();
-    }
-    if value.get("animated_background") == Some(&serde_json::Value::Bool(false)) {
-        return "static".to_owned();
-    }
-    DEFAULT_BACKGROUND.to_owned()
+        .unwrap_or(DEFAULT_BACKGROUND)
+        .to_owned()
 }
 
 /// Start Fathom's one canonical desktop launcher.
@@ -388,6 +453,8 @@ pub fn run() {
             accounts_view,
             background,
             set_background,
+            appearance_modes,
+            set_appearance_modes,
             fathom_profiles::fathom_profiles_view,
             fathom_profiles::fathom_profile_switch,
             fathom_profiles::fathom_profile_create,
@@ -511,7 +578,7 @@ mod tests {
             .expect("the list must end")
             .0;
         let offered: Vec<&str> = list
-            .match_indices("{ id: '")
+            .match_indices("id: '")
             .map(|(at, marker)| {
                 let rest = &list[at + marker.len()..];
                 rest.split_once("'").expect("an id is quoted").0
@@ -538,25 +605,131 @@ mod tests {
         assert_eq!(normalise(DEFAULT_BACKGROUND), Some(DEFAULT_BACKGROUND));
     }
 
-    /// Only clips are animated. The gradient and the still frames are not, and
-    /// a still that reported itself as animated would be described wrongly by
-    /// the switch in Settings.
+    /// Every retired background, the old gradient, and the pre-underscore
+    /// spellings of the first recordings migrate to the approved default.
     #[test]
-    fn only_video_backgrounds_count_as_animated() {
-        assert!(animated("bg_1"));
-        assert!(animated("bg_5rain"));
-        assert!(!animated("static"));
-        assert!(!animated("bg_6pull_neon-grid"));
-        assert!(!animated("bg_6pull_city-overlook"));
+    fn retired_backgrounds_migrate_to_golden_hour() {
+        for retired in [
+            "bg_1",
+            "bg1",
+            "bg_5rain",
+            "bg_6midnight",
+            "bg_6pull_neon-grid",
+            "bg_6pull_red-tower",
+            "static",
+            "../../secret",
+        ] {
+            let mut stored = serde_json::Map::new();
+            stored.insert("background".to_owned(), serde_json::Value::from(retired));
+            assert!(migrate_appearance(&mut stored), "{retired} should migrate");
+            assert_eq!(
+                stored.get("background").and_then(|v| v.as_str()),
+                Some(DEFAULT_BACKGROUND),
+                "{retired}"
+            );
+        }
     }
 
-    /// The bug that made the background black: a preference written by the
-    /// previous interface spells the id without an underscore, and the asset
-    /// files have one.
+    /// The migration touches the background and the retired animation flag, and
+    /// nothing else: the glass accessibility switches survive it.
     #[test]
-    fn ids_from_the_previous_build_are_accepted() {
-        assert_eq!(normalise("bg1"), Some("bg_1"));
-        assert_eq!(normalise("bg4"), Some("bg_4"));
+    fn migration_keeps_the_accessibility_switches() {
+        let mut stored = parse_appearance(
+            r#"{"background":"bg_5rain","animated_background":true,"reduce_transparency":true,"reduce_blur":true}"#,
+        );
+        assert!(migrate_appearance(&mut stored));
+        assert_eq!(
+            stored.get("background").and_then(|v| v.as_str()),
+            Some("golden-hour")
+        );
+        assert!(stored.get("animated_background").is_none());
+        assert_eq!(
+            AppearanceModes::from_stored(&stored),
+            AppearanceModes {
+                reduce_transparency: true,
+                reduce_blur: true
+            }
+        );
+    }
+
+    /// A preference already on policy is left alone, so it is not rewritten on
+    /// every start.
+    #[test]
+    fn an_approved_preference_is_not_rewritten() {
+        let mut stored = parse_appearance(r#"{"background":"golden-hour","reduce_blur":true}"#);
+        assert!(!migrate_appearance(&mut stored));
+    }
+
+    /// A preference with no background at all, or a mistyped one, still gets one.
+    #[test]
+    fn a_missing_or_mistyped_background_becomes_the_default() {
+        let mut missing = parse_appearance(r#"{"reduce_blur":true}"#);
+        assert!(migrate_appearance(&mut missing));
+        assert_eq!(
+            missing.get("background").and_then(|v| v.as_str()),
+            Some(DEFAULT_BACKGROUND)
+        );
+        let mut mistyped = parse_appearance(r#"{"background":7}"#);
+        assert!(migrate_appearance(&mut mistyped));
+        assert_eq!(
+            mistyped.get("background").and_then(|v| v.as_str()),
+            Some(DEFAULT_BACKGROUND)
+        );
+    }
+
+    /// The background picker and the accessibility switches share one file.
+    /// Each writer must keep the other's keys.
+    #[test]
+    fn appearance_writers_keep_each_others_keys() {
+        let mut stored = parse_appearance(r#"{"background":"golden-hour"}"#);
+        AppearanceModes {
+            reduce_transparency: true,
+            reduce_blur: false,
+        }
+        .store_into(&mut stored);
+        assert_eq!(
+            stored.get("background").and_then(|v| v.as_str()),
+            Some("golden-hour")
+        );
+        assert_eq!(
+            AppearanceModes::from_stored(&stored),
+            AppearanceModes {
+                reduce_transparency: true,
+                reduce_blur: false
+            }
+        );
+    }
+
+    /// A file written before the switches existed, or one that is not JSON at
+    /// all, reads as full glass rather than as an error.
+    #[test]
+    fn missing_or_unreadable_modes_are_off() {
+        let old = parse_appearance(r#"{"background":"bg_1","animated_background":true}"#);
+        assert_eq!(
+            AppearanceModes::from_stored(&old),
+            AppearanceModes::default()
+        );
+        let garbage = parse_appearance("not json");
+        assert_eq!(
+            AppearanceModes::from_stored(&garbage),
+            AppearanceModes::default()
+        );
+        let bom = parse_appearance("\u{feff}{\"reduce_blur\":true}");
+        assert!(AppearanceModes::from_stored(&bom).reduce_blur);
+    }
+
+    /// The frontend sends camelCase; the file stores snake_case.
+    #[test]
+    fn appearance_modes_cross_the_bridge_in_camel_case() {
+        let modes: AppearanceModes =
+            serde_json::from_str(r#"{"reduceTransparency":false,"reduceBlur":true}"#).unwrap();
+        assert_eq!(
+            modes,
+            AppearanceModes {
+                reduce_transparency: false,
+                reduce_blur: true
+            }
+        );
     }
 
     #[test]
@@ -570,7 +743,15 @@ mod tests {
     /// rather than normalised into something plausible.
     #[test]
     fn anything_else_is_refused() {
-        for hostile in ["../../secret", "bg_9", "", "bg_1/../..", "http://elsewhere"] {
+        for hostile in [
+            "../../secret",
+            "bg_9",
+            "",
+            "bg_1/../..",
+            "http://elsewhere",
+            "bg_5rain",
+            "static",
+        ] {
             assert_eq!(normalise(hostile), None, "{hostile} should be refused");
         }
     }
@@ -589,6 +770,9 @@ mod tests {
         let shell = include_str!("../../../desktop/src/App.svelte");
         let load = shell.find("homeView(), shellStatus()").unwrap();
         let show = shell.find("await windowShow()").unwrap();
-        assert!(show > load, "the window may only be shown after shell data loads");
+        assert!(
+            show > load,
+            "the window may only be shown after shell data loads"
+        );
     }
 }

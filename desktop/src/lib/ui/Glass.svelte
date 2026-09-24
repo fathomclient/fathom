@@ -1,31 +1,58 @@
 <!--
   A pane of Fathom's glass.
 
-  Exists so that "the material" is one thing rather than a convention. Every
-  translucent surface in the product renders through here or through the
-  `.glass` class it shares, which is what stops eight components drifting into
-  eight slightly different greys.
+  The one component for a surface. Every translucent pane renders through here
+  or through the `.material-*` classes it applies, which is what stops eight
+  components drifting into eight slightly different tints.
 
-  USE IT FOR: the launch control, popovers, drawers, dialogs, the profile
-  selector, and status that genuinely matters.
+  FOUR LEVELS, ONE SUBSTANCE. Levels differ in density -- opacity, luminance,
+  blur, rim and shadow -- never in hue. The photograph behind supplies the
+  colour; a denser level simply lets less of it through.
 
-  DO NOT USE IT FOR: every section of every page. A page made of glass panes is
-  the same mistake as a page made of cards, with a more expensive paint. Most
-  content should sit directly on the background and be grouped by type and
-  spacing.
+    clear     chips and icon buttons sitting directly on the photograph
+    light     quiet grouping; a surface you should barely notice
+    standard  the default pane: content groups, popovers, list platters
+    dense     things that must read over anything: drawers, dialogs, the
+              primary control, status that matters
+
+  Reduced blur and reduced transparency are handled by the tokens, not here.
+
+  GEOMETRY. `radius` picks the pane's corner; `inset` is its padding. Both are
+  published as `--surface-radius` / `--surface-inset`, so a child with
+  `class="concentric"` gets a radius that stays concentric with this one.
+
+  `normal` and `strong` are the previous dark glass, kept so screens that have
+  not been rebuilt render exactly as before. Nothing new should use them.
 -->
 <script lang="ts">
-  /** `strong` is for surfaces that float above other surfaces. */
-  export let level: 'normal' | 'strong' = 'normal';
-  /** Corner radius token name, without the `--r-` prefix. */
-  export let radius: 'sm' | 'md' | 'lg' | 'xl' = 'lg';
+  type Level = 'clear' | 'light' | 'standard' | 'dense';
+  type Legacy = 'normal' | 'strong';
+
+  export let level: Level | Legacy = 'standard';
+  /** Corner radius token name, without the `--radius-` prefix. */
+  export let radius: 'sm' | 'md' | 'lg' | 'xl' | '2xl' = 'lg';
+  /** Padding, as a spacing step. `0` for a pane whose children bring their own. */
+  export let inset: 0 | 2 | 3 | 4 | 5 | 6 = 4;
+  /** Hover veil and press compression, for a pane that is itself a control. */
+  export let interactive = false;
+  /** @deprecated Use `inset={0}`. Kept for the legacy levels' callers. */
   export let padded = true;
+
+  $: legacy = level === 'normal' || level === 'strong';
+  $: materialClass = legacy
+    ? level === 'strong'
+      ? 'glass-strong'
+      : 'glass'
+    : `material-${level}`;
+  $: padding = !padded || inset === 0 ? '0px' : `var(--space-${inset})`;
 </script>
 
 <div
-  class="pane {level === 'strong' ? 'glass-strong' : 'glass'}"
-  class:padded
-  style="border-radius: var(--r-{radius})"
+  class="pane {materialClass}"
+  class:material-interactive={interactive && !legacy}
+  style="--surface-radius: var(--radius-{radius}); --surface-inset: {padding}; padding: {padding};{legacy
+    ? ` border-radius: var(--r-${radius === '2xl' ? 'xl' : radius})`
+    : ''}"
 >
   <slot />
 </div>
@@ -36,9 +63,5 @@
     /* `isolation` gives the pane its own stacking context, so a child's
        z-index cannot escape and land on top of a popover elsewhere. */
     isolation: isolate;
-  }
-
-  .padded {
-    padding: 14px 16px;
   }
 </style>

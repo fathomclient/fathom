@@ -1,13 +1,12 @@
 <!--
   One row: an optional icon, a short title, one line under it, a control.
 
-  This is the copy rule made structural. There is nowhere here to put a
-  paragraph — `detail` is one line and it truncates — so the only place a longer
-  explanation can go is the `details` slot, behind a disclosure. A component
-  that made it easy to write four sentences would get four sentences, on every
-  row, forever.
+  `detail` is meant to be one short line; anything longer belongs in the
+  `details` slot, behind a disclosure. It wraps rather than truncating, though:
+  a detail cut off mid-word hides exactly the part somebody needed, and the
+  layout should not punish a sentence for being a few characters too long.
 
-  Rows are separated by a hairline and have no enclosing box. Hover lifts the
+  Rows are separated by a hairline and have no enclosing box. Hover thickens the
   fill very slightly, which is enough to show the row is a target without
   drawing a rectangle around it.
 -->
@@ -75,12 +74,12 @@
 
 <style>
   .row {
-    padding: 12px 14px;
-    border-radius: var(--r-md);
+    padding: var(--space-3) var(--space-4);
+    border-radius: max(var(--radius-inner-min), calc(var(--surface-radius, var(--radius-lg)) - 2px));
     /* Hairline between rows, none above the first: the separator belongs to
        the gap between two rows, not to either one of them. */
-    box-shadow: 0 -1px 0 var(--chrome-line);
-    transition: background var(--m-fast) var(--ease);
+    box-shadow: 0 -1px 0 var(--control-hairline);
+    transition: background-color var(--motion-hover) var(--ease-standard);
   }
 
   .row:first-child {
@@ -88,11 +87,11 @@
   }
 
   .row.compact {
-    padding: 9px 14px;
+    padding: 10px var(--space-4);
   }
 
   .row:hover {
-    background: var(--fill);
+    background-color: var(--control-fill-faint);
   }
 
   .row.dimmed {
@@ -102,18 +101,19 @@
   .line {
     display: flex;
     align-items: center;
-    gap: var(--s-3);
+    gap: var(--space-3);
   }
 
   .icon {
     display: grid;
     place-items: center;
-    width: 30px;
-    height: 30px;
+    width: var(--space-8);
+    height: var(--space-8);
     flex-shrink: 0;
-    border-radius: var(--r-sm);
-    background: var(--fill);
-    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    background-color: var(--control-fill);
+    box-shadow: var(--control-rim);
+    color: var(--color-text-secondary);
   }
 
   .text {
@@ -124,47 +124,45 @@
   .title-line {
     display: flex;
     align-items: center;
-    gap: var(--s-2);
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
 
   .title {
-    font-size: var(--t-row);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
-    color: var(--text);
+    font-size: var(--type-body-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
+    color: var(--color-text);
   }
 
   .detail {
-    margin: 2px 0 0;
-    font-size: var(--t-body);
-    color: var(--text-muted);
-    /* One line, always. The overflow rule IS the copy rule, enforced by the
-       layout: if it does not fit on one line it belongs in `details`. */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin: 3px 0 0;
+    font-size: var(--type-secondary-size);
+    line-height: var(--type-secondary-leading);
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
   }
 
   .warning {
     margin: 6px 0 0;
-    font-size: var(--t-caption);
-    color: var(--warn);
+    font-size: var(--type-caption-size);
+    color: var(--color-warning-text);
   }
 
   .control {
     display: flex;
     align-items: center;
-    gap: var(--s-2);
+    gap: var(--space-2);
     flex-shrink: 0;
   }
 
   .badge {
-    padding: 2px 7px;
-    border-radius: var(--r-pill);
-    font-size: var(--t-meta);
-    font-weight: var(--w-medium);
-    color: var(--text-faint);
-    background: var(--fill);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-pill);
+    font-size: var(--type-caption-size);
+    font-weight: var(--type-label-weight);
+    color: var(--color-text-tertiary);
+    background-color: var(--control-fill);
     white-space: nowrap;
   }
 
@@ -172,51 +170,53 @@
      the data does not. */
   .badge.safe,
   .badge.good {
-    color: var(--good);
-    background: rgba(79, 201, 138, 0.13);
+    color: var(--color-success-text);
+    background-color: var(--color-success-tint);
   }
+
   .badge.optional,
   .badge.warn {
-    color: var(--warn);
-    background: rgba(224, 174, 87, 0.13);
+    color: var(--color-warning-text);
+    background-color: var(--color-warning-tint);
   }
+
   .badge.experimental,
   .badge.bad {
-    color: var(--bad);
-    background: rgba(232, 114, 114, 0.13);
+    color: var(--color-danger-text);
+    background-color: var(--color-danger-tint);
   }
 
   .disclose {
     display: grid;
     place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: var(--r-xs);
-    color: var(--text-disabled);
+    width: var(--control-height-sm);
+    height: var(--control-height-sm);
+    border-radius: var(--radius-pill);
+    color: var(--color-text-tertiary);
     transition:
-      color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease),
-      transform var(--m-normal) var(--ease);
+      color var(--motion-hover) var(--ease-standard),
+      background-color var(--motion-hover) var(--ease-standard),
+      transform var(--motion-state) var(--ease-standard);
   }
 
   .disclose:hover {
-    color: var(--text-muted);
-    background: var(--fill-hover);
+    color: var(--color-text);
+    background-color: var(--control-fill-hover);
   }
 
   .disclose.open {
-    color: var(--text-muted);
+    color: var(--color-text-secondary);
     transform: rotate(180deg);
   }
 
   .details {
-    margin-top: var(--s-3);
-    padding: 11px 13px;
-    border-radius: var(--r-md);
-    background: var(--fill-sunken);
-    border: 1px solid var(--chrome-line);
-    font-size: var(--t-body);
-    color: var(--text-muted);
+    margin-top: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    background-color: var(--control-fill-sunken);
+    box-shadow: var(--control-rim);
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
     line-height: 1.5;
   }
 </style>
