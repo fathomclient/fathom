@@ -16,6 +16,7 @@
   shut.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount, tick } from 'svelte';
   import { Check, Copy, ArrowDownToLine, X } from '@lucide/svelte';
 
@@ -68,23 +69,23 @@
     <div class="spacer"></div>
 
     <label class="follow">
-      <ArrowDownToLine size={14} />
+      <ArrowDownToLine size={ICON.inline} />
       <span>Follow</span>
       <Switch checked={follow} label="Follow output" onChange={(value) => (follow = value)} />
     </label>
 
     <Button onClick={copy}>
       {#if copied}
-        <Check size={14} />
+        <Check size={ICON.inline} />
         Copied
       {:else}
-        <Copy size={14} />
+        <Copy size={ICON.inline} />
         Copy
       {/if}
     </Button>
 
     <Button onClick={() => void closeConsole()}>
-      <X size={14} />
+      <X size={ICON.inline} />
       Close
     </Button>
   </header>

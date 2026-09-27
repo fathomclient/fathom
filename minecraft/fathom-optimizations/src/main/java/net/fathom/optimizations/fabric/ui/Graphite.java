@@ -4,6 +4,7 @@ import net.fathom.optimizations.core.ui.Colour;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
+import net.fathom.optimizations.generated.FathomTheme;
 import net.fathom.optimizations.generated.GraphiteTokens;
 
 /**
@@ -69,6 +70,7 @@ public final class Graphite {
     public static final float PAD = GraphiteTokens.LAYOUT_PANEL_PAD;
     public static final float GROUP_GAP = GraphiteTokens.LAYOUT_GROUP_GAP;
     public static final float ICON_INLINE = GraphiteTokens.SIZE_ICON_INLINE;
+    public static final float ICON_NAV = GraphiteTokens.SIZE_ICON_NAV;
     public static final float SWITCH_W = GraphiteTokens.SIZE_SWITCH_WIDTH;
     public static final float SWITCH_H = GraphiteTokens.SIZE_SWITCH_HEIGHT;
     public static final float SWITCH_KNOB = GraphiteTokens.SIZE_SWITCH_KNOB;
@@ -187,7 +189,7 @@ public final class Graphite {
 
     /** The rim: one device pixel, inside the shape's edge, one uniform colour. */
     public static void rim(Renderer ui, Rect area, float radius, int argb) {
-        ui.outline(area.x, area.y, area.right(), area.bottom(), radius, 1f / ui.scale(), argb);
+        ui.rim(area.x, area.y, area.right(), area.bottom(), radius, argb);
     }
 
     /**
@@ -218,9 +220,27 @@ public final class Graphite {
         }
     }
 
+    /**
+     * A segment inside a segmented control: fill only, never a rim.
+     *
+     * <p>The segment sits {@code Metrics.SEGMENT_INSET} inside the track, whose
+     * own rim is already there; a second rim two pixels inside it reads as a
+     * double border. Selection is the denser fill and full-strength type.
+     */
+    public static void segment(Renderer ui, Rect area, float hover, float selected) {
+        int fill = Colour.mix(Colour.scaleAlpha(STATE_HOVER, hover), STATE_SELECTED, selected);
+        if (Colour.alpha(fill) > 0) {
+            ui.rounded(area.x, area.y, area.right(), area.bottom(), R_SEGMENT, fill);
+        }
+        if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED) {
+            net.fathom.optimizations.core.ui.render.GeometryDebug.segment(
+                    ui, area.x, area.y, area.right(), area.bottom(), R_SEGMENT);
+        }
+    }
+
     /** A divider: 1 device pixel, snapped. */
     public static void hairline(Renderer ui, float left, float right, float y) {
-        float px = 1f / ui.scale();
+        float px = ui.pixel();
         ui.fill(left, y, right, y + px, HAIRLINE);
     }
 
@@ -248,18 +268,18 @@ public final class Graphite {
 
     /**
      * A module's mark: its glyph in a small rounded tile -- the launcher's mod
-     * monogram, in the game. 32 or 40 units square, radius 12, the glyph 18 or
-     * 20 and optically centred. On is the denser tile with full-strength ink;
+     * monogram, in the game. {@code Metrics.TILE} square with the small radius,
+     * the glyph {@code Metrics.ICON_TILE}, centred on the pixel grid. On is the denser tile with full-strength ink;
      * off recedes. Every list and detail view uses this one, so a module looks
      * the same wherever it is shown.
      */
     public static void modMark(Renderer ui, Rect box, net.fathom.optimizations.core.ui.render.Icon icon,
             float on, float hover) {
-        float radius = GraphiteTokens.RADIUS_PLATE;
+        float radius = FathomTheme.Metrics.RADIUS_SMALL;
         int fill = Colour.mix(Colour.mix(STATE_HOVER, STATE_SELECTED, on), RIM_HOVER, hover * 0.5f);
         ui.rounded(box.x, box.y, box.right(), box.bottom(), radius, fill);
         rim(ui, box, radius, Colour.mix(RIM, RIM_SELECTED, on));
-        float glyph = box.width >= 40f ? 20f : 18f;
+        float glyph = FathomTheme.Metrics.ICON_TILE;
         int ink = Colour.mix(TEXT_TERTIARY, TEXT, Math.max(on, hover * 0.5f));
         ui.icon(icon, Math.round(box.centreX() - glyph / 2f), Math.round(box.centreY() - glyph / 2f),
                 glyph, ink);
@@ -274,7 +294,7 @@ public final class Graphite {
             String title, String detail) {
         Type heading = floor(ui, UI);
         Type line = floor(ui, SMALL);
-        float circle = 32f;
+        float circle = FathomTheme.Metrics.TILE;
         float gap = S2;
         float height = circle + gap + ui.lineHeight(heading)
                 + (detail == null || detail.isEmpty() ? 0f : S1 + ui.lineHeight(line));
@@ -283,7 +303,8 @@ public final class Graphite {
         Rect badge = new Rect(Math.round(cx - circle / 2f), top, circle, circle);
         ui.rounded(badge.x, badge.y, badge.right(), badge.bottom(), circle / 2f, STATE_HOVER);
         rim(ui, badge, circle / 2f, RIM);
-        ui.icon(icon, badge.centreX() - 8f, badge.centreY() - 8f, 16f, TEXT_SECONDARY);
+        float inline = FathomTheme.Metrics.ICON_INLINE;
+        ui.icon(icon, badge.centreX() - inline / 2f, badge.centreY() - inline / 2f, inline, TEXT_SECONDARY);
         float y = badge.bottom() + gap;
         ui.textCentred(net.fathom.optimizations.core.ui.layout.Text.fit(ui, title, heading, area.width - S8),
                 cx, y + ui.ascent(heading), heading, TEXT);
@@ -294,9 +315,17 @@ public final class Graphite {
         }
     }
 
-    /** A value's baseline centred in a box, from the face's own ascent. */
+    /**
+     * A value's baseline centred in a box, from the face's own metrics.
+     *
+     * <p>The same rule as {@link Controls#baseline}: centre the ascent-plus-
+     * descent box. This used to be {@code ascent / 2 - ascent * 0.06}, a guess
+     * that sat text about an eighth of an em lower than every Controls row, so
+     * the title screen and the Hub chrome had a different baseline from the
+     * pages inside them.
+     */
     public static float baseline(Renderer ui, Rect box, Type type) {
-        return box.centreY() + ui.ascent(type) / 2f - ui.ascent(type) * 0.06f;
+        return Controls.baseline(ui, box, type);
     }
 
     // -----------------------------------------------------------------------

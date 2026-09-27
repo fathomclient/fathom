@@ -8,6 +8,7 @@
   own convention (a red close) is worth echoing -- quietly.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { Minus, Square, X } from '@lucide/svelte';
   import { tooltip } from '../tooltip';
 
@@ -18,15 +19,15 @@
 
 <div class="window-controls">
   <button class="control" aria-label="Minimize" use:tooltip={'Minimize'} on:click={onMinimize}>
-    <Minus size={16} />
+    <Minus size={ICON.inline} />
   </button>
   <button class="control" aria-label="Maximize" use:tooltip={'Maximize'} on:click={onMaximize}>
     <!-- Lucide's square is drawn at 18 units; at 14px it matches the optical
          size of the minus and the cross beside it. -->
-    <Square size={14} />
+    <Square size={ICON.inline} />
   </button>
   <button class="control close" aria-label="Close" use:tooltip={'Close'} on:click={onClose}>
-    <X size={16} />
+    <X size={ICON.inline} />
   </button>
 </div>
 
@@ -40,9 +41,9 @@
   .control {
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-pill);
+    width: var(--metric-control-compact);
+    height: var(--metric-control-compact);
+    border-radius: var(--metric-radius-control);
     color: var(--color-text-secondary);
     transition:
       color var(--motion-hover) var(--ease-standard),

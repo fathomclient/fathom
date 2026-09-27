@@ -4,6 +4,9 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,27 +20,26 @@ import com.mojang.blaze3d.platform.GlStateManager;
 
 import net.minecraft.client.MinecraftClient;
 
+import net.fathom.optimizations.core.profile.ProfileLocation;
+import net.fathom.optimizations.core.ui.BackgroundChoice;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.render.FathomRenderer;
 import net.fathom.optimizations.core.ui.render.ImageRef;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.fabric.gfx.GlRenderer;
+import net.fathom.optimizations.generated.BackgroundCatalog;
 
 /**
  * What the menu can sit on, and the picture behind whichever is chosen.
  *
- * <h2>The same approved set as the launcher</h2>
+ * <h2>The launcher's library, and the launcher's choice</h2>
  *
- * <p>{@code desktop/src/lib/backgrounds.ts} is the other copy of this list,
- * and today both hold one environment: Rainforest Storm. The other Minecraft
- * recordings are retired in both places. With one environment there is no
- * {@code scene} setting on the main-menu module at all (a choice of one is not
- * a choice), so a profile that stored a retired name simply gets Rainforest Storm,
- * and nothing else in it is touched.
- *
- * <p>The structure is kept for a curated set later: with one scene the picker
- * is not offered ({@link #pickable()}), exactly as the launcher hides its own,
- * and the setting returns with the second picture.
+ * <p>The list is generated from {@code assets/backgrounds/manifest.json} (the
+ * {@link BackgroundCatalog}), the same catalogue the launcher's picker is
+ * generated from. The choice is made in the launcher -- Settings, Appearance,
+ * Background -- and {@link #selected()} reads it, so the title screen, the Hub
+ * and every Fathom menu backdrop show the background the launcher shows. There
+ * is no second picker in the game to disagree with it.
  *
  * <h2>The fallback is not a scene</h2>
  *
@@ -48,7 +50,8 @@ import net.fathom.optimizations.fabric.gfx.GlRenderer;
  * <h2>Video</h2>
  *
  * <p>{@link MenuVideo} streams the cached Rainforest Storm frame sequence,
- * because 1.8.9 has no video decoder.
+ * because 1.8.9 has no video decoder. Every other background shows its still
+ * in the game -- the launcher's own full-resolution frame of it.
  *
  * <h2>Textures</h2>
  *
@@ -62,7 +65,7 @@ public final class MenuScenes {
     public static final class Scene {
         public final String id;
         public final String label;
-        /** True for the one scene that plays as video. */
+        /** True where the game has a frame sequence to play. */
         public final boolean animated;
         /** True for the flat field, which has no picture behind it. */
         public final boolean gradient;
@@ -71,14 +74,17 @@ public final class MenuScenes {
         /** Interned once; asking NanoVG for a thumbnail allocates nothing. */
         private final ImageRef image;
 
-        Scene(String id, String label, boolean animated, boolean gradient, String credit) {
+        /** The still's classpath resource: the same picture the launcher shows. */
+        final String still;
+
+        Scene(String id, String label, boolean animated, String still, String credit) {
             this.id = id;
             this.label = label;
             this.animated = animated;
-            this.gradient = gradient;
+            this.gradient = false;
             this.credit = credit;
-            this.image = gradient ? null : ImageRef.resource(
-                    "bg_5rain".equals(id) ? POSTER : ROOT + id + ".jpg");
+            this.still = MENU + still;
+            this.image = ImageRef.resource(this.still);
         }
 
         public boolean credited() {
@@ -86,21 +92,28 @@ public final class MenuScenes {
         }
     }
 
-    private static final String ROOT = "/assets/fathom-optimizations/textures/menu/scenes/";
-    private static final String POSTER =
-            "/assets/fathom-optimizations/textures/menu/main-menu-bg.png";
+    private static final String MENU = "/assets/fathom-optimizations/textures/menu/";
     private static final float SOURCE_ASPECT = 16f / 9f;
 
-    /** The launcher's credit for the photograph, word for word. */
-    public static final String RAINFOREST_STORM_CREDIT =
-            "Community-made Minecraft world recording; see ATTRIBUTION.md";
+    /** The library, one scene per catalogue entry, in the launcher's order. */
+    private static final Scene[] SCENES = new Scene[BackgroundCatalog.IDS.length];
 
-    private static final Scene[] SCENES = {
-        new Scene("bg_5rain", "Rainforest Storm", true, false, RAINFOREST_STORM_CREDIT),
-    };
+    static {
+        for (int index = 0; index < SCENES.length; index++) {
+            SCENES[index] = new Scene(BackgroundCatalog.IDS[index], BackgroundCatalog.LABELS[index],
+                    BackgroundCatalog.VIDEO[index] != null, BackgroundCatalog.STILL[index],
+                    BackgroundCatalog.CREDITS[index]);
+        }
+    }
 
-    /** The scene a profile with no choice recorded gets. */
-    public static final String DEFAULT_LABEL = "Rainforest Storm";
+    /** The scene a game with no launcher choice gets. */
+    public static final String DEFAULT_LABEL = labelOf(BackgroundCatalog.DEFAULT_ID);
+
+    /** How often the launcher's choice is looked at again while a menu is open. */
+    private static final long CHOICE_REFRESH_NANOS = 1_000_000_000L;
+    private static Scene chosen;
+    private static long chosenAt;
+    private static long chosenModified = Long.MIN_VALUE;
 
     /** Scene id to texture name. Zero means tried and failed; absent means untried. */
     private static final Map<String, Integer> TEXTURES = new HashMap<String, Integer>();
@@ -136,6 +149,59 @@ public final class MenuScenes {
     }
 
     /** The scene by its launcher label, falling back to the default. */
+    private static String labelOf(String id) {
+        for (int index = 0; index < BackgroundCatalog.IDS.length; index++) {
+            if (BackgroundCatalog.IDS[index].equals(id)) {
+                return BackgroundCatalog.LABELS[index];
+            }
+        }
+        return BackgroundCatalog.LABELS[0];
+    }
+
+    /** The scene with this id, or the default. */
+    public static Scene byId(String id) {
+        for (Scene scene : SCENES) {
+            if (scene.id.equals(id)) {
+                return scene;
+            }
+        }
+        return byLabel(DEFAULT_LABEL);
+    }
+
+    /**
+     * The background the user chose in the launcher, for every Fathom menu.
+     *
+     * <p>Read from the launcher's {@code appearance.json} (see
+     * {@link BackgroundChoice}), looked at again at most once a second and only
+     * re-parsed when the file changed, so a choice made in the launcher while a
+     * menu is open arrives within a second. A game started without the
+     * launcher has no file and shows the default.
+     */
+    public static Scene selected() {
+        long now = System.nanoTime();
+        if (chosen != null && now - chosenAt < CHOICE_REFRESH_NANOS) {
+            return chosen;
+        }
+        chosenAt = now;
+        File root = ProfileLocation.platformRoot();
+        File file = root == null ? null : new File(root, BackgroundChoice.FILE);
+        long modified = file != null && file.isFile() ? file.lastModified() : 0L;
+        if (chosen != null && modified == chosenModified) {
+            return chosen;
+        }
+        chosenModified = modified;
+        String json = null;
+        if (modified != 0L) {
+            try {
+                json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+            } catch (IOException | RuntimeException unreadable) {
+                json = null;
+            }
+        }
+        chosen = byId(BackgroundChoice.resolve(json, BackgroundCatalog.IDS, BackgroundCatalog.DEFAULT_ID));
+        return chosen;
+    }
+
     public static Scene byLabel(String label) {
         for (Scene scene : SCENES) {
             if (scene.label.equals(label)) {
@@ -210,7 +276,7 @@ public final class MenuScenes {
     }
 
     private static int upload(String id) {
-        String path = "bg_5rain".equals(id) ? POSTER : ROOT + id + ".jpg";
+        String path = byId(id).still;
         try {
             BufferedImage image;
             try (InputStream stream = MenuScenes.class.getResourceAsStream(path)) {

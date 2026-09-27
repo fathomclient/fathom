@@ -89,6 +89,8 @@ public final class Gfx {
     private static boolean vectorOpen;
     private static boolean glOpen;
     private static float screenDelta;
+    /** The renderer {@link #beginScreen} returned, for the geometry debug overlay. */
+    private static net.fathom.optimizations.core.ui.render.Renderer screenRenderer;
 
     /**
      * Begin a Fathom screen frame on the best renderer available.
@@ -111,11 +113,13 @@ public final class Gfx {
                 screenDelta = clock().advance(System.nanoTime());
                 FRAMES.begin();
                 vectorOpen = true;
+                screenRenderer = vector;
                 return vector;
             }
         }
         screenDelta = begin(client, scalePreference);
         glOpen = true;
+        screenRenderer = renderer;
         return renderer;
     }
 
@@ -131,6 +135,12 @@ public final class Gfx {
 
     /** Close what {@link #beginScreen} opened. Safe to call when nothing is open. */
     public static void endScreen() {
+        // Developer-only (-Dfathom.debugGeometry=true): the frame's boxes, on top.
+        if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED
+                && (glOpen || vectorOpen) && screenRenderer != null) {
+            net.fathom.optimizations.core.ui.render.GeometryDebug.drawAndClear(screenRenderer);
+        }
+        screenRenderer = null;
         if (glOpen) {
             glOpen = false;
             end();

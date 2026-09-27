@@ -94,6 +94,37 @@ rim in the status hue: the one place a hue means something.
 
 ## 4. Geometry
 
+### Control metrics -- one system, both renderers
+
+`metrics` in [`fathom-theme.json`](../assets/theme/fathom-theme.json) is the only
+place a control's geometry is a number. The launcher reads it as
+`--metric-*` (and `ICON` in `metrics.generated.ts`), the game as
+`FathomTheme.Metrics`. Every older radius, height and spacing token is an alias
+of it, and the generator refuses a literal in those tables.
+
+| Metric | Value |
+| --- | --- |
+| Radius: panel / control / small (item inside a panel, segment) | 18 / 12 / 10 (pill only for switches, avatars, badges) |
+| Button / compact / primary action | 36 / 32 / 44 |
+| Input / search / segmented | 36 / 36 / 36 (segment inset 2, radius 10) |
+| List row / dense row | 48 / 40 |
+| Switch | 32 × 18, knob 14 |
+| Icons: navigation / inline / tile / in caption text | 20 / 16 / 20 / 12, one 1.5 pen at every size |
+| Rim / divider / focus ring | 1 / 1 / 2 **device** pixels |
+| Spacing | 4 / 8 / 12 / 16 / 24 / 32 (40+ only for page gutters) |
+
+**A rim is one device pixel.** In CSS every rim is a multiple of
+`var(--hairline)` (`1 / devicePixelRatio`, set in `main.ts`); in the game it is
+`Renderer.rim()` / `Renderer.pixel()`, which NanoVG snaps onto the pixel grid.
+Selection, hover and focus change a rim's brightness, never its width, and a
+child inside a bordered parent is filled, not given a second rim.
+
+The geometry debug overlay shows all of this live: Ctrl+Shift+G in a dev build
+of the launcher, `-Dfathom.debugGeometry=true` in the game. Off-metric values
+are drawn in the warning colour.
+
+### Concentric shapes
+
 Generous and concentric. A container that owns its shape sets
 `--surface-radius` and `--surface-inset`; a `.concentric` child gets
 `max(inner-min, outer − inset)`. This works one level deep. A deeper nest sets
@@ -131,23 +162,17 @@ reduced-motion rule still applies.
 
 ## 7. The background
 
-[`Background.svelte`](../desktop/src/lib/Background.svelte) is the only place
-a backdrop is drawn. It layers the warm fallback (always painted), the approved
-photograph, and the warm scrim.
+The background is the user's choice: the atmosphere. The control system is the
+quality, and it does not change per background. See
+[`backgrounds.md`](backgrounds.md).
 
-The policy is curated: [`backgrounds.ts`](../desktop/src/lib/backgrounds.ts)
-lists the approved images, and today that is only `golden-hour`. The chain is
-exactly **approved image → warm fallback**. The fallback is a failure-state
-substrate, not a choice. Any other id, including every retired recording, is
-shown as the default and is migrated to it in `appearance.json` on start
-(`migrate_appearance` in `crates/launcher-desktop/src/lib.rs`, which leaves the
-accessibility switches alone).
-
-Video backgrounds are retired: the path renders `<img>` only. The picker shows
-itself only when there is more than one approved background
-(`PICKER_AVAILABLE`), so adding a second image is a one-line change in each of
-the two lists. The photograph is shown as supplied (`--backdrop-image-filter`
-is `none`).
+[`Background.svelte`](../desktop/src/lib/Background.svelte) is the only place a
+backdrop is drawn. It layers the fallback field (always painted), the chosen
+background's full-resolution still, its video when it has one (fading in once
+it plays), and a light scrim. Nothing is blurred or re-graded per background.
+The library is [`assets/backgrounds/manifest.json`](../assets/backgrounds/manifest.json);
+an unknown stored id is shown as the default and migrated in `appearance.json`
+on start.
 
 ## 7a. The shell and the shared controls
 

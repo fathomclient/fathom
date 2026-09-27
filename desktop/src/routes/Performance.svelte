@@ -21,6 +21,7 @@
   by omission.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { Gauge, CircleCheck, CircleAlert } from '@lucide/svelte';
@@ -170,9 +171,9 @@
       >
         <span slot="icon" class="module-icon" class:on={view.module.installed}>
           {#if view.module.installed}
-            <CircleCheck size={18} />
+            <CircleCheck size={ICON.tile} />
           {:else}
-            <CircleAlert size={18} />
+            <CircleAlert size={ICON.tile} />
           {/if}
         </span>
       </Row>
@@ -204,7 +205,7 @@
           tone={view.benchmark.partial ? 'warn' : 'good'}
           expandable
         >
-          <span slot="icon"><Gauge size={18} /></span>
+          <span slot="icon"><Gauge size={ICON.tile} /></span>
           <svelte:fragment slot="details">
             <div class="metrics">
               <div class="metric-group">

@@ -11,6 +11,7 @@
   drawing a rectangle around it.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { slide, fade } from 'svelte/transition';
   import { ChevronDown } from '@lucide/svelte';
   import { EASE, FAST, NORMAL } from '../motion';
@@ -60,7 +61,7 @@
           use:tooltip={open ? 'Hide details' : 'Details'}
           on:click={() => (open = !open)}
         >
-          <ChevronDown size={14} />
+          <ChevronDown size={ICON.inline} />
         </button>
       {/if}
     </div>
@@ -76,9 +77,17 @@
 </div>
 
 <style>
+  /* One row height: 48, or 40 compact -- with or without a detail line, so
+     two rows in one group are never different heights. A title (~19) and a
+     detail (~19) fit in 48 with 4 above and below; only text that wraps
+     grows the row. Flush with its pane, so the pane's radius. */
   .row {
-    padding: var(--space-3) var(--space-4);
-    border-radius: max(var(--radius-inner-min), calc(var(--surface-radius, var(--radius-lg)) - 2px));
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: var(--metric-row);
+    padding: var(--space-1) var(--space-4);
+    border-radius: var(--metric-radius-panel);
     /* Hairline between rows, none above the first: the separator belongs to
        the gap between two rows, not to either one of them. One device pixel. */
     box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
@@ -90,7 +99,7 @@
   }
 
   .row.compact {
-    padding: 10px var(--space-4);
+    min-height: var(--metric-row-dense);
   }
 
   .row:hover {
@@ -113,10 +122,10 @@
   .icon {
     display: grid;
     place-items: center;
-    width: var(--space-8);
-    height: var(--space-8);
+    width: var(--metric-tile);
+    height: var(--metric-tile);
     flex-shrink: 0;
-    border-radius: var(--radius-sm);
+    border-radius: var(--metric-radius-small);
     background-color: var(--control-fill);
     box-shadow: var(--control-rim);
     color: var(--color-text-secondary);
@@ -142,7 +151,7 @@
   }
 
   .detail {
-    margin: 3px 0 0;
+    margin: 0;
     font-size: var(--type-secondary-size);
     line-height: var(--type-secondary-leading);
     color: var(--color-text-secondary);
@@ -224,9 +233,9 @@
   .disclose {
     display: grid;
     place-items: center;
-    width: var(--control-height-sm);
-    height: var(--control-height-sm);
-    border-radius: var(--radius-pill);
+    width: var(--metric-control-compact);
+    height: var(--metric-control-compact);
+    border-radius: var(--metric-radius-small);
     color: var(--color-text-tertiary);
     transition:
       color var(--motion-hover) var(--ease-standard),
@@ -247,7 +256,7 @@
   .details {
     margin-top: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-md);
+    border-radius: var(--metric-radius-small);
     background-color: var(--control-fill-sunken);
     box-shadow: var(--control-rim);
     font-size: var(--type-secondary-size);

@@ -68,7 +68,7 @@ public final class VisualEffects {
         int colour = activating ? Skin.ENERGY_EDGE : Skin.ENERGY;
         ui.outline(area.x - expansion, area.y - expansion,
                 area.right() + expansion, area.bottom() + expansion,
-                radius + expansion, 1f,
+                radius + expansion, ui.pixel(),
                 Skin.scaleAlpha(colour, remaining * (activating ? 0.80f : 0.45f)));
     }
 
@@ -93,10 +93,10 @@ public final class VisualEffects {
         float inset = Math.min(Skin.S6, viewport.width * 0.08f);
         if (top) {
             ui.fill(viewport.x + inset, viewport.y, viewport.right() - inset,
-                    viewport.y + Skin.HAIRLINE, Skin.EDGE_RECESSED);
+                    viewport.y + ui.pixel(), Skin.EDGE_RECESSED);
         }
         if (bottom) {
-            ui.fill(viewport.x + inset, viewport.bottom() - Skin.HAIRLINE,
+            ui.fill(viewport.x + inset, viewport.bottom() - ui.pixel(),
                     viewport.right() - inset, viewport.bottom(), Skin.EDGE_RECESSED);
         }
     }
@@ -126,10 +126,10 @@ public final class VisualEffects {
      */
     public static void glass(Renderer ui, Rect area, float radius, int fill, int rimTop, int rimEdge) {
         ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, fill);
-        ui.outline(area.x, area.y, area.right(), area.bottom(), radius, Skin.HAIRLINE, rimEdge);
+        ui.rim(area.x, area.y, area.right(), area.bottom(), radius, rimEdge);
         float corner = Math.min(radius, Math.min(area.width, area.height) / 2f);
         if (area.width > corner * 2f + 2f) {
-            ui.fill(area.x + corner, area.y, area.right() - corner, area.y + Skin.HAIRLINE, rimTop);
+            ui.fill(area.x + corner, area.y, area.right() - corner, area.y + ui.pixel(), rimTop);
         }
     }
 

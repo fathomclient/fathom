@@ -32,8 +32,8 @@
 <style>
   .switch {
     position: relative;
-    width: 38px;
-    height: 22px;
+    width: var(--metric-switch-width);
+    height: var(--metric-switch-height);
     flex-shrink: 0;
     border-radius: var(--radius-pill);
     background-color: var(--control-switch-track);
@@ -66,12 +66,15 @@
     outline-offset: 2px;
   }
 
+  /* The knob is centred in the track, so the inset is derived rather than a
+     third number: (18 - 14) / 2 = 2. */
   .knob {
+    --knob-inset: calc((var(--metric-switch-height) - var(--metric-switch-knob)) / 2);
     position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 16px;
-    height: 16px;
+    top: var(--knob-inset);
+    left: var(--knob-inset);
+    width: var(--metric-switch-knob);
+    height: var(--metric-switch-knob);
     border-radius: var(--radius-pill);
     background-color: var(--control-switch-knob);
     box-shadow: var(--shadow-knob);
@@ -86,7 +89,9 @@
 
   .switch.on .knob,
   .switch.on:hover:not(:disabled) .knob {
-    transform: translateX(16px);
+    transform: translateX(
+      calc(var(--metric-switch-width) - var(--metric-switch-knob) - 2 * var(--knob-inset))
+    );
     background-color: var(--control-switch-knob-on);
   }
 </style>

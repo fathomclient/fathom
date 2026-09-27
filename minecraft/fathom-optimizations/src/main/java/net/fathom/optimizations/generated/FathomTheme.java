@@ -50,30 +50,30 @@ public final class FathomTheme {
     public static final float DIM_S_2 = 8.0f;
     public static final float DIM_S_3 = 12.0f;
     public static final float DIM_S_4 = 16.0f;
-    public static final float DIM_S_5 = 20.0f;
+    public static final float DIM_S_5 = 24.0f;
     public static final float DIM_S_6 = 24.0f;
     public static final float DIM_S_8 = 32.0f;
     public static final float DIM_S_10 = 40.0f;
     public static final float DIM_PAGE_PAD_X = 28.0f;
     public static final float DIM_PAGE_PAD_Y = 24.0f;
-    public static final float DIM_PAGE_GAP = 20.0f;
+    public static final float DIM_PAGE_GAP = 24.0f;
     public static final float DIM_COLUMN = 780.0f;
     public static final float DIM_COLUMN_WIDE = 1000.0f;
-    public static final float DIM_H_SM = 26.0f;
-    public static final float DIM_H_MD = 30.0f;
-    public static final float DIM_H_LG = 36.0f;
+    public static final float DIM_H_SM = 32.0f;
+    public static final float DIM_H_MD = 36.0f;
+    public static final float DIM_H_LG = 44.0f;
     public static final float DIM_RAIL_WIDTH = 56.0f;
     public static final float DIM_RAIL_TRAY_WIDTH = 186.0f;
-    public static final float DIM_RAIL_ROW = 40.0f;
+    public static final float DIM_RAIL_ROW = 44.0f;
     public static final float DIM_TITLEBAR_HEIGHT = 32.0f;
     public static final float DIM_TOPBAR_HEIGHT = 46.0f;
     public static final float DIM_BOTTOMBAR_HEIGHT = 38.0f;
     public static final float DIM_HUB_HEADER_HEIGHT = 62.0f;
-    public static final float DIM_R_XS = 6.0f;
-    public static final float DIM_R_SM = 9.0f;
+    public static final float DIM_R_XS = 10.0f;
+    public static final float DIM_R_SM = 10.0f;
     public static final float DIM_R_MD = 12.0f;
-    public static final float DIM_R_LG = 16.0f;
-    public static final float DIM_R_XL = 20.0f;
+    public static final float DIM_R_LG = 18.0f;
+    public static final float DIM_R_XL = 18.0f;
     public static final float DIM_R_PILL = 999.0f;
     public static final float DIM_HAIRLINE = 1.0f;
     public static final float DIM_HUB_MAX_WIDTH = 1280.0f;
@@ -201,23 +201,23 @@ public final class FathomTheme {
         public static final int CONTROL_SWITCH_KNOB_ON = 0xFFEDEDED;
         public static final int CONTROL_SLIDER_TRACK = 0x1FFFFFFF;
         public static final int CONTROL_SLIDER_FILL = 0xC7EDEDED;
-        public static final float CONTROL_HEIGHT_SM = 28.0f;
-        public static final float CONTROL_HEIGHT_MD = 34.0f;
-        public static final float CONTROL_HEIGHT_LG = 40.0f;
+        public static final float CONTROL_HEIGHT_SM = 32.0f;
+        public static final float CONTROL_HEIGHT_MD = 36.0f;
+        public static final float CONTROL_HEIGHT_LG = 44.0f;
 
-        public static final float RADIUS_XS = 6.0f;
+        public static final float RADIUS_XS = 10.0f;
         public static final float RADIUS_SM = 10.0f;
-        public static final float RADIUS_MD = 14.0f;
-        public static final float RADIUS_LG = 20.0f;
-        public static final float RADIUS_XL = 26.0f;
-        public static final float RADIUS_2XL = 32.0f;
+        public static final float RADIUS_MD = 12.0f;
+        public static final float RADIUS_LG = 18.0f;
+        public static final float RADIUS_XL = 18.0f;
+        public static final float RADIUS_2XL = 18.0f;
         public static final float RADIUS_PILL = 999.0f;
-        public static final float RADIUS_INNER_MIN = 6.0f;
+        public static final float RADIUS_INNER_MIN = 10.0f;
         public static final float SPACE_1 = 4.0f;
         public static final float SPACE_2 = 8.0f;
         public static final float SPACE_3 = 12.0f;
         public static final float SPACE_4 = 16.0f;
-        public static final float SPACE_5 = 20.0f;
+        public static final float SPACE_5 = 24.0f;
         public static final float SPACE_6 = 24.0f;
         public static final float SPACE_8 = 32.0f;
         public static final float SPACE_10 = 40.0f;
@@ -270,5 +270,46 @@ public final class FathomTheme {
         public static final int GAME_SCRIM_WORLD = 0x2E04090C;
         public static final int GAME_SCRIM_POSTER = 0x1F04090C;
         public static final int GAME_MODAL_SCRIM = 0x4704090C;
+    }
+
+    /**
+     * The one control metric system (`metrics` in the manifest): the same
+     * numbers the launcher reads as `--metric-*`. Values ending in
+     * {@code _DEVICE_PX} are device pixels, not logical units; draw them with
+     * {@code Renderer.rim}/{@code Renderer.pixel}, never as a dp thickness.
+     */
+    public static final class Metrics {
+        private Metrics() {}
+
+        public static final float RADIUS_PANEL = 18.0f;
+        public static final float RADIUS_CONTROL = 12.0f;
+        public static final float RADIUS_SMALL = 10.0f;
+        public static final float RADIUS_PILL = 999.0f;
+        public static final float CONTROL = 36.0f;
+        public static final float CONTROL_COMPACT = 32.0f;
+        public static final float CONTROL_PRIMARY = 44.0f;
+        public static final float INPUT = 36.0f;
+        public static final float SEARCH = 36.0f;
+        public static final float SEGMENTED = 36.0f;
+        public static final float SEGMENT_INSET = 2.0f;
+        public static final float ROW = 48.0f;
+        public static final float ROW_DENSE = 40.0f;
+        public static final float SWITCH_WIDTH = 32.0f;
+        public static final float SWITCH_HEIGHT = 18.0f;
+        public static final float SWITCH_KNOB = 14.0f;
+        public static final float ICON_NAV = 20.0f;
+        public static final float ICON_INLINE = 16.0f;
+        public static final float ICON_TILE = 20.0f;
+        public static final float ICON_CAPTION = 12.0f;
+        public static final float TILE = 32.0f;
+        public static final float RIM_DEVICE_PX = 1.0f;
+        public static final float DIVIDER_DEVICE_PX = 1.0f;
+        public static final float FOCUS_DEVICE_PX = 2.0f;
+        public static final float SPACE_1 = 4.0f;
+        public static final float SPACE_2 = 8.0f;
+        public static final float SPACE_3 = 12.0f;
+        public static final float SPACE_4 = 16.0f;
+        public static final float SPACE_6 = 24.0f;
+        public static final float SPACE_8 = 32.0f;
     }
 }

@@ -7,14 +7,14 @@
   size, which is how a 13px icon used to end up with a hairline and a 19px one
   with a heavy line.
 
-  Sizes are the system's: 20 navigation, 18 standalone action, 16 inline,
-  14 and 12 status.
+  Sizes are the system's roles (`ICON` in `metrics.generated.ts`): 20
+  navigation and tiles, 16 inline, 12 inside caption text.
 -->
 <script lang="ts">
   import { FATHOM_ICON_BODY, FATHOM_ICON_FILLED, type FathomIconName } from '../icons.generated';
 
   export let name: FathomIconName;
-  export let size: 12 | 14 | 16 | 18 | 20 = 16;
+  export let size: 12 | 16 | 20 = 16;
 </script>
 
 <svg

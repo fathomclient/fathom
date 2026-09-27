@@ -22,6 +22,7 @@
   pointer crossed the edge of the window.
 -->
 <script lang="ts">
+  import { ICON } from './lib/metrics.generated';
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { Image as ImageIcon, ChevronDown, User } from '@lucide/svelte';
@@ -380,7 +381,7 @@
 
 <!-- One persistent player across every route: navigation never restarts the
      approved recording or replaces it with a page-specific image. -->
-<GraphiteBackdrop />
+<GraphiteBackdrop {choice} />
 
 <!-- One photographic environment. Nothing below paints a bar: the header row,
      the navigation and the status line are pieces of glass and type laid onto
@@ -437,14 +438,14 @@
         {:else if home?.account.name}
           {home.account.name[0].toUpperCase()}
         {:else}
-          <User size={14} />
+          <User size={ICON.inline} />
         {/if}
       </span>
       <!-- Never cut: a Minecraft name is at most sixteen characters. -->
       <span class="account-name" class:restoring-name={home?.account.remembered}>
         {home?.account.name ?? 'Sign in'}
       </span>
-      <ChevronDown size={14} />
+      <ChevronDown size={ICON.inline} />
     </button>
 
     <div class="window-controls">
@@ -478,7 +479,7 @@
           use:tooltip={railOpen ? '' : item.label}
           on:click={() => go(item.id)}
         >
-          <span class="glyph"><FathomIcon name={item.icon} size={20} /></span>
+          <span class="glyph"><FathomIcon name={item.icon} size={ICON.nav} /></span>
           <span class="nav-label">{item.label}</span>
         </button>
       {/each}
@@ -493,7 +494,7 @@
           use:tooltip={railOpen ? '' : item.label}
           on:click={() => go(item.id)}
         >
-          <span class="glyph"><FathomIcon name={item.icon} size={20} /></span>
+          <span class="glyph"><FathomIcon name={item.icon} size={ICON.nav} /></span>
           <span class="nav-label">{item.label}</span>
         </button>
       {/each}
@@ -578,7 +579,7 @@
             aria-expanded={pickerOpen}
             on:click|stopPropagation={() => (pickerOpen = !pickerOpen)}
           >
-            <ImageIcon size={14} />
+            <ImageIcon size={ICON.inline} />
             <span>{backgroundLabel}</span>
           </button>
 
@@ -608,7 +609,7 @@
       {/if}
 
       <button class="ui-capsule small material-clear material-interactive" on:click={() => go('logs')}>
-        <FathomIcon name="logs" size={14} />
+        <FathomIcon name="logs" size={ICON.inline} />
         <span>Logs</span>
       </button>
     </div>
@@ -724,17 +725,14 @@
     overflow: hidden;
     border-radius: var(--radius-pill);
     background-color: var(--control-fill-selected);
-    box-shadow: var(--control-rim);
     font-size: var(--type-caption-size);
     font-weight: var(--type-heading-weight);
     color: var(--color-text);
   }
 
-  .avatar.signed {
-    box-shadow: var(--control-rim-strong);
-  }
-
-  /* The rim over the face (an inset shadow is painted beneath an image). */
+  /* ONE rim, over the face (an inset shadow on the element itself would be
+     painted beneath the image). It used to be drawn twice -- on the element
+     and again here -- which doubled its weight whenever there was no face. */
   .avatar {
     position: relative;
   }
@@ -748,12 +746,19 @@
     pointer-events: none;
   }
 
-  /* The player's head, cut from their skin. Eight pixels of art, so it is
-     scaled without smoothing, and clipped to the same circle as the initial. */
+  .avatar.signed::after {
+    box-shadow: var(--control-rim-strong);
+  }
+
+  /* The player's head, cut from their skin: 8x8 art that Rust has already
+     enlarged to 64x64 with hard edges. Displayed at 24 CSS pixels, so it is
+     DOWNSCALED, and smoothly: nearest-neighbour at 125% or 150% display scaling
+     lands on 3.75 or 4.5 device pixels per block, alternating 3- and 4-pixel
+     columns that read as a blurry, uneven face. */
   .face {
     width: 100%;
     height: 100%;
-    image-rendering: pixelated;
+    image-rendering: auto;
     object-fit: cover;
   }
 
@@ -800,16 +805,19 @@
   /* Each group is a capsule of light glass sized to its contents, anchored to
      the top or the foot of the column. Widening it is an overlay: the column
      itself never changes width. */
+  /* The rail's inset is derived, not chosen: whatever centres a 36 control in
+     the 48 rail (6), which is also what makes the item's 12 radius concentric
+     with the rail's 18. */
   .rail-group {
-    --surface-radius: var(--radius-xl);
-    --surface-inset: 6px;
+    --surface-radius: var(--metric-radius-panel);
+    --surface-inset: calc((var(--layout-rail-width) - var(--metric-control)) / 2);
     position: absolute;
     left: var(--space-3);
     width: var(--layout-rail-width);
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 6px;
+    gap: var(--space-1);
+    padding: var(--surface-inset);
     overflow: hidden;
     transition:
       width var(--motion-surface) var(--ease-standard),
@@ -834,11 +842,12 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    height: 40px;
+    height: var(--metric-control);
     /* The glyph stays at the same x whether the capsule is open or closed, so
-       the icons do not slide sideways when the labels appear. */
-    padding-left: 8px;
-    border-radius: calc(var(--radius-xl) - 6px);
+       the icons do not slide sideways when the labels appear: centred in the
+       closed 36 square. */
+    padding-left: calc((var(--metric-control) - var(--metric-icon-nav)) / 2);
+    border-radius: var(--metric-radius-control);
     color: var(--color-text-secondary);
     white-space: nowrap;
     transition:
@@ -867,7 +876,7 @@
   .glyph {
     display: grid;
     place-items: center;
-    width: 20px;
+    width: var(--metric-icon-nav);
     flex-shrink: 0;
   }
 

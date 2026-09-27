@@ -23,6 +23,7 @@
   in TypeScript — is the thing it deliberately cannot contain.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { onMount } from 'svelte';
   import { slide } from 'svelte/transition';
   import { Check, Download, Sparkles } from '@lucide/svelte';
@@ -178,10 +179,10 @@
               <span class="kind-head">
                 <span class="kind-name">{kind.label}</span>
                 {#if kind.recommended}
-                  <span class="badge"><Sparkles size={12} /> Recommended</span>
+                  <span class="badge"><Sparkles size={ICON.caption} /> Recommended</span>
                 {/if}
                 {#if draft.kind === kind.id}
-                  <span class="tick"><Check size={14} /></span>
+                  <span class="tick"><Check size={ICON.inline} /></span>
                 {/if}
               </span>
               <span class="kind-summary">{kind.summary}</span>
@@ -234,7 +235,7 @@
                      to the author and a drop target on the Mods page, not a
                      switch that would do nothing. -->
                 <Button onClick={() => void openPage(component.id)}>
-                  <Download size={14} />
+                  <Download size={ICON.inline} />
                   Get it
                 </Button>
               {/if}

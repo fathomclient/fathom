@@ -46,8 +46,7 @@ interface ModulePreview {
         @Override
         public void draw(Renderer ui, FathomModule module, Rect area) {
             ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_MEDIUM, Skin.RECESSED);
-            ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_MEDIUM,
-                    Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
+            ui.rim(area.x, area.y, area.right(), area.bottom(), Skin.R_MEDIUM, Skin.EDGE_RECESSED);
 
             String chosen = module.choice(CrosshairPresets.STYLE, "Cross");
             if ("Vanilla".equals(chosen)) {

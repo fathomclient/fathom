@@ -18,6 +18,7 @@
   bottom, rather than on every entry.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { Check, ChevronDown, Layers } from '@lucide/svelte';
@@ -91,9 +92,9 @@
     use:tooltip={open ? '' : 'Switch installation'}
     on:click|stopPropagation={() => void toggle()}
   >
-    <Layers size={size === 'hero' ? 15 : 13} />
+    <Layers size={ICON.inline} />
     <span class="label">{label}</span>
-    <span class="chevron" class:open><ChevronDown size={14} /></span>
+    <span class="chevron" class:open><ChevronDown size={ICON.inline} /></span>
   </button>
 
   {#if open}
@@ -115,7 +116,7 @@
           on:click={() => void choose(row.id)}
         >
           <span class="tick">
-            {#if row.selected}<Check size={14} />{/if}
+            {#if row.selected}<Check size={ICON.inline} />{/if}
           </span>
           <span class="text">
             <span class="name">{row.name}</span>

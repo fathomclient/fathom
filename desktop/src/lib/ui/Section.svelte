@@ -11,6 +11,7 @@
   content and any indication of what is inside is just a thing to click.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { slide } from 'svelte/transition';
   import { ChevronRight } from '@lucide/svelte';
   import { EASE, NORMAL } from '../motion';
@@ -28,7 +29,7 @@
   {#if label}
     {#if collapsible}
       <button class="head interactive" on:click={() => (open = !open)}>
-        <span class="chevron" class:open><ChevronRight size={14} /></span>
+        <span class="chevron" class:open><ChevronRight size={ICON.inline} /></span>
         <span class="label on-footage">{label}</span>
         {#if summary}<span class="summary on-footage tnum">{summary}</span>{/if}
       </button>

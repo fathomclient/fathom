@@ -27,6 +27,7 @@
   three of them explain why they are empty is worse than one honest list.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import {
@@ -385,7 +386,7 @@
       <svelte:fragment slot="actions">
         {#if view.loaderSupportsMods}
           <Button variant="primary" disabled={busy} onClick={addOne}>
-            <FolderOpen size={14} />
+            <FolderOpen size={ICON.inline} />
             Add JAR
           </Button>
         {/if}
@@ -477,7 +478,7 @@
                         disabled={busy}
                         onClick={() => void addComponent(component.id, component.name)}
                       >
-                        <Download size={14} />
+                        <Download size={ICON.inline} />
                         Install
                       </Button>
                     {/if}
@@ -487,7 +488,7 @@
                       use:tooltip={'Details'}
                       on:click={() => open('component', component.id)}
                     >
-                      <ChevronRight size={16} />
+                      <ChevronRight size={ICON.inline} />
                     </button>
                   </div>
                 </div>
@@ -551,7 +552,7 @@
                         use:tooltip={'Configure'}
                         on:click={() => open('mod', row.id)}
                       >
-                        <ChevronRight size={16} />
+                        <ChevronRight size={ICON.inline} />
                       </button>
                     </div>
                   </div>
@@ -620,10 +621,10 @@
                     </div>
                     <div class="controls">
                       {#if hit.installed}
-                        <span class="installed"><Check size={14} /> Installed</span>
+                        <span class="installed"><Check size={ICON.inline} /> Installed</span>
                       {:else}
                         <Button disabled={busy} onClick={() => void install(hit.project, hit.title)}>
-                          <Download size={14} />
+                          <Download size={ICON.inline} />
                           Install
                         </Button>
                       {/if}
@@ -633,7 +634,7 @@
                         use:tooltip={'Open its page'}
                         on:click={() => void openProjectPage(hit.slug)}
                       >
-                        <ExternalLink size={16} />
+                        <ExternalLink size={ICON.inline} />
                       </button>
                     </div>
                   </div>
@@ -692,7 +693,7 @@
                     </div>
                     <div class="controls">
                       <Button disabled={busy} onClick={() => void install(update.project, update.name)}>
-                        <RefreshCw size={14} />
+                        <RefreshCw size={ICON.inline} />
                         Update
                       </Button>
                     </div>
@@ -717,7 +718,7 @@
             </Section>
             <div class="more">
               <Button disabled={checking} onClick={checkUpdates}>
-                <RefreshCw size={14} />
+                <RefreshCw size={ICON.inline} />
                 {checking ? 'Checking' : 'Check again'}
               </Button>
             </div>
@@ -757,13 +758,13 @@
                 JAR here.
               </p>
               <div class="drop" class:active={dropping}>
-                <FolderOpen size={18} />
+                <FolderOpen size={ICON.tile} />
                 <span>{dropping ? 'Let go to add it' : 'Drop OptiFine here'}</span>
               </div>
 
               <div class="optifine-actions">
                 <Button onClick={() => void openPage('optifine')}>
-                  <Download size={14} />
+                  <Download size={ICON.inline} />
                   Get OptiFine
                 </Button>
                 <!-- The full flow, for somebody who has the file but not a
@@ -772,7 +773,7 @@
                      looking at this profile's mods. -->
                 <Button onClick={onAddOptiFine}>Add OptiFine…</Button>
                 <Button disabled={busy} onClick={addOne}>
-                  <FolderOpen size={14} />
+                  <FolderOpen size={ICON.inline} />
                   Add my JAR
                 </Button>
               </div>
@@ -851,8 +852,9 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space-4);
-    padding: var(--space-3) var(--space-4);
-    border-radius: max(var(--radius-inner-min), calc(var(--surface-radius, var(--radius-lg)) - 2px));
+    min-height: var(--metric-row);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--metric-radius-panel);
     box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
     transition: background-color var(--motion-hover) var(--ease-standard);
   }
@@ -868,12 +870,12 @@
   .monogram {
     display: grid;
     place-items: center;
-    width: var(--control-height-lg);
-    height: var(--control-height-lg);
-    border-radius: var(--radius-md);
+    width: var(--metric-tile);
+    height: var(--metric-tile);
+    border-radius: var(--metric-radius-small);
     background-color: var(--control-fill-selected);
     box-shadow: var(--control-rim);
-    font-size: var(--type-heading-size);
+    font-size: var(--type-body-size);
     font-weight: var(--type-heading-weight);
     color: var(--color-text);
     transition:

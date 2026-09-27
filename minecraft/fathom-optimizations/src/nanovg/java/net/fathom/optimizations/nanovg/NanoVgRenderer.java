@@ -293,6 +293,13 @@ public final class NanoVgRenderer implements FathomRenderer {
         return scale;
     }
 
+    /** One device pixel under the current transform, zoom included. */
+    @Override
+    public float pixel() {
+        float zoom = state.zoom();
+        return 1f / (scale * (zoom > 0f ? zoom : 1f));
+    }
+
     // -----------------------------------------------------------------------
     // Shapes
     // -----------------------------------------------------------------------
@@ -389,6 +396,20 @@ public final class NanoVgRenderer implements FathomRenderer {
             float topLeft, float topRight, float bottomRight, float bottomLeft, float thickness, int argb) {
         if (Colour.invisible(argb) || !(thickness > 0f) || skip(left, top, right, bottom)) {
             return;
+        }
+        // A stroke that is a whole number of device pixels wide -- every rim and
+        // focus ring -- is put on the pixel grid first. NanoVG strokes the
+        // centre line of the path, and a one-pixel line whose centre falls
+        // between two pixel rows is drawn as two half-strength rows: softer,
+        // and visibly heavier than the same rim on a control that happens to
+        // sit on the grid. Snapping the edges and insetting by half the width
+        // puts the centre line exactly on a pixel centre. Not while a zoom
+        // animates, where a snapped edge would step instead of glide.
+        if (crisp(thickness)) {
+            left = snapX(left);
+            top = snapY(top);
+            right = snapX(right);
+            bottom = snapY(bottom);
         }
         // Centred on a line half the thickness inside the box, so a bordered box
         // is exactly the size it says it is -- Renderer's rule for outlines.
@@ -831,6 +852,28 @@ public final class NanoVgRenderer implements FathomRenderer {
         return y + (snapped - frame) / (zoom == 0f ? 1f : zoom);
     }
 
+    /** The same, horizontally: for static edges only (see {@link #crisp}). */
+    private float snapX(float x) {
+        float zoom = state.zoom();
+        float frame = state.frameX(x);
+        float snapped = Math.round(frame * scale) / scale;
+        return x + (snapped - frame) / (zoom == 0f ? 1f : zoom);
+    }
+
+    /**
+     * Whether a stroke is a whole number of device pixels (1 or 2) at rest, and
+     * so should be drawn on the pixel grid. False mid-zoom.
+     */
+    private boolean crisp(float thickness) {
+        float zoom = state.zoom();
+        if (Math.abs(zoom - 1f) > 0.001f) {
+            return false;
+        }
+        float device = thickness * scale;
+        float whole = Math.round(device);
+        return whole >= 1f && whole <= 2f && Math.abs(device - whole) < 0.01f;
+    }
+
     /** UTF-8 into the reusable buffer, position 0, limit at the end. */
     private int encode(String text) {
         int length = MemoryUtil.memLengthUTF8(text, false);
@@ -933,10 +976,13 @@ public final class NanoVgRenderer implements FathomRenderer {
         if (icon == null || Colour.invisible(argb) || size <= 0f || skip(x, y, x + size, y + size)) {
             return;
         }
+        if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED) {
+            net.fathom.optimizations.core.ui.render.GeometryDebug.icon(this, x, y, size);
+        }
         IconGeometry geometry = IconGeometry.of(icon);
         float k = size / IconGeometry.GRID;
         float pixel = 1f / (scale * state.zoom());
-        float thickness = Math.max(IconGeometry.STROKE * k, 1.3f * pixel);
+        float thickness = Math.max(IconGeometry.STROKE_DP, 1.3f * pixel);
 
         float[] ops = geometry.strokes();
         if (ops.length > 0) {

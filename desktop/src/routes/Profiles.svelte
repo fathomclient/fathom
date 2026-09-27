@@ -24,6 +24,7 @@
   opens the shared sheet.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import { Plus, Copy, Pencil, Trash2, GitBranch, Package } from '@lucide/svelte';
@@ -165,7 +166,7 @@
 <Page title="Installations" summary="{rows.length} {rows.length === 1 ? 'installation' : 'installations'}">
   <svelte:fragment slot="actions">
     <Button variant="primary" disabled={busy} onClick={() => (settingUp = true)}>
-      <Plus size={14} />
+      <Plus size={ICON.inline} />
       New installation
     </Button>
   </svelte:fragment>
@@ -182,7 +183,7 @@
     <Section label="In use" summary="Play launches this" material>
       <div class="ui-item current lead-item">
         <span class="cover big" class:art={Boolean(art[row.id])} style={cover(row)} aria-hidden="true">
-          {#if !art[row.id]}<Package size={24} />{/if}
+          {#if !art[row.id]}<Package size={ICON.tile} />{/if}
         </span>
         <div class="text">
           <span class="ui-item-title big">{row.name}</span>
@@ -194,7 +195,7 @@
             Minecraft {row.version} · {row.preset} · {played(row.lastPlayed)}
           </span>
           {#if row.parent}
-            <span class="facts derived"><GitBranch size={12} /> Based on {row.parent}</span>
+            <span class="facts derived"><GitBranch size={ICON.caption} /> Based on {row.parent}</span>
           {/if}
         </div>
         {#if confirmingDelete === row.id}
@@ -214,7 +215,7 @@
         {:else}
           <div class="ui-item-controls">
             <button class="ui-icon-button small" aria-label="Edit {row.name}" use:tooltip={'Edit'} on:click={() => openEditor(row.id)}>
-              <Pencil size={14} />
+              <Pencil size={ICON.inline} />
             </button>
             <!-- A variant, not a copy. It shares the parent's client and
                  overrides only its own look and extra mods, so it stays
@@ -226,13 +227,13 @@
               disabled={busy}
               on:click={() => run(() => deriveProfile(row.id, `${row.name} variant`))}
             >
-              <GitBranch size={14} />
+              <GitBranch size={ICON.inline} />
             </button>
             <button class="ui-icon-button small" aria-label="Duplicate {row.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => run(() => duplicateProfile(row.id))}>
-              <Copy size={14} />
+              <Copy size={ICON.inline} />
             </button>
             <button class="ui-icon-button small danger" aria-label="Delete {row.name}" use:tooltip={'Delete'} on:click={() => (confirmingDelete = row.id)}>
-              <Trash2 size={14} />
+              <Trash2 size={ICON.inline} />
             </button>
           </div>
         {/if}
@@ -245,7 +246,7 @@
       {#each others as row, index (row.id)}
         <div class="ui-item" in:fly={{ y: 8, duration: MOTION_PAGE, delay: index * MOTION_STAGGER, easing: EASE }}>
           <span class="cover" class:art={Boolean(art[row.id])} style={cover(row)} aria-hidden="true">
-            {#if !art[row.id]}<Package size={18} />{/if}
+            {#if !art[row.id]}<Package size={ICON.tile} />{/if}
           </span>
           <div class="text">
             <span class="ui-item-title">{row.name}</span>
@@ -255,7 +256,7 @@
             </span>
             <span class="facts tnum">Minecraft {row.version} · {played(row.lastPlayed)}</span>
             {#if row.parent}
-              <span class="facts derived"><GitBranch size={12} /> Based on {row.parent}</span>
+              <span class="facts derived"><GitBranch size={ICON.caption} /> Based on {row.parent}</span>
             {/if}
           </div>
 
@@ -276,7 +277,7 @@
           {:else}
             <div class="ui-item-controls">
               <button class="ui-icon-button small" aria-label="Edit {row.name}" use:tooltip={'Edit'} on:click={() => openEditor(row.id)}>
-                <Pencil size={14} />
+                <Pencil size={ICON.inline} />
               </button>
               <button
                 class="ui-icon-button small"
@@ -285,13 +286,13 @@
                 disabled={busy}
                 on:click={() => run(() => deriveProfile(row.id, `${row.name} variant`))}
               >
-                <GitBranch size={14} />
+                <GitBranch size={ICON.inline} />
               </button>
               <button class="ui-icon-button small" aria-label="Duplicate {row.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => run(() => duplicateProfile(row.id))}>
-                <Copy size={14} />
+                <Copy size={ICON.inline} />
               </button>
               <button class="ui-icon-button small danger" aria-label="Delete {row.name}" use:tooltip={'Delete'} on:click={() => (confirmingDelete = row.id)}>
-                <Trash2 size={14} />
+                <Trash2 size={ICON.inline} />
               </button>
               <span class="use">
                 <Button disabled={busy} onClick={() => run(() => selectProfile(row.id))}>Use</Button>

@@ -19,6 +19,7 @@
   `floating` adds the pane's shadow, for status that has no page to sit in.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import type { Component } from 'svelte';
   import { CircleAlert, CircleCheck, Info, TriangleAlert, X, type IconProps } from '@lucide/svelte';
   import { tooltip } from '../tooltip';
@@ -43,12 +44,12 @@
   role={tone === 'danger' || tone === 'warning' ? 'alert' : 'status'}
 >
   {#if icon}
-    <span class="glyph" aria-hidden="true"><svelte:component this={shown} size={16} /></span>
+    <span class="glyph" aria-hidden="true"><svelte:component this={shown} size={ICON.inline} /></span>
   {/if}
   <div class="content"><slot /></div>
   {#if onDismiss}
     <button class="ui-icon-button small" aria-label="Dismiss" use:tooltip={'Dismiss'} on:click={onDismiss}>
-      <X size={14} />
+      <X size={ICON.inline} />
     </button>
   {/if}
 </div>

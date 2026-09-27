@@ -10,6 +10,7 @@
   the whole session.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { Copy, RefreshCw, Search, ArrowDownToLine, Check, ScrollText } from '@lucide/svelte';
@@ -65,15 +66,15 @@
       <SearchField bind:value={query} placeholder="Filter" label="Filter log lines" />
     </div>
     <Button onClick={() => void load()}>
-      <RefreshCw size={14} />
+      <RefreshCw size={ICON.inline} />
       Refresh
     </Button>
     <Button onClick={copy}>
       {#if copied}
-        <Check size={14} />
+        <Check size={ICON.inline} />
         Copied
       {:else}
-        <Copy size={14} />
+        <Copy size={ICON.inline} />
         Copy
       {/if}
     </Button>
@@ -86,7 +87,7 @@
       onChange={(id) => (active = id)}
     />
     <div class="follow">
-      <ArrowDownToLine size={14} />
+      <ArrowDownToLine size={ICON.inline} />
       <span>Follow</span>
       <Switch checked={autoScroll} label="Follow" onChange={(value) => (autoScroll = value)} />
     </div>

@@ -48,7 +48,7 @@ import net.fathom.optimizations.fabric.ui.Skin;
  */
 final class PerformanceSection implements Section {
 
-    private static final float ROW = 54f;
+    private static final float ROW = Skin.ROW_HEIGHT;
     private static final float METER = 68f;
     private static final float GROUP = 34f;
 

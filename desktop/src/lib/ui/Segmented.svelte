@@ -87,23 +87,25 @@
     width: fit-content;
     max-width: 100%;
     align-items: center;
-    gap: 2px;
-    padding: 3px;
-    border-radius: var(--radius-pill);
+    gap: 0;
+    height: var(--metric-segmented);
+    padding: var(--metric-segment-inset);
+    border-radius: var(--metric-radius-control);
     background-color: var(--control-fill-faint);
     box-shadow: var(--control-rim);
   }
 
   /* The selection is a denser neutral overlay inside the light track, with a
      stronger rim and full-strength type. No colour, no shadow. */
+  /* Filled, not outlined: a rim here would sit two pixels inside the track's
+     own rim and read as a double border. Selection is density and type. */
   .indicator {
     position: absolute;
-    top: 3px;
-    bottom: 3px;
+    top: var(--metric-segment-inset);
+    bottom: var(--metric-segment-inset);
     left: 0;
-    border-radius: var(--radius-pill);
+    border-radius: var(--metric-radius-small);
     background-color: var(--control-fill-selected);
-    box-shadow: var(--control-rim-strong);
     pointer-events: none;
   }
 
@@ -116,9 +118,9 @@
   .segment {
     position: relative;
     z-index: 1;
-    height: var(--control-height-sm);
+    height: calc(var(--metric-segmented) - 2 * var(--metric-segment-inset));
     padding: 0 var(--space-4);
-    border-radius: var(--radius-pill);
+    border-radius: var(--metric-radius-small);
     font-size: var(--type-secondary-size);
     font-weight: var(--type-button-weight);
     color: var(--color-text-secondary);

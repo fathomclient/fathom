@@ -20,16 +20,21 @@
  * turns a control white.
  */
 
-/* -- capsule: the secondary control -------------------------------------- */
+/* -- capsule: the secondary control --------------------------------------
+   Every rectangular control is one shape: `--metric-radius-control` (12) at
+   `--metric-control` (36) tall, 32 compact, 44 only for the primary action.
+   The name is historical; it is no longer a pill, because a pill button beside
+   a 12-radius field and a 12-radius segmented control is three corner
+   families on one row. */
 .ui-capsule {
-  --surface-radius: var(--radius-pill);
+  --surface-radius: var(--metric-radius-control);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  height: var(--control-height-md);
+  height: var(--metric-control);
   padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
+  border-radius: var(--metric-radius-control);
   font-family: var(--type-family);
   font-size: var(--type-secondary-size);
   font-weight: var(--type-button-weight);
@@ -41,16 +46,17 @@
 }
 
 .ui-capsule.small {
-  height: var(--control-height-sm);
+  height: var(--metric-control-compact);
   padding: 0 var(--space-3);
   font-size: var(--type-caption-size);
-  gap: 6px;
+  gap: var(--space-2);
 }
 
-/* The hero size: the selectors above Play. One definition, so the
-   installation and profile selectors cannot drift apart. */
+/* The hero size: the selectors beside Play, at the primary action's height so
+   the row has one height. One definition, so the installation and profile
+   selectors cannot drift apart. */
 .ui-capsule.large {
-  height: var(--control-height-lg);
+  height: var(--metric-control-primary);
   padding: 0 var(--space-4);
   font-size: var(--type-body-size);
   gap: var(--space-2);
@@ -111,20 +117,20 @@
 
 /* -- icon button ----------------------------------------------------------- */
 .ui-icon-button {
-  --surface-radius: var(--radius-pill);
+  --surface-radius: var(--metric-radius-control);
   display: inline-grid;
   place-items: center;
-  width: var(--control-height-md);
-  height: var(--control-height-md);
+  width: var(--metric-control);
+  height: var(--metric-control);
   flex-shrink: 0;
-  border-radius: var(--radius-pill);
+  border-radius: var(--metric-radius-control);
   color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .ui-icon-button.small {
-  width: var(--control-height-sm);
-  height: var(--control-height-sm);
+  width: var(--metric-control-compact);
+  height: var(--metric-control-compact);
 }
 
 .ui-icon-button:not([class*='material-']) {
@@ -159,7 +165,7 @@
 
 /* -- popover: menus and dropdown lists ----------------------------------- */
 .ui-popover {
-  --surface-radius: var(--radius-lg);
+  --surface-radius: var(--metric-radius-panel);
   --surface-inset: var(--space-2);
   display: flex;
   flex-direction: column;
@@ -169,7 +175,7 @@
   -webkit-backdrop-filter: var(--mat-dense-filter);
   backdrop-filter: var(--mat-dense-filter);
   box-shadow: var(--mat-dense-rim), var(--shadow-md);
-  border-radius: var(--radius-lg);
+  border-radius: var(--metric-radius-panel);
   color: var(--color-text);
   overscroll-behavior: contain;
 }
@@ -187,12 +193,11 @@
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  min-height: 36px;
-  padding: 6px var(--space-3);
-  border-radius: max(
-    var(--radius-inner-min),
-    calc(var(--radius-lg) - var(--space-2))
-  );
+  min-height: var(--metric-control);
+  padding: 0 var(--space-3);
+  /* Concentric with the popover: 18 outside, inset 8, so 10 -- the small
+     radius, which is what an item inside a panel always is. */
+  border-radius: var(--metric-radius-small);
   text-align: left;
   font-size: var(--type-body-size);
   color: var(--color-text-secondary);
@@ -231,10 +236,10 @@
 /* -- fields: text inputs, selects, text areas ---------------------------- */
 .ui-field {
   width: 100%;
-  min-height: var(--control-height-lg);
+  min-height: var(--metric-input);
   padding: 0 var(--space-3);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--metric-radius-control);
   background-color: var(--control-fill-sunken);
   box-shadow: var(--control-rim);
   font-family: var(--type-family);
@@ -342,8 +347,8 @@ input[type='range']:focus-visible {
   position: fixed;
   z-index: 100;
   max-width: 280px;
-  padding: 5px var(--space-2);
-  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--metric-radius-small);
   background-color: var(--mat-dense-fill);
   -webkit-backdrop-filter: var(--mat-dense-filter);
   backdrop-filter: var(--mat-dense-filter);
@@ -376,8 +381,10 @@ input[type='range']:focus-visible {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2) var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  border-radius: max(var(--radius-inner-min), calc(var(--surface-radius, var(--radius-lg)) - 2px));
+  min-height: var(--metric-row);
+  padding: var(--space-2) var(--space-4);
+  /* Flush with the pane, so the pane's radius rather than a second family. */
+  border-radius: var(--metric-radius-panel);
   box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   transition: background-color var(--motion-hover) var(--ease-standard);
 }
@@ -404,16 +411,16 @@ input[type='range']:focus-visible {
 .ui-mark {
   display: grid;
   place-items: center;
-  width: var(--control-height-lg);
-  height: var(--control-height-lg);
+  width: var(--metric-tile);
+  height: var(--metric-tile);
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: var(--metric-radius-small);
   background-color: var(--control-fill-selected);
   background-size: cover;
   background-position: center;
   box-shadow: var(--control-rim);
-  font-size: var(--type-heading-size);
+  font-size: var(--type-body-size);
   font-weight: var(--type-heading-weight);
   color: var(--color-text);
 }

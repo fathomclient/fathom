@@ -18,6 +18,7 @@
   have. That is the difference between a privacy page and a privacy promise.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import { Check, Radio, WifiOff } from '@lucide/svelte';
@@ -156,7 +157,7 @@
       <ul class="claims">
         {#each view.guarantees as claim}
           <li>
-            <span class="tick"><Check size={12} /></span>
+            <span class="tick"><Check size={ICON.caption} /></span>
             <div>
               <span class="claim">{claim.label}</span>
               <p class="claim-detail">{claim.detail}</p>
@@ -238,7 +239,7 @@
     gap: var(--s-1);
     padding: 13px 15px;
     background: var(--control-fill-faint);
-    border-radius: max(var(--radius-inner-min), calc(var(--radius-lg) - 2px));
+    border-radius: var(--metric-radius-panel);
   }
 
   .fact-label {

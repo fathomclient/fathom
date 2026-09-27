@@ -39,3 +39,14 @@ function trackDevicePixel() {
 trackDevicePixel();
 
 export default mount(windowLabel === 'console' ? Console : App, { target });
+
+// The geometry debug overlay (Ctrl+Shift+G): development builds only. Behind
+// `import.meta.env.DEV` the import is dead code in a release build, so the
+// bundle users run does not contain it at all.
+if (import.meta.env.DEV) {
+  void import('./lib/GeometryDebug.svelte').then(({ default: GeometryDebug }) => {
+    const layer = document.createElement('div');
+    document.body.appendChild(layer);
+    mount(GeometryDebug, { target: layer });
+  });
+}

@@ -66,7 +66,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private static final float BUTTON_WIDTH = 264f;
     private static final float BUTTON_HEIGHT = GraphiteTokens.SIZE_PRIMARY;
     private static final float BUTTON_GAP = GraphiteTokens.SPACE_1;
-    private static final float MENU_PAD = GraphiteTokens.SPACE_3;
+    /**
+     * One rounded surface, rows inside it with no borders of their own (the
+     * surface's rim is the only line). The 8 inset is what makes a row's small
+     * radius (10) concentric with the panel's 18.
+     */
+    private static final float MENU_PAD = GraphiteTokens.SPACE_2;
     private static final float TRAVEL = GraphiteTokens.MOTION_TRAVEL;
 
     private static final String[] IDS = {"menu.single", "menu.multi", "menu.options", "menu.quit"};
@@ -76,7 +81,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private final Runnable backgroundPass = new Runnable() {
         @Override
         public void run() {
-            MenuVideo.draw(client, Runtime.menuBackgroundQuality());
+            drawBackdrop(client);
         }
     };
 
@@ -198,11 +203,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     /** A row inside the shared glass group; no nested material surface. */
     private boolean button(Renderer ui, String id, Rect area, String label) {
         Controls.State state = controls.state(id, area, !closing);
-        Graphite.overlay(ui, area, Graphite.R_CONTROL, state.hover, state.press);
+        // Hover and press are density only: a row never gets a rim, so the menu
+        // never shows a border inside a border.
+        Graphite.segment(ui, area, Math.max(state.hover, state.press), 0f);
         ui.text(label, area.x + Graphite.PAD, Graphite.baseline(ui, area, Graphite.floor(ui, Graphite.UI)),
                 Graphite.floor(ui, Graphite.UI), Graphite.TEXT);
         if (keyboardFocus && controls.focused(id)) {
-            focusRing(ui, area, Graphite.R_CONTROL);
+            focusRing(ui, area, Graphite.R_SEGMENT);
         }
         if (state.clicked) {
             keyboardFocus = false;
@@ -215,11 +222,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         return false;
     }
 
-    /** The keyboard focus ring: the launcher's -- signal, 1.5dp wide, 2dp outside, following the shape. */
+    /** The keyboard focus ring: the launcher's -- signal, two device pixels, 2dp outside, following the shape. */
     static void focusRing(Renderer ui, Rect area, float radius) {
-        float gap = 2f;
-        ui.outline(area.x - gap, area.y - gap, area.right() + gap, area.bottom() + gap,
-                radius + gap, 1.5f, net.fathom.optimizations.fabric.ui.Skin.FOCUS);
+        ui.focusRing(area.x, area.y, area.right(), area.bottom(), radius, 2f,
+                net.fathom.optimizations.fabric.ui.Skin.FOCUS);
     }
 
     private void activate(int index) {
@@ -305,12 +311,19 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     // -----------------------------------------------------------------------
 
     /**
-     * Draw the approved bg_5rain recording for another Fathom screen. The
-     * player freezes its last uploaded frame while the window is unfocused and
-     * resumes from that frame when focus returns. Call inside {@code Gfx.isolated}.
+     * Draw the background the user chose in the launcher, for this screen and
+     * every other Fathom screen: the title, the Hub, and Fathom-owned menu
+     * backdrops. A background with a frame sequence plays it (the player holds
+     * its last frame while the window is unfocused); any other shows its
+     * full-resolution still, and the video decoder is released. Call inside
+     * {@code Gfx.isolated}.
      */
     public static void drawBackdrop(net.minecraft.client.MinecraftClient client) {
-        MenuVideo.draw(client, Runtime.menuBackgroundQuality());
+        MenuScenes.Scene scene = MenuScenes.selected();
+        if (!scene.animated) {
+            MenuVideo.stop();
+        }
+        MenuScenes.draw(client, scene, Runtime.menuBackgroundQuality());
     }
 
     /** Stop background decoding when no Fathom screen is presenting it. */
