@@ -9,7 +9,7 @@ import net.fathom.optimizations.core.ui.render.Icon;
  * <h2>Why an interface and not seven branches in one screen</h2>
  *
  * <p>Because the sections have nothing in common except their frame. Mods is a
- * searchable list with a drawer; HUD is a list plus a door into a full-screen
+ * searchable list with a dedicated detail page; HUD is a list plus a door into a full-screen
  * editor; Diagnostics is read-only text. Written as branches they would share a
  * method and no logic, and the shared method would grow a parameter every time
  * one of them needed something the others did not.

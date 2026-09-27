@@ -750,7 +750,7 @@ public final class GlRenderer implements Renderer {
             return;
         }
         int pixels = Math.max(6, Math.round(deviceSize(size)));
-        Icons.Entry entry = icons.entry(icon, pixels);
+        Icons.Entry entry = icons.entry(icon, pixels, deviceSize(Icons.strokeUnits(size)));
         batch.bind(icons.atlas().texture());
         float left = Math.round(deviceX(x));
         float top = Math.round(deviceY(y));
@@ -794,6 +794,33 @@ public final class GlRenderer implements Renderer {
                     entry.u0, entry.v0, entry.u1, entry.v1, colour);
         }
         return entry.width / ui.scale();
+    }
+
+    /** The Graphite wordmark's width in logical units at a cap height in logical units. */
+    public float graphiteWordmarkWidth(float capHeight) {
+        int cap = Math.max(8, Math.round(capHeight * ui.scale()));
+        return BrandArt.graphiteWordmarkWidth(cap) / ui.scale();
+    }
+
+    /**
+     * The Graphite wordmark, FATHOM, with its cap's top-left ink at {@code x, y},
+     * in one ink. The cap is held at 8 device pixels or more.
+     *
+     * @return the ink width drawn, in logical units
+     */
+    public float graphiteWordmark(float x, float y, float capHeight, int argb) {
+        int cap = Math.max(8, Math.round(capHeight * ui.scale()));
+        BrandArt.Entry entry = brand.graphiteWordmark(cap);
+        int colour = tint(argb);
+        if (entry.width > 0 && !Colour.invisible(colour)) {
+            batch.bind(brand.atlas().texture());
+            float pad = BrandArt.graphitePad() * zoom;
+            float left = Math.round(deviceX(x)) - pad;
+            float top = Math.round(deviceY(y)) - pad;
+            quad(left, top, left + entry.width * zoom, top + entry.height * zoom,
+                    entry.u0, entry.v0, entry.u1, entry.v1, colour);
+        }
+        return BrandArt.graphiteWordmarkWidth(cap) / ui.scale();
     }
 
     /**
@@ -924,6 +951,30 @@ public final class GlRenderer implements Renderer {
         offsetX = deviceOriginX - (deviceOriginX - offsetX) * scale + deviceSize(translateX);
         offsetY = deviceOriginY - (deviceOriginY - offsetY) * scale + deviceSize(translateY);
         zoom *= scale;
+    }
+
+    @Override
+    public float localX(float x) {
+        float s = ui.scale();
+        return (x * s - offsetX) / (s * zoom);
+    }
+
+    @Override
+    public float localY(float y) {
+        float s = ui.scale();
+        return (y * s - offsetY) / (s * zoom);
+    }
+
+    @Override
+    public boolean clipContains(float x, float y) {
+        if (clipDepth == 0) {
+            return true;
+        }
+        int base = (clipDepth - 1) * 4;
+        float dx = x * ui.scale();
+        float dy = y * ui.scale();
+        return dx >= clipStack[base] && dx < clipStack[base + 2]
+                && dy >= clipStack[base + 1] && dy < clipStack[base + 3];
     }
 
     @Override

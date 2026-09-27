@@ -411,7 +411,7 @@ final class PotionsWidget implements HudWidget {
     private int timeColour(FathomModule module, int index, int alpha) {
         if (Widgets.option("potions", "ending", true)
                 && effects.get(index).getDuration() <= ENDING_TICKS) {
-            return (alpha << 24) | 0x00E0505C;
+            return (alpha << 24) | (net.fathom.optimizations.generated.GraphiteTokens.COLOR_STATUS_ERROR & 0x00FFFFFF);
         }
         int rgb = HudStyle.textColour(module);
         // Three quarters of the text colour, so the time reads as secondary

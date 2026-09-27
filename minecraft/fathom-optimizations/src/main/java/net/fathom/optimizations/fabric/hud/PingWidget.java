@@ -246,8 +246,11 @@ final class PingWidget implements HudWidget {
         int good = (int) Math.round(Widgets.optionNumber("ping", "good", 100));
         int bad = (int) Math.round(Widgets.optionNumber("ping", "bad", 300));
         if (latency < good) {
-            return 0x5FD37A;
+            return net.fathom.optimizations.generated.GraphiteTokens.COLOR_STATUS_OK & 0xFFFFFF;
         }
-        return latency <= Math.max(good, bad) ? 0xE0B341 : 0xE0505C;
+        // The shared status tones, so a HUD warning and a launcher warning
+        // are the same amber.
+        return (latency <= Math.max(good, bad)
+                ? net.fathom.optimizations.generated.GraphiteTokens.COLOR_STATUS_WARN : net.fathom.optimizations.generated.GraphiteTokens.COLOR_STATUS_ERROR) & 0xFFFFFF;
     }
 }

@@ -31,6 +31,17 @@ import net.fathom.optimizations.fabric.hud.FathomHud;
 @Mixin(InGameHud.class)
 public abstract class InGameHudMixin {
 
+    /**
+     * The world is drawn and no HUD is: the one moment a menu opening over the
+     * world can capture it clean. One boolean read unless a menu asked.
+     */
+    @Inject(method = "render(F)V", at = @At("HEAD"))
+    private void fathom$captureBackdrop(float tickDelta, CallbackInfo info) {
+        if (net.fathom.optimizations.fabric.gfx.WorldBackdrop.pending()) {
+            net.fathom.optimizations.fabric.gfx.WorldBackdrop.captureIfRequested(MinecraftClient.getInstance());
+        }
+    }
+
     @Inject(method = "render(F)V", at = @At("RETURN"))
     private void fathom$drawHud(float tickDelta, CallbackInfo info) {
         long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
@@ -45,6 +56,10 @@ public abstract class InGameHudMixin {
             // F1 hides the HUD. A HUD Fathom kept drawing through F1 would be a
             // HUD nobody could take a screenshot without.
             if (client.currentScreen instanceof net.fathom.optimizations.fabric.hud.HudEditorScreen) return;
+            // Nor under the Hub: it is transparent now, and widgets drawn under
+            // its header and rail read as clutter on top of it. A module's own
+            // page previews its widget.
+            if (client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen) return;
         // The benchmark's minimal pass switches the whole HUD off here rather
         // than switching eleven widgets off individually: the question it
         // answers is what the pass costs, including the frame it opens.

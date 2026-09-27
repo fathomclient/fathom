@@ -36,10 +36,18 @@ public enum Icon {
     STAR_FILLED,
     CHEVRON_RIGHT,
     CHEVRON_DOWN,
+    CHEVRON_LEFT,
     MOVE,
     RESET,
     CHECK,
     PIN,
+    MINUS,
+    PLUS,
+
+    // -- status ---------------------------------------------------------------
+    INFO,
+    WARNING,
+    SUCCESS,
 
     // -- features -------------------------------------------------------------
     KEYBOARD,

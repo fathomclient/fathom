@@ -26,7 +26,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Plus, Copy, Pencil, Trash2, GitBranch } from '@lucide/svelte';
+  import { Plus, Copy, Pencil, Trash2, GitBranch, Package } from '@lucide/svelte';
 
   import Page from '../lib/ui/Page.svelte';
   import Section from '../lib/ui/Section.svelte';
@@ -35,7 +35,10 @@
   import Sheet from '../lib/ui/Sheet.svelte';
   import Switch from '../lib/ui/Switch.svelte';
   import ProfileSetup from '../lib/ui/ProfileSetup.svelte';
+  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import Select from '../lib/ui/Select.svelte';
   import { tooltip } from '../lib/tooltip';
+  import { rangeFill } from '../lib/range';
   import { EASE, MOTION_HOVER, MOTION_PAGE, MOTION_STAGGER } from '../lib/motion';
   import {
     deleteProfile,
@@ -162,7 +165,7 @@
 <Page title="Installations" summary="{rows.length} {rows.length === 1 ? 'installation' : 'installations'}">
   <svelte:fragment slot="actions">
     <Button variant="primary" disabled={busy} onClick={() => (settingUp = true)}>
-      <Plus size={14} strokeWidth={2.4} />
+      <Plus size={14} />
       New installation
     </Button>
   </svelte:fragment>
@@ -178,7 +181,9 @@
     <!-- The one Play launches. -->
     <Section label="In use" summary="Play launches this" material>
       <div class="ui-item current lead-item">
-        <span class="cover big" class:art={Boolean(art[row.id])} style={cover(row)} aria-hidden="true"></span>
+        <span class="cover big" class:art={Boolean(art[row.id])} style={cover(row)} aria-hidden="true">
+          {#if !art[row.id]}<Package size={24} />{/if}
+        </span>
         <div class="text">
           <span class="ui-item-title big">{row.name}</span>
           <span class="ui-item-meta">
@@ -189,7 +194,7 @@
             Minecraft {row.version} · {row.preset} · {played(row.lastPlayed)}
           </span>
           {#if row.parent}
-            <span class="facts derived"><GitBranch size={12} strokeWidth={2} /> Based on {row.parent}</span>
+            <span class="facts derived"><GitBranch size={12} /> Based on {row.parent}</span>
           {/if}
         </div>
         {#if confirmingDelete === row.id}
@@ -209,7 +214,7 @@
         {:else}
           <div class="ui-item-controls">
             <button class="ui-icon-button small" aria-label="Edit {row.name}" use:tooltip={'Edit'} on:click={() => openEditor(row.id)}>
-              <Pencil size={14} strokeWidth={2} />
+              <Pencil size={14} />
             </button>
             <!-- A variant, not a copy. It shares the parent's client and
                  overrides only its own look and extra mods, so it stays
@@ -221,13 +226,13 @@
               disabled={busy}
               on:click={() => run(() => deriveProfile(row.id, `${row.name} variant`))}
             >
-              <GitBranch size={14} strokeWidth={2} />
+              <GitBranch size={14} />
             </button>
             <button class="ui-icon-button small" aria-label="Duplicate {row.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => run(() => duplicateProfile(row.id))}>
-              <Copy size={14} strokeWidth={2} />
+              <Copy size={14} />
             </button>
             <button class="ui-icon-button small danger" aria-label="Delete {row.name}" use:tooltip={'Delete'} on:click={() => (confirmingDelete = row.id)}>
-              <Trash2 size={14} strokeWidth={2} />
+              <Trash2 size={14} />
             </button>
           </div>
         {/if}
@@ -239,7 +244,9 @@
     <Section label={current ? 'Other installations' : 'Installations'} material>
       {#each others as row, index (row.id)}
         <div class="ui-item" in:fly={{ y: 8, duration: MOTION_PAGE, delay: index * MOTION_STAGGER, easing: EASE }}>
-          <span class="cover" class:art={Boolean(art[row.id])} style={cover(row)} aria-hidden="true"></span>
+          <span class="cover" class:art={Boolean(art[row.id])} style={cover(row)} aria-hidden="true">
+            {#if !art[row.id]}<Package size={18} />{/if}
+          </span>
           <div class="text">
             <span class="ui-item-title">{row.name}</span>
             <span class="ui-item-meta">
@@ -248,7 +255,7 @@
             </span>
             <span class="facts tnum">Minecraft {row.version} · {played(row.lastPlayed)}</span>
             {#if row.parent}
-              <span class="facts derived"><GitBranch size={12} strokeWidth={2} /> Based on {row.parent}</span>
+              <span class="facts derived"><GitBranch size={12} /> Based on {row.parent}</span>
             {/if}
           </div>
 
@@ -269,7 +276,7 @@
           {:else}
             <div class="ui-item-controls">
               <button class="ui-icon-button small" aria-label="Edit {row.name}" use:tooltip={'Edit'} on:click={() => openEditor(row.id)}>
-                <Pencil size={14} strokeWidth={2} />
+                <Pencil size={14} />
               </button>
               <button
                 class="ui-icon-button small"
@@ -278,13 +285,13 @@
                 disabled={busy}
                 on:click={() => run(() => deriveProfile(row.id, `${row.name} variant`))}
               >
-                <GitBranch size={14} strokeWidth={2} />
+                <GitBranch size={14} />
               </button>
               <button class="ui-icon-button small" aria-label="Duplicate {row.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => run(() => duplicateProfile(row.id))}>
-                <Copy size={14} strokeWidth={2} />
+                <Copy size={14} />
               </button>
               <button class="ui-icon-button small danger" aria-label="Delete {row.name}" use:tooltip={'Delete'} on:click={() => (confirmingDelete = row.id)}>
-                <Trash2 size={14} strokeWidth={2} />
+                <Trash2 size={14} />
               </button>
               <span class="use">
                 <Button disabled={busy} onClick={() => run(() => selectProfile(row.id))}>Use</Button>
@@ -297,14 +304,15 @@
   {/if}
 
   {#if loaded && !rows.length}
-    <div class="blank">
-      <p class="blank-title on-footage">No installations</p>
-      <p class="empty on-footage">
-        An installation is how Minecraft starts: its version, loader, Java and memory. Make one to
-        play.
-      </p>
-      <div><Button variant="primary" onClick={() => (settingUp = true)}>New installation</Button></div>
-    </div>
+    <Section material>
+      <EmptyState
+        icon={Package}
+        title="No installations"
+        detail="An installation is how Minecraft starts: its version, loader, Java and memory. Make one to play."
+      >
+        <Button variant="primary" onClick={() => (settingUp = true)}>New installation</Button>
+      </EmptyState>
+    </Section>
   {/if}
 </Page>
 
@@ -341,41 +349,54 @@
     </label>
 
     {#if !editing.parent}
-      <label class="field">
+      <div class="field">
         <span class="field-label">Loader</span>
-        <select class="ui-field" bind:value={editing.loader} disabled={editing.kind === 'fathom'}>
-          {#each editing.loaders as loader}
-            <!-- Unavailable loaders are shown and marked, not hidden. Hiding
-                 them makes the product look smaller than it is and gives
-                 somebody looking for Forge nothing to conclude. -->
-            <option value={loader.id} disabled={!loader.available}>
-              {loader.label}{loader.available ? '' : ' — not ready'}
-            </option>
-          {/each}
-        </select>
+        <!-- Unavailable loaders are shown and marked, not hidden. Hiding them
+             makes the product look smaller than it is and gives somebody
+             looking for Forge nothing to conclude. -->
+        <Select
+          label="Loader"
+          bind:value={editing.loader}
+          disabled={editing.kind === 'fathom'}
+          options={editing.loaders.map((loader) => ({
+            id: loader.id,
+            label: loader.label,
+            disabled: !loader.available,
+            note: loader.available ? '' : 'Not ready',
+          }))}
+        />
         {#if editing.kind === 'fathom'}
           <span class="fine">A Fathom installation's loader comes with the type.</span>
         {/if}
-      </label>
+      </div>
 
-      <label class="field">
+      <div class="field">
         <span class="field-label">Java runtime</span>
-        <select class="ui-field" bind:value={editing.java}>
-          <option value="automatic">Automatic</option>
-          <option value="managed">Fathom managed</option>
-          <option value="system">System</option>
-          {#if editing.javaPath}
-            <option value="custom">Custom — {editing.javaPath}</option>
-          {/if}
-        </select>
-      </label>
+        <Select
+          label="Java runtime"
+          bind:value={editing.java}
+          options={[
+            { id: 'automatic', label: 'Automatic' },
+            { id: 'managed', label: 'Fathom managed' },
+            { id: 'system', label: 'System' },
+            ...(editing.javaPath ? [{ id: 'custom', label: `Custom — ${editing.javaPath}` }] : []),
+          ]}
+        />
+      </div>
 
       <label class="field">
         <span class="field-line">
           <span class="field-label">Memory</span>
-          <span class="value tnum">{(editing.memoryMb / 1024).toFixed(1)} GB</span>
+          <span class="value mono">{(editing.memoryMb / 1024).toFixed(1)} GB</span>
         </span>
-        <input type="range" min="512" max="8192" step="256" bind:value={editing.memoryMb} />
+        <input
+          type="range"
+          min="512"
+          max="8192"
+          step="256"
+          bind:value={editing.memoryMb}
+          use:rangeFill={editing.memoryMb}
+        />
       </label>
 
       <label class="field">
@@ -459,9 +480,13 @@
   /* -- the artwork ------------------------------------------------------------
      16:9, rounded, unframed. A generated field gets the control rim so it reads
      as a surface; real artwork gets nothing on top of it. */
+  /* A generated field carries the installation glyph, so it reads as a cover
+     rather than as an image that failed to load. */
   .cover {
-    display: block;
+    display: grid;
+    place-items: center;
     width: 88px;
+    color: var(--color-text-secondary);
     aspect-ratio: 16 / 9;
     border-radius: var(--radius-md);
     background-size: cover;
@@ -526,28 +551,6 @@
     margin-right: var(--space-1);
   }
 
-  .empty {
-    margin: 0;
-    max-width: 60ch;
-    font-size: var(--type-secondary-size);
-    line-height: var(--type-secondary-leading);
-    color: var(--color-text-secondary);
-  }
-
-  .blank {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-8) var(--space-1);
-  }
-
-  .blank-title {
-    margin: 0;
-    font-size: var(--type-heading-size);
-    font-weight: var(--type-heading-weight);
-    color: var(--color-text);
-  }
-
   /* -- the editor ------------------------------------------------------------ */
   .what {
     margin: calc(-1 * var(--space-2)) 0 0;
@@ -582,6 +585,8 @@
   }
 
   .value {
+    min-width: 7ch;
+    text-align: right;
     font-size: var(--type-secondary-size);
     font-weight: var(--type-button-weight);
     color: var(--color-text);
@@ -596,7 +601,7 @@
     align-items: center;
     gap: var(--space-3);
     padding-top: var(--space-4);
-    box-shadow: 0 -1px 0 var(--control-hairline);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 
   .toggle-text {
@@ -610,7 +615,7 @@
     flex-direction: column;
     gap: var(--space-2);
     padding-top: var(--space-4);
-    box-shadow: 0 -1px 0 var(--control-hairline);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 
   h3 {

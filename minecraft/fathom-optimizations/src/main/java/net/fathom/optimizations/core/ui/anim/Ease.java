@@ -30,6 +30,10 @@ public final class Ease {
         /** A prompt, slightly quieter deceleration used only for dismissal. */
         EXIT {
             @Override public float apply(float amount) { return Ease.exit(amount); }
+        },
+        /** Graphite + Instrument's one curve: cubic-bezier(0.2, 0, 0, 1). */
+        GRAPHITE {
+            @Override public float apply(float amount) { return Ease.cubic(amount, 0.2f, 0f, 0f, 1f); }
         };
 
         public abstract float apply(float amount);
@@ -81,6 +85,30 @@ public final class Ease {
         return 3f * inverse * inverse * first
                 + 6f * inverse * t * (second - first)
                 + 3f * t * t * (1f - second);
+    }
+
+    /** Any CSS cubic-bezier(x1, y1, x2, y2), in the same x-to-y form. */
+    public static float cubic(float t, float x1, float y1, float x2, float y2) {
+        float x = clamp01(t);
+        if (x == 0f || x == 1f) {
+            return x;
+        }
+        float low = 0f;
+        float high = 1f;
+        float parameter = x;
+        for (int iteration = 0; iteration < 24; iteration++) {
+            float estimate = bezier(parameter, x1, x2);
+            if (Math.abs(estimate - x) < 0.00005f) {
+                break;
+            }
+            if (estimate < x) {
+                low = parameter;
+            } else {
+                high = parameter;
+            }
+            parameter = (low + high) * 0.5f;
+        }
+        return clamp01(bezier(parameter, y1, y2));
     }
 
     /** A responsive ease-out for dismissal; shorter and quieter than entry. */

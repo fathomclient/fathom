@@ -1,25 +1,29 @@
 <!--
   The one button.
 
-  Three variants and no more. A codebase with a `primary`, a `secondary`, a
-  `subtle`, a `ghost`, a `quiet` and a `link` variant has six ways to say the
-  same thing and no way to tell which one a screen should use.
+  Four variants, all the same capsule, differing in density rather than colour:
 
-  All three are the same capsule; they differ in density, not colour.
-
-    normal   a thin ivory fill: the ordinary action
-    primary  denser, darker glass with a stronger rim and heavier type -- the
-             one thing on the surface you are expected to do
+    primary  the one thing on the surface you are expected to do: the bright
+             neutral fill with dark type. Used sparingly -- one per surface
+    normal   translucent glass with a subtle rim: the ordinary action
+    ghost    no surface until the pointer is on it: secondary actions beside a
+             primary one, and inline actions that used to be underlined text
     caution  normal until hovered, when it warms towards the danger tone
 
-  None of them glows, and hover never turns one white: it thickens the fill.
-  They carry no blur of their own, because they sit on panes that already have
-  one.
+  None of them glows, lifts or scales on hover. Press is a denser fill and a
+  very slight compression. They carry no blur of their own, because they sit on
+  panes that already have one.
+
+  `title` is the tooltip (the shared `use:tooltip`, never the native one).
 -->
 <script lang="ts">
-  export let variant: 'primary' | 'normal' | 'caution' = 'normal';
+  import { tooltip } from '../tooltip';
+
+  export let variant: 'primary' | 'normal' | 'ghost' | 'caution' = 'normal';
   export let disabled = false;
   export let title = '';
+  /** The 28px size, for dense rows and inline actions. */
+  export let small = false;
   /** Fills the width of its container, for drawers and menus. */
   export let block = false;
   export let onClick: () => void;
@@ -27,9 +31,10 @@
 
 <button
   class="btn ui-capsule {variant}"
+  class:small
   class:block
   {disabled}
-  {title}
+  use:tooltip={title}
   on:click|stopPropagation={() => !disabled && onClick()}
 >
   <slot />
@@ -47,7 +52,8 @@
 
   .btn.primary {
     background-color: var(--control-prominent);
-    box-shadow: var(--control-rim-strong), var(--shadow-sm);
+    box-shadow: none;
+    color: var(--color-prominent-text);
     font-weight: var(--type-heading-weight);
   }
 
@@ -56,7 +62,11 @@
   }
 
   .btn.primary:active:not(:disabled) {
-    background-color: var(--control-prominent-hover);
+    background-color: var(--palette-champagne-300);
+  }
+
+  .btn.primary:focus-visible {
+    outline-offset: 3px;
   }
 
   .btn.caution:hover:not(:disabled) {
@@ -64,12 +74,13 @@
     background-color: var(--color-danger-tint);
   }
 
-  /* A disabled primary loses its density rather than fading it: a washed-out
-     dark slab reads as a rendering fault; a thin neutral one reads as "not
+  /* A disabled primary loses its fill rather than fading it: a washed-out
+     bright slab reads as a rendering fault; a thin neutral one reads as "not
      available", which is what it is. */
   .btn.primary:disabled {
-    background-color: var(--control-fill-pressed);
+    background-color: var(--control-fill-faint);
     box-shadow: var(--control-rim);
+    color: var(--color-text-disabled);
     font-weight: var(--type-button-weight);
   }
 </style>

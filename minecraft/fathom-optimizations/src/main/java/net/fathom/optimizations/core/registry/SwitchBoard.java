@@ -217,6 +217,38 @@ public final class SwitchBoard {
         return moved;
     }
 
+    /**
+     * The preset the switches currently match, or null for a custom set.
+     *
+     * <p>An entry held off by a conflict, an incompatibility or a safeguard is
+     * not counted against a preset: applying the preset would leave it off too,
+     * so the board still is that preset. This is what lets the Hub show the
+     * current preset as a selection, as the launcher does, instead of four
+     * buttons that never say which one is in effect.
+     */
+    public Preset matchingPreset() {
+        for (Preset preset : Preset.values()) {
+            boolean matches = true;
+            for (Optimization entry : registry.all()) {
+                State current = states.get(entry.id());
+                if (current != null
+                        && (current.reason == Reason.CONFLICT
+                                || current.reason == Reason.INCOMPATIBLE
+                                || current.reason == Reason.SAFEGUARD)) {
+                    continue;
+                }
+                if (isEnabled(entry.id()) != preset.includes(entry)) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                return preset;
+            }
+        }
+        return null;
+    }
+
     /** Everything currently on. */
     public List<Optimization> enabled() {
         List<Optimization> out = new ArrayList<Optimization>();

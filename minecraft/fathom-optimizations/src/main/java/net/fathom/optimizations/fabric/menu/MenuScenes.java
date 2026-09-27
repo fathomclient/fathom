@@ -29,11 +29,10 @@ import net.fathom.optimizations.fabric.gfx.GlRenderer;
  * <h2>The same approved set as the launcher</h2>
  *
  * <p>{@code desktop/src/lib/backgrounds.ts} is the other copy of this list,
- * and today both hold one photograph: Golden Hour. The fifteen Minecraft
- * recordings that used to be here -- the rain, the storm, the neon city, the
- * snowfield -- are retired in both places. With one picture there is no
+ * and today both hold one environment: Rainforest Storm. The other Minecraft
+ * recordings are retired in both places. With one environment there is no
  * {@code scene} setting on the main-menu module at all (a choice of one is not
- * a choice), so a profile that stored a retired name simply gets Golden Hour,
+ * a choice), so a profile that stored a retired name simply gets Rainforest Storm,
  * and nothing else in it is touched.
  *
  * <p>The structure is kept for a curated set later: with one scene the picker
@@ -43,13 +42,13 @@ import net.fathom.optimizations.fabric.gfx.GlRenderer;
  * <h2>The fallback is not a scene</h2>
  *
  * <p>When the picture cannot be loaded, or the player has turned the
- * background off, the menu sits on the launcher's warm static field
+ * background off, the menu sits on the launcher's neutral static field
  * ({@link MenuPoster#drawFlat}). It is never offered as a choice.
  *
  * <h2>Video</h2>
  *
- * <p>{@link MenuVideo} still exists for a frame sequence, because 1.8.9 has no
- * video decoder. No approved scene is animated.
+ * <p>{@link MenuVideo} streams the cached Rainforest Storm frame sequence,
+ * because 1.8.9 has no video decoder.
  *
  * <h2>Textures</h2>
  *
@@ -78,7 +77,8 @@ public final class MenuScenes {
             this.animated = animated;
             this.gradient = gradient;
             this.credit = credit;
-            this.image = gradient ? null : ImageRef.resource(ROOT + id + ".jpg");
+            this.image = gradient ? null : ImageRef.resource(
+                    "bg_5rain".equals(id) ? POSTER : ROOT + id + ".jpg");
         }
 
         public boolean credited() {
@@ -87,18 +87,20 @@ public final class MenuScenes {
     }
 
     private static final String ROOT = "/assets/fathom-optimizations/textures/menu/scenes/";
+    private static final String POSTER =
+            "/assets/fathom-optimizations/textures/menu/main-menu-bg.png";
     private static final float SOURCE_ASPECT = 16f / 9f;
 
     /** The launcher's credit for the photograph, word for word. */
-    public static final String GOLDEN_HOUR_CREDIT =
-            "Palm Tree Sunset Water by showtime at Wallpapers.com";
+    public static final String RAINFOREST_STORM_CREDIT =
+            "Community-made Minecraft world recording; see ATTRIBUTION.md";
 
     private static final Scene[] SCENES = {
-        new Scene("golden-hour", "Golden Hour", false, false, GOLDEN_HOUR_CREDIT),
+        new Scene("bg_5rain", "Rainforest Storm", true, false, RAINFOREST_STORM_CREDIT),
     };
 
     /** The scene a profile with no choice recorded gets. */
-    public static final String DEFAULT_LABEL = "Golden Hour";
+    public static final String DEFAULT_LABEL = "Rainforest Storm";
 
     /** Scene id to texture name. Zero means tried and failed; absent means untried. */
     private static final Map<String, Integer> TEXTURES = new HashMap<String, Integer>();
@@ -208,7 +210,7 @@ public final class MenuScenes {
     }
 
     private static int upload(String id) {
-        String path = ROOT + id + ".jpg";
+        String path = "bg_5rain".equals(id) ? POSTER : ROOT + id + ".jpg";
         try {
             BufferedImage image;
             try (InputStream stream = MenuScenes.class.getResourceAsStream(path)) {
@@ -259,8 +261,8 @@ public final class MenuScenes {
      *
      * <p>An animated scene would go through {@link MenuVideo}. A still goes
      * through the poster's drawing path, so every picture gets the same cover
-     * crop and the launcher's warm scrim. A picture that cannot load gives the
-     * warm field instead, never black.
+     * crop and the launcher's neutral scrim. A picture that cannot load gives the
+     * neutral field instead, never black.
      */
     public static void draw(MinecraftClient client, Scene scene, String videoQuality) {
         if (scene == null || scene.gradient) {

@@ -30,7 +30,6 @@
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import {
-    Search,
     SlidersHorizontal,
     Gamepad2,
     Palette,
@@ -47,6 +46,8 @@
   import Button from '../lib/ui/Button.svelte';
   import Notice from '../lib/ui/Notice.svelte';
   import BackgroundPicker from '../lib/ui/BackgroundPicker.svelte';
+  import SearchField from '../lib/ui/SearchField.svelte';
+  import EmptyState from '../lib/ui/EmptyState.svelte';
   import { EASE, MOTION_HOVER, MOTION_PAGE } from '../lib/motion';
   import { WORLD_CREDITS } from '../lib/credits';
   import {
@@ -171,20 +172,14 @@
 
 <Page title="Settings">
   {#if view}
+    <div class="frame">
     <div class="settings">
       <!-- THE CATEGORIES. One pane of standard glass; everything else on the page
            is either the photograph or a section of rows. -->
       <nav class="nav material-standard" aria-label="Settings categories">
-        <label class="search">
-          <Search size={14} strokeWidth={2} />
-          <input
-            class="ui-field"
-            bind:value={query}
-            placeholder="Search"
-            spellcheck="false"
-            aria-label="Search settings"
-          />
-        </label>
+        <div class="search">
+          <SearchField bind:value={query} placeholder="Search" label="Search settings" />
+        </div>
 
         {#if query.trim()}
           <div class="list" transition:fade={{ duration: MOTION_HOVER }}>
@@ -216,7 +211,7 @@
                 aria-current={category === item.id ? 'page' : undefined}
                 on:click={() => (category = item.id)}
               >
-                <svelte:component this={item.icon} size={16} strokeWidth={1.9} />
+                <svelte:component this={item.icon} size={16} />
                 <span>{item.label}</span>
               </button>
             {/each}
@@ -439,8 +434,15 @@
                     </Row>
                   {/each}
                 </Section>
-              {:else if category === 'network'}
-                <p class="aside on-footage">Nothing to set here yet.</p>
+              {:else if category === 'network' || !view.about.length}
+                <Section material>
+                  <EmptyState
+                    compact
+                    icon={category === 'network' ? Wifi : SlidersHorizontal}
+                    title="Nothing to set here yet"
+                    detail="Preferences for this category appear here when there are some."
+                  />
+                </Section>
               {/if}
             {/if}
 
@@ -448,7 +450,7 @@
               <Section label="About" material>
                 {#each view.about as row}
                   <Row title={row.label} compact>
-                    <span slot="control" class="value tnum">{row.value}</span>
+                    <span slot="control" class="value mono">{row.value}</span>
                   </Row>
                 {/each}
               </Section>
@@ -457,14 +459,20 @@
         {/key}
       </div>
     </div>
+    </div>
   {/if}
 </Page>
 
 <style>
   /* Categories beside the rows while there is room for both; above them, as a
      wrapping row, when there is not. */
-  .settings {
+  /* The frame is the container: an element cannot answer a container query
+     about itself, so the query below used to never apply. */
+  .frame {
     container-type: inline-size;
+  }
+
+  .settings {
     display: grid;
     grid-template-columns: minmax(168px, 200px) minmax(0, 1fr);
     gap: var(--space-6);
@@ -503,27 +511,9 @@
     --mat-veil: var(--control-deepen);
   }
 
+  /* Concentric with the pane around it. */
   .search {
-    position: relative;
-    display: flex;
-    align-items: center;
-    color: var(--color-text-tertiary);
-  }
-
-  .search :global(svg) {
-    position: absolute;
-    left: var(--space-3);
-    pointer-events: none;
-  }
-
-  .search input {
-    min-height: var(--control-height-md);
-    padding-left: var(--space-8);
-    border-radius: max(var(--radius-inner-min), calc(var(--radius-lg) - var(--space-2)));
-  }
-
-  .search:focus-within {
-    color: var(--color-text-secondary);
+    --search-radius: max(var(--radius-inner-min), calc(var(--radius-lg) - var(--space-2)));
   }
 
   .list {
@@ -556,7 +546,7 @@
   }
 
   .item:focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: var(--focus-ring-width) solid var(--color-focus);
     outline-offset: 2px;
   }
 
@@ -620,7 +610,7 @@
   }
 
   .value {
-    font-size: var(--type-secondary-size);
+    font-size: var(--type-caption-size);
     color: var(--color-text-secondary);
   }
 
@@ -650,7 +640,7 @@
   }
 
   .link:focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: var(--focus-ring-width) solid var(--color-focus);
     outline-offset: 2px;
     border-radius: var(--radius-xs);
   }
@@ -659,7 +649,7 @@
      in it rather than a title, a detail and a control. */
   .credit {
     padding: var(--space-3) var(--space-4);
-    box-shadow: 0 -1px 0 var(--control-hairline);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 
   .credit:first-child {

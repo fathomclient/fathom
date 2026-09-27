@@ -35,7 +35,7 @@ public final class UiScale {
     public static final float MAX_SCALE = 3.0f;
 
     /** What the user is allowed to ask for, as a multiplier on the automatic scale. */
-    public static final float MIN_PREFERENCE = 0.75f;
+    public static final float MIN_PREFERENCE = 0.65f;
     public static final float MAX_PREFERENCE = 1.5f;
 
     private final int framebufferWidth;

@@ -21,7 +21,7 @@ import net.fathom.optimizations.fabric.ui.Skin;
  * picture: it asks {@link CrosshairShape} for the same rectangles the HUD draws,
  * so it cannot show something the game will not.
  *
- * <p>The drawer asks {@link #of} for a preview and draws whatever it gets. A
+ * <p>The configuration page asks {@link #of} for a preview and draws whatever it gets. A
  * module without one simply has more room for its settings.
  */
 interface ModulePreview {
@@ -106,6 +106,6 @@ interface ModulePreview {
         }
     };
 
-    /** One instance: the drawer draws one preview at a time, on one thread. */
+    /** One instance: the detail page draws one preview at a time, on one thread. */
     CrosshairShape SHAPE = new CrosshairShape();
 }

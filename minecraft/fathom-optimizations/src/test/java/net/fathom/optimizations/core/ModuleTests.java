@@ -245,9 +245,13 @@ public final class ModuleTests {
     /** Keystrokes can style its panel, key plates, borders, text and opacity separately. */
     static void keystrokesHasIndependentVisualControls() {
         FathomModule keys = ModuleRegistry.standard().find("keystrokes");
-        check("Panel Background".equals(keys.setting(HudStyle.BACKGROUND).label()),
-                "outer plate is named Panel Background");
-        check(!keys.toggle(HudStyle.BACKGROUND, true), "outer panel is off by default");
+        Setting.Choice material = (Setting.Choice) keys.setting(HudStyle.BACKGROUND);
+        check("Panel material".equals(material.label()), "outer plate is named Panel material");
+        check("None".equals(material.get()), "outer panel is clear by default");
+        check(material.parse("true") && "Standard".equals(material.get()),
+                "the old enabled background migrates to Standard");
+        check(material.parse("false") && "None".equals(material.get()),
+                "the old disabled background remains clear");
         check(keys.setting("key.background") != null, "key background has its own control");
         check(keys.setting("key.border") != null, "border has its own control");
         check(keys.setting("key.pressed.fill") != null, "pressed fill has its own colour");

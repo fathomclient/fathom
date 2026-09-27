@@ -44,6 +44,8 @@ import net.fathom.optimizations.fabric.ui.Skin;
 final class ProfilesSection implements Section {
 
     private static final float ROW = 52f;
+    /** The list group's inner padding. */
+    private static final float LIST_PAD = 6f;
     private static final float LIST_MAX = 360f;
     private static final float CARD_HEIGHT = 236f;
     private static final float WIDE = 640f;
@@ -173,16 +175,29 @@ final class ProfilesSection implements Section {
         }
     }
 
+    /**
+     * The profiles, as rows in one floating group of light glass -- sized to
+     * them, never taller than the page -- rather than loose text on the
+     * background. The rows are capsules concentric with the group.
+     */
     private void list(HubContext context, ProfileRuntime runtime, List<FathomProfile> profiles, Rect list) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
-        float offset = scroller.offset(context.delta(), profiles.size() * ROW, list.height);
+        float pad = LIST_PAD;
+        float contentHeight = profiles.size() * ROW;
+        Rect group = new Rect(list.x, list.y, list.width - Skin.S3,
+                Math.min(list.height, contentHeight + pad * 2f));
+        if (!profiles.isEmpty()) {
+            FathomComponents.group(ui, group, (ROW - 4f) / 2f + pad);
+        }
+        Rect inner = group.inset(pad);
+        float offset = scroller.offset(context.delta(), contentHeight, inner.height);
 
-        ui.clip(list.x, list.y, list.right(), list.bottom());
+        ui.clip(inner.x, inner.y, inner.right(), inner.bottom());
         for (int index = 0; index < profiles.size(); index++) {
             FathomProfile profile = profiles.get(index);
-            Rect row = new Rect(list.x, list.y + index * ROW - offset, list.width - Skin.S3, ROW).inset(0f, 2f);
-            if (row.bottom() < list.y || row.y > list.bottom()) {
+            Rect row = new Rect(inner.x, inner.y + index * ROW - offset, inner.width, ROW).inset(0f, 2f);
+            if (row.bottom() < inner.y || row.y > inner.bottom()) {
                 continue;
             }
             boolean live = profile.id().equals(runtime.liveId());
@@ -214,7 +229,7 @@ final class ProfilesSection implements Section {
             }
         }
         ui.unclip();
-        scroller.rail(ui, list, context.pointer(), context.now());
+        scroller.rail(ui, inner, context.pointer(), context.now());
     }
 
     private void card(HubContext context, ProfileRuntime runtime, FathomProfile profile, int total, Rect card) {

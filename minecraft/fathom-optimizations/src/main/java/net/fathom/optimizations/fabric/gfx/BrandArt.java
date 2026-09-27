@@ -80,6 +80,7 @@ final class BrandArt {
     private final Atlas atlas;
     private final Map<Integer, Entry> wordmarks = new HashMap<Integer, Entry>();
     private final Map<Integer, Entry> soundings = new HashMap<Integer, Entry>();
+    private final Map<Integer, Entry> graphite = new HashMap<Integer, Entry>();
     /** The last lookup, which is nearly every lookup: a screen draws one size. */
     private int lastKey = -1;
     private Entry lastEntry;
@@ -110,6 +111,7 @@ final class BrandArt {
     private void forget() {
         wordmarks.clear();
         soundings.clear();
+        graphite.clear();
         lastKey = -1;
         lastEntry = null;
     }
@@ -261,6 +263,70 @@ final class BrandArt {
         atlas.upload(image, at[0], at[1]);
         return new Entry(atlas.u(at[0]), atlas.v(at[1]),
                 atlas.u(at[0] + width), atlas.v(at[1] + height), width, height, surfaceY);
+    }
+
+    // -----------------------------------------------------------------------
+    // The Graphite wordmark
+    // -----------------------------------------------------------------------
+
+    /** Pixels of room around the Graphite wordmark's ink, for the round letters' overshoot. */
+    private static final int GRAPHITE_PAD = 2;
+
+    /**
+     * FATHOM in Geist Medium, tracked +10%, at a cap height in device pixels:
+     * {@code GraphiteWordmark.PATH}, the same path the launcher draws as SVG.
+     * One ink, rasterised white and tinted when drawn. Never under 8px.
+     */
+    Entry graphiteWordmark(int capPixels) {
+        int cap = Math.max(8, Math.min(256, capPixels));
+        int key = 200000 + cap;
+        if (key == lastKey && lastEntry != null) {
+            return lastEntry;
+        }
+        Entry found = graphite.get(Integer.valueOf(cap));
+        if (found == null) {
+            found = rasteriseGraphite(cap);
+            graphite.put(Integer.valueOf(cap), found);
+        }
+        lastKey = key;
+        lastEntry = found;
+        return found;
+    }
+
+    /** The Graphite wordmark's ink width in device pixels at a cap height. */
+    static int graphiteWordmarkWidth(int capPixels) {
+        int cap = Math.max(8, Math.min(256, capPixels));
+        return (int) Math.ceil(net.fathom.optimizations.generated.GraphiteWordmark.WIDTH
+                * cap / net.fathom.optimizations.generated.GraphiteWordmark.CAP);
+    }
+
+    /** Where the cap's top sits in the Graphite raster, in device pixels. */
+    static int graphitePad() {
+        return GRAPHITE_PAD;
+    }
+
+    private Entry rasteriseGraphite(int cap) {
+        float scale = cap / net.fathom.optimizations.generated.GraphiteWordmark.CAP;
+        int width = graphiteWordmarkWidth(cap) + GRAPHITE_PAD * 2;
+        int height = cap + GRAPHITE_PAD * 2;
+        int[] at = atlas.allocate(width, height);
+        if (at == null) {
+            return EMPTY;
+        }
+        Path2D.Float path = new Path2D.Float(Path2D.WIND_NON_ZERO);
+        SvgPath.append(net.fathom.optimizations.generated.GraphiteWordmark.PATH, path);
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+        graphics.translate(GRAPHITE_PAD, GRAPHITE_PAD);
+        graphics.scale(scale, scale);
+        graphics.setColor(Color.WHITE);
+        graphics.fill(path);
+        graphics.dispose();
+        atlas.upload(image, at[0], at[1]);
+        return new Entry(atlas.u(at[0]), atlas.v(at[1]),
+                atlas.u(at[0] + width), atlas.v(at[1] + height), width, height, GRAPHITE_PAD);
     }
 
     // -----------------------------------------------------------------------

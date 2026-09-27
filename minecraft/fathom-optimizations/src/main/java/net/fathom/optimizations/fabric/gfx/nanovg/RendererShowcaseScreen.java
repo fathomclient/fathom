@@ -65,9 +65,9 @@ public final class RendererShowcaseScreen extends Screen {
     private static final Shadow KNOB_SHADOW = new Shadow(6f, 0f, 0f, 1f, 0x66000000, false);
 
     private static final ImageRef SCENE =
-            ImageRef.resource("/assets/fathom-optimizations/textures/menu/scenes/golden-hour.jpg");
+            ImageRef.resource("/assets/fathom-optimizations/textures/menu/main-menu-bg.png");
     private static final ImageRef STILL =
-            ImageRef.resource("/assets/fathom-optimizations/textures/menu/scenes/golden-hour.jpg");
+            ImageRef.resource("/assets/fathom-optimizations/textures/menu/main-menu-bg.png");
 
     private final Clock clock = new Clock(System.nanoTime());
     private final Motion[] entrance = new Motion[TITLES.length];

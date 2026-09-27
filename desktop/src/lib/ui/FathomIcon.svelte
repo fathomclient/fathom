@@ -1,22 +1,40 @@
+<!--
+  A Fathom icon, by name.
+
+  Drawn inline rather than as a CSS mask so that the global icon rule in
+  `theme.css` (`svg.lucide`) sets its stroke in screen pixels, exactly as it
+  does for every Lucide component. A masked SVG scales its stroke with its
+  size, which is how a 13px icon used to end up with a hairline and a 19px one
+  with a heavy line.
+
+  Sizes are the system's: 20 navigation, 18 standalone action, 16 inline,
+  14 and 12 status.
+-->
 <script lang="ts">
-  export let source: string;
-  export let size = 18;
+  import { FATHOM_ICON_BODY, FATHOM_ICON_FILLED, type FathomIconName } from '../icons.generated';
+
+  export let name: FathomIconName;
+  export let size: 12 | 14 | 16 | 18 | 20 = 16;
 </script>
 
-<span
-  class="fathom-icon"
-  style:width="{size}px"
-  style:height="{size}px"
-  style:--fathom-icon="url('{source}')"
+<svg
+  class="lucide fathom-icon"
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill={FATHOM_ICON_FILLED.has(name) ? 'currentColor' : 'none'}
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
   aria-hidden="true"
-></span>
+>
+  {@html FATHOM_ICON_BODY[name]}
+</svg>
 
 <style>
   .fathom-icon {
-    display: inline-block;
+    display: block;
     flex: 0 0 auto;
-    background: currentColor;
-    -webkit-mask: var(--fathom-icon) center / contain no-repeat;
-    mask: var(--fathom-icon) center / contain no-repeat;
   }
 </style>

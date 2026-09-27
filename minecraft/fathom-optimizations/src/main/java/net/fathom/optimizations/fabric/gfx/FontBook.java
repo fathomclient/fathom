@@ -144,6 +144,10 @@ final class FontBook {
         any |= read(Type.Weight.REGULAR, "Geist-Regular.ttf");
         any |= read(Type.Weight.MEDIUM, "Geist-Medium.ttf");
         any |= read(Type.Weight.SEMIBOLD, "Geist-SemiBold.ttf");
+        // Geist Mono, for values that change while visible. Missing, a mono
+        // weight falls back to the sans family of the same weight.
+        read(Type.Weight.MONO_REGULAR, "GeistMono-Regular.ttf");
+        read(Type.Weight.MONO_MEDIUM, "GeistMono-Medium.ttf");
         if (!any) {
             usingFallback = true;
             families.put(Type.Weight.REGULAR.name(), new Font(Font.SANS_SERIF, Font.PLAIN, 16));

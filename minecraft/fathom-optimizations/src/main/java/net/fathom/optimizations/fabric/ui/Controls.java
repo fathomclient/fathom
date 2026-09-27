@@ -67,8 +67,9 @@ public final class Controls {
     // Geometry callers lay out around
     // -----------------------------------------------------------------------
 
-    public static final float TOGGLE_WIDTH = 40f;
-    public static final float TOGGLE_HEIGHT = 22f;
+    /** The launcher's switch: 38 x 22 with a 16-unit knob (`Switch.svelte`). */
+    public static final float TOGGLE_WIDTH = Graphite.SWITCH_W;
+    public static final float TOGGLE_HEIGHT = Graphite.SWITCH_H;
     public static final float SWATCH = 24f;
     public static final float SLIDER_HEIGHT = 20f;
     public static final float ICON_BUTTON = 30f;
@@ -78,8 +79,8 @@ public final class Controls {
     /** How fast a hover lights, and how slowly it lets go. Seconds. */
     public static final float HOVER_IN = Timing.HOVER_IN;
     public static final float HOVER_OUT = Timing.HOVER_OUT;
-    /** How long the pointer rests on something before its tooltip shows. */
-    public static final float TOOLTIP_DELAY = 0.45f;
+    /** How long the pointer rests on something before its tooltip shows (the launcher's 400ms). */
+    public static final float TOOLTIP_DELAY = 0.40f;
 
     private static final int PRUNE_EVERY_FRAMES = 300;
     private static final int PRUNE_UNSEEN_FRAMES = 600;
@@ -122,6 +123,8 @@ public final class Controls {
     private float[] segmentWidths = new float[8];
 
     private Pointer pointer;
+    /** The renderer this frame draws with, for transform-aware hit tests, or null. */
+    private Renderer hitSpace;
     private float delta;
     private float now;
     private long frame;
@@ -166,7 +169,17 @@ public final class Controls {
     }
 
     /** Start a frame: one timestamp, one pointer, every control agrees on both. */
+    /**
+     * Start a frame whose hit tests follow {@code frame}'s transform and clip,
+     * so every control is hit exactly where it is drawn.
+     */
+    public void begin(Pointer mouse, float seconds, Renderer drawing) {
+        begin(mouse, seconds);
+        this.hitSpace = drawing;
+    }
+
     public void begin(Pointer mouse, float seconds) {
+        this.hitSpace = null;
         this.pointer = mouse;
         this.delta = seconds;
         this.now = Gfx.clock().seconds();
@@ -299,9 +312,29 @@ public final class Controls {
     }
 
     private boolean pointerOver(Rect area) {
-        return inputEnabled && !overlayBlocking && pointer != null
-                && area.contains(pointer.x(), pointer.y())
-                && (shield == null || !shield.contains(pointer.x(), pointer.y()));
+        if (!inputEnabled || overlayBlocking || pointer == null) {
+            return false;
+        }
+        float x = pointer.x();
+        float y = pointer.y();
+        if (shield != null && shield.contains(x, y)) {
+            return false;
+        }
+        if (hitSpace == null) {
+            return area.contains(x, y);
+        }
+        // Tested in the space the control is being drawn in, and only where
+        // the current clip shows it.
+        return hitSpace.clipContains(x, y) && area.contains(hitSpace.localX(x), hitSpace.localY(y));
+    }
+
+    /**
+     * Whether the pointer is over a rectangle as it is drawn right now --
+     * through the current transform and inside the current clip. For a row that
+     * shows hover without being a control of its own.
+     */
+    public boolean pointerOverVisible(Rect area) {
+        return pointerOver(area);
     }
 
     // -----------------------------------------------------------------------
@@ -499,17 +532,20 @@ public final class Controls {
     // -----------------------------------------------------------------------
 
     /**
-     * The one action a panel is for: the launcher's prominent fill -- denser and
-     * darker than everything around it, with the brighter rim. Never coloured.
+     * The one action a panel is for: the launcher's primary -- the bright
+     * neutral fill with dark type. Hover brightens it a step; press settles it a
+     * step darker. Never coloured, never glowing.
      */
     public boolean primary(Renderer ui, String id, Rect area, String label, boolean enabled) {
         State s = state(id, area, enabled);
         int face = !enabled
                 ? Skin.FILL_DISABLED
-                : Skin.mix(Skin.PROMINENT, Skin.PROMINENT_HOVER, Math.max(s.hover, s.press));
-        int edge = !enabled ? Skin.EDGE_RECESSED
-                : Skin.mix(Skin.EDGE_ELEVATED, Skin.ENERGY_EDGE, s.hover);
-        int text = !enabled ? Skin.TEXT_DISABLED : Skin.TEXT;
+                : Skin.mix(Skin.mix(Skin.PROMINENT, Skin.PROMINENT_HOVER, s.hover),
+                        Tokens.PALETTE_CHAMPAGNE_300, s.press);
+        int edge = !enabled ? Skin.EDGE_RECESSED : Skin.fade(Skin.PROMINENT, 0f);
+        // Ivory type on the ivory fill was invisible: the fill changed to the
+        // launcher's bright primary and the label kept the old dark-button colour.
+        int text = !enabled ? Skin.TEXT_DISABLED : Tokens.COLOR_PROMINENT_TEXT;
         button(ui, s, area, face, edge, text, label, true);
         return s.clicked;
     }
@@ -561,6 +597,33 @@ public final class Controls {
         return s.clicked;
     }
 
+    /**
+     * The way back to where this page was opened from: a chevron and the
+     * destination's name, with no surface until touched -- a link in the
+     * page's own type rather than a button competing with the page's actions.
+     *
+     * @return true when it was clicked
+     */
+    public boolean back(Renderer ui, String id, Rect area, String label) {
+        State s = state(id, area, true);
+        float round = Skin.pill(area);
+        int face = Skin.mix(Skin.mix(Skin.fade(Skin.FILL_HOVER, 0f), Skin.FILL_HOVER, s.hover),
+                Skin.FILL_PRESSED, s.press);
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), round, face);
+        int ink = Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, s.hover);
+        float icon = 14f;
+        ui.icon(Icon.CHEVRON_LEFT, area.x + Skin.S2, area.centreY() - icon / 2f, icon, ink);
+        ui.text(label, area.x + Skin.S2 + icon + Skin.S1, baseline(ui, area, Type.BODY_STRONG),
+                Type.BODY_STRONG, ink);
+        focusRing(ui, s, area, round);
+        return s.clicked;
+    }
+
+    /** The width {@link #back} needs for a label. */
+    public static float backWidth(Renderer ui, String label) {
+        return Skin.S2 + 14f + Skin.S1 + ui.measure(label, Type.BODY_STRONG) + Skin.S3;
+    }
+
     /** No surface until touched. */
     public boolean ghost(Renderer ui, String id, Rect area, String label, boolean enabled) {
         State s = state(id, area, enabled);
@@ -587,13 +650,13 @@ public final class Controls {
         return s.clicked;
     }
 
-    /** An icon in a circle. */
+    /** An icon in a circle. Active is the selected fill and rim, like a current nav item. */
     public boolean iconButton(Renderer ui, String id, Rect area, Icon icon, boolean active, boolean enabled) {
         State s = state(id, area, enabled);
         float on = active(s, active);
         int face = Skin.mix(Skin.mix(Skin.fade(Skin.FILL_HOVER, 0f), Skin.FILL_HOVER, s.hover), Skin.FILL_PRESSED, s.press);
         if (on > 0.01f) {
-            face = Skin.mix(face, Skin.scaleAlpha(Skin.ENERGY, 0.32f), on);
+            face = Skin.mix(face, Skin.ELEVATED, on);
         }
         float round = Skin.pill(area);
         float scale = 1f - s.press * 0.006f;
@@ -602,9 +665,10 @@ public final class Controls {
         if (s.hover > 0.01f || on > 0.01f) {
             ui.outline(area.x, area.y, area.right(), area.bottom(), round, Skin.HAIRLINE,
                     Skin.mix(Skin.scaleAlpha(Skin.EDGE_STRONG, s.hover),
-                            Skin.scaleAlpha(Skin.ENERGY_EDGE, on), on));
+                            Skin.scaleAlpha(Skin.EDGE_ELEVATED, on), on));
         }
-        float size = Math.round(Math.min(area.width, area.height) * 0.54f);
+        // The launcher's sizes: 16 inside a 28-34 button, 18 inside anything larger.
+        float size = Math.min(area.width, area.height) >= 36f ? 18f : 16f;
         int tint = !enabled
                 ? Skin.TEXT_DISABLED
                 : Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT, s.hover), Skin.ENERGY_MARK, on);
@@ -624,11 +688,10 @@ public final class Controls {
         float radius = Skin.pill(area);
         ui.pushTransform(0f, sink, scale, area.centreX(), area.centreY());
         if (signature && s.enabled) {
-            // The primary action: the densest face on the panel and the
-            // brighter rim. Hover deepens it; it never lights up.
-            VisualEffects.layeredSurface(ui, area, radius, face, 0f);
-            ui.outline(area.x, area.y, area.right(), area.bottom(), radius,
-                    Skin.BORDER_STANDARD, edge);
+            // The primary action: one flat bright neutral face. No gradient,
+            // no rim, no glow -- the launcher's primary exactly.
+            Rect visual = Skin.pixelAligned(ui, area);
+            surface(ui, visual.x, visual.y, visual.right(), visual.bottom(), radius, face);
         } else {
             borderedSurface(ui, area, radius, face, edge);
         }
@@ -647,9 +710,9 @@ public final class Controls {
         s.slot.focus.to(s.focused && s.enabled && s.slot.over ? 0f : (s.focused && s.enabled ? 1f : 0f), now);
         float focus = s.slot.focus.value(now);
         if (focus > 0.01f) {
+            // The launcher's ring: 1.5 units of signal, 2 units outside the shape.
             ui.outline(area.x - 2f, area.y - 2f, area.right() + 2f, area.bottom() + 2f, radius + 2f,
-                    Skin.HAIRLINE * 1.5f,
-                    Skin.scaleAlpha(Skin.FOCUS, focus * VisualEffects.FOCUS_INTENSITY));
+                    1.5f, Skin.scaleAlpha(Skin.FOCUS, focus));
         }
     }
 
@@ -676,10 +739,12 @@ public final class Controls {
             ui.outline(row.x, row.y, row.right(), row.bottom(), Skin.pill(row), Skin.HAIRLINE,
                     Skin.scaleAlpha(Skin.EDGE_ELEVATED, on));
         }
-        float iconSize = 16f;
-        int tint = Skin.mix(Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, s.hover), Skin.TEXT, on);
+        float iconSize = Graphite.ICON_INLINE;
+        // Secondary at rest, full strength under the pointer or when current:
+        // over a transparent group, the tertiary tone does not hold on a bright sky.
+        int tint = Skin.mix(Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, s.hover), Skin.TEXT, on);
         float x = row.x + Skin.S4;
-        ui.icon(icon, x, row.centreY() - iconSize / 2f, iconSize, Skin.mix(tint, Skin.ACCENT_STRONG, on * 0.85f));
+        ui.icon(icon, x, row.centreY() - iconSize / 2f, iconSize, tint);
         x += iconSize + Skin.S3;
         middle(ui, label, x, row, row.right() - x - Skin.S2, current ? Type.BODY_STRONG : Type.BODY, tint);
         return s.clicked;
@@ -710,27 +775,26 @@ public final class Controls {
         Rect box = new Rect(area.right() - TOGGLE_WIDTH, boxY, TOGGLE_WIDTH, TOGGLE_HEIGHT);
         float radius = Skin.pill(box);
 
-        // The launcher's switch: a sunken track with a rim when off, champagne
-        // when on, and an ivory knob either way. On is luminance, not a hue.
-        int off = Skin.mix(Tokens.CONTROL_FILL_SUNKEN, Tokens.CONTROL_FILL_SUNKEN_HOVER, s.hover);
-        int accent = Skin.mix(Tokens.PALETTE_CHAMPAGNE_300, Tokens.PALETTE_CHAMPAGNE_200, s.hover);
-        int track = Skin.mix(off, accent, t);
+        // The launcher's switch: a faint neutral track with a grey knob when
+        // off, a brighter track with a near-white knob when on. The whole change
+        // is luminance, carried mostly by the knob. No hue, no glow.
+        int off = Skin.mix(Tokens.CONTROL_SWITCH_TRACK, Tokens.CONTROL_FILL_HOVER, s.hover * (1f - t));
+        int track = Skin.mix(off, Tokens.CONTROL_SWITCH_TRACK_ON, t);
         if (!enabled) {
             track = Skin.scaleAlpha(track, 0.45f);
         }
         ui.rounded(box.x, box.y, box.right(), box.bottom(), radius, track);
-        // Emphasis is an inside stroke. Growing the geometry by one unit
-        // made the switch wider and taller only while active.
         ui.outline(box.x, box.y, box.right(), box.bottom(), radius, Skin.BORDER_STANDARD,
                 Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, Math.max(s.hover, t)));
         focusRing(ui, s, box, radius);
 
-        float inset = 3f;
-        float knob = box.height - inset * 2f;
+        float knob = Graphite.SWITCH_KNOB;
+        float inset = (box.height - knob) / 2f;
         float travel = box.width - knob - inset * 2f;
         float knobX = box.x + inset + travel * t;
-        int face = enabled ? Tokens.PALETTE_IVORY_50 : Tokens.PALETTE_CHAMPAGNE_300;
-        ui.shadow(knobX, box.y + inset, knobX + knob, box.y + inset + knob, knob / 2f, 2.5f,
+        int rest = Skin.mix(Tokens.CONTROL_SWITCH_KNOB, Tokens.PALETTE_SAND_400, s.hover);
+        int face = enabled ? Skin.mix(rest, Tokens.CONTROL_SWITCH_KNOB_ON, t) : Skin.TEXT_DISABLED;
+        ui.shadow(knobX, box.y + inset, knobX + knob, box.y + inset + knob, knob / 2f, 2f,
                 Skin.SHADOW);
         Rect thumb = new Rect(knobX, box.y + inset, knob, knob);
         ui.rounded(thumb.x, thumb.y, thumb.right(), thumb.bottom(), Skin.pill(thumb), face);
@@ -745,10 +809,12 @@ public final class Controls {
         if (options == null || options.length == 0) {
             return selected;
         }
+        // The launcher's segmented control: a light glass track, and the
+        // selection a denser neutral pill with a stronger rim. No colour.
         float outerRadius = Skin.pill(area);
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), outerRadius, Skin.RECESSED);
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), outerRadius, Tokens.CONTROL_FILL_FAINT);
         ui.outline(area.x, area.y, area.right(), area.bottom(), outerRadius,
-                Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
+                Skin.BORDER_STANDARD, Skin.EDGE_SURFACE);
 
         float segment = area.width / options.length;
         String markId = id + "#mark";
@@ -766,7 +832,7 @@ public final class Controls {
         surface(ui, markX + 2f, area.y + 2f, markX + segment - 2f, area.bottom() - 2f,
                 innerRadius, Skin.ELEVATED);
         ui.outline(markX + 2f, area.y + 2f, markX + segment - 2f, area.bottom() - 2f,
-                innerRadius, Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.ENERGY_EDGE, 0.62f));
+                innerRadius, Skin.BORDER_STANDARD, Skin.EDGE_ELEVATED);
 
         int result = selected;
         for (int index = 0; index < options.length; index++) {
@@ -813,8 +879,10 @@ public final class Controls {
         float selectedWidth = widths[Math.max(0, Math.min(selected, widths.length - 1))];
         float pan = scrolls ? pan(id, box, total, selectedX, selectedWidth) : 0f;
 
-        // One quiet rounded track; the categories inside are text until chosen.
-        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.pill(box), Skin.RECESSED);
+        // One quiet light-glass track; the categories inside are text until chosen.
+        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.pill(box), Tokens.CONTROL_FILL_FAINT);
+        ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.pill(box), Skin.BORDER_STANDARD,
+                Skin.EDGE_SURFACE);
         ui.clip(box.x, box.y, box.right(), box.bottom());
 
         String markXId = id + "#mark-x";
@@ -842,7 +910,7 @@ public final class Controls {
         ui.rounded(activeMark.x, activeMark.y, activeMark.right(), activeMark.bottom(),
                 innerRadius, Skin.ELEVATED);
         ui.outline(activeMark.x, activeMark.y, activeMark.right(), activeMark.bottom(),
-                innerRadius, Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.ENERGY_EDGE, 0.70f));
+                innerRadius, Skin.BORDER_STANDARD, Skin.EDGE_ELEVATED);
 
         int result = selected;
         float x = box.x - pan;
@@ -963,17 +1031,18 @@ public final class Controls {
                 Skin.RECESSED, s.press);
         float radius = Skin.pill(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
-        int edge = Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover),
-                Skin.ENERGY_EDGE, spin * 0.82f);
+        int edge = Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, Math.max(s.hover, spin));
         ui.outline(area.x, area.y, area.right(), area.bottom(), radius,
                 Skin.BORDER_STANDARD, edge);
         focusRing(ui, s, area, radius);
 
-        float chevron = 12f;
+        // The chevron is fixed: an icon that moves under the pointer that is
+        // pointing at it reads as a wobble, not a state.
+        float chevron = 14f;
         String value = options[Math.max(0, Math.min(options.length - 1, selected))];
         middle(ui, value, area.x + Skin.S3, area, area.width - Skin.S3 * 2f - chevron - Skin.S1, Type.BODY,
                 Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, Math.max(s.hover, spin)));
-        ui.icon(Icon.CHEVRON_DOWN, area.right() - Skin.S3 - chevron, area.centreY() - chevron / 2f + spin,
+        ui.icon(Icon.CHEVRON_DOWN, area.right() - Skin.S3 - chevron, area.centreY() - chevron / 2f,
                 chevron, Skin.mix(Skin.TEXT_FAINT, Skin.TEXT, Math.max(s.hover, spin)));
 
         if (open) {
@@ -1023,19 +1092,21 @@ public final class Controls {
         }
         float drawnValue = tracked.motion.value(now);
 
+        // The launcher's slider: a thin translucent channel, the part up to the
+        // value in brighter neutral, a small high-contrast thumb.
         ui.rounded(area.x, trackY, area.right(), trackY + trackHeight, trackHeight / 2f,
-                Skin.mix(Tokens.CONTROL_FILL_SUNKEN, Tokens.CONTROL_FILL_SUNKEN_HOVER, s.hover));
+                Tokens.CONTROL_SLIDER_TRACK);
         float filled = travelLeft + travel * drawnValue;
         ui.rounded(area.x, trackY, filled, trackY + trackHeight, trackHeight / 2f,
-                enabled ? Skin.mix(Skin.ACCENT_DEEP, Skin.ACCENT, 0.6f + 0.4f * s.hover) : Skin.fade(Skin.ACCENT, 0.4f));
+                enabled ? Tokens.CONTROL_SLIDER_FILL : Skin.scaleAlpha(Tokens.CONTROL_SLIDER_FILL, 0.4f));
 
         // Hover may change colour, never geometry. Growing this knob made the
         // control visibly change size as the pointer crossed it.
-        float knob = 8f;
+        float knob = 7f;
         float cy = area.centreY();
-        ui.shadow(filled - knob, cy - knob, filled + knob, cy + knob, knob, 2.5f, Skin.SHADOW);
+        ui.shadow(filled - knob, cy - knob, filled + knob, cy + knob, knob, 2f, Skin.SHADOW);
         ui.rounded(filled - knob, cy - knob, filled + knob, cy + knob, knob,
-                enabled ? Tokens.PALETTE_IVORY_50 : Tokens.PALETTE_CHAMPAGNE_300);
+                enabled ? Skin.mix(Skin.TEXT, Tokens.PALETTE_IVORY_50, s.hover) : Skin.TEXT_DISABLED);
         focusRing(ui, s, area, Skin.R_SMALL);
         return value;
     }
@@ -1048,15 +1119,15 @@ public final class Controls {
     public boolean keybind(Renderer ui, String id, Rect area, String key, boolean listening) {
         State s = state(id, area, true);
         float listen = active(s, listening);
-        float pulse = listening ? 0.5f + 0.5f * (float) Math.sin(now * 6.0) : 0f;
         int face = Skin.mix(Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, s.hover), Skin.BACKGROUND, s.press),
-                Skin.scaleAlpha(Skin.ENERGY, 0.28f), listen);
+                Skin.ELEVATED, listen);
         float radius = Skin.pill(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
         if (listen > 0.01f) {
+            // Waiting for a key is input focus: the steady signal rim a text
+            // field wears, not a pulse.
             ui.outline(area.x, area.y, area.right(), area.bottom(), radius,
-                    Skin.BORDER_ENERGIZED,
-                    Skin.scaleAlpha(Skin.ENERGY_MARK, listen * (0.64f + 0.26f * pulse)));
+                    Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.FOCUS, listen));
         }
         focusRing(ui, s, area, radius);
         ui.textCentred(
@@ -1082,11 +1153,13 @@ public final class Controls {
                 Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
         ui.textCentred(value, area.centreX(), baseline(ui, area, Type.BODY_STRONG), Type.BODY_STRONG, Skin.TEXT);
 
+        // Icons, not the '-' and '+' characters: a hyphen is a text glyph with
+        // the font's metrics, and sat visibly off-centre in its circle.
         int moved = 0;
-        if (ghost(ui, id + "#-", down, "-", !atMinimum)) {
+        if (iconButton(ui, id + "#-", down, Icon.MINUS, false, !atMinimum)) {
             moved = -1;
         }
-        if (ghost(ui, id + "#+", up, "+", !atMaximum)) {
+        if (iconButton(ui, id + "#+", up, Icon.PLUS, false, !atMaximum)) {
             moved = 1;
         }
         return moved;
@@ -1105,8 +1178,9 @@ public final class Controls {
         float radius = Skin.pill(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
         if (edit > 0.01f) {
+            // Editing is focus: the launcher's field wears the signal ring.
             ui.outline(area.x, area.y, area.right(), area.bottom(), radius,
-                    Skin.BORDER_ENERGIZED, Skin.scaleAlpha(Skin.ENERGY_EDGE, edit));
+                    Skin.BORDER_STANDARD, Skin.scaleAlpha(Skin.FOCUS, edit));
         }
         focusRing(ui, s, area, radius);
 
@@ -1134,7 +1208,7 @@ public final class Controls {
     };
 
     private static final String[] PALETTE_LABELS = {
-        "White", "Fathom red", "Light red", "Amber", "Green", "Blue", "Violet", "Grey", "Black"
+        "White", "Red", "Light red", "Amber", "Green", "Blue", "Violet", "Grey", "Black"
     };
 
     /** A colour with a palette behind it. @return the chosen RGB */
@@ -1298,26 +1372,23 @@ public final class Controls {
         if (lastTooltipText == null || lastTooltipAnchor == null || tooltipAlpha <= 0.01f) {
             return;
         }
-        float width = Math.min(280f, ui.measure(lastTooltipText, Type.SMALL) + Skin.S3 * 2f);
+        // The launcher's tooltip: small dense glass, 6-unit radius, the rim and
+        // no shadow; it fades and does not travel.
+        float width = Math.min(280f, ui.measure(lastTooltipText, Type.SMALL) + Skin.S2 * 2f);
         float height = 26f;
         float left = Math.max(Skin.S3,
                 Math.min(lastTooltipAnchor.centreX() - width / 2f, ui.width() - width - Skin.S3));
-        float top = lastTooltipAnchor.y - height - 6f;
+        float top = lastTooltipAnchor.y - height - Skin.S2;
         if (top < Skin.S3) {
-            top = lastTooltipAnchor.bottom() + 6f;
+            top = lastTooltipAnchor.bottom() + Skin.S2;
         }
         ui.pushAlpha(tooltipAlpha);
-        ui.pushTransform(0f, (1f - tooltipAlpha) * 3f,
-                0.985f + tooltipAlpha * 0.015f,
-                left + width / 2f, top + height / 2f);
-        Rect tooltip = new Rect(left, top, width, height);
-        VisualEffects.overlayShadow(ui, tooltip, Skin.R_CONTROL);
-        VisualEffects.layeredSurface(ui, tooltip, Skin.R_CONTROL, Skin.FLOATING, 0f);
-        ui.outline(left, top, left + width, top + height, Skin.R_CONTROL,
-                Skin.BORDER_STANDARD, Skin.EDGE_ELEVATED);
-        ui.text(Text.fit(ui, lastTooltipText, Type.SMALL, width - Skin.S3 * 2f), left + Skin.S3,
-                baseline(ui, top, height, Type.SMALL), Type.SMALL, Skin.TEXT_MUTED);
-        ui.popTransform();
+        Rect tooltip = Skin.pixelAligned(ui, new Rect(left, top, width, height));
+        ui.rounded(tooltip.x, tooltip.y, tooltip.right(), tooltip.bottom(), Tokens.RADIUS_XS,
+                Graphite.Material.DENSE.fill);
+        Graphite.rim(ui, tooltip, Tokens.RADIUS_XS, Graphite.Material.DENSE.rim);
+        ui.text(Text.fit(ui, lastTooltipText, Type.SMALL, width - Skin.S2 * 2f), tooltip.x + Skin.S2,
+                baseline(ui, tooltip, Type.SMALL), Type.SMALL, Skin.TEXT);
         ui.popAlpha();
     }
 
@@ -1330,12 +1401,14 @@ public final class Controls {
         float left = Math.min(overlay.anchor.x, ui.width() - width - Skin.S4);
         Rect panel = new Rect(left, top, width, height);
 
+        // The launcher's popover: dense glass, one soft shadow, the rim; it
+        // fades in over 6 units of travel from the control it belongs to.
         ui.pushAlpha(grown);
-        ui.pushTransform(0f, (1f - grown) * (upwards ? 4f : -4f));
+        ui.pushTransform(0f, (1f - grown) * (upwards ? 6f : -6f));
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
         VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM,
-                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.ENERGY_EDGE, 0.40f));
+                Skin.BORDER_STANDARD, Skin.EDGE_ELEVATED);
 
         for (int index = 0; index < overlay.options.length; index++) {
             Rect row = new Rect(panel.x + Skin.S1, panel.y + Skin.S1 + rowHeight * index,
@@ -1349,7 +1422,7 @@ public final class Controls {
             ui.text(Text.fit(ui, overlay.options[index], Type.BODY, row.width - Skin.S6), row.x + Skin.S3,
                     baseline(ui, row, Type.BODY), Type.BODY, active || over ? Skin.TEXT : Skin.TEXT_MUTED);
             if (active) {
-                ui.icon(Icon.CHECK, row.right() - Skin.S3 - 12f, row.centreY() - 6f, 12f, Skin.ENERGY_MARK);
+                ui.icon(Icon.CHECK, row.right() - Skin.S3 - 14f, row.centreY() - 7f, 14f, Skin.TEXT);
             }
             if (over && pointer.released(0)) {
                 choiceId = overlay.id;
@@ -1377,7 +1450,7 @@ public final class Controls {
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
         VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
         ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM,
-                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.ENERGY_EDGE, 0.40f));
+                Skin.BORDER_STANDARD, Skin.EDGE_ELEVATED);
 
         for (int index = 0; index < PALETTE.length; index++) {
             float cx = panel.x + Skin.S2 + (index % columns) * cell;
@@ -1386,8 +1459,9 @@ public final class Controls {
             boolean over = interactive && inputEnabled && pointer != null
                     && swatch.inset(-3f).contains(pointer.x(), pointer.y());
             ui.rounded(swatch.x, swatch.y, swatch.right(), swatch.bottom(), Skin.R_SMALL, 0xFF000000 | PALETTE[index]);
-            ui.outline(swatch.x, swatch.y, swatch.right(), swatch.bottom(), Skin.R_SMALL, Skin.HAIRLINE,
-                    index == overlay.selected ? Skin.ACCENT : (over ? Skin.TEXT : Skin.EDGE_STRONG));
+            ui.outline(swatch.x, swatch.y, swatch.right(), swatch.bottom(), Skin.R_SMALL,
+                    index == overlay.selected ? 2f : Skin.HAIRLINE,
+                    index == overlay.selected ? Skin.TEXT : (over ? Skin.TEXT_MUTED : Skin.EDGE_STRONG));
             if (over && pointer.released(0)) {
                 choiceId = overlay.id;
                 choiceIndex = index;

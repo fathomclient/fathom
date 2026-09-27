@@ -70,10 +70,10 @@
         <span class="name">{account.name}</span>
         <span class="kind" class:dev={account.development}>
           {#if account.development}
-            <TriangleAlert size={12} strokeWidth={2.2} />
+            <TriangleAlert size={12} />
             Development identity
           {:else}
-            <ShieldCheck size={12} strokeWidth={2.2} />
+            <ShieldCheck size={12} />
             Minecraft: Java Edition
           {/if}
         </span>
@@ -86,7 +86,7 @@
 
     <div class="actions">
       <Button block disabled={working} onClick={onSignIn}>
-        <Plus size={14} strokeWidth={2.2} />
+        <Plus size={14} />
         Add another Microsoft account
       </Button>
     </div>
@@ -192,9 +192,9 @@
             </span>
             <span class="saved-name">{saved.name}</span>
             {#if saved.signedIn}
-              <Check size={14} strokeWidth={2.3} />
+              <Check size={14} />
             {:else}
-              <LogIn size={14} strokeWidth={2} />
+              <LogIn size={14} />
             {/if}
           </button>
           <button
@@ -203,7 +203,7 @@
             aria-label={`Forget ${saved.name}`}
             disabled={!saved.uuid}
             on:click={() => saved.uuid && onForget(saved.uuid)}
-          ><X size={13} strokeWidth={2.2} /></button>
+          ><X size={14} /></button>
         </div>
       {/each}
     </section>
@@ -214,7 +214,7 @@
   <button class="disclose" aria-expanded={detailsOpen} on:click={() => (detailsOpen = !detailsOpen)}>
     <span>Authentication details</span>
     <span class="chevron" class:open={detailsOpen}>
-      <ChevronDown size={14} strokeWidth={2.2} />
+      <ChevronDown size={14} />
     </span>
   </button>
 
@@ -244,7 +244,7 @@
     border-radius: var(--radius-md);
     background-color: var(--control-fill-sunken);
     box-shadow: var(--control-rim);
-    font-family: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
+    font-family: var(--type-family-mono);
     font-size: var(--type-title-size);
     font-weight: var(--type-heading-weight);
     letter-spacing: 0.12em;
@@ -264,7 +264,7 @@
     gap: var(--space-2);
     margin-top: var(--space-2);
     padding-top: var(--space-4);
-    box-shadow: 0 -1px 0 var(--control-hairline);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 
   /* -- signed in --------------------------------------------------------- */
@@ -280,7 +280,9 @@
     width: 48px;
     height: 48px;
     flex-shrink: 0;
-    border-radius: var(--radius-md);
+    /* Round, like the account capsule's face in the header: one avatar shape
+       everywhere. */
+    border-radius: var(--radius-pill);
     background-color: var(--control-fill-selected);
     box-shadow: var(--control-rim-strong);
     color: var(--color-text);
@@ -288,10 +290,22 @@
     font-weight: var(--type-title-weight);
   }
 
-  /* The player's head. The pixels are kept square rather than smoothed. */
+  /* The player's head. The pixels are kept square rather than smoothed, at a
+     whole multiple of the 8px face (48 = 6x), and the rim is drawn over the
+     image: an inset shadow on the box itself would be painted beneath it. */
   .avatar.has-face {
+    position: relative;
     overflow: hidden;
     padding: 0;
+  }
+
+  .avatar.has-face::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: var(--control-rim-strong);
+    pointer-events: none;
   }
 
   .face {
@@ -377,7 +391,7 @@
   }
 
   .account-choice:focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: var(--focus-ring-width) solid var(--color-focus);
     outline-offset: 2px;
   }
 
@@ -390,17 +404,27 @@
   }
 
   .mini-avatar {
+    position: relative;
     width: 24px;
     height: 24px;
     display: grid;
     place-items: center;
     flex: 0 0 auto;
     overflow: hidden;
-    border-radius: var(--radius-xs);
+    border-radius: var(--radius-pill);
     background-color: var(--control-fill-selected);
     color: var(--color-text);
     font-size: var(--type-caption-size);
     font-weight: var(--type-heading-weight);
+  }
+
+  .mini-avatar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: var(--control-rim);
+    pointer-events: none;
   }
 
   .saved-name {
@@ -460,7 +484,7 @@
     padding: var(--space-3) 0 var(--space-1);
     font-size: var(--type-secondary-size);
     color: var(--color-text-secondary);
-    box-shadow: 0 -1px 0 var(--control-hairline);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
     transition: color var(--motion-hover) var(--ease-standard);
   }
 

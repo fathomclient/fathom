@@ -68,23 +68,23 @@
     <div class="spacer"></div>
 
     <label class="follow">
-      <ArrowDownToLine size={13} strokeWidth={2} />
+      <ArrowDownToLine size={14} />
       <span>Follow</span>
       <Switch checked={follow} label="Follow output" onChange={(value) => (follow = value)} />
     </label>
 
     <Button onClick={copy}>
       {#if copied}
-        <Check size={13} strokeWidth={2.4} />
+        <Check size={14} />
         Copied
       {:else}
-        <Copy size={13} strokeWidth={2} />
+        <Copy size={14} />
         Copy
       {/if}
     </Button>
 
-    <Button onClick={() => void closeConsole()} title="Close">
-      <X size={13} strokeWidth={2.2} />
+    <Button onClick={() => void closeConsole()}>
+      <X size={14} />
       Close
     </Button>
   </header>
@@ -100,7 +100,7 @@
   </div>
 
   <footer>
-    <span>{view?.lines.length ?? 0} lines</span>
+    <span><span class="mono">{view?.lines.length ?? 0}</span> lines</span>
     <span class="sep">·</span>
     <!-- Said plainly, because somebody about to paste this into a bug report
          deserves to know it has already been through the redactor. -->
@@ -113,7 +113,9 @@
     display: grid;
     grid-template-rows: var(--topbar-height) 1fr var(--bottombar-height);
     height: 100vh;
-    background: #000;
+    /* A plain window, not a scene: the backdrop's own base colour, no
+       photograph behind a log. */
+    background: var(--backdrop-base);
     font-family: var(--font);
     color: var(--text);
   }
@@ -123,7 +125,7 @@
     align-items: center;
     gap: var(--s-2);
     padding: 0 var(--s-3);
-    border-bottom: 1px solid var(--chrome-line);
+    border-bottom: var(--hairline) solid var(--chrome-line);
     font-size: var(--t-body);
   }
 
@@ -138,9 +140,9 @@
     background: var(--text-disabled);
   }
 
+  /* Live: the game is running and writing. Signal colour, no glow. */
   .dot.live {
-    background: var(--good);
-    box-shadow: 0 0 8px var(--good);
+    background: var(--color-signal);
   }
 
   .state {
@@ -166,7 +168,7 @@
     padding: var(--s-3);
     /* Fixed width, like the Logs screen: a log is columnar, and timestamps only
        line up in a monospace face. */
-    font-family: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
+    font-family: var(--type-family-mono);
     font-size: var(--t-caption);
     line-height: 1.5;
     user-select: text;
@@ -201,7 +203,7 @@
     align-items: center;
     gap: var(--s-2);
     padding: 0 var(--s-3);
-    border-top: 1px solid var(--chrome-line);
+    border-top: var(--hairline) solid var(--chrome-line);
     font-size: var(--t-meta);
     color: var(--text-faint);
   }

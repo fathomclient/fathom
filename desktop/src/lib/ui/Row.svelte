@@ -14,6 +14,7 @@
   import { slide, fade } from 'svelte/transition';
   import { ChevronDown } from '@lucide/svelte';
   import { EASE, FAST, NORMAL } from '../motion';
+  import { tooltip } from '../tooltip';
 
   export let title: string;
   export let detail = '';
@@ -54,10 +55,12 @@
         <button
           class="disclose"
           class:open
-          title={open ? 'Hide details' : 'Details'}
+          aria-label={open ? 'Hide details' : 'Details'}
+          aria-expanded={open}
+          use:tooltip={open ? 'Hide details' : 'Details'}
           on:click={() => (open = !open)}
         >
-          <ChevronDown size={14} strokeWidth={2.2} />
+          <ChevronDown size={14} />
         </button>
       {/if}
     </div>
@@ -77,8 +80,8 @@
     padding: var(--space-3) var(--space-4);
     border-radius: max(var(--radius-inner-min), calc(var(--surface-radius, var(--radius-lg)) - 2px));
     /* Hairline between rows, none above the first: the separator belongs to
-       the gap between two rows, not to either one of them. */
-    box-shadow: 0 -1px 0 var(--control-hairline);
+       the gap between two rows, not to either one of them. One device pixel. */
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
     transition: background-color var(--motion-hover) var(--ease-standard);
   }
 
@@ -152,6 +155,16 @@
     color: var(--color-warning-text);
   }
 
+  .warning::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin: 0 6px 1px 0;
+    border-radius: var(--radius-pill);
+    background-color: currentColor;
+  }
+
   .control {
     display: flex;
     align-items: center;
@@ -164,34 +177,48 @@
     display: none;
   }
 
+  /* A short state word in a quiet neutral pill. A tone adds a small dot in
+     its status colour and nothing else: the word stays neutral, so a list of
+     rows never turns into a column of coloured slabs. Tones are the catalogue's
+     own vocabulary, so a badge cannot say something the data does not. */
   .badge {
-    padding: 2px var(--space-2);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 20px;
+    padding: 0 var(--space-2);
     border-radius: var(--radius-pill);
     font-size: var(--type-caption-size);
     font-weight: var(--type-label-weight);
-    color: var(--color-text-tertiary);
-    background-color: var(--control-fill);
+    line-height: 1;
+    color: var(--color-text-secondary);
+    background-color: var(--control-fill-faint);
+    box-shadow: var(--control-rim);
     white-space: nowrap;
   }
 
-  /* Tones are the catalogue's own vocabulary, so a badge cannot say something
-     the data does not. */
+  .badge:not(.neutral)::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    background-color: var(--badge-dot);
+  }
+
   .badge.safe,
   .badge.good {
-    color: var(--color-success-text);
-    background-color: var(--color-success-tint);
+    --badge-dot: var(--color-success-text);
   }
 
   .badge.optional,
   .badge.warn {
-    color: var(--color-warning-text);
-    background-color: var(--color-warning-tint);
+    --badge-dot: var(--color-warning-text);
   }
 
   .badge.experimental,
   .badge.bad {
-    color: var(--color-danger-text);
-    background-color: var(--color-danger-tint);
+    --badge-dot: var(--color-danger-text);
   }
 
   .disclose {

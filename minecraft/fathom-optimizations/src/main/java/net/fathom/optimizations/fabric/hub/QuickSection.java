@@ -69,7 +69,8 @@ final class QuickSection implements Section {
      * segmented control measures those labels with the active renderer and can
      * pan rather than clipping if a narrow window cannot give it all 320 units.
      */
-    private static final float SCALE_CONTROL = 320f;
+    /** Seven options -- Auto and six sizes -- at their natural widths. */
+    private static final float SCALE_CONTROL = 372f;
 
     @Override
     public String title() {
@@ -228,7 +229,7 @@ final class QuickSection implements Section {
             VideoSetting setting) {
         Renderer ui = context.ui();
         Rect row = area.inset(0f, 2f);
-        boolean hovered = row.contains(context.pointer().x(), context.pointer().y());
+        boolean hovered = context.controls().pointerOverVisible(row);
         ui.text(name, row.x, row.y + ui.ascent(Type.BODY), Type.BODY, hovered ? Skin.TEXT : Skin.TEXT_MUTED);
         ui.textRight(value, row.right(), row.y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_FAINT);
 
@@ -253,7 +254,7 @@ final class QuickSection implements Section {
 
     private void label(HubContext context, Rect row, String name, String detail) {
         Renderer ui = context.ui();
-        boolean hovered = row.contains(context.pointer().x(), context.pointer().y());
+        boolean hovered = context.controls().pointerOverVisible(row);
         boolean twoLines = detail != null && !detail.isEmpty();
         if (!twoLines) {
             ui.text(name, row.x, Controls.baseline(ui, row, Type.BODY), Type.BODY,

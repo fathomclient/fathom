@@ -134,6 +134,35 @@ public interface Renderer {
     void popTransform();
 
     // -----------------------------------------------------------------------
+    // Hit testing
+    // -----------------------------------------------------------------------
+
+    /*
+     * A control's hitbox is the geometry it was drawn with. These map an
+     * untransformed point -- the pointer, in logical units -- into the space
+     * the current transform draws in, and say whether the current clip shows
+     * it, so a control tested while a page slides or a panel settles is hit
+     * exactly where it is seen, and a row scrolled under a list's edge cannot
+     * be clicked through the edge. The defaults are for a renderer without a
+     * transform stack.
+     */
+
+    /** An untransformed x, in the space the current transform draws in. */
+    default float localX(float x) {
+        return x;
+    }
+
+    /** An untransformed y, in the space the current transform draws in. */
+    default float localY(float y) {
+        return y;
+    }
+
+    /** Whether an untransformed point is inside the current clip. */
+    default boolean clipContains(float x, float y) {
+        return true;
+    }
+
+    // -----------------------------------------------------------------------
     // Frame
     // -----------------------------------------------------------------------
 

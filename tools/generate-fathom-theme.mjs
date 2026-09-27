@@ -42,14 +42,121 @@ for (const name of ['1', '2', '3', '4', '5']) css.push(`  --s${name}: var(--s-${
 css.push('}');
 css.push('');
 css.push(...systemCss(theme.system));
+css.push(...graphiteCss(theme.graphite));
 emit(path.join(root, 'desktop', 'src', 'lib', 'theme.generated.css'), css.join('\n'));
+
+/*
+ * Graphite + Instrument (`graphite` in the manifest): the proof-of-direction
+ * identity. Emitted as `--g-*` custom properties and as `GraphiteTokens` for the
+ * game, alongside the retiring system rather than over it, so only the screens
+ * that ask for it change.
+ */
+function graphiteCss(g) {
+  if (!g) return [];
+  const out = ['', '/* Graphite + Instrument. */', ':root {'];
+  for (const [name, value] of Object.entries(g.color)) out.push(`  --g-${name}: ${value};`);
+  for (const [name, m] of Object.entries(g.material)) {
+    out.push(`  --g-mat-${name}: ${m.fill};`);
+    out.push(`  --g-mat-${name}-rim: rgba(255, 255, 255, ${m.rim});`);
+    if (typeof m.blur === 'number') out.push(`  --g-mat-${name}-blur: ${m.blur}px;`);
+  }
+  out.push(`  --g-elevation: 0 ${g.shadow.y}px ${g.shadow.blur}px ${g.color.shadow};`);
+  for (const [name, value] of Object.entries(g.radius)) out.push(`  --g-r-${name}: ${value}px;`);
+  for (const [name, value] of Object.entries(g.size)) out.push(`  --g-size-${name}: ${value}px;`);
+  for (const [name, value] of Object.entries(g.space)) out.push(`  --g-s-${name}: ${value}px;`);
+  for (const [name, value] of Object.entries(g.layout)) out.push(`  --g-${name}: ${value}px;`);
+  for (const [name, r] of Object.entries(g.type)) {
+    const family = r.mono ? "'Geist Mono', ui-monospace, monospace" : "'Geist', system-ui, sans-serif";
+    out.push(`  --g-type-${name}-family: ${family};`);
+    out.push(`  --g-type-${name}-size: ${r.size}px;`);
+    out.push(`  --g-type-${name}-line: ${r.line}px;`);
+    out.push(`  --g-type-${name}-weight: ${r.weight};`);
+    out.push(`  --g-type-${name}-tracking: ${r.tracking}em;`);
+  }
+  out.push(`  --g-ease: cubic-bezier(${g.motion.ease.join(', ')});`);
+  for (const name of ['fast', 'panel', 'close', 'tooltip-delay', 'scrollbar-fade']) {
+    out.push(`  --g-motion-${name}: ${g.motion[name]}ms;`);
+  }
+  out.push(`  --g-travel: ${g.motion.travel}px;`);
+  out.push(`  --g-vignette-start: ${g.backdrop['vignette-start'] * 100}%;`);
+  out.push(`  --g-vignette-alpha: ${g.backdrop['vignette-alpha']};`);
+  out.push(`  --g-grain-alpha: ${g.backdrop['grain-alpha']};`);
+  out.push('}');
+  out.push('');
+  return out;
+}
+
+function graphiteJava(g) {
+  const out = [];
+  out.push('package net.fathom.optimizations.generated;');
+  out.push('');
+  out.push('/** Graphite + Instrument tokens. Generated from assets/theme/fathom-theme.json. Do not edit. */');
+  out.push('public final class GraphiteTokens {');
+  out.push('    private GraphiteTokens() {}');
+  out.push('');
+  for (const [name, value] of Object.entries(g.color)) {
+    out.push(`    public static final int COLOR_${javaName(name)} = ${colour(value)};`);
+  }
+  out.push('');
+  for (const [name, m] of Object.entries(g.material)) {
+    const key = `MATERIAL_${javaName(name)}`;
+    out.push(`    public static final int ${key}_FILL = ${colour(m.fill)};`);
+    out.push(`    public static final int ${key}_RIM = ${colour(`rgba(255, 255, 255, ${m.rim})`)};`);
+    if (typeof m.blur === 'number') {
+      out.push(`    public static final float ${key}_BLUR = ${m.blur.toFixed(3)}f;`);
+    }
+    out.push(`    public static final boolean ${key}_SHADOW = ${m.shadow};`);
+  }
+  out.push('');
+  const floats = (prefix, table) => {
+    for (const [name, value] of Object.entries(table)) {
+      if (typeof value === 'number') {
+        out.push(`    public static final float ${prefix}${javaName(name)} = ${value.toFixed(3)}f;`);
+      }
+    }
+  };
+  floats('STATE_', g.state);
+  floats('SHADOW_', g.shadow);
+  floats('RADIUS_', g.radius);
+  floats('SIZE_', g.size);
+  floats('SPACE_', g.space);
+  floats('LAYOUT_', g.layout);
+  floats('WORDMARK_', g.wordmark);
+  floats('BACKDROP_', g.backdrop);
+  out.push('');
+  for (const [name, r] of Object.entries(g.type)) {
+    const key = `TYPE_${javaName(name)}`;
+    out.push(`    public static final float ${key}_SIZE = ${r.size.toFixed(1)}f;`);
+    out.push(`    public static final float ${key}_LINE = ${r.line.toFixed(1)}f;`);
+    out.push(`    public static final int ${key}_WEIGHT = ${r.weight};`);
+    out.push(`    public static final float ${key}_TRACKING = ${r.tracking.toFixed(3)}f;`);
+    out.push(`    public static final boolean ${key}_MONO = ${r.mono};`);
+    out.push(`    public static final boolean ${key}_UPPER = ${r.upper};`);
+  }
+  out.push('');
+  out.push(`    public static final float[] EASE = {${g.motion.ease.map((v) => `${Number(v).toFixed(2)}f`).join(', ')}};`);
+  for (const name of ['fast', 'panel', 'close', 'tooltip-delay', 'scrollbar-fade']) {
+    out.push(`    public static final float MOTION_${javaName(name)} = ${(g.motion[name] / 1000).toFixed(3)}f;`);
+  }
+  out.push(`    public static final float MOTION_TRAVEL = ${g.motion.travel.toFixed(1)}f;`);
+  out.push(`    public static final String WORDMARK_TEXT = "${g.wordmark.text}";`);
+  out.push('}');
+  out.push('');
+  return out;
+}
+
+if (theme.graphite) {
+  emit(path.join(root, 'minecraft', 'fathom-optimizations', 'src', 'main', 'java',
+    'net', 'fathom', 'optimizations', 'generated', 'GraphiteTokens.java'),
+    graphiteJava(theme.graphite).join('\n'));
+}
 
 const motionTs = [
   '// Generated from assets/theme/fathom-theme.json. Do not edit.',
   ...Object.entries(theme.motion).map(([name, value]) =>
     `export const ${name.replace(/-/g, '_').toUpperCase()} = ${Number(value)};`),
   '',
-  '// The golden-hour system (`system.motion`).',
+  '// The shared Rainforest glass system (`system.motion`).',
   ...Object.entries(theme.system.motion.durations).map(([name, value]) =>
     `export const MOTION_${javaName(name)} = ${Number(value)};`),
   ...Object.entries(theme.system.motion.curves).map(([name, points]) =>
@@ -77,7 +184,7 @@ const brandTs = [
 emit(path.join(root, 'desktop', 'src', 'lib', 'brand', 'brand.generated.ts'), brandTs.join('\n'));
 
 // ---------------------------------------------------------------------------
-// The golden-hour system.
+// The shared Rainforest glass system.
 //
 // Everything below is emitted from `theme.system`. The legacy sections above
 // are still emitted unchanged, so screens that have not been rebuilt keep
@@ -116,14 +223,18 @@ function rim(system, level) {
 /**
  * The same system for the game, where nothing reads the framebuffer.
  *
- * In-game surfaces are the launcher's reduced-blur mode by construction, so the
- * game gets each level's `tint-noblur` as its fill, plus the rim components as
- * separate colours: a HUD plate draws them as spans, not as a box-shadow list.
- * Not consumed yet; the in-game migration reads these instead of adding its own.
+ * Nothing in the game reads the framebuffer, so there is no blur. The fill is
+ * each level's `tint-game`: clear is the launcher's own faint neutral veil, for controls
+ * on the photograph; light, standard and dense are neutral deepenings, far lighter
+ * than `tint-noblur`. Unblurred, a pale veil behind light type lowers its
+ * contrast, so a group that carries text deepens a little instead. `tint-noblur`
+ * is the launcher's blur-off mode, whose panes sit on a scrimmed photograph and
+ * may be dense; the game's float over the world and must stay transparent. The rim components are separate
+ * colours: a HUD plate draws them as spans, not as a box-shadow list.
  */
 function systemJava(system) {
   const out = [''];
-  out.push('    /** The golden-hour system (`system` in the manifest), which the game `Skin` reads. */');
+  out.push('    /** The shared Rainforest glass system (`system` in the manifest), which the game `Skin` reads. */');
   out.push('    public static final class Tokens {');
   out.push('        private Tokens() {}');
   out.push('');
@@ -138,7 +249,7 @@ function systemJava(system) {
   const shade = resolve(system, system.color['rim-shade']);
   for (const [name, level] of Object.entries(system.material)) {
     const prefix = `MATERIAL_${javaName(name)}`;
-    out.push(`        public static final int ${prefix}_FILL = ${colour(level['tint-noblur'])};`);
+    out.push(`        public static final int ${prefix}_FILL = ${colour(level['tint-game'] ?? level['tint-noblur'])};`);
     out.push(`        public static final int ${prefix}_FILL_SOLID = ${colour(level['tint-solid'])};`);
     out.push(`        public static final int ${prefix}_RIM_TOP = ${colour(rgba(light, level.rim.top))};`);
     out.push(`        public static final int ${prefix}_RIM_EDGE = ${colour(rgba(light, level.rim.edge))};`);
@@ -178,6 +289,11 @@ function systemJava(system) {
     } else {
       out.push(`        public static final int BRAND_${javaName(name)} = ${colour(resolved)};`);
     }
+  }
+  // The game's own scrims: over the world, over the photograph, under a modal.
+  out.push('');
+  for (const [name, value] of Object.entries(system.game ?? {})) {
+    out.push(`        public static final int GAME_${javaName(name)} = ${colour(resolve(system, value))};`);
   }
   out.push('    }');
   return out;

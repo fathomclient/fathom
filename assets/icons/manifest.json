@@ -36,7 +36,24 @@
     "crosshair": { "lucide": "crosshair" },
     "magnifier": { "lucide": "search" },
     "run": { "lucide": "person-standing" },
-    "spark": { "lucide": "zap" }
+    "spark": { "lucide": "zap" },
+    "chevron-left": { "lucide": "chevron-left" },
+    "minus": { "lucide": "minus" },
+    "plus": { "lucide": "plus" },
+    "more": { "lucide": "ellipsis" },
+    "info": { "lucide": "info" },
+    "warning": { "lucide": "triangle-alert" },
+    "success": { "lucide": "circle-check" },
+    "error": { "lucide": "circle-alert" },
+    "copy": { "lucide": "copy" },
+    "folder": { "lucide": "folder-open" },
+    "download": { "lucide": "download" },
+    "refresh": { "lucide": "refresh-cw" },
+    "edit": { "lucide": "pencil" },
+    "delete": { "lucide": "trash-2" },
+    "sign-out": { "lucide": "log-out" },
+    "play": { "lucide": "play" },
+    "back": { "lucide": "arrow-left" }
   },
   "java": {
     "HOME": "home",
@@ -68,6 +85,12 @@
     "CROSSHAIR": "crosshair",
     "MAGNIFIER": "magnifier",
     "RUN": "run",
-    "SPARK": "spark"
+    "SPARK": "spark",
+    "CHEVRON_LEFT": "chevron-left",
+    "MINUS": "minus",
+    "PLUS": "plus",
+    "INFO": "info",
+    "WARNING": "warning",
+    "SUCCESS": "success"
   }
 }

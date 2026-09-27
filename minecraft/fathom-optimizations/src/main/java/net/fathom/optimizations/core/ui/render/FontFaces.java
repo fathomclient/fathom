@@ -21,6 +21,10 @@ public final class FontFaces {
                 return ROOT + "Geist-Medium.ttf";
             case SEMIBOLD:
                 return ROOT + "Geist-SemiBold.ttf";
+            case MONO_REGULAR:
+                return ROOT + "GeistMono-Regular.ttf";
+            case MONO_MEDIUM:
+                return ROOT + "GeistMono-Medium.ttf";
             case REGULAR:
             default:
                 return ROOT + "Geist-Regular.ttf";
@@ -38,6 +42,10 @@ public final class FontFaces {
                 return new Type.Weight[] {Type.Weight.MEDIUM, Type.Weight.REGULAR};
             case MEDIUM:
                 return new Type.Weight[] {Type.Weight.SEMIBOLD, Type.Weight.REGULAR};
+            case MONO_REGULAR:
+                return new Type.Weight[] {Type.Weight.MONO_MEDIUM, Type.Weight.REGULAR};
+            case MONO_MEDIUM:
+                return new Type.Weight[] {Type.Weight.MONO_REGULAR, Type.Weight.MEDIUM};
             case REGULAR:
             default:
                 return new Type.Weight[] {Type.Weight.MEDIUM, Type.Weight.SEMIBOLD};

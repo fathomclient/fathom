@@ -7,8 +7,6 @@ const manifestPath = path.join(root, 'assets', 'icons', 'manifest.json');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const lucideRoot = path.join(root, 'desktop', 'node_modules', '@lucide', 'svelte', 'dist', 'icons');
 const assetRoot = path.join(root, 'assets', 'icons');
-const publicRoot = path.join(root, 'desktop', 'public', 'icons');
-fs.mkdirSync(publicRoot, { recursive: true });
 
 function number(value, fallback = 0) {
   return value === undefined ? fallback : Number(value);
@@ -65,19 +63,37 @@ for (const [id, definition] of Object.entries(manifest.icons)) {
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${fill}" ` +
     `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">\n${body}\n</svg>\n`;
   fs.writeFileSync(path.join(assetRoot, `${id}.svg`), svg);
-  fs.writeFileSync(path.join(publicRoot, `${id}.svg`), svg);
   // Each SVG child owns a fresh current point. A leading relative move must
   // therefore start at SVG's origin even when several children are combined.
   // Prefixing a zero move preserves all following implicit relative segments.
   const combined = nodes.map(nodePath)
     .map(value => /^\s*m/.test(value) ? `M0 0 ${value}` : value)
     .join(' ');
-  resolved.set(id, { path: combined, fill: Boolean(definition.fill) });
+  const inline = nodes.map(([kind, attributes]) => {
+    const attrs = Object.entries(attributes).map(([key, value]) => ` ${key}="${value}"`).join('');
+    return `<${kind}${attrs}/>`;
+  }).join('');
+  resolved.set(id, { path: combined, fill: Boolean(definition.fill), inline });
 }
 
-const ts = ['// Generated from assets/icons/manifest.json. Do not edit.', 'export const FATHOM_ICONS = {'];
-for (const id of Object.keys(manifest.icons)) ts.push(`  '${id}': '/icons/${id}.svg',`);
-ts.push('} as const;', '');
+const ts = [
+  '// Generated from assets/icons/manifest.json. Do not edit.',
+  '//',
+  '// The launcher draws these inline (see `FathomIcon.svelte`) so that the',
+  '// global icon stroke rule in `theme.css` gives them the same optical weight',
+  '// as every Lucide component. The same artwork is in assets/icons/*.svg.',
+  'export const FATHOM_ICONS = {',
+];
+for (const id of Object.keys(manifest.icons)) ts.push(`  '${id}': '${id}',`);
+ts.push('} as const;', '', 'export type FathomIconName = keyof typeof FATHOM_ICONS;', '');
+ts.push('export const FATHOM_ICON_BODY: Record<FathomIconName, string> = {');
+for (const id of Object.keys(manifest.icons)) {
+  ts.push(`  '${id}': ${JSON.stringify(resolved.get(id).inline)},`);
+}
+ts.push('};', '');
+ts.push('export const FATHOM_ICON_FILLED: ReadonlySet<FathomIconName> = new Set([');
+for (const id of Object.keys(manifest.icons)) if (resolved.get(id).fill) ts.push(`  '${id}',`);
+ts.push(']);', '');
 fs.writeFileSync(path.join(root, 'desktop', 'src', 'lib', 'icons.generated.ts'), ts.join('\n'));
 
 const java = [

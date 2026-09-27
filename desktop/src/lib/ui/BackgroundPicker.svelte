@@ -45,7 +45,7 @@
       >
         {#if option.id === value}
           <span class="tick" transition:fade={{ duration: FAST, easing: EASE }}>
-            <Check size={size === 'large' ? 13 : 11} strokeWidth={3} />
+            <Check size={size === 'large' ? 13 : 11} />
           </span>
         {/if}
       </span>
@@ -83,50 +83,50 @@
     position: relative;
     display: block;
     aspect-ratio: 16 / 9;
-    border-radius: var(--r-sm);
+    border-radius: var(--radius-sm);
     background: var(--backdrop-fallback);
     background-size: cover;
     background-position: center;
-    border: 1px solid var(--chrome-line-strong);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
-    transition:
-      transform var(--m-fast) var(--ease),
-      border-color var(--m-normal) var(--ease),
-      box-shadow var(--m-normal) var(--ease);
+    box-shadow: var(--control-rim);
+    transition: box-shadow var(--motion-hover) var(--ease-standard);
   }
 
   .large .thumb {
-    border-radius: var(--r-md);
+    border-radius: var(--radius-md);
   }
 
-  /* Scales from the bottom edge, so a hovered tile grows upward into the
-     popover rather than pushing against the row below it. */
+  /* Hover brightens the rim; nothing scales. Selected is the strong rim and a
+     check -- neutral, never the old accent. */
   .item:hover .thumb {
-    transform: scale(1.035);
-    border-color: rgba(255, 255, 255, 0.28);
+    box-shadow: var(--control-rim-strong);
   }
 
   .item.selected .thumb {
-    border-color: var(--accent-strong);
     box-shadow:
-      0 0 0 1px rgba(224, 80, 92, 0.35),
-      0 4px 16px rgba(0, 0, 0, 0.5),
-      0 0 20px var(--accent-glow);
+      var(--control-rim-strong),
+      0 0 0 2px var(--color-text);
   }
 
+  .item:focus-visible {
+    outline: none;
+  }
+
+  .item:focus-visible .thumb {
+    outline: var(--focus-ring-width) solid var(--color-focus);
+    outline-offset: 3px;
+  }
 
   .tick {
     position: absolute;
-    top: var(--s-1);
-    right: var(--s-1);
+    top: var(--space-1);
+    right: var(--space-1);
     display: grid;
     place-items: center;
-    width: 17px;
-    height: 17px;
-    border-radius: var(--r-pill);
-    background: var(--accent);
-    color: #fff;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+    width: 18px;
+    height: 18px;
+    border-radius: var(--radius-pill);
+    background: var(--control-prominent);
+    color: var(--color-prominent-text);
   }
 
   .large .tick {

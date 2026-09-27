@@ -33,20 +33,34 @@ import net.fathom.optimizations.generated.SharedIconPaths;
  *
  * <h2>Stroke weight</h2>
  *
- * <p>Two units on twenty-four, which is Lucide's ratio, with a floor of about
- * 1.3 device pixels. Without the floor a 10-unit icon on a 1× display is a
- * 0.8-pixel line, which anti-aliasing renders as a grey suggestion.
+ * <p>The launcher's weight, not Lucide's ratio: the stroke is fixed in
+ * interface units by the icon's size tier -- 1.5 at 12-14, 1.6 at 16, 1.7 at
+ * 18, 1.75 at 20 and up -- and multiplied by the display scale, so a 14-unit
+ * status glyph and a 20-unit navigation glyph read as the same pen here and in
+ * the launcher's {@code svg.lucide} rule. A plain 2/24 ratio drew small icons
+ * hairline-thin and large ones heavy.
  */
 final class Icons {
 
     /** The grid every path is described on. */
     private static final float GRID = 24f;
 
-    /** Lucide's stroke, in grid units. */
-    private static final float STROKE = 2f;
-
     /** Below this many device pixels a stroke stops reading as a line. */
     private static final float MIN_STROKE_PIXELS = 1.3f;
+
+    /** The stroke for an icon drawn {@code logical} interface units wide. */
+    static float strokeUnits(float logical) {
+        if (logical <= 14.5f) {
+            return 1.5f;
+        }
+        if (logical <= 16.5f) {
+            return 1.6f;
+        }
+        if (logical <= 18.5f) {
+            return 1.7f;
+        }
+        return 1.75f;
+    }
 
     private static final int SHEET = 512;
 
@@ -113,19 +127,25 @@ final class Icons {
         recentNext = 0;
     }
 
-    /** The sheet entry for an icon at a device size, rasterising if needed. */
-    Entry entry(Icon icon, int pixels) {
+    /**
+     * The sheet entry for an icon at a device size, rasterising if needed.
+     *
+     * @param strokePixels the stroke in device pixels (see {@link #strokeUnits})
+     */
+    Entry entry(Icon icon, int pixels, float strokePixels) {
         int size = Math.max(6, Math.min(128, pixels));
-        int key = size * 64 + icon.ordinal() + 1;
+        int tenths = Math.max(1, Math.min(99, Math.round(strokePixels * 10f)));
+        int key = (tenths * 256 + size) * 64 + icon.ordinal() + 1;
         for (int slot = 0; slot < CACHE; slot++) {
             if (recentKeys[slot] == key) {
                 return recentEntries[slot];
             }
         }
-        Entry found = entries.get(icon.name() + '/' + size);
+        String name = icon.name() + '/' + size + '/' + tenths;
+        Entry found = entries.get(name);
         if (found == null) {
-            found = rasterise(icon, size);
-            entries.put(icon.name() + '/' + size, found);
+            found = rasterise(icon, size, tenths / 10f);
+            entries.put(name, found);
         }
         recentKeys[recentNext] = key;
         recentEntries[recentNext] = found;
@@ -133,7 +153,7 @@ final class Icons {
         return found;
     }
 
-    private Entry rasterise(Icon icon, int size) {
+    private Entry rasterise(Icon icon, int size, float strokePixels) {
         int[] at = atlas.allocate(size, size);
         if (at == null) {
             return new Entry(0f, 0f, 0f, 0f, size);
@@ -148,7 +168,7 @@ final class Icons {
         float scale = size / GRID;
         graphics.scale(scale, scale);
 
-        float stroke = Math.max(STROKE, MIN_STROKE_PIXELS / scale);
+        float stroke = Math.max(strokePixels, MIN_STROKE_PIXELS) / scale;
         graphics.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
         Pen pen = new Pen(stroke);
@@ -312,6 +332,10 @@ final class Icons {
             case CHEVRON_DOWN:
                 pen.line(5, 9, 12, 16);
                 pen.line(12, 16, 19, 9);
+                break;
+            case CHEVRON_LEFT:
+                pen.line(15, 5, 8, 12);
+                pen.line(8, 12, 15, 19);
                 break;
             case MOVE:
                 pen.line(12, 3, 12, 21);

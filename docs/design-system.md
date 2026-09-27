@@ -64,7 +64,7 @@ When a rebuilt screen no longer needs a legacy token, delete the token.
 
 ```html
 <div class="material-standard">…</div>
-<Glass level="dense" radius="xl" inset={4}>…</Glass>
+<div class="material-dense" style="--surface-radius: var(--radius-xl)">…</div>
 ```
 
 | Level | For | Tint | Blur | Rim | Shadow |
@@ -122,8 +122,8 @@ previous system.
 
 ## 6. Motion
 
-Quick, smooth, quiet. `press` 90, `hover` 160, `state` 180, `page` 200,
-`surface` 220, `exit` 150 ms; `backdrop` 420 ms for background crossfades only.
+Quick, smooth, quiet. `press` 90, `hover` 120, `state` 160, `page` 200,
+`surface` 180, `exit` 120 ms; `backdrop` 420 ms for background crossfades only.
 One entrance curve, `cubic-bezier(0.2, 0.8, 0.2, 1)`, identical in CSS
 (`--ease-standard`), Svelte (`EASE`, which now evaluates the bezier rather than
 approximating it) and Java (`Ease`). Nothing bounces or springs. The global
@@ -192,21 +192,47 @@ or darkening the page. Settings' category pane is the example.
 rebuilt sit in the same palette. The manifest's legacy values are untouched
 because the game's `Skin` still reads them.
 
+## 7c. Finishing rules
+
+The small things, shared by the launcher and the game so the two read as one
+product. Each has one implementation per side.
+
+| Element | Launcher | Game | Rule |
+| --- | --- | --- | --- |
+| Icons | `svg.lucide` rule in `theme.css`; `FathomIcon` for Fathom ids | `Icons.strokeUnits` | Lucide geometry only. Sizes 20 (navigation), 18 (standalone action), 16 (inline), 14/12 (status). Stroke fixed in screen units by size: 1.5 / 1.6 / 1.7 / 1.75. Call sites never set a stroke. |
+| Focus | `--focus-ring-width` + `--color-focus` | `Skin.FOCUS`, `Controls.focusRing` | 1.5px signal cyan, 2px outside the shape, keyboard focus only. |
+| Signal cyan | `--color-signal` | `Tokens.COLOR_SIGNAL` | Focus, live telemetry (the running-now dot, FPS dot, graphs) and HUD-editor guides/selection. Never "enabled", never a fill. |
+| Buttons | `Button` (`primary`, `normal`, `ghost`, `caution`) | `Controls.primary/secondary/ghost/danger` | Primary is the bright neutral fill with dark type, one per surface. No lift, no glow, no scale on hover. |
+| Switch | `Switch` | `Controls.toggle` | 38x22, 16 knob; off a faint track and grey knob, on a brighter track and near-white knob. 120ms. |
+| Slider | `input[type=range]` + `use:rangeFill` | `Controls.slider` | 4px translucent channel, brighter neutral fill, 14px thumb. Values beside it are Geist Mono, fixed width. |
+| Segmented | `Segmented` | `Controls.segmented*` | Light track; selection a denser pill with the strong rim. No shadow, no colour. |
+| Search | `SearchField` | `ModsSection.graphiteSearch` | Glyph in a 16px slot; clear button only while there is a value; Escape clears. |
+| Tooltip | `use:tooltip` | `Controls.tooltip` | Dense glass, 6px radius, rim only, 12px type. 400ms hover delay, immediate on keyboard focus, 120ms fade, no travel. Never the native `title`. |
+| Popover | `.ui-popover` | `Controls.drawList` | Dense glass, one `md` shadow. In: fade + 6px over 180ms. Out: fade over 120ms. |
+| Scrollbar | `::-webkit-scrollbar` | `Scroller.rail` | No track. 4px thumb inset 3px, 20% white, 32% under the pointer. Never changes width. |
+| Hairline | `--hairline` (one device pixel, set in `main.ts`) | `Graphite.hairline` | Only where structure needs it; never a gradient. |
+| Status | `Notice`, `Row` badges, `.status` dots | `Skin.GOOD/WARN/BAD` on marks only | A 6px dot or a 14-16px icon in the status colour beside neutral text. Panels are never washed green, amber or red. |
+| Empty | `EmptyState` | -- | Small icon in a faint circle, a short heading, one line, optionally one action. |
+| Loading | `Progress` (3px line; drifts when there is no fraction) | -- | No spinners, no fake percentages. The Play control reserves the line's space so nothing moves. |
+| Shell | `App.svelte` (Home included) | Hub header and rail | One header, account capsule and rail on every page, in the same place. Home drops only the crumb and the status line. |
+| Avatar | header capsule, account sheet | -- | Round everywhere, pixel-scaled at a whole multiple of the 8px face, rim drawn over the image. |
+| Presets | `Segmented` with the current preset | `Controls.segmentedNatural` + `SwitchBoard.matchingPreset` | The preset in effect is selected; "Custom" once a switch is changed by hand. |
+| Mono | `.mono` | `Graphite.DATA_*` | Geist Mono for measured values, build ids, hashes, host names, log lines and coordinates. Short versions in running chrome (the header, the status line) stay tabular Geist: in a monospace face "1.8.9" letter-spaces. |
+
 ## 7b. The brand
 
 The Surface wordmark, the offset ring and the Sounding Line are drawn from one
 construction in [`desktop/src/lib/brand/surface.ts`](../desktop/src/lib/brand/surface.ts),
 with their colours and construction numbers in the manifest (`system.brand`,
 emitted to CSS as `--brand-*`, to `brand.generated.ts`, and to Java as
-`FathomTheme.Tokens.BRAND_*`). The launcher renders them as components
-(`Wordmark`, `BrandRing`, `SoundingLine` in `lib/brand/`); the icon files are
+`FathomTheme.Tokens.BRAND_*`). In the launcher the header wordmark is
+`lib/graphite/GraphiteWordmark.svelte` and the loading mark is
+`lib/brand/SoundingLine.svelte`; the icon files are
 rendered from the same geometry by `assets/brand/build-brand.mjs`. See
 [`assets/brand/README.md`](../assets/brand/README.md) for the rules.
 
-- The header shows the wordmark at a 20px cap (the reduced tier). It reveals
-  once after the window appears: the lower band of each letter steps into its
-  whole-pixel displacement as an implied pane passes left to right, about a
-  second in all. Reduced motion: a 200ms fade.
+- The header shows the tracked FATHOM wordmark (`GraphiteWordmark`) at a 13px
+  cap, the same mark the game's Hub and title screen draw. It does not animate.
 - The Sounding Line is the loading symbol. Nothing in the brand spins.
 - Editing a brand colour means running `node assets/brand/build-brand.mjs` as
   well as the theme generator, so the icon files follow.
@@ -228,29 +254,52 @@ remaining legacy components that still declare their own `backdrop-filter`.
 The launcher uses real backdrop blur. The game must not copy that. Nothing in
 the in-game renderer reads the framebuffer, and HUD widgets are replayed from
 display lists. `FathomTheme.Tokens` therefore gives the game each level as its
-**no-blur** fill plus the three rim colours as separate ARGB values, which a
-plate can draw as spans. Full-screen menus may later add one blurred world
+**`tint-game`** fill plus the three rim colours as separate ARGB values, which a
+plate can draw as spans. `tint-game` is not the launcher's `tint-noblur`: that
+is the launcher's blur-off mode, over a scrimmed photograph, and dense. In game,
+clear is the launcher's own pale ivory veil (for controls on the photograph),
+light (24%) and standard (36%) are light warm deepenings, and only dense (74%)
+is dense. Unblurred, a pale veil behind ivory type lowers its contrast, so a
+group that carries text deepens a little instead of lightening. The scrims are
+`system.game`: over the world (38%), over the photograph (24%), under a modal
+(34%). Full-screen menus may later add one blurred world
 snapshot, taken once when the screen opens. HUD modules never get a live blur.
 
 **In game today** (the main menu and the Hub):
 
 | Launcher | Game |
 | --- | --- |
-| `.material-*` with blur | `Skin.MATERIAL_*`: the no-blur fill, `VisualEffects.glass` draws fill + rim ring + a hairline highlight across the top's straight run |
+| `.material-*` with blur | `Skin.MATERIAL_*`: the `tint-game` fill, `VisualEffects.glass` draws fill + rim ring + a hairline highlight across the top's straight run |
 | `--control-*` fills | `Tokens.CONTROL_*` (generated), read through `Skin.SURFACE`, `ELEVATED`, `RECESSED`, `FILL_*` |
 | `--color-text*` | `Skin.TEXT`, `TEXT_MUTED` (champagne), `TEXT_FAINT`, `TEXT_DISABLED` |
 | Primary button | `Skin.PROMINENT`: the dark dense fill, ivory type, never coloured |
 | Selection / on | a denser fill and `Skin.EDGE_ELEVATED`; switches and sliders in champagne with an ivory knob |
 | The old red | `Skin.ENERGY*`: ivory luminance only. There is no hue but the status tones |
-| `Wordmark.svelte` | `BrandMark.wordmark`: the outlines are `generated/BrandGeometry.java`, emitted from `surface.ts` by the theme generator; `GlRenderer` rasterises them once per size into their own sheet with the same pixel snapping and tiers, plus the mark shadow |
+| `GraphiteWordmark.svelte` | `Graphite.wordmark` (and `BrandMark.wordmark` for the Surface mark): the outlines are `generated/BrandGeometry.java`, emitted from `surface.ts` by the theme generator; `GlRenderer` rasterises them once per size into their own sheet with the same pixel snapping and tiers, plus the mark shadow |
 | `SoundingLine.svelte` | `BrandMark.soundingLine`: the small mark and the loading glyph |
-| `Background.svelte` | `MenuScenes` + `MenuPoster`: the approved set (Golden Hour), the launcher's warm scrim, the warm field as fallback |
+| `Background.svelte` | `MenuScenes` + `MenuPoster`: the approved set (Golden Hour), the launcher's warm scrim, the warm field only when the picture cannot load. The Hub opened from the title screen draws the same photograph behind itself (`FathomMenuScreen.drawBackdrop`) |
 
-The Hub is one pane of standard glass over a warm scrim; its header and rail
-are regions of it, not panes on top of it. Only transient surfaces (popovers,
-drawers, the menu's account, credits and picker panels) are dense glass. The
-offset ring is not drawn in game: at in-game sizes it is too coarse, and the
-Sounding Line is the small form of the brand.
+The Hub has no window. The background -- the world under the light scrim, or
+the photograph -- is the page. The header is loose capsules; navigation is two
+floating groups of light glass (the current section is the ivory capsule);
+the content area is open, and a page's lists and settings are light-glass
+groups whose rows are not cards. Material use:
+
+| Material | In game |
+| --- | --- |
+| Clear | Controls on the photograph (the menu's account capsule) |
+| Light | Navigation groups, list and settings groups, cards, the menu dock |
+| Standard | The selected card, pressed states |
+| Dense | Popovers, dropdowns, tooltips, the menu's account, credits and picker panels |
+
+Radii follow the launcher: controls are pills, cards and groups
+`RADIUS_XL`, major groups `RADIUS_2XL`, popovers `RADIUS_LG`, and rows inside a
+group are concentric with it (its radius less the inset). Control heights are
+the launcher's 28/34/40. The wordmark is sized by device pixels so it keeps the
+Surface: the Hub's header never falls under the 20px reduced tier, and the
+menu's hero wordmark is drawn at the 48px full tier or above. The offset ring
+is not drawn in game: at in-game sizes it is too coarse, and the Sounding Line
+is the small form of the brand.
 
 ## 10. What a component may not do
 

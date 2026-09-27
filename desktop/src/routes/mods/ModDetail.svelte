@@ -38,6 +38,10 @@
   export let onOpenProject: (slug: string) => void = () => {};
   export let onOpenPage: (page: string) => void = () => {};
 
+  /* Facts that identify a build are set in Geist Mono; names and sentences
+     are not. */
+  const MONO = new Set(['Version', 'Size', 'File', 'Minecraft']);
+
   $: title = mod?.name ?? component?.name ?? '';
   $: summary = mod ? mod.version : (component?.version ?? component?.state ?? '');
   $: about = mod?.summary || component?.summary || '';
@@ -64,11 +68,12 @@
 <Page {title} {summary} wide>
   <svelte:fragment slot="lead">
     <button class="ui-capsule small material-clear material-interactive" on:click={onBack}>
-      <ArrowLeft size={14} strokeWidth={2.2} />
+      <ArrowLeft size={14} />
       Mods
     </button>
   </svelte:fragment>
 
+  <div class="frame">
   <div class="layout">
     <div class="main">
       {#if mod}
@@ -104,7 +109,7 @@
             <svelte:fragment slot="control">
               {#if mod.slug}
                 <Button onClick={() => mod?.slug && onOpenProject(mod.slug)}>
-                  <ExternalLink size={13} strokeWidth={2} />
+                  <ExternalLink size={14} />
                   Project page
                 </Button>
               {/if}
@@ -121,13 +126,13 @@
             <svelte:fragment slot="control">
               {#if component.installable}
                 <Button variant="primary" disabled={busy} onClick={onInstall}>
-                  <Download size={13} strokeWidth={2} />
+                  <Download size={14} />
                   Install
                 </Button>
               {/if}
               {#if component.page}
                 <Button onClick={() => component?.page && onOpenPage(component.page)}>
-                  <ExternalLink size={13} strokeWidth={2} />
+                  <ExternalLink size={14} />
                   Page
                 </Button>
               {/if}
@@ -159,7 +164,7 @@
              from the settings above rather than sitting in a row of them. -->
         <div class="remove">
           <Button variant="caution" disabled={busy} onClick={onRemove}>
-            <Trash2 size={13} strokeWidth={2} />
+            <Trash2 size={14} />
             Remove from {profileName}
           </Button>
         </div>
@@ -172,20 +177,25 @@
           {#each facts as [term, value]}
             <div>
               <dt>{term}</dt>
-              <dd class="tnum">{value}</dd>
+              <dd class:mono={MONO.has(term)}>{value}</dd>
             </div>
           {/each}
         </dl>
       </Section>
     </aside>
   </div>
+  </div>
 </Page>
 
 <style>
   /* Two columns when there is room for both to be readable, one otherwise.
-     Measured on the page's own width, not the window's. */
-  .layout {
+     Measured on the page's own width, not the window's: the frame is the
+     container, because an element cannot answer a query about itself. */
+  .frame {
     container-type: inline-size;
+  }
+
+  .layout {
     display: grid;
     grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr);
     gap: var(--layout-section-gap) var(--space-6);
@@ -257,5 +267,9 @@
     font-size: var(--type-secondary-size);
     color: var(--color-text);
     overflow-wrap: anywhere;
+  }
+
+  dd.mono {
+    font-size: var(--type-caption-size);
   }
 </style>

@@ -14,9 +14,6 @@
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import {
-    CircleCheck,
-    TriangleAlert,
-    LoaderCircle,
     FileSearch,
     Coffee,
     Eraser,
@@ -28,11 +25,12 @@
   import Section from '../lib/ui/Section.svelte';
   import Row from '../lib/ui/Row.svelte';
   import Button from '../lib/ui/Button.svelte';
+  import Notice from '../lib/ui/Notice.svelte';
   import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
   import { recoveryView, runRecovery, type ActionOutcome, type RecoveryView } from '../lib/api';
 
   let view: RecoveryView | null = null;
-  /** Which action is running, so only that row shows a spinner. */
+  /** Which action is running, so only that row says it is working. */
   let running: string | null = null;
   let outcomes: Record<string, ActionOutcome> = {};
 
@@ -72,18 +70,12 @@
 
 {#if view}
   <Page title="Recovery" summary={view.healthy ? 'No problems found' : 'Needs attention'}>
-    <div class="state glass" class:good={view.healthy} in:fade={{ duration: NORMAL, easing: EASE }}>
-      <span class="state-icon">
-        {#if view.healthy}
-          <CircleCheck size={17} strokeWidth={2} />
-        {:else}
-          <TriangleAlert size={17} strokeWidth={2} />
-        {/if}
-      </span>
-      <span>{view.summary}</span>
+    <div in:fade={{ duration: NORMAL, easing: EASE }}>
+      <Notice tone={view.healthy ? 'success' : 'warning'}>{view.summary}</Notice>
     </div>
 
-    <Section label="Things you can do">
+    {#if view.actions.length}
+    <Section label="Things you can do" material>
       {#each view.actions as action, index (action.id)}
         <div in:fly={{ y: 6, duration: NORMAL, delay: index * STAGGER, easing: EASE }}>
           <Row
@@ -96,7 +88,7 @@
             compact
           >
             <svelte:fragment slot="icon">
-              <svelte:component this={ICONS[action.id] ?? FileSearch} size={15} strokeWidth={1.9} />
+              <svelte:component this={ICONS[action.id] ?? FileSearch} size={16} />
             </svelte:fragment>
 
             <svelte:fragment slot="control">
@@ -111,60 +103,36 @@
                 title={action.unavailable ?? ''}
                 onClick={() => act(action.id)}
               >
-                {#if running === action.id}
-                  <span class="spin"><LoaderCircle size={13} strokeWidth={2.4} /></span>
-                {/if}
-                {action.verb}
+                {running === action.id ? 'Working' : action.verb}
               </Button>
             </svelte:fragment>
           </Row>
         </div>
       {/each}
     </Section>
+    {/if}
   </Page>
 {/if}
 
 <style>
-  .state {
-    display: flex;
-    align-items: center;
-    gap: var(--s-3);
-    padding: 13px 15px;
-    font-size: var(--t-body-lg);
-    color: var(--warn);
-    /* Overrides the neutral glass edge with a tinted one, so the whole surface
-       carries the state rather than a coloured dot on a grey panel. */
-    border-color: rgba(224, 174, 87, 0.3);
-    background: rgba(224, 174, 87, 0.09);
-  }
-
-  .state.good {
-    color: var(--good);
-    border-color: rgba(79, 201, 138, 0.26);
-    background: rgba(79, 201, 138, 0.08);
-  }
-
-  .state-icon {
-    display: grid;
-    place-items: center;
-  }
-
+  /* What the action did: a small success dot and a neutral sentence. */
   .done {
-    font-size: var(--t-body);
-    color: var(--good);
-    text-align: right;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
     max-width: 230px;
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
+    text-align: right;
   }
 
-  .spin {
-    display: grid;
-    place-items: center;
-    animation: spin 800ms linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+  .done::before {
+    content: '';
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background-color: var(--color-success-text);
+    transform: translateY(-1px);
   }
 </style>

@@ -33,6 +33,12 @@ public final class HudCapture {
     /** Read once: this runs every HUD frame, and the answer is fixed at launch. */
     private static final boolean REQUESTED = "hud".equalsIgnoreCase(System.getProperty("fathom.captureUi", ""));
 
+    /**
+     * A Hub section to open over the settled world instead of capturing the
+     * HUD ({@code -PcaptureHubWorld=Mods}); the Hub then captures itself.
+     */
+    private static final String HUB_SECTION = System.getProperty("fathom.captureHubWorld", "").trim();
+
     /** Worn armour, a held item and two effects, so the shot has something to show. */
     private static void dress(MinecraftClient client) {
         net.minecraft.entity.player.ClientPlayerEntity player = client.player;
@@ -73,8 +79,17 @@ public final class HudCapture {
     private static final boolean DRESS = Boolean.getBoolean("fathom.captureHudItems")
             && net.fabricmc.loader.api.FabricLoader.getInstance().isDevelopmentEnvironment();
 
+    /** Set once a backdrop-source capture was requested; the client stops after it. */
+    private static final boolean[] STOP_AFTER_SOURCE = {false};
+
     /** Called once per drawn HUD frame. */
     public static void frame(MinecraftClient client) {
+        if (STOP_AFTER_SOURCE[0] && !net.fathom.optimizations.fabric.gfx.WorldBackdrop.pending()) {
+            STOP_AFTER_SOURCE[0] = false;
+            net.fathom.optimizations.fabric.gfx.WorldBackdrop.release();
+            client.scheduleStop();
+            return;
+        }
         if (!REQUESTED || captured || client == null || client.player == null) {
             return;
         }
@@ -93,6 +108,19 @@ public final class HudCapture {
             return;
         }
         captured = true;
+        if (Boolean.getBoolean("fathom.captureBackdropSource")) {
+            // The next frame's world, before any HUD, saved unprocessed as a
+            // curated-capture source; then stop.
+            net.fathom.optimizations.fabric.gfx.WorldBackdrop.request();
+            STOP_AFTER_SOURCE[0] = true;
+            return;
+        }
+        if (!HUB_SECTION.isEmpty()) {
+            net.fathom.optimizations.core.instrument.Probe.end();
+            net.fathom.optimizations.fabric.gfx.FathomNavigation.openHub(client,
+                    net.fathom.optimizations.fabric.Runtime.hud());
+            return;
+        }
         net.fathom.optimizations.core.instrument.Probe.end();
         WidgetProfile.report();
         String override = System.getProperty("fathom.hudFont", "").trim();

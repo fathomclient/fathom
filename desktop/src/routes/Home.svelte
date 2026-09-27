@@ -1,306 +1,316 @@
-<!--
-  Home.
-
-  A cinematic launch canvas, not a page. The footage is the hero and the entire
-  centre is one composition:
-
-              SELECTED PROFILE
-              Minecraft 1.8.9
-           Legacy Fabric · Balanced
-                  PLAY
-               small status
-
-  No bordered card, no three loose facts under the button, no explanatory
-  paragraph. Files, Java and heap are real information and they belong in
-  Recovery and Performance, where somebody goes to look for them.
-
-  THE LAUNCH CONTROL
-
-  The most important object on the screen, and still made of the same glass as
-  everything else. Its importance comes from scale, position, type and density,
-  not from a colour: when launch is possible it is the densest glass in the
-  window with a brighter rim and full ivory type; when it is not, it thins to
-  standard glass and says what is missing. Same object, two states, never two
-  different controls, and never a solid gold slab.
-
-  Implementation detail stays out of the composition entirely. "This build has
-  no Microsoft application id" is true, useful to exactly one person, and
-  meaningless to everyone else standing in front of a launch screen — so the
-  Rust side routes it to `developerNote` and it appears behind a small
-  affordance.
--->
 <script lang="ts">
-  import { fly, fade } from 'svelte/transition';
-  import { Info, Play, X } from '@lucide/svelte';
+  import { fade, fly } from 'svelte/transition';
+  import { CircleAlert } from '@lucide/svelte';
   import { NO_LAUNCH, type HomeView, type LaunchProgress } from '../lib/api';
-  import ProfileSwitcher from '../lib/ui/ProfileSwitcher.svelte';
+  import GraphiteProfileSwitcher from '../lib/graphite/GraphiteProfileSwitcher.svelte';
   import Progress from '../lib/ui/Progress.svelte';
-  import Notice from '../lib/ui/Notice.svelte';
-  import { tooltip } from '../lib/tooltip';
-  import FathomProfilePicker from '../lib/ui/FathomProfilePicker.svelte';
-  import { EASE, MOTION_HOVER, MOTION_PAGE } from '../lib/motion';
+  import { EASE, MOTION_EXIT, MOTION_PAGE, MOTION_HOVER } from '../lib/motion';
 
   export let view: HomeView;
   export let onAction: (command: string) => void;
-  /** The launch in flight. `NO_LAUNCH` when there is not one. */
   export let launch: LaunchProgress = NO_LAUNCH;
   export let onCancel: () => void = () => {};
   export let onDismiss: () => void = () => {};
   export let onProfileChanged: () => void = () => {};
-  /** Bumped by the shell when the profile list changed. */
   export let epoch = 0;
-
-  let noteOpen = false;
 
   $: profile = view.profile;
   $: action = view.action;
-
-  /* The control has three modes, not three controls: the launch button, the
-     same object working, and the same object after it settled. Which is why
-     every one of these is a boolean over one element rather than an {#if}
-     chain that swaps the button out and takes its transition with it. */
   $: busy = launch.active;
-  $: settled =
-    launch.phase === 'failed' || launch.phase === 'cancelled' || launch.phase === 'finished';
-  $: label = busy ? launch.headline : action.label;
-  $: line = busy || settled ? launch.detail : action.detail;
-  $: bad = settled ? launch.failure !== null : !action.ready;
-  /* Type first: "Fathom" answers more of a reader's questions than the loader
-     name does, and a Vanilla profile saying so is the point of the setting.
-
-     Then de-duplicated, because two of these fields can legitimately carry the
-     same word and printing it twice reads as a rendering fault rather than as
-     two facts. A Vanilla profile said "Vanilla · Vanilla"; a profile with no
-     preset said "Custom · Vanilla · Custom". */
-  $: facts = profile
-    ? [
-        profile.kindLabel,
-        profile.loader,
-        profile.preset,
-        `${profile.enabledMods} ${profile.enabledMods === 1 ? 'mod' : 'mods'}`,
-      ].filter((fact, index, all) => all.indexOf(fact) === index)
-    : [];
+  $: settled = ['failed', 'cancelled', 'finished'].includes(launch.phase);
+  $: title = profile
+    ? profile.nameIsRedundant
+      ? `Minecraft ${profile.version}`
+      : profile.name
+    : 'No profile selected';
+  $: build = profile
+    ? `${profile.loader.toLowerCase()} · ${profile.enabledMods} ${profile.enabledMods === 1 ? 'mod' : 'mods'}`
+    : 'Choose a profile to begin';
+  /* The backend names its states in capitals ("SIGN IN REQUIRED"); every label
+     in the interface is sentence case. */
+  const sentence = (value: string) =>
+    value ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : value;
+  $: label = busy ? 'Launching' : action.ready ? 'Play' : sentence(action.label);
+  $: disabled = busy || !action.command;
+  /* A failed launch is the one settled state worth a status mark; a cancelled
+     or finished one just reports what happened. */
+  $: failed = launch.phase === 'failed';
 </script>
 
-<div class="stage">
-  {#if profile}
-    <div class="composition">
-      <!-- The eyebrow already said "Selected profile", so making it the
-           control costs no space and removes a trip to another screen. -->
-      <div class="switcher" in:fly={{ y: 10, duration: MOTION_PAGE, easing: EASE }}>
-        <ProfileSwitcher size="hero" align="down" {epoch} onChanged={onProfileChanged} />
-        <!-- The loadout inside that installation. A separate control because it is
-             a separate thing: the installation is how Minecraft starts, the
-             profile is which modules and HUD it starts with. -->
-        <FathomProfilePicker align="down" />
-      </div>
+<section class="home-stage">
+  <div class="launch-composition" in:fly={{ y: 8, duration: MOTION_PAGE, easing: EASE }}>
+    <div class="heading">
+      <span class="eyebrow">CURRENT INSTALLATION</span>
+      <h1>{title}</h1>
+      <p class="build">
+        {#if profile}<span class="tnum">{profile.version}</span><span class="sep">·</span>{/if}{build}
+      </p>
+    </div>
 
-      <h1 class="hero on-footage" in:fly={{ y: 14, duration: MOTION_PAGE, delay: 40, easing: EASE }}>
-        {profile.nameIsRedundant ? `Minecraft ${profile.version}` : profile.name}
-      </h1>
-
-      <div class="facts on-footage" in:fly={{ y: 12, duration: MOTION_PAGE, delay: 80, easing: EASE }}>
-        {#each facts as fact, index}
-          {#if index > 0}<span class="dot">·</span>{/if}
-          <span>{fact}</span>
-        {/each}
-      </div>
-
-      <div class="launch-wrap" in:fly={{ y: 16, duration: MOTION_PAGE, delay: 120, easing: EASE }}>
+    <div class="actions">
+      <div class="primary-wrap">
+        <!-- Three looks for three situations: ready (the bright primary),
+             something to do first such as signing in (glass, full-strength
+             type -- it is still a live button), and working (glass, the label
+             says so, the line below shows how far). -->
         <button
-          class="launch material-interactive"
-          class:material-dense={(action.ready && !busy) || busy}
-          class:material-standard={!action.ready && !busy}
+          class="primary"
           class:ready={action.ready && !busy}
+          class:pending={!action.ready && !busy && !!action.command}
           class:busy
-          disabled={busy || !action.command}
+          {disabled}
           on:click={() => action.command && onAction(action.command)}
         >
-          {#if action.ready && !busy}
-            <Play size={22} strokeWidth={2.6} fill="currentColor" />
-          {/if}
-          <span class="launch-label">{label}</span>
-
-          {#if busy}
-            <!-- Sits inside the slab rather than under it: the bar is the
-                 button filling up, not a second object that appeared. An
-                 unmeasurable stage drifts instead of showing a number, because
-                 a bar parked at a made-up percentage is worse than no bar. -->
-            <Progress variant="inset" value={launch.fraction} label={launch.headline || 'Launching'} />
-          {/if}
+          {label}
         </button>
-      </div>
-
-      <div
-        class="status on-footage"
-        class:warn={bad}
-        in:fly={{ y: 10, duration: MOTION_PAGE, delay: 160, easing: EASE }}
-      >
-        <span>{line}</span>
-
-        {#if launch.cancellable}
-          <button class="ui-capsule small material-clear material-interactive" on:click|stopPropagation={onCancel}>Stop</button>
-        {/if}
-
-        {#if settled}
-          <button class="ui-icon-button small" aria-label="Dismiss" use:tooltip={'Dismiss'} on:click|stopPropagation={onDismiss}>
-            <X size={13} strokeWidth={2.2} />
-          </button>
-        {/if}
-
-        {#if action.developerNote && !busy && !settled}
-          <button
-            class="ui-icon-button small"
-            aria-label="Developer detail"
-            use:tooltip={'Developer detail'}
-            on:click|stopPropagation={() => (noteOpen = !noteOpen)}
-          >
-            <Info size={13} strokeWidth={2.2} />
-          </button>
-        {/if}
-      </div>
-
-      {#if noteOpen && action.developerNote}
-        <div class="note" transition:fade={{ duration: MOTION_HOVER }}>
-          <Notice floating>{action.developerNote}</Notice>
+        <!-- Reserved space, so the line appearing does not move anything. A
+             launch with no measurable fraction drifts rather than parking at a
+             made-up percentage. -->
+        <div class="progress">
+          {#if busy}
+            <div transition:fade={{ duration: MOTION_HOVER }}>
+              <Progress value={launch.fraction} label={launch.headline || 'Launching'} />
+            </div>
+          {/if}
         </div>
-      {/if}
+      </div>
+
+      <GraphiteProfileSwitcher {epoch} onChanged={onProfileChanged} />
     </div>
-  {/if}
-</div>
+
+    <div class="installation" aria-label="Installation summary">
+      <div>
+        <span>Client</span>
+        <strong>{profile?.kindLabel ?? 'Fathom'}</strong>
+      </div>
+      <div>
+        <span>Preset</span>
+        <strong>{profile?.preset ?? '—'}</strong>
+      </div>
+      <div>
+        <span>Modules</span>
+        <strong>{profile ? profile.enabledMods : '—'} active</strong>
+      </div>
+    </div>
+
+    {#if settled && launch.detail}
+      <div class="result" class:failed in:fade={{ duration: MOTION_HOVER }} out:fade={{ duration: MOTION_EXIT }}>
+        {#if failed}<span class="mark"><CircleAlert size={14} /></span>{/if}
+        <span class="text">{launch.detail}</span>
+        <button class="ui-capsule small ghost" on:click={onDismiss}>Dismiss</button>
+      </div>
+    {:else if busy && launch.detail}
+      <div class="result" in:fade={{ duration: MOTION_HOVER }} out:fade={{ duration: MOTION_EXIT }}>
+        <span class="text">{launch.detail}</span>
+        {#if launch.cancellable}
+          <button class="ui-capsule small ghost" on:click={onCancel}>Stop</button>
+        {/if}
+      </div>
+    {/if}
+  </div>
+</section>
 
 <style>
-  /* The composition sits in the lower part of the frame, over the darker
-     water, and leaves the sky and the horizon to the photograph. Placement is
-     part of the hierarchy: the eye reads the scene first and lands on Play. */
-  .stage {
+  .home-stage {
     position: relative;
-    display: grid;
-    place-items: end center;
-    height: 100%;
     width: 100%;
-    padding: var(--space-6) var(--layout-page-pad-x) clamp(var(--space-8), 11vh, var(--space-20));
-    overflow-y: auto;
+    height: 100%;
   }
 
-  .composition {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    max-width: 100%;
-    text-align: center;
-  }
-
-  /* What will launch, at title scale rather than display scale: the name is
-     context for the Play control, not a poster competing with it. */
-  .hero {
-    margin: var(--space-4) 0 0;
-    font-size: var(--type-title-size);
-    font-weight: var(--type-title-weight);
-    letter-spacing: var(--type-title-tracking);
-    line-height: var(--type-title-leading);
-    color: var(--color-text);
-    overflow-wrap: anywhere;
-  }
-
-  .facts {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    gap: var(--space-2);
-    margin-top: var(--space-2);
-    font-size: var(--type-body-size);
-    font-weight: var(--type-button-weight);
-    color: var(--color-text-secondary);
-  }
-
-  .dot {
-    color: var(--color-text-tertiary);
-  }
-
-  /* -- the launch control ------------------------------------------------- */
-  .launch-wrap {
-    margin-top: clamp(var(--space-6), 3.6vh, var(--space-10));
-  }
-
-  .launch {
-    --surface-radius: var(--radius-2xl);
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    min-width: clamp(300px, 24vw, 400px);
-    max-width: min(560px, 80vw);
-    min-height: clamp(60px, 4.8vw, 72px);
-    padding: 0 clamp(var(--space-10), 3vw, var(--space-12));
-    font-size: clamp(17px, 1.3vw, 21px);
-    font-weight: var(--type-title-weight);
-    letter-spacing: 0.04em;
-    color: var(--color-text-secondary);
-  }
-
-  /* Ready: the densest glass in the window, with a brighter lit edge, a
-     deeper shadow and full ivory type. Restrained luminance, not colour. */
-  .launch.ready {
-    color: var(--color-text);
+  /* Inside the shell's content area, which starts after the 76px rail
+     column: 28px in puts it where it has always been, 104px from the edge. */
+  .launch-composition {
+    position: absolute;
+    bottom: 40px;
+    left: 28px;
+    width: min(440px, calc(100vw - 160px));
+    padding: 24px;
+    border-radius: var(--g-r-panel);
+    background: var(--g-mat-standard);
     box-shadow:
-      var(--control-rim-strong),
-      inset 0 0 0 100vmax var(--mat-veil, transparent),
-      var(--shadow-lg);
+      inset 0 0 0 1px var(--g-mat-standard-rim),
+      var(--g-elevation);
+    -webkit-backdrop-filter: blur(var(--g-mat-standard-blur)) saturate(1.12);
+    backdrop-filter: blur(var(--g-mat-standard-blur)) saturate(1.12);
   }
 
-  /* Not ready: thinner glass, and the label is the thing to read, so it stays
-     legible rather than greying out. */
-  .launch:disabled {
+  .heading {
+    margin-bottom: 18px;
+  }
+
+  .eyebrow {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--g-text-secondary);
+    font: var(--g-type-caption-weight) var(--g-type-caption-size) / var(--g-type-caption-line) var(--g-type-caption-family);
+    letter-spacing: var(--g-type-caption-tracking);
+  }
+
+  h1 {
+    margin: 0;
+    color: var(--g-text-primary);
+    font: var(--g-type-title-weight) var(--g-type-title-size) / var(--g-type-title-line) var(--g-type-title-family);
+    letter-spacing: var(--g-type-title-tracking);
+    text-shadow: var(--backdrop-text-shadow-glass);
+  }
+
+  .build {
+    margin: 4px 0 0;
+    color: var(--g-text-secondary);
+    font: var(--g-type-small-weight) var(--g-type-small-size) / var(--g-type-small-line) var(--g-type-small-family);
+    text-shadow: var(--backdrop-text-shadow-glass);
+  }
+
+  .build .sep {
+    margin: 0 6px;
+    color: var(--g-text-tertiary);
+  }
+
+  .actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .primary-wrap {
+    position: relative;
+    width: 168px;
+  }
+
+  .primary {
+    width: 168px;
+    height: 44px;
+    border-radius: 22px;
+    background: var(--g-mat-standard);
+    color: var(--g-text-disabled);
+    font: var(--g-type-primary-weight) var(--g-type-primary-size) / var(--g-type-primary-line) var(--g-type-primary-family);
+    box-shadow: inset 0 0 0 1px var(--g-mat-standard-rim);
+    transition:
+      color var(--g-motion-fast) var(--g-ease),
+      background-color var(--g-motion-fast) var(--g-ease),
+      box-shadow var(--g-motion-fast) var(--g-ease);
+  }
+
+  .primary:disabled {
     cursor: default;
-    color: var(--color-text-secondary);
-    transform: none;
   }
 
-  /* Working. Not clickable, but not dimmed either: the label is live
-     information about what is happening. Source order after `:disabled` on
-     purpose -- the two have equal specificity. */
-  .launch.busy {
-    color: var(--color-text);
+  .primary.ready {
+    background: var(--g-action);
+    color: var(--g-action-text);
+    box-shadow: none;
+  }
+
+  .primary.ready:hover {
+    background: var(--g-action-hover);
+  }
+
+  .primary.ready:active {
+    background: var(--g-action-pressed);
+  }
+
+  .primary.pending {
+    color: var(--g-text-primary);
+  }
+
+  .primary.pending:hover {
+    background: var(--g-mat-dense);
+    box-shadow: inset 0 0 0 1px var(--g-rim-selected);
+  }
+
+  .primary.pending:active {
+    background: var(--g-mat-dense);
+    box-shadow: inset 0 0 0 1px var(--g-rim-hover);
+  }
+
+  .primary.busy {
+    color: var(--g-text-secondary);
     cursor: progress;
   }
 
-  .launch-label {
+  .installation {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: var(--hairline) solid var(--g-hairline);
+  }
+
+  .installation div {
+    min-width: 0;
+    padding: 0 12px;
+    border-left: var(--hairline) solid var(--g-hairline);
+  }
+
+  .installation div:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .installation span,
+  .installation strong {
     display: block;
-    line-height: 1.1;
-    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .status {
+  .installation span {
+    margin-bottom: 3px;
+    color: var(--g-text-tertiary);
+    font: var(--g-type-caption-weight) var(--g-type-caption-size) / var(--g-type-caption-line) var(--g-type-caption-family);
+  }
+
+  .installation strong {
+    color: var(--g-text-primary);
+    font: var(--g-type-ui-weight) var(--g-type-ui-size) / var(--g-type-ui-line) var(--g-type-ui-family);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .primary:focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-focus);
+    outline-offset: 3px;
+  }
+
+  .progress {
+    height: 10px;
+    padding: 6px 16px 0;
+  }
+
+  .result {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
     align-items: center;
-    gap: var(--space-2);
-    max-width: min(640px, 90vw);
-    margin-top: clamp(var(--space-3), 1.8vh, var(--space-6));
-    font-size: var(--type-body-size);
-    color: var(--color-text-secondary);
+    gap: var(--g-s-2);
+    min-height: 28px;
+    margin-top: var(--g-s-2);
+    color: var(--g-text-secondary);
+    font: var(--g-type-small-weight) var(--g-type-small-size) / var(--g-type-small-line) var(--g-type-small-family);
   }
 
-  .status.warn {
-    color: var(--color-warning-text);
+  .result.failed {
+    color: var(--g-text-primary);
   }
 
-  .note {
-    max-width: 460px;
-    margin-top: var(--space-4);
-    text-align: left;
+  .result .mark {
+    display: grid;
+    place-items: center;
+    color: var(--color-danger-text);
   }
 
-  /* Installation and profile side by side, wrapping on a narrow window. */
-  .switcher {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-2);
+  .result .text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .result .ui-capsule {
+    flex-shrink: 0;
+    margin-right: -12px;
+  }
+
+  @media (max-width: 760px) {
+    .launch-composition {
+      left: 20px;
+      width: min(420px, calc(100vw - 128px));
+    }
   }
 </style>

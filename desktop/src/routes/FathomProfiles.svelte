@@ -142,11 +142,11 @@
       disabled={busy}
       onClick={() => (importing = !importing)}
     >
-      <Upload size={14} strokeWidth={2.2} />
+      <Upload size={14} />
       Import
     </Button>
     <Button variant="primary" disabled={busy} onClick={() => void run(() => createFathomProfile('New profile'))}>
-      <Plus size={14} strokeWidth={2.4} />
+      <Plus size={14} />
       New profile
     </Button>
   </svelte:fragment>
@@ -231,13 +231,13 @@
         {:else}
           <div class="ui-item-controls">
             <button class="ui-icon-button small" aria-label="Rename {profile.name}" use:tooltip={'Rename'} on:click={() => startRename(profile)}>
-              <Pencil size={14} strokeWidth={2} />
+              <Pencil size={14} />
             </button>
             <button class="ui-icon-button small" aria-label="Duplicate {profile.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => void run(() => duplicateFathomProfile(profile.id))}>
-              <Copy size={14} strokeWidth={2} />
+              <Copy size={14} />
             </button>
             <button class="ui-icon-button small" aria-label="Copy {profile.name} as text" use:tooltip={'Copy as text'} on:click={() => void copyExport(profile)}>
-              <Download size={14} strokeWidth={2} />
+              <Download size={14} />
             </button>
             <button
               class="ui-icon-button small danger"
@@ -246,7 +246,7 @@
               disabled={lastOne}
               on:click={() => (confirmingDelete = profile.id)}
             >
-              <Trash2 size={14} strokeWidth={2} />
+              <Trash2 size={14} />
             </button>
           </div>
         {/if}
@@ -297,13 +297,13 @@
           {:else}
             <div class="ui-item-controls">
               <button class="ui-icon-button small" aria-label="Rename {profile.name}" use:tooltip={'Rename'} on:click={() => startRename(profile)}>
-                <Pencil size={14} strokeWidth={2} />
+                <Pencil size={14} />
               </button>
               <button class="ui-icon-button small" aria-label="Duplicate {profile.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => void run(() => duplicateFathomProfile(profile.id))}>
-                <Copy size={14} strokeWidth={2} />
+                <Copy size={14} />
               </button>
               <button class="ui-icon-button small" aria-label="Copy {profile.name} as text" use:tooltip={'Copy as text'} on:click={() => void copyExport(profile)}>
-                <Download size={14} strokeWidth={2} />
+                <Download size={14} />
               </button>
               <button
                 class="ui-icon-button small danger"
@@ -312,7 +312,7 @@
                 disabled={lastOne}
                 on:click={() => (confirmingDelete = profile.id)}
               >
-                <Trash2 size={14} strokeWidth={2} />
+                <Trash2 size={14} />
               </button>
               <span class="use">
                 <Button

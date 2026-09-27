@@ -60,9 +60,12 @@ public final class FathomSettingRows {
         hovered = enabled && hovered;
         float response = controls.towards(id + "#row", hovered, net.fathom.optimizations.core.ui.anim.Timing.HOVER_IN);
         if (response > 0.001f) {
-            ui.rounded(area.x + Skin.S1, area.y + Skin.S1,
-                    area.right() - Skin.S1, area.bottom() - Skin.S1,
-                    Skin.R_SMALL, Skin.scaleAlpha(Skin.SURFACE_HOVER, response * 0.52f));
+            // Concentric with the group: its radius, less the inset.
+            Rect wash = Rect.of(area.x + Skin.S1, area.y + Skin.S1,
+                    area.right() - Skin.S1, area.bottom() - Skin.S1);
+            ui.rounded(wash.x, wash.y, wash.right(), wash.bottom(),
+                    Skin.radius(Skin.R_CARD - Skin.S1, wash),
+                    Skin.scaleAlpha(Skin.FILL_HOVER, response));
         }
 
         float controlX = area.right() - Skin.CARD_PADDING - controlWidth;

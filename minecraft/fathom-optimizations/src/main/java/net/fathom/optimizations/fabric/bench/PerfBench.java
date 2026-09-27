@@ -28,7 +28,7 @@ import net.fathom.optimizations.fabric.hud.HudEditorScreen;
  *
  * <p>Started with {@code gradle runClient -Pnanovg -PperfBench=world} (gameplay
  * scenarios in the development save) or {@code -PperfBench=soak} (long idle runs
- * of the main menu, Hub, settings drawer and HUD editor, to catch frame-rate
+ * of the main menu, Hub, full-page module settings and HUD editor, to catch frame-rate
  * degradation and memory growth). Absent the property this class does nothing:
  * {@link #ACTIVE} is a constant and the frame hook's call folds away.
  *
@@ -117,11 +117,12 @@ public final class PerfBench {
     private static long measureStartNanos;
 
     private enum Scenario {
-        STILL("a-still", "standing still, horizon"),
+        HUD_OFF("e-hud-off", "standing still with Fathom HUD modules off"),
+        STILL("a-still", "standing still with the configured HUD set"),
+        HUD("g-hud", "every HUD module on, standing still"),
         PAN("b-pan", "panning across terrain at 45 deg/s"),
         GROUND("c-ground", "looking straight down"),
         PARTICLES("h-particles", "torch-style flame and smoke particles in view, standing still"),
-        HUD("g-hud", "every HUD module on, standing still"),
         HUB("f-hub", "Fathom Hub open over the world"),
         // Last on purpose. Flying 12 blocks/s for the length of the scenario
         // leaves a long tail of terrain still arriving, and whichever scenario
@@ -145,8 +146,10 @@ public final class PerfBench {
     private enum SoakPhase {
         MENU("menu", "main menu"),
         HUB("hub", "Hub over the main menu"),
-        SETTINGS("settings", "Hub with a settings drawer open"),
-        EDITOR("editor", "HUD editor over the main menu");
+        SCROLL("scroll", "Hub module list scrolling continuously"),
+        SETTINGS("settings", "Hub with full-page module settings open"),
+        EDITOR("editor", "HUD editor over the main menu"),
+        DRAG("drag", "HUD editor while a module is dragged and snapped");
 
         final String id;
         final String description;
@@ -169,6 +172,7 @@ public final class PerfBench {
     private static double startZ;
     private static float startYaw;
     private static final List<FathomModule> hudForced = new ArrayList<FathomModule>();
+    private static final List<FathomModule> hudSuppressed = new ArrayList<FathomModule>();
     private static final List<String> summary = new ArrayList<String>();
 
     // Soak state.
@@ -573,7 +577,14 @@ public final class PerfBench {
         phaseStartNanos = now;
         Scenario scenario = Scenario.values()[next];
         System.out.println("[Fathom] Bench: " + scenario.id + " (" + scenario.description + ")");
-        if (scenario == Scenario.HUD) {
+        if (scenario == Scenario.HUD_OFF) {
+            for (FathomModule module : Runtime.features().all()) {
+                if (!module.widgets().isEmpty() && module.enabled() && module.switchable()) {
+                    module.setEnabled(false);
+                    hudSuppressed.add(module);
+                }
+            }
+        } else if (scenario == Scenario.HUD) {
             for (FathomModule module : Runtime.features().all()) {
                 if (!module.widgets().isEmpty() && !module.enabled() && module.switchable()) {
                     module.setEnabled(true);
@@ -587,7 +598,12 @@ public final class PerfBench {
     }
 
     private static void end(MinecraftClient client, Scenario scenario) {
-        if (scenario == Scenario.HUD) {
+        if (scenario == Scenario.HUD_OFF) {
+            for (FathomModule module : hudSuppressed) {
+                module.setEnabled(true);
+            }
+            hudSuppressed.clear();
+        } else if (scenario == Scenario.HUD) {
             for (FathomModule module : hudForced) {
                 module.setEnabled(false);
             }
@@ -753,6 +769,7 @@ public final class PerfBench {
         Runtime.features().seal();
         switch (phase) {
             case HUB:
+            case SCROLL:
                 FathomNavigation.openHub(client, Runtime.hud());
                 break;
             case SETTINGS:
@@ -760,6 +777,7 @@ public final class PerfBench {
                 FathomNavigation.openHub(client, Runtime.hud());
                 break;
             case EDITOR:
+            case DRAG:
                 System.setProperty("fathom.qaOpenSettings", "false");
                 FathomNavigation.push(client, new HudEditorScreen(Runtime.hud()));
                 break;
@@ -767,6 +785,31 @@ public final class PerfBench {
                 break;
         }
     }
+
+    /**
+     * Synthetic wheel input for the scrolling phase: one notch every 90 ms,
+     * reversing every eleven, so the list glides through its whole length and
+     * back for the whole phase. Zero at any other time, and {@link #ACTIVE}
+     * folds the caller away when no benchmark runs.
+     */
+    public static int benchWheelNotches() {
+        if (!"soak".equals(MODE) || index < 0 || SoakPhase.values()[index] != SoakPhase.SCROLL) {
+            return 0;
+        }
+        long step = (System.nanoTime() - phaseStartNanos) / 90_000_000L;
+        if (step == lastWheelStep) {
+            return 0;
+        }
+        lastWheelStep = step;
+        return (step / 11) % 2 == 0 ? -1 : 1;
+    }
+
+    /** Whether the editor should drive its real drag/snap path for this soak phase. */
+    public static boolean benchHudDrag() {
+        return "soak".equals(MODE) && index >= 0 && SoakPhase.values()[index] == SoakPhase.DRAG;
+    }
+
+    private static long lastWheelStep = -1L;
 
     /** Heap in use after a full collection: the figure a leak moves. Outside measurement. */
     private static long settledHeap() {

@@ -38,6 +38,12 @@ public final class SharedIconPaths {
             case MAGNIFIER: return "M0 0 m21 21-4.34-4.34 M3 11a8 8 0 1 0 16 0a8 8 0 1 0 -16 0Z";
             case RUN: return "M11 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0Z M0 0 m9 20 3-6 3 6 M0 0 m6 8 6 2 6-2 M12 10v4";
             case SPARK: return "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z";
+            case CHEVRON_LEFT: return "M0 0 m15 18-6-6 6-6";
+            case MINUS: return "M5 12h14";
+            case PLUS: return "M5 12h14 M12 5v14";
+            case INFO: return "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0Z M12 16v-4 M12 8h.01";
+            case WARNING: return "M0 0 m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3 M12 9v4 M12 17h.01";
+            case SUCCESS: return "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0Z M0 0 m9 12 2 2 4-4";
             default: return "";
         }
     }

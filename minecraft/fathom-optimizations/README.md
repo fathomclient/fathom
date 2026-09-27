@@ -33,7 +33,7 @@ needs the game to exist: layout in a real GL context, Mixin application, and how
 The hub and the module system were both built without opening the game, then
 opened and used: 1280x720, GUI scale 3, singleplayer, a creative world.
 
-Seen working: the hub and its Mods and HUD pages; the settings drawer built from
+Seen working: the hub and its Mods and HUD pages; the full-page module settings built from
 the setting schema, including the stepper and both dropdowns; a Format change
 that altered the FPS readout on the next frame; module toggles for Clock, CPS,
 Keystrokes, Sprint and Crosshair, each of which drew its widget immediately;
@@ -50,8 +50,9 @@ them.
 
 Two defects were found this way and fixed:
 
-- the settings drawer's close button cleared `open` in the middle of drawing from
-  it, which crashed the render call. It is noted and applied after the frame now.
+- the former settings drawer's close button cleared `open` in the middle of drawing from
+  it, which crashed the render call. Detail navigation now keeps the module alive through
+  its dedicated exit transition and clears it only after the frame.
   The crash was in code the hub milestone shipped; it took a click on that
   particular control to reach it;
 - the inspector's two new reset buttons drew outside the panel, which is

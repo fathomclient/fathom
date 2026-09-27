@@ -2,7 +2,7 @@
 @import './controls.css';
 
 /*
- * Fathom's visual system: golden-hour glass.
+ * Fathom's visual system: neutral glass over Rainforest Storm.
  *
  * Every value comes from `assets/theme/fathom-theme.json` through
  * `tools/generate-fathom-theme.mjs` into `theme.generated.css`. This file holds
@@ -22,7 +22,7 @@
  *
  * TWO GENERATIONS, FOR NOW. The `--text`, `--accent`, `--fill-*`, `--glass-*`,
  * `--r-*` and `--m-*` tokens and the `.glass` classes are the previous dark
- * system. In the launcher they are re-pointed at the golden-hour tokens below,
+ * system. In the launcher they are re-pointed at the Rainforest glass tokens below,
  * so screens that have not been rebuilt sit in the same palette without their
  * layout changing. New work uses `--color-*`, `--mat-*`, `--control-*`,
  * `--radius-*`, `--space-*`, `--type-*` and `--motion-*` only.
@@ -50,13 +50,36 @@
   src: url('./fonts/Geist-Variable.woff2') format('woff2-variations');
 }
 
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./fonts/GeistMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url('./fonts/GeistMono-Medium.woff2') format('woff2');
+}
+
 /* -- legacy aliases ----------------------------------------------------------
-   The previous dark system's names, answered by the golden-hour tokens. CSS
+   The previous dark system's names, answered by the neutral glass tokens. CSS
    only: the manifest's legacy sections are untouched, because the game's
    `Skin` still reads them through `FathomTheme.java`. Delete each alias once no
-   screen uses it. The red accent becomes champagne and its glow disappears:
+   screen uses it. The old accent becomes neutral and its glow disappears:
    nothing in this system glows. */
 :root {
+  /* The keyboard focus ring: a thin signal line outside the control. Shown for
+     keyboard focus only (`:focus-visible`), never after a click. */
+  --focus-ring-width: 1.5px;
+  --type-family-mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', monospace;
+  /* Replaced at start-up with one device pixel (see `main.ts`). */
+  --hairline: 1px;
+
   --chrome: var(--backdrop-base);
   --chrome-line: var(--control-hairline);
   --chrome-line-strong: var(--control-hairline-strong);
@@ -87,9 +110,9 @@
   --text-disabled: var(--color-text-disabled);
   --text-label: var(--color-text-secondary);
 
-  --accent: var(--palette-champagne-300);
-  --accent-strong: var(--palette-ivory-100);
-  --accent-deep: var(--palette-bronze-600);
+  --accent: var(--color-text-secondary);
+  --accent-strong: var(--color-text);
+  --accent-deep: var(--control-fill-selected);
   --accent-glow: transparent;
   --accent-wash: var(--control-fill-hover);
   --focus: var(--color-focus);
@@ -107,7 +130,7 @@
   --r-pill: var(--radius-pill);
 
   /* Native checkboxes, radios and progress elements. */
-  accent-color: var(--palette-champagne-300);
+  accent-color: var(--color-text-secondary);
 }
 
 * {
@@ -145,6 +168,38 @@ body {
    they change. */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* Geist Mono, for what is measured or identifies a build: FPS, frame time,
+   memory, live percentages, versions, hashes, device codes, log lines. Never
+   decoration -- a profile name or a preset is words, and words are Geist. */
+.mono {
+  font-family: var(--type-family-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* -- icons -------------------------------------------------------------------
+   One family (Lucide geometry, `FathomIcon` for Fathom's own ids), one weight.
+   The stroke is set in screen pixels rather than in the icon's 24-unit grid,
+   so a 14px status icon and a 20px navigation icon read as the same pen:
+   1.5px at 12-14, 1.6px at 16, 1.7px at 18, 1.75px at 20 and up. Individual
+   call sites never pick a stroke. */
+svg.lucide {
+  stroke-width: 1.6px;
+  flex-shrink: 0;
+}
+svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) {
+  vector-effect: non-scaling-stroke;
+}
+svg.lucide:is([width='12'], [width='14']) {
+  stroke-width: 1.5px;
+}
+svg.lucide[width='18'] {
+  stroke-width: 1.7px;
+}
+svg.lucide:is([width='20'], [width='22'], [width='24']) {
+  stroke-width: 1.75px;
 }
 
 button {
@@ -188,14 +243,14 @@ textarea {
    `-dense`) are generated. What follows is behaviour every level shares. */
 
 /* Clear and light glass let the most of the photograph through, so the type on
-   them gets a faint warm edge for definition. Not a glow: it is darker than the
+   them gets a faint dark edge for definition. Not a glow: it is darker than the
    text and one pixel away from it. */
 .material-clear,
 .material-light {
   text-shadow: var(--backdrop-text-shadow-glass);
 }
 
-/* Interaction is material density, not light. Hover lays a faint ivory veil
+/* Interaction is material density, not light. Hover lays a faint neutral veil
    into the pane (the `--mat-veil` layer the generated rule reserves in its
    box-shadow, so it interpolates); press compresses it very slightly. Nothing
    glows, nothing lifts. */
@@ -208,11 +263,11 @@ textarea {
 }
 
 .material-interactive:hover {
-  --mat-veil: rgba(255, 244, 222, 0.07);
+  --mat-veil: rgba(255, 255, 255, 0.06);
 }
 
 .material-interactive:active {
-  --mat-veil: rgba(26, 16, 6, 0.08);
+  --mat-veil: rgba(4, 9, 12, 0.08);
   transform: scale(var(--press-scale));
 }
 
@@ -224,10 +279,10 @@ textarea {
   --mat-veil: transparent;
 }
 
-/* Keyboard focus: an ivory ring outside the rim, following the radius. */
+/* Keyboard focus: a neutral light ring outside the rim, following the radius. */
 .material-interactive:focus-visible,
 .focus-ring:focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: var(--focus-ring-width) solid var(--color-focus);
   outline-offset: 2px;
 }
 
@@ -297,29 +352,37 @@ textarea {
    Putting a box behind every label to make it readable would be covering up
    the thing we went to the trouble of showing. */
 .on-footage {
-  /* The same warm shadow as `.legible`: a tight edge for definition against
+  /* The same neutral shadow as `.legible`: a tight edge for definition against
      bright sky, and a wide soft one that deepens the area around the glyphs. */
   text-shadow: var(--backdrop-text-shadow);
 }
 
 /* Scrollbars, restyled. The default Windows scrollbar is the single most
-   effective way to make an application look unfinished. */
+   effective way to make an application look unfinished. No track, no arrows:
+   a narrow neutral thumb inset from the edge, a little brighter under the
+   pointer. The game's `Scroller` draws the same thing. */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
-::-webkit-scrollbar-thumb {
-  background: var(--control-fill-hover);
-  border-radius: var(--r-pill);
-  border: 3px solid transparent;
-  background-clip: content-box;
+::-webkit-scrollbar-button {
+  display: none;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: var(--control-fill-selected);
-  background-clip: content-box;
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  background: var(--control-scrollbar);
+  border-radius: var(--radius-pill);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: var(--control-scrollbar-hover);
+  background-clip: padding-box;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -62,7 +62,7 @@
 
   /* THE READABILITY VEIL.
      Document pages are text, and parts of the photograph are bright sky, so a
-     page gets a warm deepening behind its column. It is a veil and not a
+     page gets a neutral deepening behind its column. It is a veil and not a
      panel: it has no edge. It fades out at every side of the content area, so
      the photograph continues around it and the page does not become a
      rectangle inside the window. Home does not use `Page`, because Home IS the

@@ -79,19 +79,23 @@
 </div>
 
 <style>
+  /* Sized by its options, never stretched by a column parent: a stretched
+     track leaves an empty length of glass past the last option. */
   .track {
     position: relative;
     display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
     align-items: center;
     gap: 2px;
     padding: 3px;
     border-radius: var(--radius-pill);
-    background-color: var(--control-fill-sunken);
+    background-color: var(--control-fill-faint);
     box-shadow: var(--control-rim);
   }
 
-  /* The selection is a lighter pane inside the channel: denser, brighter glass
-     with its own rim, never a coloured slab. */
+  /* The selection is a denser neutral overlay inside the light track, with a
+     stronger rim and full-strength type. No colour, no shadow. */
   .indicator {
     position: absolute;
     top: 3px;
@@ -99,7 +103,7 @@
     left: 0;
     border-radius: var(--radius-pill);
     background-color: var(--control-fill-selected);
-    box-shadow: var(--control-rim-strong), var(--shadow-sm);
+    box-shadow: var(--control-rim-strong);
     pointer-events: none;
   }
 
@@ -119,11 +123,14 @@
     font-weight: var(--type-button-weight);
     color: var(--color-text-secondary);
     white-space: nowrap;
-    transition: color var(--motion-hover) var(--ease-standard);
+    transition:
+      color var(--motion-hover) var(--ease-standard),
+      background-color var(--motion-hover) var(--ease-standard);
   }
 
   .segment:hover:not(:disabled):not(.selected) {
     color: var(--color-text);
+    background-color: var(--control-fill-faint);
   }
 
   .segment.selected {
@@ -131,8 +138,8 @@
   }
 
   .segment:focus-visible {
-    outline: 2px solid var(--color-focus);
-    outline-offset: 1px;
+    outline: var(--focus-ring-width) solid var(--color-focus);
+    outline-offset: -1px;
   }
 
   .segment:disabled {

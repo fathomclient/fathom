@@ -53,6 +53,9 @@ public final class FathomHud {
     /** Reused selection and entries: the HUD is an every-game-frame hot path. */
     private final List<Drawable> drawing = new ArrayList<Drawable>();
     private final List<Drawable> drawablePool = new ArrayList<Drawable>();
+    /** Editor geometry is rebuilt while dragging; retain its entries instead of churning them. */
+    private final List<Positioned> positioned = new ArrayList<Positioned>();
+    private final List<Positioned> positionedPool = new ArrayList<Positioned>();
     private final File gameDirectory;
     private final ModuleRegistry features;
     private final ModuleStore featureStore = new ModuleStore();
@@ -682,13 +685,14 @@ public final class FathomHud {
 
     /** Every enabled widget's rectangle, newest on top, for hit testing and snapping. */
     public List<Positioned> boxes(MinecraftClient client, int screenWidth, int screenHeight) {
-        List<Positioned> out = new ArrayList<Positioned>();
+        positioned.clear();
         TextRenderer vanilla = client.textRenderer;
         if (vanilla == null) {
-            return out;
+            return positioned;
         }
         HudFont minecraftFont = HudFonts.vanilla(vanilla);
         HudFont fathomFont = null;
+        int cursor = 0;
         for (Widget widget : registry.all()) {
             HudWidget renderer = renderers.get(widget.id());
             if (renderer == null) {
@@ -706,13 +710,18 @@ public final class FathomHud {
                 font = fathomFont;
             }
             Placement placement = placement(widget.id());
-            out.add(
-                    new Positioned(
-                            widget,
-                            placement,
-                            box(client, font, renderer, placement, screenWidth, screenHeight)));
+            Positioned entry;
+            if (cursor == positionedPool.size()) {
+                entry = new Positioned();
+                positionedPool.add(entry);
+            } else {
+                entry = positionedPool.get(cursor);
+            }
+            cursor++;
+            positioned.add(entry.set(widget, placement,
+                    box(client, font, renderer, placement, screenWidth, screenHeight)));
         }
-        return out;
+        return positioned;
     }
 
     /** How many widgets are switched on, for the visual-QA log. */
@@ -732,14 +741,17 @@ public final class FathomHud {
 
     /** A widget, where it is configured to be, and where that puts it. */
     public static final class Positioned {
-        public final Widget widget;
-        public final Placement placement;
-        public final Snap.Box box;
+        public Widget widget;
+        public Placement placement;
+        public Snap.Box box;
 
-        Positioned(Widget widget, Placement placement, Snap.Box box) {
+        Positioned() {}
+
+        Positioned set(Widget widget, Placement placement, Snap.Box box) {
             this.widget = widget;
             this.placement = placement;
             this.box = box;
+            return this;
         }
     }
 }

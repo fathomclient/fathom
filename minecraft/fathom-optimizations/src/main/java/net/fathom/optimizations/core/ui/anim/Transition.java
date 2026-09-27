@@ -15,8 +15,13 @@ public final class Transition {
     private boolean closing;
 
     public Transition(float enterSeconds, float exitSeconds) {
-        entering = new Motion(0f, enterSeconds, Ease.Curve.STANDARD);
-        exiting = new Motion(0f, exitSeconds, Ease.Curve.EXIT);
+        this(enterSeconds, exitSeconds, Ease.Curve.STANDARD, Ease.Curve.EXIT);
+    }
+
+    /** Entry and exit on curves of the caller's choosing. */
+    public Transition(float enterSeconds, float exitSeconds, Ease.Curve enterCurve, Ease.Curve exitCurve) {
+        entering = new Motion(0f, enterSeconds, enterCurve);
+        exiting = new Motion(0f, exitSeconds, exitCurve);
     }
 
     /** Start or restart entry from the current monotonic time. */

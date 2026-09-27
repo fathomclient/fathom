@@ -23,7 +23,8 @@ public final class Placement {
     /** Below this a widget is unreadable; above it, it stops being a HUD. */
     public static final float MIN_SCALE = 0.5f;
 
-    public static final float MAX_SCALE = 3.0f;
+    /** Large enough for accessibility without letting one widget become the whole screen. */
+    public static final float MAX_SCALE = 2.0f;
 
     private final Anchor anchor;
     private final int offsetX;

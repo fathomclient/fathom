@@ -24,16 +24,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import {
-    Image as ImageIcon,
-    ChevronDown,
-    Minus,
-    Square,
-    X,
-  } from '@lucide/svelte';
+  import { Image as ImageIcon, ChevronDown, User } from '@lucide/svelte';
 
   import './lib/theme.css';
-  import Background from './lib/Background.svelte';
+  import GraphiteBackdrop from './lib/graphite/GraphiteBackdrop.svelte';
   import Home from './routes/Home.svelte';
   import Profiles from './routes/Profiles.svelte';
   import FathomProfiles from './routes/FathomProfiles.svelte';
@@ -48,10 +42,11 @@
   import ProfileSwitcher from './lib/ui/ProfileSwitcher.svelte';
   import BackgroundPicker from './lib/ui/BackgroundPicker.svelte';
   import FathomIcon from './lib/ui/FathomIcon.svelte';
-  import Wordmark from './lib/brand/Wordmark.svelte';
+  import WindowControls from './lib/ui/WindowControls.svelte';
+  import GraphiteWordmark from './lib/graphite/GraphiteWordmark.svelte';
   import { FATHOM_ICONS } from './lib/icons.generated';
   import { BACKGROUNDS, DEFAULT_BACKGROUND, PICKER_AVAILABLE } from './lib/backgrounds';
-  import { EASE, MOTION_PAGE, MOTION_SURFACE } from './lib/motion';
+  import { EASE, EASE_EXIT, MOTION_EXIT, MOTION_PAGE, MOTION_SURFACE } from './lib/motion';
   import { tooltip } from './lib/tooltip';
   import {
     background as loadBackground,
@@ -84,9 +79,8 @@
     type ShellStatus,
   } from './lib/api';
 
-  /* One icon family throughout (Lucide), and one table. Screens reference a
-     route, never an icon file, so swapping in Fathom artwork later means
-     editing this and nothing else. */
+  /* One icon family throughout (Lucide geometry, Fathom ids), and one table.
+     Screens reference a route, never an icon file. */
   const ROUTES = [
     { id: 'home', label: 'Home', icon: FATHOM_ICONS.home },
     { id: 'profiles', label: 'Profiles', icon: FATHOM_ICONS.profiles },
@@ -104,15 +98,18 @@
 
   let route = 'home';
   let settingsCategory = 'general';
+  /* Development only: `?route=mods` opens a page directly, so the screenshot
+     pass can photograph every screen without clicking through the shell. */
+  const devQuery = import.meta.env.DEV ? new URLSearchParams(window.location.search) : null;
+  route = devQuery?.get('route') ?? route;
+  settingsCategory = devQuery?.get('category') ?? settingsCategory;
   let home: HomeView | null = null;
   let accounts: AccountSummary[] = [];
   let status: ShellStatus | null = null;
   let choice = DEFAULT_BACKGROUND;
   let pickerOpen = false;
-  let accountOpen = false;
+  let accountOpen = devQuery?.get("sheet") === "account";
   let railOpen = false;
-  /** The window is on screen: the wordmark's one-time reveal may run. */
-  let revealed = false;
   /** The launch in flight, if any. `NO_LAUNCH` the rest of the time. */
   let launch: LaunchProgress = NO_LAUNCH;
   let poll: ReturnType<typeof setInterval> | null = null;
@@ -192,7 +189,6 @@
            flashing before Home is ready. `finally` keeps an unexpected data
            error from leaving an invisible process behind. */
         await windowShow();
-        revealed = true;
       }
     })();
     return () => {
@@ -382,12 +378,17 @@
   on:keydown={handleGlobalKey}
 />
 
-<Background {choice} />
+<!-- One persistent player across every route: navigation never restarts the
+     approved recording or replaces it with a page-specific image. -->
+<GraphiteBackdrop />
 
 <!-- One photographic environment. Nothing below paints a bar: the header row,
      the navigation and the status line are pieces of glass and type laid onto
      the photograph, which continues behind all of them. -->
-<div class="shell">
+<!-- Home is the same shell: the same header, account and rail in the same
+     places, so nothing jumps when you leave it. It only drops the crumb (it is
+     the root) and the status line (its launch panel already says all of it). -->
+<div class="shell" class:home={route === 'home'}>
   <!-- The header row: brand, where you are, the account, and the window's own
        controls. The native strip is disabled; this whole row is the drag
        region, and only its interactive pieces opt out of it. -->
@@ -400,14 +401,13 @@
     on:dblclick={() => void windowToggleMaximize()}
   >
     <div class="brand" data-tauri-drag-region>
-      <!-- The Surface wordmark at a 20px cap: the reduced tier, with a 1px
-           displacement and both densities. It reveals once, after the window
-           is on screen. It takes no pointer events, so a press on it lands on
-           this drag region like the rest of the row. -->
+      <!-- The same simple tracked FATHOM wordmark used by Home and Minecraft. -->
       <span class="brand-mark" data-tauri-drag-region>
-        <Wordmark height={20} reveal start={revealed} />
+        <GraphiteWordmark height={13} />
       </span>
-      <span class="crumb legible" data-tauri-drag-region>{activeLabel}</span>
+      {#if route !== 'home'}
+        <span class="crumb legible" data-tauri-drag-region>{activeLabel}</span>
+      {/if}
     </div>
 
     <div class="spacer" data-tauri-drag-region></div>
@@ -434,27 +434,25 @@
       >
         {#if home?.account.avatar}
           <img class="face" src={home.account.avatar} alt="" draggable="false" />
+        {:else if home?.account.name}
+          {home.account.name[0].toUpperCase()}
         {:else}
-          {home?.account.name?.[0]?.toUpperCase() ?? '?'}
+          <User size={14} />
         {/if}
       </span>
       <!-- Never cut: a Minecraft name is at most sixteen characters. -->
       <span class="account-name" class:restoring-name={home?.account.remembered}>
         {home?.account.name ?? 'Sign in'}
       </span>
-      <ChevronDown size={14} strokeWidth={2.2} />
+      <ChevronDown size={14} />
     </button>
 
     <div class="window-controls">
-      <button class="ui-icon-button small" aria-label="Minimize" use:tooltip={'Minimize'} on:click={() => void windowMinimize()}>
-        <Minus size={15} strokeWidth={2} />
-      </button>
-      <button class="ui-icon-button small" aria-label="Maximize" use:tooltip={'Maximize'} on:click={() => void windowToggleMaximize()}>
-        <Square size={12} strokeWidth={2} />
-      </button>
-      <button class="ui-icon-button small danger" aria-label="Close" use:tooltip={'Close'} on:click={() => void windowClose()}>
-        <X size={15} strokeWidth={2} />
-      </button>
+      <WindowControls
+        onMinimize={() => void windowMinimize()}
+        onMaximize={() => void windowToggleMaximize()}
+        onClose={() => void windowClose()}
+      />
     </div>
   </header>
 
@@ -480,7 +478,7 @@
           use:tooltip={railOpen ? '' : item.label}
           on:click={() => go(item.id)}
         >
-          <span class="glyph"><FathomIcon source={item.icon} size={19} /></span>
+          <span class="glyph"><FathomIcon name={item.icon} size={20} /></span>
           <span class="nav-label">{item.label}</span>
         </button>
       {/each}
@@ -495,7 +493,7 @@
           use:tooltip={railOpen ? '' : item.label}
           on:click={() => go(item.id)}
         >
-          <span class="glyph"><FathomIcon source={item.icon} size={19} /></span>
+          <span class="glyph"><FathomIcon name={item.icon} size={20} /></span>
           <span class="nav-label">{item.label}</span>
         </button>
       {/each}
@@ -546,6 +544,7 @@
   </main>
 
   <!-- THE STATUS LINE. Type on the photograph and a few capsules, not a bar. -->
+  {#if route !== 'home'}
   <footer class="status">
     <div class="zone left legible">
       <span class="dot" class:ready={ready && launch.phase === 'idle'} aria-hidden="true"></span>
@@ -579,14 +578,15 @@
             aria-expanded={pickerOpen}
             on:click|stopPropagation={() => (pickerOpen = !pickerOpen)}
           >
-            <ImageIcon size={13} strokeWidth={2} />
+            <ImageIcon size={14} />
             <span>{backgroundLabel}</span>
           </button>
 
           {#if pickerOpen}
             <div
               class="picker ui-popover"
-              transition:fly={{ y: 6, duration: MOTION_SURFACE, easing: EASE }}
+              in:fly={{ y: 6, duration: MOTION_SURFACE, easing: EASE }}
+              out:fade={{ duration: MOTION_EXIT, easing: EASE_EXIT }}
               on:click|stopPropagation
               on:keydown={(event) => event.key === 'Escape' && (pickerOpen = false)}
               role="menu"
@@ -608,11 +608,12 @@
       {/if}
 
       <button class="ui-capsule small material-clear material-interactive" on:click={() => go('logs')}>
-        <FathomIcon source={FATHOM_ICONS.logs} size={13} />
+        <FathomIcon name="logs" size={14} />
         <span>Logs</span>
       </button>
     </div>
   </footer>
+  {/if}
 </div>
 
 {#if accountOpen && home}
@@ -647,6 +648,16 @@
     height: 100%;
   }
 
+  /* Home has no status line: its page runs to the bottom of the window. The
+     rail keeps its own row, so its lower group sits exactly where it does on
+     every other page. */
+  .shell.home {
+    grid-template-areas:
+      'top top'
+      'rail main'
+      '. main';
+  }
+
   /* -- header row -------------------------------------------------------- */
   .header {
     grid-area: top;
@@ -665,7 +676,7 @@
     min-width: 0;
   }
 
-  /* A tight dark edge keeps the ivory letters defined where the sky behind
+  /* A tight dark edge keeps the light letters defined where the sky behind
      them is brightest. Darker than the photograph, never a glow. */
   .brand-mark {
     display: flex;
@@ -678,7 +689,7 @@
 
   .crumb {
     padding-left: var(--space-3);
-    border-left: 1px solid var(--control-hairline-strong);
+    border-left: var(--hairline) solid var(--control-hairline-strong);
     font-size: var(--type-secondary-size);
     font-weight: var(--type-button-weight);
     color: var(--color-text-secondary);
@@ -721,6 +732,20 @@
 
   .avatar.signed {
     box-shadow: var(--control-rim-strong);
+  }
+
+  /* The rim over the face (an inset shadow is painted beneath an image). */
+  .avatar {
+    position: relative;
+  }
+
+  .avatar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: var(--control-rim);
+    pointer-events: none;
   }
 
   /* The player's head, cut from their skin. Eight pixels of art, so it is
@@ -835,7 +860,7 @@
   }
 
   .nav:focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: var(--focus-ring-width) solid var(--color-focus);
     outline-offset: -2px;
   }
 
@@ -887,8 +912,14 @@
   .zone {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
     min-width: 0;
+  }
+
+  /* Not on the centre zone: it is a capsule itself, and its own gap is the
+     small capsule's, as for every other capsule in this bar. */
+  .zone.left,
+  .zone.right {
+    gap: var(--space-2);
   }
 
   .zone.right {

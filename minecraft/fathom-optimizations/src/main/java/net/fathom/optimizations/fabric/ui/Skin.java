@@ -8,30 +8,36 @@ import net.fathom.optimizations.generated.FathomTheme;
 import net.fathom.optimizations.generated.FathomTheme.Tokens;
 
 /**
- * Fathom's visual system, in the game: the golden-hour glass.
+ * Fathom's visual system in the game: neutral Rainforest glass.
  *
  * <h2>One source, two implementations</h2>
  *
  * <p>Every value here comes from the manifest that produces the launcher's
  * CSS -- {@code FathomTheme.Tokens}, the `system` half of it. The in-game client
  * should feel like the launcher walked into Minecraft, and a slightly different
- * ivory or corner reads, immediately, as a different program.
+ * tone or corner reads, immediately, as a different program.
  *
  * <h2>Glass without blur</h2>
  *
  * <p>The launcher's panes blur what is behind them. The game's do not: a blur
  * is a framebuffer read and a pass per surface, and the game has better things
  * to spend a frame on. So the materials here are the manifest's
- * {@code tint-noblur} fills -- the same warm umber at the density the launcher
- * itself falls back to with blur turned off -- plus the rims and the type. The
- * hierarchy is the launcher's: clear for type on a controlled background,
- * light for low-priority groups, standard for persistent panels, dense for
- * what floats over everything.
+ * {@code tint-game} fills: clear is the launcher's own faint neutral veil, light
+ * and standard are transparent dark deepenings, and only dense is dense.
+ * Unblurred, a pale veil behind light type costs it contrast,
+ * so a group that carries text deepens a little instead. The background -- the
+ * photograph, or the world under a light scrim -- provides the colour; the
+ * glass borrows it. There is no application shell: navigation and content
+ * float as separate groups.
+ *
+ * <p>The hierarchy is the launcher's: clear is the default substrate, light is
+ * navigation, rows and low-priority groups, standard is what is selected or
+ * important, and dense is only for modals, popovers and temporary focus.
  *
  * <h2>Density, not colour</h2>
  *
  * <p>There is no accent hue. Selection, hover and "on" are a denser fill, a
- * brighter rim and full-strength ivory type -- the launcher's rule. The status
+ * brighter rim and full-strength neutral type -- the launcher's rule. The status
  * tones (sage, amber, terracotta) are the only hues, and only where a state
  * needs one.
  *
@@ -48,13 +54,13 @@ public final class Skin {
     // Materials
     // -----------------------------------------------------------------------
 
-    /** Clear glass: a control on the photograph that should be barely there. */
+    /** Clear glass: the default substrate; controls on the photograph. */
     public static final int MATERIAL_CLEAR = Tokens.MATERIAL_CLEAR_FILL;
-    /** Light glass: low-priority groups. */
+    /** Light glass: navigation, rows and low-priority groups. */
     public static final int MATERIAL_LIGHT = Tokens.MATERIAL_LIGHT_FILL;
-    /** Standard glass: persistent panels -- the hub window, the menu's panes. */
+    /** Standard glass: what is selected, and important interactive groups. */
     public static final int MATERIAL_STANDARD = Tokens.MATERIAL_STANDARD_FILL;
-    /** Dense glass: what floats over everything -- popovers, sheets, menus. */
+    /** Dense glass: modals, popovers and temporary focus. Never the default. */
     public static final int MATERIAL_DENSE = Tokens.MATERIAL_DENSE_FILL;
     /** Dense glass that must be readable over anything, including itself. */
     public static final int MATERIAL_DENSE_SOLID = Tokens.MATERIAL_DENSE_FILL_SOLID;
@@ -77,18 +83,18 @@ public final class Skin {
     // Surfaces (previous names)
     // -----------------------------------------------------------------------
 
-    /** Was pure black. Now dense glass. */
-    public static final int CHROME = MATERIAL_DENSE;
+    /** Was pure black. Now standard glass: a bar over the world. */
+    public static final int CHROME = MATERIAL_STANDARD;
 
-    /** The panel: standard glass. */
-    public static final int PANEL = MATERIAL_STANDARD;
+    /** A panel: light glass. */
+    public static final int PANEL = MATERIAL_LIGHT;
 
     /** Inside a panel: a flat control fill, never a second glass. */
     public static final int RAISED = Tokens.CONTROL_FILL;
     public static final int RAISED_HOVER = Tokens.CONTROL_FILL_HOVER;
 
-    /** A popover that must be readable over anything. */
-    public static final int OVERLAY = MATERIAL_DENSE_SOLID;
+    /** A popover: dense glass. */
+    public static final int OVERLAY = MATERIAL_DENSE;
 
     /** A control sitting on the photograph brings its own glass. */
     public static final int GLASS = MATERIAL_LIGHT;
@@ -107,23 +113,25 @@ public final class Skin {
     public static final int SHEEN = RIM_TOP;
 
     /**
-     * The warm deepening over the world behind the hub.
+     * The light deepening over the world behind the hub.
      *
-     * <p>Umber, not black, and lighter than the old one: the world is context,
-     * and the window above it is already standard glass, so between the two
-     * body text sits on a darkened, warmed version of whatever the player was
-     * looking at rather than on a black hole.
+     * <p>Neutral and light: the world stays visible as the hub's background,
+     * and is only quieted enough that text holds over it.
      */
-    public static final int SCRIM = 0x8C1A1006;
+    public static final int SCRIM = Tokens.GAME_SCRIM_WORLD;
+    /** The extra, lighter deepening over the photograph behind the hub. */
+    public static final int SCRIM_POSTER = Tokens.GAME_SCRIM_POSTER;
+    /** Under a modal: the launcher's modal scrim. */
+    public static final int MODAL_SCRIM = Tokens.GAME_MODAL_SCRIM;
 
-    /** Under a floating panel. Warm and soft; not a blur. */
+    /** Under a floating panel. Neutral and soft; not a blur. */
     public static final int SHADOW = Colour.fade(Tokens.COLOR_SHADOW, 0.55f);
 
     // -----------------------------------------------------------------------
     // Depth, as the pages ask for it
     // -----------------------------------------------------------------------
 
-    /** The window: standard glass. */
+    /** A pressed well, and the deepest a resting control gets: standard glass. */
     public static final int BACKGROUND = MATERIAL_STANDARD;
     /** Wells: fields, tracks, the search box. Sunken, never a panel of its own. */
     public static final int RECESSED = Tokens.CONTROL_FILL_SUNKEN;
@@ -131,8 +139,8 @@ public final class Skin {
     public static final int SURFACE = Tokens.CONTROL_FILL;
     /** Selected or current: the denser fill. */
     public static final int ELEVATED = Tokens.CONTROL_FILL_SELECTED;
-    /** Transient: popovers, drawers, anything over everything. */
-    public static final int FLOATING = MATERIAL_DENSE_SOLID;
+    /** Transient: popovers, drawers, anything over everything. Dense glass. */
+    public static final int FLOATING = MATERIAL_DENSE;
 
     /** One step up from a surface: what hover does, and nothing more. */
     public static final int SURFACE_HOVER = Tokens.CONTROL_FILL_HOVER;
@@ -152,41 +160,41 @@ public final class Skin {
     public static final int FILL_SUNKEN = Tokens.CONTROL_FILL_SUNKEN;
     public static final int FILL_DISABLED = Tokens.CONTROL_FILL_FAINT;
 
-    /** The ivory ring a keyboard-focused control wears. */
+    /** The neutral light ring a keyboard-focused control wears. */
     public static final int FOCUS = Tokens.COLOR_FOCUS;
 
     // -----------------------------------------------------------------------
     // Text
     // -----------------------------------------------------------------------
 
-    /** Ivory, champagne, and champagne at two lower densities. */
+    /** Neutral light text at progressively lower densities. */
     public static final int TEXT = Tokens.COLOR_TEXT;
     public static final int TEXT_MUTED = Tokens.COLOR_TEXT_SECONDARY;
     public static final int TEXT_FAINT = Tokens.COLOR_TEXT_TERTIARY;
     public static final int TEXT_DISABLED = Tokens.COLOR_TEXT_DISABLED;
     public static final int TEXT_LABEL = Tokens.COLOR_TEXT_SECONDARY;
-    /** Type on an ivory surface, where there is one. */
+    /** Type on a light surface, where there is one. */
     public static final int TEXT_INVERSE = Tokens.COLOR_TEXT_INVERSE;
 
     // -----------------------------------------------------------------------
     // Selection and status
     // -----------------------------------------------------------------------
 
-    /** Champagne: an "on" track, a slider's fill, a chosen swatch. */
+    /** Neutral light: an "on" track, a slider's fill, a chosen swatch. */
     public static final int ACCENT = Tokens.PALETTE_CHAMPAGNE_300;
     public static final int ACCENT_STRONG = Tokens.PALETTE_IVORY_100;
     public static final int ACCENT_DEEP = Tokens.PALETTE_BRONZE_600;
     public static final int ACCENT_WASH = Tokens.CONTROL_FILL_SELECTED;
 
     /**
-     * Energy: what the old red did, now as ivory luminance.
+     * Energy: what the old red did, now as neutral luminance.
      *
      * <p>{@code ENERGY} is a wash (scaled down before use it is a selected
      * fill), {@code ENERGY_EDGE} a brightened rim, {@code ENERGY_MARK} a caret,
-     * a check, a thumb -- full ivory. None of them is a hue.
+     * a check, a thumb -- full neutral light. None of them is a hue.
      */
-    public static final int ENERGY = 0x99FFF4DE;
-    public static final int ENERGY_EDGE = 0x4DFFF4DE;
+    public static final int ENERGY = 0x99FFFFFF;
+    public static final int ENERGY_EDGE = 0x4DFFFFFF;
     public static final int ENERGY_MARK = Tokens.COLOR_TEXT;
 
     public static final int GOOD = Tokens.COLOR_SUCCESS_TEXT;
@@ -214,14 +222,14 @@ public final class Skin {
 
     /** Small inset shapes: swatches, tags and compact tooltips. */
     public static final float R_SMALL = Tokens.RADIUS_SM;
-    /** Buttons that are not pills, fields and list rows. */
+    /** Icon marks, fields and anything that is not a pill. */
     public static final float R_CONTROL = Tokens.RADIUS_MD;
-    /** Search, segmented controls, icon containers and popovers. */
-    public static final float R_MEDIUM = Tokens.RADIUS_MD;
-    /** Cards, drawers and substantial overlays. */
-    public static final float R_CARD = Tokens.RADIUS_LG;
-    /** The outer application panel. */
-    public static final float R_PANEL = Tokens.RADIUS_XL;
+    /** Popovers and menus: the launcher's `.ui-popover`. */
+    public static final float R_MEDIUM = Tokens.RADIUS_LG;
+    /** Cards, groups and modals. */
+    public static final float R_CARD = Tokens.RADIUS_XL;
+    /** Major floating groups: the rail, a page's list. */
+    public static final float R_PANEL = Tokens.RADIUS_2XL;
 
     /** A hovered card rises this far before press compression wins. */
     public static final float HOVER_ELEVATION = 1.25f;
@@ -234,9 +242,9 @@ public final class Skin {
     public static final float R_XL = R_PANEL;
 
     /** Three control heights. A control that is none of these will not line up. */
-    public static final float H_SM = FathomTheme.DIM_H_SM;
-    public static final float H_MD = FathomTheme.DIM_H_MD;
-    public static final float H_LG = FathomTheme.DIM_H_LG;
+    public static final float H_SM = Tokens.CONTROL_HEIGHT_SM;
+    public static final float H_MD = Tokens.CONTROL_HEIGHT_MD;
+    public static final float H_LG = Tokens.CONTROL_HEIGHT_LG;
 
     /**
      * The widest a column of settings gets.

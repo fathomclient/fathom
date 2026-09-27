@@ -24,6 +24,7 @@ import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.Graphite;
 
 /**
  * Diagnostics: what the client is actually doing.
@@ -94,6 +95,15 @@ final class DiagnosticsSection implements Section {
         return false;
     }
 
+    private static boolean hasDigit(String text) {
+        for (int index = 0; index < text.length(); index++) {
+            if (Character.isDigit(text.charAt(index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public String subtitle() {
         return "Client status and tests.";
@@ -117,7 +127,22 @@ final class DiagnosticsSection implements Section {
 
         Rect bar = area.top(Skin.H_MD);
         boolean recording = Runtime.session() != null;
-        Rect bench = new Rect(bar.x, bar.y, 170f, Skin.H_MD);
+
+        // Every button is as wide as its label needs. When the two clusters do
+        // not fit on one line they take two, rather than being drawn over each
+        // other at fixed widths.
+        float pad = Skin.S4 * 2f;
+        float benchWidth = Math.max(120f, ui.measure(recording ? "Stop recording" : "Benchmark", Type.BODY_STRONG) + pad);
+        float spikeWidth = ui.measure("Renderer spike", Type.BODY_STRONG) + pad;
+        float launcherWidth = ui.measure("Launcher diagnostics", Type.BODY_STRONG) + pad;
+        float saveWidth = Math.max(72f, ui.measure("Save", Type.BODY_STRONG) + pad);
+        float copyWidth = Math.max(72f, ui.measure("Copy", Type.BODY_STRONG) + pad);
+        float leftWidth = benchWidth + Skin.S3 + 170f + Skin.S3 + spikeWidth;
+        float rightWidth = launcherWidth + Skin.S2 + saveWidth + Skin.S2 + copyWidth;
+        boolean twoLines = leftWidth + Skin.S6 + rightWidth > bar.width;
+        Rect rightBar = twoLines ? new Rect(bar.x, bar.bottom() + Skin.S2, bar.width, Skin.H_MD) : bar;
+
+        Rect bench = new Rect(bar.x, bar.y, benchWidth, Skin.H_MD);
         if (recording
                 ? controls.danger(ui, "diag.bench", bench, "Stop recording", true)
                 : controls.primary(ui, "diag.bench", bench, "Benchmark", true)) {
@@ -136,13 +161,13 @@ final class DiagnosticsSection implements Section {
                 chosenScenario = index;
             }
         }
-        Rect picker = new Rect(bench.right() + Skin.S3, bar.y, 190f, Skin.H_MD);
+        Rect picker = new Rect(bench.right() + Skin.S3, bar.y, 170f, Skin.H_MD);
         int picked = controls.dropdown(ui, "diag.scenario", picker, scenarios, chosenScenario);
         if (picked != chosenScenario && picked >= 0 && picked < scenarios.length) {
             scenario = scenarios[picked];
         }
 
-        Rect spike = new Rect(picker.right() + Skin.S3, bar.y, 160f, Skin.H_MD);
+        Rect spike = new Rect(picker.right() + Skin.S3, bar.y, spikeWidth, Skin.H_MD);
         if (controls.secondary(ui, "diag.spike", spike, "Renderer spike", true)) {
             context.openSpike();
         }
@@ -153,36 +178,47 @@ final class DiagnosticsSection implements Section {
         // thing this client spent a milestone removing.
         boolean connected = Runtime.bridge() != null
                 && Runtime.bridge().state() == net.fathom.optimizations.fabric.bridge.LauncherBridge.State.READY;
-        Rect launcher = bar.vcentreRight(0f, 190f, Skin.H_MD);
+        Rect launcher = twoLines
+                ? new Rect(rightBar.x + copyWidth + Skin.S2 + saveWidth + Skin.S2, rightBar.y, launcherWidth, Skin.H_MD)
+                : rightBar.vcentreRight(0f, launcherWidth, Skin.H_MD);
         if (controls.secondary(ui, "diag.launcher", launcher, "Launcher diagnostics", connected)) {
             note = Runtime.bridge().openDiagnostics()
                     ? "Opened in the launcher."
                     : "The launcher did not answer.";
         }
-        Rect save = new Rect(launcher.x - Skin.S2 - 92f, bar.y, 92f, Skin.H_MD);
+        Rect save = new Rect(launcher.x - Skin.S2 - saveWidth, rightBar.y, saveWidth, Skin.H_MD);
         if (controls.secondary(ui, "diag.save", save, "Save", true)) {
             saveReport(context);
         }
-        Rect copy = new Rect(save.x - Skin.S2 - 92f, bar.y, 92f, Skin.H_MD);
+        Rect copy = new Rect(save.x - Skin.S2 - copyWidth, rightBar.y, copyWidth, Skin.H_MD);
         if (controls.secondary(ui, "diag.copy", copy, "Copy", true)) {
             net.minecraft.client.gui.screen.Screen.setClipboard(report(context));
             note = "Copied to the clipboard.";
         }
 
-        float messageX = spike.right() + Skin.S4;
+        // The status line sits after the last control on whichever line has room.
+        Rect messageBar = twoLines ? rightBar : bar;
+        float messageX = twoLines ? launcher.right() + Skin.S4 : spike.right() + Skin.S4;
+        float messageRight = twoLines ? messageBar.right() : copy.x - Skin.S4;
         if (recording) {
             Session running = Runtime.session();
             String state = running.warmupComplete()
                     ? "Recording. Play, then stop."
                     : running.warmupRemaining() + " warm-up frames left";
-            ui.text(Text.fit(ui, state, Type.BODY, bar.right() - messageX), messageX,
-                    Controls.baseline(ui, bar, Type.BODY), Type.BODY, Skin.TEXT_FAINT);
+            ui.text(Text.fit(ui, state, Type.BODY, Math.max(0f, messageRight - messageX)), messageX,
+                    Controls.baseline(ui, messageBar, Type.BODY), Type.BODY, Skin.TEXT_FAINT);
         } else if (!note.isEmpty()) {
-            ui.text(Text.fit(ui, note, Type.BODY, bar.right() - messageX), messageX,
-                    Controls.baseline(ui, bar, Type.BODY), Type.BODY, Skin.GOOD);
+            // A confirmation, not a status colour: a small success dot and
+            // neutral words.
+            float dot = 6f;
+            float cy = messageBar.centreY();
+            ui.rounded(messageX, cy - dot / 2f, messageX + dot, cy + dot / 2f, dot / 2f, Skin.GOOD);
+            ui.text(Text.fit(ui, note, Type.BODY, Math.max(0f, messageRight - messageX - dot - Skin.S2)),
+                    messageX + dot + Skin.S2, Controls.baseline(ui, messageBar, Type.BODY), Type.BODY,
+                    Skin.TEXT_MUTED);
         }
 
-        Rect body = area.belowTop(Skin.H_MD + Skin.S5);
+        Rect body = area.belowTop((twoLines ? Skin.H_MD * 2f + Skin.S2 : Skin.H_MD) + Skin.S5);
         List<String[]> facts = facts(context);
         float contentHeight = facts.size() * FACT_ROW;
         float offset = scroller.offset(context.delta(), contentHeight, body.height);
@@ -206,7 +242,12 @@ final class DiagnosticsSection implements Section {
             } else {
                 ui.text(Text.fit(ui, fact[0], Type.BODY, row.width * 0.6f), row.x,
                         Controls.baseline(ui, row, Type.BODY), Type.BODY, Skin.TEXT_FAINT);
-                ui.textRight(fact[1], row.right(), Controls.baseline(ui, row, Type.BODY), Type.BODY, colourOf(fact));
+                // Measured values, versions and paths are data: Geist Mono.
+                // A value that is only words ("Default", "Not Fathom") stays Geist.
+                Type value = hasDigit(fact[1]) || fact[1].indexOf('\\') >= 0
+                        ? Graphite.floor(ui, Graphite.DATA_S) : Type.BODY;
+                ui.textRight(Text.fit(ui, fact[1], value, row.width * 0.4f), row.right(),
+                        Controls.baseline(ui, row, value), value, colourOf(fact));
             }
         }
         ui.unclip();

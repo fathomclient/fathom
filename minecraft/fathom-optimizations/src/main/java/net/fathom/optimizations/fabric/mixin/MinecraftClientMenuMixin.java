@@ -68,7 +68,12 @@ public abstract class MinecraftClientMenuMixin {
                 || !net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowOptifineOverlapHooks()) {
             return screen;
         }
-        if (!fathom$enabled()) {
+        // Visual QA explicitly asks for this screen and must not depend on the
+        // last profile's optional main-menu toggle. Production still respects
+        // the saved module state exactly as before.
+        boolean visualQa = Boolean.getBoolean("fathom.captureMenu")
+                || !System.getProperty("fathom.captureUi", "").isEmpty();
+        if (!fathom$enabled() && !visualQa) {
             return screen;
         }
         // Vanilla is about to turn this null into a title screen, because there

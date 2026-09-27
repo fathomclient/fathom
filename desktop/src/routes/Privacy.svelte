@@ -20,12 +20,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Check, WifiOff } from '@lucide/svelte';
+  import { Check, Radio, WifiOff } from '@lucide/svelte';
 
   import Page from '../lib/ui/Page.svelte';
   import Section from '../lib/ui/Section.svelte';
   import Row from '../lib/ui/Row.svelte';
   import Switch from '../lib/ui/Switch.svelte';
+  import Notice from '../lib/ui/Notice.svelte';
+  import EmptyState from '../lib/ui/EmptyState.svelte';
   import { EASE, NORMAL, STAGGER } from '../lib/motion';
   import {
     privacyView,
@@ -101,16 +103,15 @@
 {#if view}
   <Page title="Privacy" summary={view.summary}>
     {#if view.offline}
-      <div class="offline" transition:fade={{ duration: NORMAL }}>
-        <WifiOff size={15} strokeWidth={2} />
-        <span>Offline mode is on. Nothing is contacted.</span>
+      <div transition:fade={{ duration: NORMAL }}>
+        <Notice glyph={WifiOff}>Offline mode is on. Nothing is contacted.</Notice>
       </div>
     {/if}
 
-    <div class="facts">
+    <div class="facts material-light">
       {#each FACTS as fact, index}
         <div
-          class="fact glass"
+          class="fact"
           in:fly={{ y: 8, duration: NORMAL, delay: index * STAGGER, easing: EASE }}
         >
           <span class="fact-label">{fact.label}</span>
@@ -120,10 +121,11 @@
     </div>
 
     {#if error}
-      <p class="failed">{error}</p>
+      <Notice tone="danger" onDismiss={() => (error = '')}>{error}</Notice>
     {/if}
 
-    <Section label="What Fathom may do" summary="{privacyToggles.length} settings">
+    {#if privacyToggles.length}
+    <Section label="What Fathom may do" summary="{privacyToggles.length} settings" material>
       {#each privacyToggles as row (row.id)}
         <Row
           title={row.label}
@@ -142,17 +144,19 @@
         </Row>
       {/each}
     </Section>
+    {/if}
 
     <Section
       label="What Fathom does"
       summary="{view.guarantees.length} guarantees"
       collapsible
+      material
       bind:open={guaranteesOpen}
     >
       <ul class="claims">
         {#each view.guarantees as claim}
           <li>
-            <span class="tick"><Check size={11} strokeWidth={3} /></span>
+            <span class="tick"><Check size={12} /></span>
             <div>
               <span class="claim">{claim.label}</span>
               <p class="claim-detail">{claim.detail}</p>
@@ -167,16 +171,17 @@
       summary="{view.destinations.filter((d) => d.allowed).length} of {view.destinations
         .length} allowed"
       collapsible
+      material
       bind:open={hostsOpen}
     >
       <table>
         <tbody>
           {#each view.destinations as destination}
             <tr class:denied={!destination.allowed}>
-              <td class="host">{destination.host}</td>
+              <td class="host mono">{destination.host}</td>
               <td class="reason">{destination.reason}</td>
               <td class="state">
-                <span class="pill" class:on={destination.allowed}>
+                <span class="status" class:on={destination.allowed}>
                   {destination.allowed ? 'Allowed' : 'Blocked'}
                 </span>
               </td>
@@ -190,6 +195,7 @@
       label="Network activity"
       summary={view.activity.length ? `${view.activity.length} recorded` : 'Nothing yet'}
       collapsible
+      material
       bind:open={activityOpen}
     >
       {#if view.activity.length}
@@ -197,7 +203,7 @@
           <tbody>
             {#each view.activity as entry}
               <tr>
-                <td class="host">{entry.host}</td>
+                <td class="host mono">{entry.host}</td>
                 <td class="reason">{entry.purpose}</td>
                 <td class="state"><span class="outcome {entry.tone}">{entry.outcome}</span></td>
               </tr>
@@ -205,26 +211,25 @@
           </tbody>
         </table>
       {:else}
-        <p class="quiet">Nothing contacted this session.</p>
+        <EmptyState
+          compact
+          icon={Radio}
+          title="No network activity"
+          detail="Nothing has been contacted this session."
+        />
       {/if}
     </Section>
   </Page>
 {/if}
 
 <style>
-  .failed {
-    margin: 0 0 var(--s-3);
-    padding: var(--s-3);
-    border: 1px solid color-mix(in srgb, var(--danger, var(--warn)) 40%, transparent);
-    border-radius: var(--r-2, 8px);
-    font-size: var(--t-body);
-    color: var(--warn);
-  }
-
   .facts {
+    --surface-radius: var(--radius-lg);
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: var(--s-3);
+    gap: 1px;
+    overflow: hidden;
+    padding: 2px;
   }
 
   .fact {
@@ -232,21 +237,22 @@
     flex-direction: column;
     gap: var(--s-1);
     padding: 13px 15px;
+    background: var(--control-fill-faint);
+    border-radius: max(var(--radius-inner-min), calc(var(--radius-lg) - 2px));
   }
 
   .fact-label {
-    font-size: var(--t-meta);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--text-faint);
+    font-size: var(--type-label-size);
+    font-weight: var(--type-label-weight);
+    letter-spacing: var(--type-label-tracking);
+    color: var(--color-text-secondary);
   }
 
   .fact-value {
-    font-size: var(--t-section);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
-    color: var(--text);
+    font-size: var(--type-heading-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
+    color: var(--color-text);
   }
 
   .claims {
@@ -258,46 +264,46 @@
   .claims li {
     display: flex;
     align-items: flex-start;
-    gap: var(--s-3);
-    padding: 10px 2px;
-    box-shadow: 0 -1px 0 var(--chrome-line);
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 
   .claims li:first-child {
     box-shadow: none;
   }
 
+  /* A small check in the success tone, centred on the claim's first line. */
   .tick {
     display: grid;
     place-items: center;
-    width: 17px;
-    height: 17px;
-    margin-top: var(--s-1);
-    border-radius: var(--r-pill);
-    background: rgba(79, 201, 138, 0.16);
-    color: var(--good);
+    height: 19px;
+    color: var(--color-success-text);
     flex-shrink: 0;
   }
 
   .claim {
-    font-size: var(--t-body-lg);
-    font-weight: var(--w-medium);
+    font-size: var(--type-body-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
+    line-height: 19px;
   }
 
   .claim-detail {
     margin: 2px 0 0;
-    font-size: var(--t-body);
-    color: var(--text-muted);
+    font-size: var(--type-secondary-size);
+    line-height: var(--type-secondary-leading);
+    color: var(--color-text-secondary);
   }
 
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--t-body);
+    font-size: var(--type-secondary-size);
   }
 
   tr {
-    box-shadow: 0 -1px 0 var(--chrome-line);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 
   tr:first-child {
@@ -309,14 +315,24 @@
   }
 
   td {
-    padding: 8px 2px;
+    padding: 10px var(--space-2);
     vertical-align: top;
+  }
+
+  td:first-child {
+    padding-left: var(--space-4);
+  }
+
+  td:last-child {
+    padding-right: var(--space-4);
   }
 
   .host {
     width: 32%;
-    color: var(--text);
-    font-variant-numeric: tabular-nums;
+    font-size: var(--type-caption-size);
+    line-height: 19px;
+    color: var(--color-text);
+    overflow-wrap: anywhere;
   }
 
   .reason {
@@ -330,52 +346,37 @@
     white-space: nowrap;
   }
 
-  .pill {
-    padding: 2px 8px;
-    border-radius: var(--r-pill);
-    font-size: var(--t-meta);
-    color: var(--text-faint);
-    background: var(--fill);
-  }
-
-  .pill.on {
-    color: var(--good);
-    background: rgba(79, 201, 138, 0.13);
-  }
-
+  /* Status is a small dot and a word: the dot carries the colour, the word
+     stays neutral. */
+  .status,
   .outcome {
-    font-size: var(--t-meta);
-    color: var(--text-muted);
-  }
-  .outcome.ok {
-    color: var(--good);
-  }
-  .outcome.denied {
-    color: var(--warn);
-  }
-  .outcome.failed {
-    color: var(--bad);
-  }
-
-  .quiet {
-    margin: 0;
-    padding: 12px 2px;
-    font-size: var(--t-body);
-    color: var(--text-faint);
-  }
-
-  .offline {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: var(--s-3);
-    padding: 10px 13px;
-    border-radius: var(--r-md);
-    background: rgba(79, 201, 138, 0.1);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid rgba(79, 201, 138, 0.26);
-    box-shadow: var(--glass-sheen);
-    color: var(--good);
-    font-size: var(--t-body);
+    gap: 6px;
+    font-size: var(--type-caption-size);
+    line-height: 19px;
+    color: var(--color-text-secondary);
+  }
+
+  .status::before,
+  .outcome::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background-color: var(--dot, var(--color-text-disabled));
+  }
+
+  .status.on,
+  .outcome.ok {
+    --dot: var(--color-success-text);
+  }
+
+  .outcome.denied {
+    --dot: var(--color-warning-text);
+  }
+
+  .outcome.failed {
+    --dot: var(--color-danger-text);
   }
 </style>

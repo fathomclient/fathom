@@ -6,82 +6,112 @@
   in the flow of the page or sheet it concerns, and stays until the state it
   describes changes or it is dismissed.
 
-  Every notice is standard glass. Tones are the only place a hue carries
-  meaning: `neutral` is the glass alone, and `success`, `warning` and `danger`
-  lay a wash and a rim in their status colour over it. `floating` adds the
-  pane's shadow, for status that has no page to sit in.
+  The surface is always neutral glass. A tone is a small icon in its status
+  colour and nothing more: a panel is never washed green, amber or red, because
+  status colour is for communication, not for decoration, and a coloured slab
+  says "something is wrong" louder than the words inside it can say what.
+
+    neutral  an info glyph, or none with `icon={false}`
+    success  a check in sage
+    warning  a triangle in amber
+    danger   a circle-alert in terracotta
+
+  `floating` adds the pane's shadow, for status that has no page to sit in.
 -->
 <script lang="ts">
-  import { X } from '@lucide/svelte';
+  import type { Component } from 'svelte';
+  import { CircleAlert, CircleCheck, Info, TriangleAlert, X, type IconProps } from '@lucide/svelte';
+  import { tooltip } from '../tooltip';
 
   export let tone: 'neutral' | 'success' | 'warning' | 'danger' = 'neutral';
   export let floating = false;
+  /** Show the tone's glyph. Neutral notices that are plain explanation can drop it. */
+  export let icon = true;
+  /** A more specific glyph than the tone's own, such as a Wi-Fi-off mark. */
+  export let glyph: Component<IconProps> | null = null;
   /** Shows a dismiss control when set. */
   export let onDismiss: (() => void) | null = null;
+
+  $: shown =
+    glyph ??
+    (tone === 'success' ? CircleCheck : tone === 'warning' ? TriangleAlert : tone === 'danger' ? CircleAlert : Info);
 </script>
 
 <div
-  class="notice"
-  class:tone-success={tone === 'success'}
-  class:tone-warning={tone === 'warning'}
-  class:tone-danger={tone === 'danger'}
-  class:neutral={tone === 'neutral'}
+  class="notice {tone}"
   class:material-standard={floating}
   role={tone === 'danger' || tone === 'warning' ? 'alert' : 'status'}
 >
+  {#if icon}
+    <span class="glyph" aria-hidden="true"><svelte:component this={shown} size={16} /></span>
+  {/if}
   <div class="content"><slot /></div>
   {#if onDismiss}
-    <button class="ui-icon-button small" aria-label="Dismiss" on:click={onDismiss}>
-      <X size={14} strokeWidth={2.2} />
+    <button class="ui-icon-button small" aria-label="Dismiss" use:tooltip={'Dismiss'} on:click={onDismiss}>
+      <X size={14} />
     </button>
   {/if}
 </div>
 
 <style>
-  /* Always on standard glass, with the status wash laid over it: a notice can
-     sit straight on the photograph, and a bare tint over bright sky would leave
-     its text unreadable. The tone classes supply only the wash, rim and text
-     colour, through their custom properties. */
+  /* Standard glass when it sits on the photograph, so its text holds over
+     bright sky. */
   .notice {
     --surface-radius: var(--radius-md);
     display: flex;
     align-items: flex-start;
-    gap: var(--space-2);
+    gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-md);
-    background:
-      linear-gradient(var(--tone-tint, transparent), var(--tone-tint, transparent)),
-      var(--mat-standard-fill);
+    background-color: var(--mat-standard-fill);
     -webkit-backdrop-filter: var(--mat-standard-filter);
     backdrop-filter: var(--mat-standard-filter);
-    box-shadow:
-      inset 0 0 0 1px var(--tone-rim, transparent),
-      var(--mat-standard-rim);
-    color: var(--tone-text, var(--color-text-secondary));
+    box-shadow: var(--mat-standard-rim);
+    color: var(--color-text-secondary);
     font-size: var(--type-secondary-size);
     line-height: var(--type-secondary-leading);
   }
 
   .notice.material-standard {
-    box-shadow:
-      inset 0 0 0 1px var(--tone-rim, transparent),
-      var(--mat-standard-rim),
-      var(--mat-standard-shadow);
+    box-shadow: var(--mat-standard-rim), var(--mat-standard-shadow);
   }
 
   /* Inside a pane that is already glass -- a sheet, a popover, a section -- a
      second blur would sample the first one's blur for nothing. The notice goes
-     flat there: the pane's own fill under a control fill, with the same wash,
-     rim and text colour. */
+     flat there: a faint control fill and rim. */
   :global(:is(.material-light, .material-standard, .material-dense, .ui-popover)) .notice {
-    background:
-      linear-gradient(var(--tone-tint, transparent), var(--tone-tint, transparent)),
-      var(--control-fill);
+    background-color: var(--control-fill-faint);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    box-shadow:
-      inset 0 0 0 1px var(--tone-rim, transparent),
-      var(--control-rim);
+    box-shadow: var(--control-rim);
+  }
+
+  /* Centred on the first line of text: 16px glyph, 13px type at 1.45. */
+  .glyph {
+    display: grid;
+    place-items: center;
+    height: 19px;
+    flex-shrink: 0;
+    color: var(--color-text-tertiary);
+  }
+
+  .success .glyph {
+    color: var(--color-success-text);
+  }
+
+  .warning .glyph {
+    color: var(--color-warning-text);
+  }
+
+  .danger .glyph {
+    color: var(--color-danger-text);
+  }
+
+  /* A danger or warning notice leads with its first line at full strength:
+     what failed. The rest is the explanation and the way out. */
+  .warning .content,
+  .danger .content {
+    color: var(--color-text);
   }
 
   .content {
@@ -91,7 +121,7 @@
   }
 
   .notice .ui-icon-button {
-    margin: -4px -8px -4px 0;
-    color: inherit;
+    margin: -5px -8px -5px 0;
+    color: var(--color-text-tertiary);
   }
 </style>

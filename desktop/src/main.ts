@@ -25,4 +25,17 @@ if (!target) throw new Error('#app is missing from index.html');
 // it is never seen with the wrong material.
 void restoreAppearanceModes();
 
+// One device pixel, in CSS pixels. A `1px` hairline at 125% or 150% display
+// scaling is 1.25 or 1.5 device pixels, which the compositor smears across two
+// rows. `--hairline` is re-derived whenever the window moves to a display with
+// a different scale.
+function trackDevicePixel() {
+  const ratio = window.devicePixelRatio || 1;
+  document.documentElement.style.setProperty('--hairline', `${1 / ratio}px`);
+  matchMedia(`(resolution: ${ratio}dppx)`).addEventListener('change', trackDevicePixel, {
+    once: true,
+  });
+}
+trackDevicePixel();
+
 export default mount(windowLabel === 'console' ? Console : App, { target });

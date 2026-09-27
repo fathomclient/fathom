@@ -35,10 +35,10 @@ public abstract class Setting {
      * <h2>Why the schema is closed</h2>
      *
      * <p>A module declares its settings and the interface renders them; no
-     * module draws its own. That is what makes every settings drawer in the
+     * module draws its own. That is what makes every module settings page in the
      * client look the same and what stops a module inventing a control nobody
      * else has. The cost is that a new kind of value needs a new constant here
-     * and a new case in the drawer — which is the right amount of friction for
+     * and a new case on the page — which is the right amount of friction for
      * adding a control to a design system.
      *
      * <p>The eight the client supports, and what each is for:

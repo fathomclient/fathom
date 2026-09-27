@@ -235,16 +235,16 @@ final class Modules {
                 .setting(new Setting.Toggle("sneak", "Sneak key", "", false))
                 .setting(new Setting.Toggle("cps-on-keys", "CPS on buttons",
                         "Show clicks per second on the mouse buttons.", false))
-                .setting(new Setting.Whole("key.size", "Key size", "", 16, 12, 32, 1, "px"))
-                .setting(new Setting.Whole("key.gap", "Spacing", "Space between keys.", 2, 0, 8, 1, "px"))
+                .setting(new Setting.Whole("key.size", "Key size", "", 18, 12, 32, 1, "px"))
+                .setting(new Setting.Whole("key.gap", "Spacing", "Space between keys.", 3, 0, 8, 1, "px"))
                 .setting(new Setting.Toggle("key.background", "Key Background", "", true))
-                .setting(new Setting.Colour("key.unpressed.fill", "Unpressed Fill", "", 0x111318))
-                .setting(new Setting.Colour("key.pressed.fill", "Pressed Fill", "", 0x373B44))
-                .setting(new Setting.Whole("key.opacity", "Opacity", "", 80, 10, 100, 5, "%"))
-                .setting(new Setting.Colour("key.unpressed.text", "Unpressed Text", "", 0xE7EAF0))
-                .setting(new Setting.Colour("key.pressed.text", "Pressed Text", "", 0xFFFFFF))
+                .setting(new Setting.Colour("key.unpressed.fill", "Unpressed Fill", "", 0x1A1A1A))
+                .setting(new Setting.Colour("key.pressed.fill", "Pressed Fill", "", 0x3A3A3A))
+                .setting(new Setting.Whole("key.opacity", "Opacity", "", 88, 10, 100, 5, "%"))
+                .setting(new Setting.Colour("key.unpressed.text", "Unpressed Text", "", 0xCCCCCC))
+                .setting(new Setting.Colour("key.pressed.text", "Pressed Text", "", 0xF2F2F2))
                 .setting(new Setting.Toggle("key.border", "Border", "", true))
-                .setting(new Setting.Colour("key.border.colour", "Border colour", "", 0x5C6573))
+                .setting(new Setting.Colour("key.border.colour", "Border colour", "", 0x5C5C5C))
                 .setting(new Setting.Whole("key.border.width", "Border width", "", 1, 1, 3, 1, "px"))
                 .setting(new Setting.Whole("key.fade", "Press fade",
                         "How long a key takes to light and go dark. Zero is instant.", 40, 0, 120, 10, "ms")))
@@ -301,7 +301,7 @@ final class Modules {
 
         // -- Utility -------------------------------------------------------
 
-        out.add(HudStyle.declare(FathomModule.builder("toggle-sprint")
+        out.add(HudStyle.declareLight(FathomModule.builder("toggle-sprint")
                 .name("Sprint and sneak")
                 .description("Toggle sprint and sneak, and show it.")
                 .category(Category.UTILITY)
@@ -382,12 +382,12 @@ final class Modules {
                 .onByDefault()
                 // Keep the persisted id for compatibility with existing profiles.
                 .setting(new Setting.Toggle("panorama", "Cinematic background",
-                        "Fathom's static, preprocessed Minecraft poster behind the menu.", true))
+                        "Fathom's Rainforest Storm sequence behind the menu.", true))
                 // No "scene" setting while the launcher's approved set holds one
                 // picture: a choice of one is not a choice (and `Setting.Choice`
-                // rightly refuses it). A profile that stored one of the fifteen
-                // retired recordings keeps that line, unread, and gets Golden
-                // Hour; nothing else in it changes. `MenuScenes` puts the setting
+                // rightly refuses it). A profile that stored a retired recording
+                // keeps that line, unread, and gets Rainforest Storm; nothing else
+                // in it changes. `MenuScenes` puts the setting
                 // back when the set grows.
                 .build());
 

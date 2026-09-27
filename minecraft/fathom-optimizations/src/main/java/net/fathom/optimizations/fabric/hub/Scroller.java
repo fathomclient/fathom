@@ -7,6 +7,7 @@ import net.fathom.optimizations.core.ui.anim.Spring;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.generated.FathomTheme.Tokens;
 import net.fathom.optimizations.fabric.ui.VisualEffects;
 
 /**
@@ -144,17 +145,14 @@ public final class Scroller {
         visibility.to(active ? 1f : 0.22f, now, active ? Timing.HOVER_IN : Timing.STANDARD);
         emphasis.to(dragging ? 1f : (hovered ? 0.62f : 0f), now,
                 active ? Timing.HOVER_IN : Timing.HOVER_OUT);
-        float alpha = visibility.opacity(now);
+        // The launcher's scrollbar: no track, a narrow neutral thumb inset
+        // from the edge at 20%, 32% under the pointer or while dragged. It
+        // never changes width and never turns white.
         float bright = emphasis.opacity(now);
-        width = 4f + bright * 2f;
-        x = viewport.right() - width;
-        ui.rounded(x, trackTop, x + width, trackTop + trackHeight,
-                net.fathom.optimizations.core.ui.render.RoundedGeometry.pill(width, trackHeight),
-                Skin.argb(0.11f + alpha * 0.08f, 0x000000));
+        x = viewport.right() - width - 3f;
         ui.rounded(x, handleY, x + width, handleY + handle,
                 net.fathom.optimizations.core.ui.render.RoundedGeometry.pill(width, handle),
-                Skin.mix(Skin.argb(0.16f + alpha * 0.18f, 0xFFFFFF),
-                        Skin.ENERGY_MARK, bright * (dragging ? 0.74f : 0.28f)));
+                Skin.mix(Tokens.CONTROL_SCROLLBAR, Tokens.CONTROL_SCROLLBAR_HOVER, Math.min(1f, bright / 0.62f)));
     }
 
     /** Whether there is anything to scroll, for a caller that lays out around it. */

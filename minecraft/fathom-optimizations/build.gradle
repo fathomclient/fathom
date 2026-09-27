@@ -121,6 +121,21 @@ loom {
                     vmArg '-Dfathom.captureMenu=true'
                 }
             }
+            // The Hub over a live world rather than over the title screen:
+            //   gradle runClient -PcaptureHubWorld=Mods
+            // loads the development world as the HUD capture does, opens the
+            // Hub on that section once the world has settled, and captures it.
+            // A clean frame of the development world -- no HUD, no hand-drawn
+            // UI -- saved unprocessed as run/screenshots/fathom-backdrop-source.png,
+            // for tools that make the shipped Graphite backdrop from it.
+            if (project.hasProperty('captureBackdropSource')) {
+                vmArg '-Dfathom.captureUi=hud'
+                vmArg '-Dfathom.captureBackdropSource=true'
+            }
+            if (project.hasProperty('captureHubWorld')) {
+                vmArg '-Dfathom.captureUi=hud'
+                vmArg "-Dfathom.captureHubWorld=${project.property('captureHubWorld')}"
+            }
             if (project.hasProperty('captureHudItems')) {
                 // Visual QA only: dresses the development player in armour and
                 // two effects so the armour and potion widgets have something
@@ -412,6 +427,19 @@ def coreTest = tasks.register('coreTest') {
 }
 
 tasks.named('check').configure { dependsOn coreTest }
+
+// Graphite + Instrument assets shared by the launcher and the game: the grain
+// tile, the wordmark path and -- with -PbackdropSource=<capture.png> -- the
+// processed backdrop. Offline; nothing here runs in a build.
+tasks.register('graphiteAssets', JavaExec) {
+    group = 'fathom'
+    description = 'Regenerates the Graphite backdrop, grain and wordmark path.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.tools.GraphiteAssets'
+    args = [rootProject.projectDir.toPath().resolve('../..').normalize().toString(),
+            project.findProperty('backdropSource')?.toString() ?: '']
+}
 
 // The NanoVG backend is not on the game classpath, so nothing else compiles it.
 // Checking it here stops it rotting between development runs; it resolves only

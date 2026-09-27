@@ -523,7 +523,8 @@ public final class FeatureTests {
 
         check(registry.find("clock").enabled(), "the readable line was applied");
         check(!registry.find("cps").enabled(), "the unreadable one fell back");
-        check(registry.find("fps").colour(HudStyle.TEXT_COLOUR, 0) == 0xFFFFFF, "and so did the bad colour");
+        check(registry.find("fps").colour(HudStyle.TEXT_COLOUR, 0) == 0xF2F2F2,
+                "and so did the bad colour");
         check(store.complaints().size() >= 2, "and both were reported: " + store.complaints());
         pass("one bad value does not cost the file");
     }
@@ -661,7 +662,12 @@ public final class FeatureTests {
         ClientPrefs prefs = new ClientPrefs();
         check(prefs.scaleIsAutomatic(), "automatic by default");
         check(prefs.highQualityUi(), "high quality rendering is on by default");
-        check(Math.abs(prefs.uiScale() - 1f) < 0.001f, "which multiplies the automatic scale by one");
+        // Auto sits a step under the full window-derived size: at 1.0 the Hub
+        // read as oversized on a 1080p screen.
+        check(Math.abs(prefs.uiScale() - 0.9f) < 0.001f, "which is 0.9 of the automatic scale");
+        prefs.setScaleLabel("65%");
+        check(Math.abs(prefs.uiScale() - 0.65f) < 0.001f, "and a compact 65% is on offer");
+        prefs.setScaleLabel("Auto");
         check(!prefs.scaleChangedFromDefault(), "and a default is not written to the file");
 
         // Chosen by label throughout. The property under test is that a label

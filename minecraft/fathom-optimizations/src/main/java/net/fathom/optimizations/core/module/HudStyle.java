@@ -20,7 +20,7 @@ package net.fathom.optimizations.core.module;
  *
  * <p>Position, anchor and scale. Those live in the HUD layout, because they are
  * spatial: they are set by dragging in the editor against the scene the widget
- * has to sit over, not by a number in a drawer. The drawer links to the editor
+ * has to sit over, not by a number on a settings page. The page links to the editor
  * instead of duplicating it.
  */
 public final class HudStyle {
@@ -30,6 +30,7 @@ public final class HudStyle {
     public static final String TEXT_COLOUR = "text.colour";
     public static final String TEXT_SHADOW = "text.shadow";
     public static final String BACKGROUND = "background";
+    public static final String[] MATERIAL_CHOICES = {"None", "Light", "Standard", "Dense"};
     public static final String BACKGROUND_COLOUR = "background.colour";
     public static final String BACKGROUND_OPACITY = "background.opacity";
     public static final String PADDING = "padding";
@@ -39,12 +40,15 @@ public final class HudStyle {
     public static final String BORDER_COLOUR = "border.colour";
     public static final String BORDER_WIDTH = "border.width";
 
-    private static final int DEFAULT_TEXT_COLOUR = 0xFFFFFF;
-    private static final int DEFAULT_BACKGROUND_COLOUR = 0x000000;
-    private static final int DEFAULT_OPACITY = 40;
-    private static final int DEFAULT_PADDING = 3;
-    private static final int DEFAULT_RADIUS = 0;
-    private static final int DEFAULT_BORDER_COLOUR = 0x5C6573;
+    // The neutral Graphite HUD: value #F2F2F2 on a #101010 plate. These were
+    // the warm golden-hour cream and umber, left behind when the rest of the
+    // product moved to neutral glass.
+    private static final int DEFAULT_TEXT_COLOUR = 0xF2F2F2;
+    private static final int DEFAULT_BACKGROUND_COLOUR = 0x101010;
+    private static final int DEFAULT_OPACITY = 100;
+    private static final int DEFAULT_PADDING = 4;
+    private static final int DEFAULT_RADIUS = 4;
+    private static final int DEFAULT_BORDER_COLOUR = 0x5C5C5C;
 
     private HudStyle() {}
 
@@ -52,10 +56,15 @@ public final class HudStyle {
      * Add the common settings to a module.
      *
      * <p>Called last in a module's declaration, so its own settings come first
-     * in the drawer: what the module <em>is</em> above how it looks.
+     * on the detail page: what the module <em>is</em> above how it looks.
      */
     public static FathomModule.Builder declare(FathomModule.Builder builder) {
-        return declare(builder, "Background", true);
+        return declare(builder, "Material", "Standard");
+    }
+
+    /** A quieter substrate for short status labels such as sprint and sneak. */
+    public static FathomModule.Builder declareLight(FathomModule.Builder builder) {
+        return declare(builder, "Material", "Light");
     }
 
     /** The same shared style, with Keystrokes' outer plate named unambiguously. */
@@ -67,10 +76,10 @@ public final class HudStyle {
                 .setting(new Setting.Choice(FONT, "Font", "Typeface for this HUD module.",
                         FONT_CHOICES[0], FONT_CHOICES))
                 .setting(new Setting.Toggle(TEXT_SHADOW, "Text shadow", "A dark edge under the letters.", true))
-                .setting(new Setting.Toggle(BACKGROUND, "Panel Background", "A plate behind the module.", false))
+                .setting(material("Panel material", "None"))
                 .setting(new Setting.Colour(BACKGROUND_COLOUR, "Panel background colour", "", DEFAULT_BACKGROUND_COLOUR))
                 .setting(new Setting.Whole(
-                        BACKGROUND_OPACITY, "Panel background opacity", "", DEFAULT_OPACITY, 0, 100, 5, "%"))
+                        BACKGROUND_OPACITY, "Panel material strength", "", DEFAULT_OPACITY, 0, 100, 5, "%"))
                 .setting(new Setting.Whole(PADDING, "Padding", "Space between the keys and the panel.",
                         DEFAULT_PADDING, 0, 10, 1, "px"))
                 .setting(new Setting.Whole(RADIUS, "Corner radius", "", DEFAULT_RADIUS, 0, 8, 1, "px"))
@@ -81,17 +90,16 @@ public final class HudStyle {
     }
 
     private static FathomModule.Builder declare(
-            FathomModule.Builder builder, String backgroundLabel, boolean backgroundDefault) {
+            FathomModule.Builder builder, String backgroundLabel, String materialDefault) {
         return builder
                 .setting(new Setting.Choice(FONT, "Font", "Typeface for this HUD module.",
                         FONT_CHOICES[0], FONT_CHOICES))
                 .setting(new Setting.Colour(TEXT_COLOUR, "Text colour", "", DEFAULT_TEXT_COLOUR))
                 .setting(new Setting.Toggle(TEXT_SHADOW, "Text shadow", "A dark edge under the letters.", true))
-                .setting(new Setting.Toggle(BACKGROUND, backgroundLabel, "A plate behind the module.",
-                        backgroundDefault))
+                .setting(material(backgroundLabel, materialDefault))
                 .setting(new Setting.Colour(BACKGROUND_COLOUR, "Background colour", "", DEFAULT_BACKGROUND_COLOUR))
                 .setting(new Setting.Whole(
-                        BACKGROUND_OPACITY, "Background opacity", "", DEFAULT_OPACITY, 0, 100, 5, "%"))
+                        BACKGROUND_OPACITY, "Material strength", "", DEFAULT_OPACITY, 0, 100, 5, "%"))
                 .setting(new Setting.Whole(PADDING, "Padding", "Space between the text and the plate.",
                         DEFAULT_PADDING, 0, 10, 1, "px"))
                 .setting(new Setting.Whole(RADIUS, "Corner radius", "", DEFAULT_RADIUS, 0, 8, 1, "px"))
@@ -99,6 +107,14 @@ public final class HudStyle {
                 .setting(new Setting.Toggle(BORDER, "Border", "An outline around the plate.", false))
                 .setting(new Setting.Colour(BORDER_COLOUR, "Border colour", "", DEFAULT_BORDER_COLOUR))
                 .setting(new Setting.Whole(BORDER_WIDTH, "Border width", "", 1, 1, 3, 1, "px"));
+    }
+
+    /** Keep the id stable and accept the old toggle's stored values. */
+    private static Setting.Choice material(String label, String fallback) {
+        return new Setting.Choice(BACKGROUND, label,
+                "HUD-safe substrate density. None draws text only.", fallback, MATERIAL_CHOICES)
+                .alias("true", "Standard")
+                .alias("false", "None");
     }
 
     /** Whether a module was declared with the common settings. */
@@ -127,7 +143,11 @@ public final class HudStyle {
     }
 
     public static boolean background(FathomModule module) {
-        return module == null || module.toggle(BACKGROUND, true);
+        return !"None".equals(material(module));
+    }
+
+    public static String material(FathomModule module) {
+        return module == null ? "Standard" : module.choice(BACKGROUND, "Standard");
     }
 
     public static int backgroundColour(FathomModule module) {

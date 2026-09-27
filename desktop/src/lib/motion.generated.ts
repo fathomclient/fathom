@@ -12,13 +12,13 @@ export const NORMAL = 160;
 export const SLOW = 200;
 export const STAGGER = 22;
 
-// The golden-hour system (`system.motion`).
+// The shared Rainforest glass system (`system.motion`).
 export const MOTION_PRESS = 90;
-export const MOTION_HOVER = 160;
-export const MOTION_STATE = 180;
+export const MOTION_HOVER = 120;
+export const MOTION_STATE = 160;
 export const MOTION_PAGE = 200;
-export const MOTION_SURFACE = 220;
-export const MOTION_EXIT = 150;
+export const MOTION_SURFACE = 180;
+export const MOTION_EXIT = 120;
 export const MOTION_BACKDROP = 420;
 export const MOTION_STAGGER = 24;
 export const CURVE_STANDARD = [0.2, 0.8, 0.2, 1] as const;

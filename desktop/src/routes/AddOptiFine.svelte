@@ -25,12 +25,14 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Download, FolderOpen, HardDriveDownload, ShieldCheck, TriangleAlert } from '@lucide/svelte';
+  import { Download, FolderOpen, HardDriveDownload, Layers, ShieldCheck, TriangleAlert } from '@lucide/svelte';
 
   import Page from '../lib/ui/Page.svelte';
   import Section from '../lib/ui/Section.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Row from '../lib/ui/Row.svelte';
+  import Notice from '../lib/ui/Notice.svelte';
+  import EmptyState from '../lib/ui/EmptyState.svelte';
   import {
     addSuppliedJar,
     installComponent,
@@ -171,34 +173,35 @@
        ways rather than a primary action and a fallback. -->
   <div class="actions">
     <Button onClick={() => void openPage('optifine')}>
-      <Download size={13} strokeWidth={2} />
+      <Download size={14} />
       Open OptiFine Downloads
     </Button>
     <Button variant="primary" disabled={busy} onClick={() => void choose()}>
-      <FolderOpen size={13} strokeWidth={2} />
+      <FolderOpen size={14} />
       Choose JAR
     </Button>
   </div>
 
   <div class="drop" class:active={dropping} class:done={!!jar}>
-    <HardDriveDownload size={26} strokeWidth={1.6} />
+    <HardDriveDownload size={20} />
     <span class="headline">
       {dropping ? 'Let go to add it' : jar ? jar.fileName : 'Drop the OptiFine JAR anywhere on this window'}
     </span>
-    <span class="quiet">
-      {jar ? `${megabytes(jar.size)} · ${jar.entries} entries · ${jar.hash}` : 'Nothing is uploaded. The file is copied into Fathom’s local store.'}
-    </span>
+    {#if jar}
+      <span class="quiet">
+        {megabytes(jar.size)} · {jar.entries} entries · <span class="mono">{jar.hash}</span>
+      </span>
+    {:else}
+      <span class="quiet">Nothing is uploaded. The file is copied into Fathom’s local store.</span>
+    {/if}
   </div>
 
   {#if error}
-    <p class="error">
-      <TriangleAlert size={14} strokeWidth={2} />
-      {error}
-    </p>
+    <Notice tone="danger">{error}</Notice>
   {/if}
 
   {#if jar}
-    <Section label="What arrived">
+    <Section label="What arrived" material>
       <Row title={jar.name} detail={jar.description} compact />
       <Row
         title="Minecraft"
@@ -237,13 +240,13 @@
            profile" means. Adding OptiFine to a Legacy Fabric profile without
            this is the exact configuration that used to start the game and then
            fail inside class transformation. -->
-      <Section label="Also needed">
+      <Section label="Also needed" material>
         <Row title={jar.bridge.name} detail={jar.bridge.reason} compact />
         <Row title="Licence" detail={jar.bridge.summary} compact />
       </Section>
     {/if}
 
-    <Section label="Add to installation" summary={`${usable.length} of ${jar.profiles.length} can take it`}>
+    <Section label="Add to installation" summary={`${usable.length} of ${jar.profiles.length} can take it`} material>
       {#each usable as fit (fit.id)}
         <div class="fit">
           <div class="fit-text">
@@ -251,7 +254,7 @@
             {#if fit.note}<span class="quiet">{fit.note}</span>{/if}
             {#if fit.needsBridge && jar.bridge}
               <span class="needs">
-                <TriangleAlert size={12} strokeWidth={2} />
+                <TriangleAlert size={12} />
                 Needs {jar.bridge.name}, which this profile does not have yet.
               </span>
             {/if}
@@ -261,16 +264,18 @@
               Install {jar.bridge.name}
             </Button>
           {/if}
-          <Button variant="primary" disabled={busy} onClick={() => void addTo(fit.id)}>
+          <Button disabled={busy} onClick={() => void addTo(fit.id)}>
             Add to profile
           </Button>
         </div>
       {/each}
       {#if usable.length === 0}
-        <p class="none">
-          None of your profiles can take this file. A profile needs a mod loader and the
-          Minecraft version this jar was built for.
-        </p>
+        <EmptyState
+          compact
+          icon={Layers}
+          title="No installation can take this file"
+          detail="An installation needs a mod loader and the Minecraft version this jar was built for."
+        />
       {/if}
       {#each unusable as fit (fit.id)}
         <Row title={fit.name} detail={fit.note} compact />
@@ -281,7 +286,7 @@
   {#if added}
     <Section label="Added" material>
       <p class="added">
-        <ShieldCheck size={14} strokeWidth={2} />
+        <span class="added-mark"><ShieldCheck size={16} /></span>
         {added.message}
       </p>
       {#if added.standdowns.length > 0}
@@ -318,70 +323,68 @@
   /* Large, and a real target: the window accepts the drop anywhere, and this is
      what says so. Dashed rather than solid, because a solid box reads as a
      container that already holds something. */
+  /* The same drop target as the Mods page: a sunken channel with a dashed
+     rim, filled with light while a file is over the window. */
   .drop {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: var(--s1);
+    gap: var(--space-1);
     min-height: 168px;
-    padding: var(--s5);
-    border: 1px dashed var(--glass-edge-strong);
-    border-radius: var(--r-md);
-    color: var(--text-faint);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    background-color: var(--control-fill-sunken);
+    outline: 1.5px dashed var(--control-hairline-strong);
+    outline-offset: -1.5px;
+    color: var(--color-text-tertiary);
     text-align: center;
     transition:
-      border-color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease),
-      color var(--m-fast) var(--ease);
+      background-color var(--motion-state) var(--ease-standard),
+      color var(--motion-state) var(--ease-standard);
   }
 
   .drop.active {
-    border-color: var(--accent);
-    background: var(--accent-wash);
-    color: var(--text);
+    background-color: var(--control-fill-selected);
+    color: var(--color-text);
   }
 
   .drop.done {
-    border-style: solid;
-    border-color: var(--glass-edge);
-    color: var(--text-muted);
+    outline-style: solid;
+    outline-color: var(--control-hairline);
+    color: var(--color-text-secondary);
   }
 
   .headline {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text);
+    margin-top: var(--space-2);
+    font-size: var(--type-body-size);
+    font-weight: var(--type-button-weight);
+    color: var(--color-text);
   }
 
   .quiet {
-    color: var(--text-faint);
-    font-size: 12px;
-  }
-
-  .error {
-    display: flex;
-    align-items: center;
-    gap: var(--s1);
-    margin: var(--s3) 0 0;
-    color: var(--bad);
-    font-size: 13px;
+    color: var(--color-text-tertiary);
+    font-size: var(--type-caption-size);
   }
 
   .fit {
     display: flex;
     align-items: center;
-    gap: var(--s3);
-    padding: var(--s2) 0;
-    border-bottom: 1px solid var(--chrome-line);
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
+  }
+
+  .fit:first-child {
+    box-shadow: none;
   }
 
   .needs {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    font-size: var(--t-body);
-    color: var(--warn);
+    gap: 6px;
+    font-size: var(--type-caption-size);
+    color: var(--color-warning-text);
   }
 
   .fit-text {
@@ -393,31 +396,39 @@
   }
 
   .fit-name {
-    font-size: 14px;
-    color: var(--text);
-  }
-
-  .none {
-    margin: 0;
-    color: var(--text-faint);
-    font-size: 13px;
-    line-height: 1.5;
+    font-size: var(--type-body-size);
+    font-weight: var(--type-heading-weight);
+    color: var(--color-text);
   }
 
   .added {
     display: flex;
-    align-items: center;
-    gap: var(--s1);
-    margin: 0 0 var(--s2);
-    color: var(--good);
-    font-size: 13px;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-3) var(--space-4) var(--space-2);
+    color: var(--color-text);
+    font-size: var(--type-secondary-size);
+    line-height: var(--type-secondary-leading);
+  }
+
+  .added-mark {
+    display: grid;
+    place-items: center;
+    height: 19px;
+    color: var(--color-success-text);
+  }
+
+  .added ~ .quiet {
+    margin: 0;
+    padding: 0 var(--space-4);
   }
 
   ul {
-    margin: var(--s1) 0 0;
-    padding-left: var(--s4);
-    color: var(--text-muted);
-    font-size: 12px;
+    margin: var(--space-1) 0 0;
+    padding: 0 var(--space-4) var(--space-3) var(--space-8);
+    color: var(--color-text-secondary);
+    font-size: var(--type-caption-size);
     line-height: 1.6;
   }
 </style>

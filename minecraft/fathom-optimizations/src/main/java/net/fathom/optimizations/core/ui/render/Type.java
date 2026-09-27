@@ -19,11 +19,16 @@ import net.fathom.optimizations.generated.FathomTheme;
  */
 public final class Type {
 
-    /** The three weights the interface uses. Geist has nine; three is a system. */
+    /**
+     * The three weights the interface uses -- Geist has nine; three is a
+     * system -- and Geist Mono's two, for values that change while visible.
+     */
     public enum Weight {
         REGULAR,
         MEDIUM,
-        SEMIBOLD
+        SEMIBOLD,
+        MONO_REGULAR,
+        MONO_MEDIUM
     }
 
     /** Metadata: badges, units, counts, the quiet line under a control. */

@@ -15,7 +15,7 @@ import net.fathom.optimizations.core.module.FathomModule;
  * <h2>The shape is not worked out here</h2>
  *
  * <p>{@link CrosshairShape} turns the settings into whole-pixel rectangles, and
- * the preview in the settings drawer asks the same class for the same
+ * the preview on the module detail page asks the same class for the same
  * rectangles. So the preview cannot drift from the crosshair, and the geometry
  * — which is the part with the interesting cases: gaps, outlines that must not
  * overlap, a dot that has to sit in the middle of an even-numbered line — has

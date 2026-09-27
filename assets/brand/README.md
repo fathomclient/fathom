@@ -79,7 +79,7 @@ very slowly between two densities. It is not an app icon.
 For a hero or splash wordmark on `golden-hour.jpg`: the smooth rose sky near
 the top, about 7–8% down; away from the horizon and palm band and from the
 water. Do not line the wordmark's surface up with the photograph's horizon. A
-very soft local darkening behind it is allowed (`veil` on `Wordmark.svelte`: at
+very soft local darkening behind it is allowed (the `veil` brand token: at
 most 18% at the centre, feathered to nothing). If a crop puts bright gold
 behind the letters, use the dark variant.
 

@@ -23,13 +23,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import { Gauge, CircleCheck, CircleAlert, Zap } from '@lucide/svelte';
+  import { Gauge, CircleCheck, CircleAlert } from '@lucide/svelte';
 
   import Page from '../lib/ui/Page.svelte';
   import Section from '../lib/ui/Section.svelte';
   import Row from '../lib/ui/Row.svelte';
   import Switch from '../lib/ui/Switch.svelte';
   import Segmented from '../lib/ui/Segmented.svelte';
+  import Notice from '../lib/ui/Notice.svelte';
+  import Button from '../lib/ui/Button.svelte';
+  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import { tooltip } from '../lib/tooltip';
   import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
   import {
     performanceView,
@@ -117,19 +121,20 @@
            so every profile created before Fathom seeded its own defaults has
            them, and no amount of optimization work is visible through a 120 fps
            limiter. -->
-      <div class="notice" transition:fade={{ duration: FAST, easing: EASE }}>
-        <CircleAlert size={18} />
-        <div class="notice-text">
-          <strong>{view.videoLimits.summary}</strong>
-          <span>
-            These are Minecraft's own defaults, not a Fathom setting. Measured on this
-            machine, lifting them took a test scene from 120 to 384 fps. Your other video
-            settings are left alone.
-          </span>
-        </div>
-        <button class="unlock" disabled={busy} on:click={unlockFrames}>
-          Remove the limit
-        </button>
+      <div transition:fade={{ duration: FAST, easing: EASE }}>
+        <Notice tone="warning">
+          <div class="notice-text">
+            <strong>{view.videoLimits.summary}</strong>
+            <span>
+              These are Minecraft's own defaults, not a Fathom setting. Measured on this
+              machine, lifting them took a test scene from 120 to 384 fps. Your other video
+              settings are left alone.
+            </span>
+            <div class="notice-action">
+              <Button small disabled={busy} onClick={unlockFrames}>Remove the limit</Button>
+            </div>
+          </div>
+        </Notice>
       </div>
     {/if}
 
@@ -165,9 +170,9 @@
       >
         <span slot="icon" class="module-icon" class:on={view.module.installed}>
           {#if view.module.installed}
-            <CircleCheck size={17} strokeWidth={2} />
+            <CircleCheck size={18} />
           {:else}
-            <CircleAlert size={17} strokeWidth={2} />
+            <CircleAlert size={18} />
           {/if}
         </span>
       </Row>
@@ -189,6 +194,7 @@
     <Section
       label="Measured"
       summary={view.benchmarkCount > 1 ? `newest of ${view.benchmarkCount} runs` : ''}
+      material
     >
       {#if view.benchmark}
         <Row
@@ -198,14 +204,14 @@
           tone={view.benchmark.partial ? 'warn' : 'good'}
           expandable
         >
-          <span slot="icon"><Gauge size={17} strokeWidth={1.9} /></span>
+          <span slot="icon"><Gauge size={18} /></span>
           <svelte:fragment slot="details">
             <div class="metrics">
               <div class="metric-group">
                 <h4>Frames</h4>
                 {#each view.benchmark.frames as metric}
                   <div class="metric">
-                    <span>{metric.label}</span><span class="tnum">{metric.value}</span>
+                    <span>{metric.label}</span><span class="mono">{metric.value}</span>
                   </div>
                 {/each}
               </div>
@@ -213,7 +219,7 @@
                 <h4>Memory</h4>
                 {#each view.benchmark.memory as metric}
                   <div class="metric">
-                    <span>{metric.label}</span><span class="tnum">{metric.value}</span>
+                    <span>{metric.label}</span><span class="mono">{metric.value}</span>
                   </div>
                 {/each}
               </div>
@@ -221,7 +227,7 @@
                 <h4>Garbage collection</h4>
                 {#each view.benchmark.gc as metric}
                   <div class="metric">
-                    <span>{metric.label}</span><span class="tnum">{metric.value}</span>
+                    <span>{metric.label}</span><span class="mono">{metric.value}</span>
                   </div>
                 {/each}
               </div>
@@ -236,10 +242,12 @@
           </svelte:fragment>
         </Row>
       {:else}
-        <p class="unmeasured">
-          Nothing measured yet. Press Right Shift in game, open Diagnostics, and start a
-          benchmark; the result appears here.
-        </p>
+        <EmptyState
+          compact
+          icon={Gauge}
+          title="No performance history"
+          detail="Press Right Shift in game, open Diagnostics and start a benchmark. The result appears here."
+        />
       {/if}
     </Section>
 
@@ -280,9 +288,15 @@
                   -->
                   {#if row.canToggle}
                     {#if row.running && row.enabled}
-                      <span class="live" title="Running now" transition:fade={{ duration: FAST }}>
-                        <Zap size={11} strokeWidth={2.6} />
-                      </span>
+                      <!-- Live state from the running game: the one place on this
+                           page the signal colour belongs. -->
+                      <span
+                        class="live"
+                        role="img"
+                        aria-label="Running now"
+                        use:tooltip={'Running now'}
+                        transition:fade={{ duration: FAST }}
+                      ></span>
                     {/if}
                     <Switch
                       checked={row.enabled}
@@ -316,64 +330,35 @@
 {/if}
 
 <style>
-  /* Deliberately not a Row: this is a one-off condition with an action, not a
-     setting, and it should stop reading like one the moment it is dealt with.
-     It removes itself when `videoLimits` comes back null. */
-  .notice {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--s-3);
-    padding: var(--s-3);
-    margin-bottom: var(--s-4);
-    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-    border-radius: var(--r-2, 8px);
-    background: color-mix(in srgb, var(--warn) 8%, transparent);
-    color: var(--warn);
-  }
-
+  /* A one-off condition with an action, not a setting: a notice that removes
+     itself when `videoLimits` comes back null. */
   .notice-text {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    flex: 1;
-    min-width: 0;
   }
 
   .notice-text strong {
-    font-size: var(--t-body);
-    color: var(--text);
+    font-weight: var(--type-heading-weight);
+    color: var(--color-text);
   }
 
   .notice-text span {
-    font-size: var(--t-body);
-    color: var(--text-muted);
-    line-height: 1.5;
+    color: var(--color-text-secondary);
   }
 
-  .unlock {
-    flex-shrink: 0;
-    padding: 6px 12px;
-    border: 1px solid var(--chrome-line);
-    border-radius: var(--r-1, 6px);
-    background: var(--surface, transparent);
-    color: var(--text);
-    font-size: var(--t-body);
-    cursor: pointer;
+  .notice-action {
+    display: flex;
+    margin-top: var(--space-2);
   }
 
-  .unlock:hover:not(:disabled) {
-    border-color: var(--warn);
-  }
-
-  .unlock:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
+  /* The segmented control keeps its own width; stretched to the column it
+     would leave an empty length of track beyond the last option. */
   .preset {
     display: flex;
     flex-direction: column;
-    gap: var(--s-3);
+    align-items: flex-start;
+    gap: var(--space-3);
   }
 
   .preset-detail {
@@ -395,7 +380,7 @@
 
   .groups :global(section) {
     padding: 7px 0;
-    box-shadow: 0 -1px 0 var(--chrome-line);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 
   .groups :global(section:first-child) {
@@ -418,12 +403,11 @@
   }
 
   .metric-group h4 {
-    margin: 0 0 var(--s-2);
-    font-size: var(--t-meta);
-    text-transform: uppercase;
-    letter-spacing: var(--track-wide);
-    color: var(--text-faint);
-    font-weight: var(--w-medium);
+    margin: 0 0 var(--space-2);
+    font-size: var(--type-label-size);
+    font-weight: var(--type-label-weight);
+    letter-spacing: var(--type-label-tracking);
+    color: var(--color-text-tertiary);
   }
 
   .metric {
@@ -436,7 +420,8 @@
   }
 
   .metric span:last-child {
-    color: var(--text);
+    font-size: var(--type-caption-size);
+    color: var(--color-text);
   }
 
   .caveats {
@@ -447,30 +432,28 @@
     line-height: 1.5;
   }
 
-  .unmeasured {
-    margin: 0;
-    padding: 14px;
-    font-size: var(--t-body);
-    color: var(--text-faint);
-    line-height: 1.5;
-  }
-
   .module-icon {
-    color: var(--warn);
+    color: var(--color-warning-text);
   }
 
   .module-icon.on {
-    color: var(--good);
+    color: var(--color-success-text);
   }
 
+  /* A 6px signal dot with a comfortable hover target around it. */
   .live {
     display: grid;
     place-items: center;
     width: 20px;
     height: 20px;
-    border-radius: var(--r-pill);
-    color: var(--good);
-    background: rgba(79, 201, 138, 0.15);
+  }
+
+  .live::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background-color: var(--color-signal);
   }
 
   .d {
@@ -483,7 +466,7 @@
     gap: var(--s-1);
     margin: 0;
     padding-top: var(--s-2);
-    border-top: 1px solid var(--chrome-line);
+    border-top: var(--hairline) solid var(--chrome-line);
   }
 
   dl div {
@@ -494,11 +477,8 @@
   dt {
     flex-shrink: 0;
     width: 110px;
-    color: var(--text-faint);
-    font-size: var(--t-meta);
-    text-transform: uppercase;
-    letter-spacing: var(--track-wide);
-    padding-top: var(--s-1);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-caption-size);
   }
 
   dd {

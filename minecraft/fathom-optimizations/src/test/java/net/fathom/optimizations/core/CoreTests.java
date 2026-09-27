@@ -55,6 +55,7 @@ public final class CoreTests {
         // -- switching -----------------------------------------------------
         everyOptimizationIsIndividuallySwitchable();
         aUserChoiceSurvivesAPreset();
+        theBoardReportsThePresetItMatches();
         aConflictDoesNotOverrideADeliberateUserChoice();
         anIncompatibilityOverridesEverything();
         resolvedConflictsAreOfferedBack();
@@ -309,6 +310,17 @@ public final class CoreTests {
         check(switches.isEnabled(id), "a preset must not override a user's explicit choice");
         check(switches.state(id).chosenByUser(), "and the reason is still USER");
         pass("a user choice survives a preset");
+    }
+
+    static void theBoardReportsThePresetItMatches() {
+        SwitchBoard switches = board();
+        switches.applyPreset(Preset.VANILLA);
+        check(switches.matchingPreset() == Preset.VANILLA, "a freshly applied preset is the one in effect");
+
+        OptimizationId id = switches.registry().all().get(0).id();
+        switches.setByUser(id, true);
+        check(switches.matchingPreset() != Preset.VANILLA, "one switch changed by hand is no longer that preset");
+        pass("the board reports the preset it matches");
     }
 
     static void aConflictDoesNotOverrideADeliberateUserChoice() {

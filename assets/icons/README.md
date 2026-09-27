@@ -4,7 +4,8 @@
 are extracted from the exact Lucide package used by the launcher. They are the
 shared artwork consumed by both products:
 
-- the launcher uses the SVGs directly as CSS masks;
+- the launcher draws them inline from `desktop/src/lib/icons.generated.ts`
+  (`FathomIcon.svelte`), so the global stroke rule applies to them;
 - Minecraft receives generated SVG path strings and rasterises them into its
   antialiased icon atlas at the active framebuffer scale.
 

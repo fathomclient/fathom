@@ -19,10 +19,10 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fly } from 'svelte/transition';
+  import { fade, fly } from 'svelte/transition';
   import { Check, ChevronDown, Layers } from '@lucide/svelte';
 
-  import { EASE, MOTION_SURFACE } from '../motion';
+  import { EASE, MOTION_SURFACE, EASE_EXIT, MOTION_EXIT } from '../motion';
   import { tooltip } from '../tooltip';
   import { profilesView, selectProfile, type ProfileRow } from '../api';
 
@@ -84,21 +84,23 @@
   <button
     class="trigger ui-capsule material-clear material-interactive {size}"
     class:small={size === 'bar'}
+    class:large={size === 'hero'}
     class:active={open}
     aria-haspopup="menu"
     aria-expanded={open}
     use:tooltip={open ? '' : 'Switch installation'}
     on:click|stopPropagation={() => void toggle()}
   >
-    <Layers size={size === 'hero' ? 15 : 13} strokeWidth={2} />
+    <Layers size={size === 'hero' ? 15 : 13} />
     <span class="label">{label}</span>
-    <span class="chevron" class:open><ChevronDown size={13} strokeWidth={2.2} /></span>
+    <span class="chevron" class:open><ChevronDown size={14} /></span>
   </button>
 
   {#if open}
     <div
       class="menu ui-popover {align}"
-      transition:fly={{ y: align === 'up' ? 6 : -6, duration: MOTION_SURFACE, easing: EASE }}
+      in:fly={{ y: align === 'up' ? 6 : -6, duration: MOTION_SURFACE, easing: EASE }}
+      out:fade={{ duration: MOTION_EXIT, easing: EASE_EXIT }}
       on:click|stopPropagation
       on:keydown={(event) => event.key === 'Escape' && (open = false)}
       role="menu"
@@ -113,7 +115,7 @@
           on:click={() => void choose(row.id)}
         >
           <span class="tick">
-            {#if row.selected}<Check size={13} strokeWidth={2.8} />{/if}
+            {#if row.selected}<Check size={14} />{/if}
           </span>
           <span class="text">
             <span class="name">{row.name}</span>
@@ -140,12 +142,6 @@
 
   .trigger {
     color: var(--color-text);
-  }
-
-  .trigger.hero {
-    height: var(--control-height-lg);
-    padding: 0 var(--space-4);
-    font-size: var(--type-body-size);
   }
 
   .trigger.active {

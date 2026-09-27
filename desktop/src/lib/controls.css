@@ -16,7 +16,7 @@
  *   nobody can see.
  *
  * Interaction everywhere is density, not light: hover thickens the fill, press
- * compresses slightly, focus draws an ivory ring. Nothing glows, and no hover
+ * compresses slightly, focus draws a neutral light ring. Nothing glows, and no hover
  * turns a control white.
  */
 
@@ -47,6 +47,15 @@
   gap: 6px;
 }
 
+/* The hero size: the selectors above Play. One definition, so the
+   installation and profile selectors cannot drift apart. */
+.ui-capsule.large {
+  height: var(--control-height-lg);
+  padding: 0 var(--space-4);
+  font-size: var(--type-body-size);
+  gap: var(--space-2);
+}
+
 .ui-capsule:not([class*='material-']) {
   background-color: var(--control-fill);
   box-shadow: var(--control-rim);
@@ -69,6 +78,24 @@
   background-color: var(--control-fill-selected);
 }
 
+/* Ghost: no surface at rest, the faint glass veil under the pointer. For the
+   secondary actions that sit beside a primary one, and for inline actions
+   ("Dismiss", "Stop") that used to be underlined text. */
+.ui-capsule.ghost:not([class*='material-']) {
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--color-text-secondary);
+}
+
+.ui-capsule.ghost:not([class*='material-']):hover:not(:disabled) {
+  background-color: var(--control-fill);
+  color: var(--color-text);
+}
+
+.ui-capsule.ghost:not([class*='material-']):active:not(:disabled) {
+  background-color: var(--control-fill-hover);
+}
+
 .ui-capsule:disabled {
   cursor: default;
   color: var(--color-text-disabled);
@@ -78,7 +105,7 @@
 .ui-icon-button:focus-visible,
 .ui-popover-item:focus-visible,
 .ui-field:focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: var(--focus-ring-width) solid var(--color-focus);
   outline-offset: 2px;
 }
 
@@ -103,8 +130,7 @@
 .ui-icon-button:not([class*='material-']) {
   transition:
     background-color var(--motion-hover) var(--ease-standard),
-    color var(--motion-hover) var(--ease-standard),
-    transform var(--motion-press) var(--ease-standard);
+    color var(--motion-hover) var(--ease-standard);
 }
 
 .ui-icon-button:hover:not(:disabled) {
@@ -116,8 +142,7 @@
 }
 
 .ui-icon-button:not([class*='material-']):active:not(:disabled) {
-  background-color: var(--control-fill-pressed);
-  transform: scale(0.94);
+  background-color: var(--control-fill-selected);
 }
 
 .ui-icon-button:disabled {
@@ -143,10 +168,18 @@
   background-color: var(--mat-dense-fill);
   -webkit-backdrop-filter: var(--mat-dense-filter);
   backdrop-filter: var(--mat-dense-filter);
-  box-shadow: var(--mat-dense-rim), var(--shadow-lg);
+  box-shadow: var(--mat-dense-rim), var(--shadow-md);
   border-radius: var(--radius-lg);
   color: var(--color-text);
   overscroll-behavior: contain;
+}
+
+/* A separator between groups of items: a device-pixel line, inset to the
+   items' own text edge. Only where a menu really has two groups. */
+.ui-popover-separator {
+  height: var(--hairline);
+  margin: var(--space-1) var(--space-3);
+  background-color: var(--control-hairline);
 }
 
 .ui-popover-item {
@@ -154,8 +187,8 @@
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  min-height: var(--control-height-lg);
-  padding: var(--space-2) var(--space-3);
+  min-height: 36px;
+  padding: 6px var(--space-3);
   border-radius: max(
     var(--radius-inner-min),
     calc(var(--radius-lg) - var(--space-2))
@@ -172,6 +205,15 @@
 .ui-popover-item:hover:not(:disabled) {
   color: var(--color-text);
   background-color: var(--control-fill);
+}
+
+.ui-popover-item:active:not(:disabled) {
+  background-color: var(--control-fill-hover);
+}
+
+.ui-popover-item:disabled {
+  cursor: default;
+  color: var(--color-text-disabled);
 }
 
 .ui-popover-item.selected {
@@ -230,52 +272,65 @@ select.ui-field {
   -webkit-appearance: none;
   appearance: none;
   padding-right: var(--space-8);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23eadcbd' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23bdbdbd' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right var(--space-3) center;
   cursor: pointer;
 }
 
 select.ui-field option {
-  background-color: var(--palette-umber-800);
+  background-color: var(--backdrop-base);
   color: var(--color-text);
 }
 
 /* -- slider -----------------------------------------------------------------
-   Every native range input, because each one used to take the browser's blue
-   or the old red. A sunken track with a rim, and an ivory knob. */
+   Every native range input. A thin translucent channel, the part up to the
+   value in brighter neutral, and a small high-contrast thumb. The filled part
+   needs the value as a percentage, which the `rangeFill` action (or an inline
+   `--range-fill`) supplies; without it the channel is simply unfilled. Cyan is
+   not used here: a slider sets a preference, it does not report telemetry. */
 input[type='range'] {
+  --range-fill: 0%;
   -webkit-appearance: none;
   appearance: none;
-  height: 22px;
+  height: 20px;
   background: transparent;
   cursor: pointer;
 }
 
 input[type='range']::-webkit-slider-runnable-track {
-  height: 5px;
+  height: 4px;
   border-radius: var(--radius-pill);
-  background-color: var(--control-fill-sunken);
-  box-shadow: var(--control-rim);
+  background:
+    linear-gradient(
+      to right,
+      var(--control-slider-fill) 0,
+      var(--control-slider-fill) var(--range-fill),
+      var(--control-slider-track) var(--range-fill)
+    );
 }
 
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  margin-top: -6.5px;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
   border-radius: var(--radius-pill);
-  background-color: var(--palette-ivory-50);
+  background-color: var(--color-text);
   box-shadow: var(--shadow-knob);
-  transition: transform var(--motion-press) var(--ease-standard);
 }
 
-input[type='range']:active::-webkit-slider-thumb {
-  transform: scale(0.92);
+input[type='range']:hover::-webkit-slider-thumb {
+  background-color: var(--palette-ivory-50);
+}
+
+input[type='range']:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 input[type='range']:focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: var(--focus-ring-width) solid var(--color-focus);
   outline-offset: 4px;
   border-radius: var(--radius-pill);
 }
@@ -287,27 +342,27 @@ input[type='range']:focus-visible {
   position: fixed;
   z-index: 100;
   max-width: 280px;
-  padding: 6px var(--space-3);
-  border-radius: var(--radius-md);
+  padding: 5px var(--space-2);
+  border-radius: var(--radius-xs);
   background-color: var(--mat-dense-fill);
   -webkit-backdrop-filter: var(--mat-dense-filter);
   backdrop-filter: var(--mat-dense-filter);
-  box-shadow: var(--mat-dense-rim), var(--shadow-sm);
+  /* The rim alone: a tooltip is too small for a shadow to read as anything
+     but a smudge. */
+  box-shadow: var(--mat-dense-rim);
   font-family: var(--type-family);
   font-size: var(--type-caption-size);
-  line-height: var(--type-caption-leading);
+  font-weight: var(--type-label-weight);
+  line-height: 16px;
   color: var(--color-text);
+  white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transform: translateY(2px);
-  transition:
-    opacity var(--motion-hover) var(--ease-standard),
-    transform var(--motion-hover) var(--ease-standard);
+  transition: opacity var(--motion-hover) var(--ease-standard);
 }
 
 .ui-tooltip.shown {
   opacity: 1;
-  transform: none;
 }
 
 /* -- list item: one thing in a list pane --------------------------------------
@@ -323,7 +378,7 @@ input[type='range']:focus-visible {
   gap: var(--space-2) var(--space-4);
   padding: var(--space-3) var(--space-4);
   border-radius: max(var(--radius-inner-min), calc(var(--surface-radius, var(--radius-lg)) - 2px));
-  box-shadow: 0 -1px 0 var(--control-hairline);
+  box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   transition: background-color var(--motion-hover) var(--ease-standard);
 }
 

@@ -32,6 +32,8 @@
   import Switch from './Switch.svelte';
   import Sheet from './Sheet.svelte';
   import Notice from './Notice.svelte';
+  import { rangeFill } from '../range';
+  import { tooltip } from '../tooltip';
   import { EASE, MOTION_HOVER, MOTION_STATE } from '../motion';
   import {
     createProfileFromSetup,
@@ -170,16 +172,16 @@
               class="kind"
               class:selected={draft.kind === kind.id}
               disabled={Boolean(kind.unavailable)}
-              title={kind.unavailable ?? ''}
+              use:tooltip={kind.unavailable ?? ''}
               on:click={() => void choose('kind', kind.id)}
             >
               <span class="kind-head">
                 <span class="kind-name">{kind.label}</span>
                 {#if kind.recommended}
-                  <span class="badge"><Sparkles size={10} strokeWidth={2.4} /> Recommended</span>
+                  <span class="badge"><Sparkles size={12} /> Recommended</span>
                 {/if}
                 {#if draft.kind === kind.id}
-                  <span class="tick"><Check size={13} strokeWidth={2.6} /></span>
+                  <span class="tick"><Check size={14} /></span>
                 {/if}
               </span>
               <span class="kind-summary">{kind.summary}</span>
@@ -232,7 +234,7 @@
                      to the author and a drop target on the Mods page, not a
                      switch that would do nothing. -->
                 <Button onClick={() => void openPage(component.id)}>
-                  <Download size={13} strokeWidth={2} />
+                  <Download size={14} />
                   Get it
                 </Button>
               {/if}
@@ -263,7 +265,7 @@
 
         <div class="row">
           <span class="label">Memory</span>
-          <span class="value tnum">
+          <span class="value mono">
             {memoryAutomatic ? `${options.recommendedMemoryMb} MB` : `${draft.memoryMb} MB`}
           </span>
         </div>
@@ -289,6 +291,7 @@
               step={512}
               value={draft.memoryMb ?? options.recommendedMemoryMb}
               aria-label="Memory"
+              use:rangeFill={draft.memoryMb}
               on:input={(event) => void choose('memoryMb', Number(event.currentTarget.value))}
             />
           </div>
@@ -384,7 +387,7 @@
   }
 
   .kind:focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: var(--focus-ring-width) solid var(--color-focus);
     outline-offset: 2px;
   }
 
@@ -458,7 +461,7 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-3) 0 var(--space-1);
-    box-shadow: 0 -1px 0 var(--control-hairline);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 
   .component-text {
@@ -519,9 +522,13 @@
     flex: 1;
   }
 
+  /* Fixed width, so the row does not shuffle while the slider is dragged
+     through 512 MB and 16384 MB. */
   .value {
     margin-left: auto;
-    font-size: var(--type-body-size);
+    min-width: 8ch;
+    text-align: right;
+    font-size: var(--type-secondary-size);
     font-weight: var(--type-button-weight);
   }
 

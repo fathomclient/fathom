@@ -1,7 +1,10 @@
 package net.fathom.optimizations.fabric.hub;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.lwjgl.input.Keyboard;
 
@@ -16,43 +19,35 @@ import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.layout.Rect;
-import net.fathom.optimizations.core.ui.layout.ResponsiveGrid;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.FathomComponents;
+import net.fathom.optimizations.fabric.ui.FathomSettingRows;
 import net.fathom.optimizations.fabric.ui.Skin;
 import net.fathom.optimizations.fabric.ui.VisualEffects;
+import net.fathom.optimizations.fabric.ui.Graphite;
+import net.fathom.optimizations.generated.GraphiteTokens;
 
 /**
  * The Mods page: every feature, searchable, with its settings a click away.
  *
- * <h2>Responsive cards, not a settings document</h2>
+ * <h2>A compact browser and a dedicated configuration page</h2>
  *
- * <p>Icon, name, state, description and the two actions that matter are visible
- * without leaving the browser. The grid chooses one to three columns from the
- * available width, so opening the settings drawer narrows the same browser
- * rather than covering or scaling it.
+ * <p>Icon, name, state, description, keybind and configuration affordance are
+ * visible in one quiet row. Selecting a configurable module replaces the list
+ * with a full-width detail page inside the Hub; it never stacks a drawer over a
+ * browser that was already narrow.
  *
- * <h2>Descriptions stay useful at every width</h2>
- *
- * <p>The card width is derived from the viewport, text wraps against that real
- * width, and the settings drawer uses the same font metrics. Nothing is laid
- * out against a guessed 720p rectangle and enlarged later.
- *
- * <h2>Why the settings are a drawer and not another screen</h2>
- *
- * <p>The requirement is "do not require leaving Minecraft for routine mod
- * configuration", and a screen you have to navigate back out of is one step
- * closer to leaving than a panel that slides over half the list. The list
- * narrows rather than being covered, so the row you pressed is still visible
- * beside its own settings.
+ * <p>The detail page groups related settings into shared surfaces. Individual
+ * settings remain lightweight rows, so a module with many values reads like a
+ * settings document rather than a wall of nested cards.
  *
  * <h2>Nothing here is written per module</h2>
  *
- * <p>The drawer is built from {@code Setting.Kind}: a toggle draws a switch, a
+ * <p>The page is built from {@code Setting.Kind}: a toggle draws a switch, a
  * whole number draws a stepper, a key draws a rebinding control, and a module
  * that adds a setting gets a control for it without this file changing. That is
  * why a module can declare eight common HUD settings in one call and have all
@@ -67,23 +62,44 @@ import net.fathom.optimizations.fabric.ui.VisualEffects;
  */
 final class ModsSection implements Section {
 
-    /** Visual-QA only: exercise a full grid of lit cards without changing saved module state. */
+    /** Visual-QA only: exercise a full list of lit rows without changing saved module state. */
     private static final boolean FORCE_ENABLED_QA = Boolean.getBoolean("fathom.qaAllModules");
 
-    private static final float CARD_HEIGHT = 148f;
-    private static final float CARD_GAP = Skin.CARD_GAP;
-    /** Space inside the scroller for shadows and press feedback. */
-    private static final float CARD_FIELD_PAD = Skin.CARD_PADDING;
-    private static final float MIN_CARD_WIDTH = 236f;
-    private static final float ICON = 22f;
-    private static final float ACTION = 26f;
-    private static final float SETTING_ROW = 40f;
+    private static final float MODULE_ROW = 64f;
+    /**
+     * Rows share one group and are divided by a hairline, as the launcher's
+     * list items are -- no gap, and no card of their own.
+     */
+    private static final float ROW_GAP = 0f;
+    /** The group's inner padding; rows are concentric with its corners. */
+    private static final float LIST_PAD = Skin.S2;
+    private static final float DETAIL_HEADER = 88f;
     private static final float CONFLICT_ROW = 18f;
-    private static final float DRAWER_MAX = 380f;
+    private static final float TOOLBAR_HEIGHT = 36f;
+    private static final float TOOLBAR_GAP = 12f;
+    private static final float DETAIL_WIDTH = 360f;
 
     private final Scroller scroller = new Scroller();
-    private final Scroller drawerScroll = new Scroller();
-    private final Motion drawer = new Motion(0f, Timing.PANEL);
+    private final Scroller detailScroll = new Scroller();
+    private final Motion detail = new Motion(0f, Timing.DETAIL);
+    private List<FathomModule> modules = Collections.emptyList();
+    private List<Setting> openSettings = Collections.emptyList();
+    private final List<Category> presentCategories = new ArrayList<Category>();
+    private String[] categoryLabels = new String[0];
+    private final List<FathomModule> visibleModules = new ArrayList<FathomModule>();
+    private String visibleSearch;
+    private Category visibleFilter;
+    /** Mockup B's All / On / Off segmented filter. */
+    private int stateFilter;
+    private int visibleStateFilter = -1;
+    private final Map<Setting.Choice, String[]> choiceOptions =
+            new IdentityHashMap<Setting.Choice, String[]>();
+    private final Map<Setting, Boolean> appearanceSettings =
+            new IdentityHashMap<Setting, Boolean>();
+    private final Map<Keybind, String> conflictCache =
+            new IdentityHashMap<Keybind, String>();
+    private int conflictFingerprint = Integer.MIN_VALUE;
+    private final Map<FathomModule, RowMeta> rowMeta = new IdentityHashMap<FathomModule, RowMeta>();
     /** The text setting being typed into, or null. */
     private Setting.Text editing;
 
@@ -91,11 +107,10 @@ final class ModsSection implements Section {
     private Category filter;
     /** The feature whose settings are open, or null. */
     private FathomModule open;
-    /** Keeps the detail surface alive while its close animation recedes. */
-    private boolean drawerClosing;
-    /** Start of the current category's tight card-grid entrance. */
+    /** Keeps the detail surface alive while its back transition recedes. */
+    private boolean detailClosing;
+    /** Start of the current category's tight row entrance. */
     private float cardsEnteredAt;
-    private float drawerOpenedAt;
     @Override
     public String title() {
         return "Mods";
@@ -108,7 +123,7 @@ final class ModsSection implements Section {
 
     @Override
     public boolean searchable() {
-        return true;
+        return open == null;
     }
 
     @Override
@@ -117,21 +132,37 @@ final class ModsSection implements Section {
     }
 
     @Override
+    public boolean ownsHeading() {
+        // The browser draws its own heading so the browser/detail transition
+        // keeps one stable content rectangle in both directions.
+        return true;
+    }
+
+    @Override
     public void opened(HubContext context) {
         scroller.reset();
+        modules = context.features().all();
+        cacheCategories(context);
+        visibleSearch = null;
+        visibleFilter = null;
+        stateFilter = 0;
+        visibleStateFilter = -1;
         open = null;
-        drawerClosing = false;
-        drawer.set(0f, context.now());
+        detailClosing = false;
+        detail.set(0f, context.now());
         cardsEnteredAt = context.now();
         String qaOpen = System.getProperty("fathom.qaOpenSettings", "").trim();
         if (!qaOpen.isEmpty()) {
             // Either "true" for the first configurable module, or a module id,
-            // so a capture can be of one particular drawer.
-            for (FathomModule feature : context.features().all()) {
+            // so a capture can be of one particular detail page.
+            for (FathomModule feature : modules) {
                 boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
                 if (configurable && (qaOpen.equalsIgnoreCase(feature.id())
                         || "true".equalsIgnoreCase(qaOpen))) {
                     open = feature;
+                    openSettings = feature.settings();
+                    detail.set(1f, context.now());
+                    conflictFingerprint = Integer.MIN_VALUE;
                     break;
                 }
             }
@@ -146,79 +177,225 @@ final class ModsSection implements Section {
 
     @Override
     public void render(HubContext context, Rect area) {
+        detail.to(open == null || detailClosing ? 0f : 1f, context.now());
+        float shown = detail.value(context.now());
+
+        Rect panel = new Rect(area.right() - DETAIL_WIDTH, area.y, DETAIL_WIDTH, area.height);
+        if (shown > 0.001f) {
+            // The detail is an overlay, not a replacement page. Only its own
+            // footprint shields the grid beneath it.
+            context.controls().shield(panel);
+        }
+        browser(context, area);
+        context.controls().clearShield();
+        if (shown > 0.001f && open != null) {
+            context.ui().pushAlpha(shown);
+            context.ui().pushTransform((1f - shown) * GraphiteTokens.MOTION_TRAVEL, 0f);
+            graphiteDetailPanel(context, panel);
+            context.ui().popTransform();
+            context.ui().popAlpha();
+        }
+        if (detailClosing && detail.settled(context.now()) && shown <= 0.001f) {
+            open = null;
+            openSettings = Collections.emptyList();
+            detailClosing = false;
+            cardsEnteredAt = context.now();
+        }
+    }
+
+    private void browser(HubContext context, Rect area) {
         Renderer ui = context.ui();
-        drawer.to(open == null || drawerClosing ? 0f : 1f, context.now());
-        float drawn = drawer.value(context.now());
+        Rect search = new Rect(area.x, area.y, 320f, TOOLBAR_HEIGHT);
+        graphiteSearch(context, search);
+        Rect filters = new Rect(search.right() + TOOLBAR_GAP, area.y, 222f, TOOLBAR_HEIGHT);
+        graphiteFilters(context, filters);
 
-        // Filtering owns the complete page width. Opening settings narrows only
-        // the card field beneath it, so the final category never disappears.
-        Rect chips = area.top(Skin.H_MD);
-        categories(context, chips);
-
-        Rect workspace = area.belowTop(Skin.H_MD + Skin.S4);
-        float drawerWidth = Math.min(DRAWER_MAX, workspace.width * 0.42f);
-        Rect body = new Rect(workspace.x, workspace.y,
-                workspace.width - (drawerWidth + Skin.S5) * drawn, workspace.height);
+        Rect body = Rect.of(area.x, area.y + TOOLBAR_HEIGHT + TOOLBAR_GAP, area.right(), area.bottom());
         List<FathomModule> cards = visible(context);
-        float gridWidth = Math.max(1f, body.width - CARD_FIELD_PAD * 2f);
-        int columns = ResponsiveGrid.columns(gridWidth, MIN_CARD_WIDTH, CARD_GAP, 3);
-        float cardWidth = ResponsiveGrid.cellWidth(gridWidth, CARD_GAP, columns);
-        float contentHeight = ResponsiveGrid.contentHeight(cards.size(), columns, CARD_HEIGHT, CARD_GAP)
-                + CARD_FIELD_PAD * 2f;
-        float offset = scroller.offset(context.delta(), contentHeight, body.height);
+        Rect group = new Rect(body.x, body.y, Math.min(744f, body.width), body.height);
+        Graphite.surface(ui, group, Graphite.R_PANEL, Graphite.Material.STANDARD, true);
+        Rect viewport = group.inset(LIST_PAD);
+        float contentHeight = cards.size() * MODULE_ROW;
+        float offset = scroller.offset(context.delta(), contentHeight, viewport.height);
 
-        ui.clip(body.x, body.y, body.right(), body.bottom());
+        ui.clip(viewport.x, viewport.y, viewport.right(), viewport.bottom());
         for (int index = 0; index < cards.size(); index++) {
-            int rowIndex = index / columns;
-            int columnIndex = index % columns;
-            Rect card = new Rect(
-                    body.x + CARD_FIELD_PAD + columnIndex * (cardWidth + CARD_GAP),
-                    body.y + CARD_FIELD_PAD + rowIndex * (CARD_HEIGHT + CARD_GAP) - offset,
-                    cardWidth,
-                    CARD_HEIGHT);
-            if (card.bottom() < body.y || card.y > body.bottom()) {
+            Rect card = new Rect(viewport.x,
+                    viewport.y + index * MODULE_ROW - offset,
+                    viewport.width, MODULE_ROW);
+            if (card.bottom() < viewport.y || card.y > viewport.bottom()) {
                 continue;
             }
             float arrival = Ease.sample(context.now(), cardsEnteredAt,
                     index * Timing.CARD_STAGGER, Timing.CARD_ENTER, Ease.Curve.STANDARD);
             ui.pushAlpha(arrival);
-            ui.pushTransform(0f, (1f - arrival) * 10f,
-                    0.98f + arrival * 0.02f, card.centreX(), card.centreY());
-            card(context, cards.get(index), card);
+            ui.pushTransform(0f, (1f - arrival) * GraphiteTokens.MOTION_TRAVEL);
+            moduleTile(context, cards.get(index), card, index == cards.size() - 1);
             ui.popTransform();
             ui.popAlpha();
         }
-        VisualEffects.scrollEdgeFade(ui, body, offset > 0.5f,
-                offset + body.height < contentHeight - 0.5f);
         ui.unclip();
-        scroller.rail(ui, body, context.pointer(), context.now());
+        graphiteScrollbar(ui, viewport, offset, contentHeight, context.now());
 
         if (cards.isEmpty()) {
-            empty(context, body);
+            empty(context, viewport);
+        }
+    }
+
+    /** Mockup B's 320x36 Light search control. Typing anywhere focuses it. */
+    private void graphiteSearch(HubContext context, Rect area) {
+        Renderer ui = context.ui();
+        Controls.State state = context.controls().state("hub.search", area, true);
+        if (state.clicked) {
+            context.controls().focus("hub.search");
+        }
+        Graphite.surface(ui, area, Graphite.R_CONTROL, Graphite.Material.LIGHT,
+                state.hover, state.press, 0f, false);
+        float icon = Graphite.ICON_INLINE;
+        ui.icon(Icon.SEARCH, area.x + Graphite.S3, area.centreY() - icon / 2f,
+                icon, Graphite.TEXT_SECONDARY);
+        String value = context.search();
+        Type type = Graphite.floor(ui, Graphite.BODY);
+        int ink = value.isEmpty() ? Graphite.TEXT_SECONDARY : Graphite.TEXT;
+        float clearSize = 24f;
+        float textRoom = area.width - Graphite.S3 * 2f - icon - Graphite.S2
+                - (value.isEmpty() ? 0f : clearSize);
+        ui.text(net.fathom.optimizations.core.ui.layout.Text.fit(ui,
+                        value.isEmpty() ? "Search mods" : value, type, textRoom),
+                area.x + Graphite.S3 + icon + Graphite.S2,
+                Graphite.baseline(ui, area, type), type, ink);
+        // The launcher's clear button: present only while there is something
+        // to clear.
+        if (!value.isEmpty()) {
+            Rect clear = new Rect(area.right() - 6f - clearSize, area.centreY() - clearSize / 2f,
+                    clearSize, clearSize);
+            if (context.controls().iconButton(ui, "hub.search.clear", clear, Icon.CLOSE, false, true)) {
+                context.setSearch("");
+                context.controls().focus("hub.search");
+            }
+        }
+        if (context.controls().focused("hub.search")) {
+            ui.outline(area.x - 2f, area.y - 2f, area.right() + 2f, area.bottom() + 2f,
+                    Graphite.R_CONTROL + 2f, 1.5f, Skin.FOCUS);
+        }
+    }
+
+    /** All / On / Off; selection is density, never colour. */
+    private void graphiteFilters(HubContext context, Rect area) {
+        Renderer ui = context.ui();
+        Graphite.surface(ui, area, Graphite.R_CONTROL, Graphite.Material.LIGHT, false);
+        int enabled = 0;
+        for (FathomModule module : modules) {
+            if (module.enabled()) {
+                enabled++;
+            }
+        }
+        String[] labels = {
+                "All " + modules.size(),
+                "On " + enabled,
+                "Off " + (modules.size() - enabled)
+        };
+        float inset = 3f;
+        float cellWidth = (area.width - inset * 2f) / labels.length;
+        Type uiType = Graphite.floor(ui, Graphite.UI);
+        for (int index = 0; index < labels.length; index++) {
+            Rect cell = new Rect(area.x + inset + index * cellWidth, area.y + inset,
+                    cellWidth, area.height - inset * 2f);
+            Controls.State state = context.controls().state("mods.state." + index, cell, true);
+            float selected = context.controls().towards("mods.state." + index + "#on",
+                    stateFilter == index, GraphiteTokens.MOTION_FAST);
+            Graphite.overlay(ui, cell, Graphite.R_SEGMENT, state.hover * (1f - selected), selected);
+            int ink = net.fathom.optimizations.core.ui.Colour.mix(
+                    Graphite.TEXT_SECONDARY, Graphite.TEXT, Math.max(state.hover, selected));
+            ui.textCentred(labels[index], cell.centreX(), Graphite.baseline(ui, cell, uiType), uiType, ink);
+            if (state.clicked && stateFilter != index) {
+                stateFilter = index;
+                visibleSearch = null;
+                visibleStateFilter = -1;
+                scroller.reset();
+                cardsEnteredAt = context.now();
+            }
+        }
+    }
+
+    /** One row in the shared glass group. The switch owns only its own hitbox. */
+    private void moduleTile(HubContext context, FathomModule feature, Rect area, boolean last) {
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        boolean visuallyEnabled = feature.enabled() || FORCE_ENABLED_QA;
+
+        Rect toggle = new Rect(area.right() - Graphite.S4 - Graphite.SWITCH_W,
+                area.centreY() - Graphite.SWITCH_H / 2f,
+                Graphite.SWITCH_W, Graphite.SWITCH_H);
+        Controls.State switchState = controls.state("mod.toggle." + feature.id(), toggle,
+                feature.switchable());
+        if (switchState.clicked) {
+            context.setFeatureEnabled(feature, !feature.enabled());
+            visibleSearch = null;
+            visibleStateFilter = -1;
         }
 
-        if (drawn > 0.01f && open != null) {
-            Rect panel = new Rect(workspace.right() - drawerWidth, workspace.y,
-                    drawerWidth, workspace.height);
-            settingsDrawer(context, panel, drawn);
+        // Keep the parent tile out from under the switch so one pointer gesture
+        // cannot both toggle the module and open its detail panel.
+        Rect tileHit = new Rect(area.x, area.y,
+                Math.max(0f, toggle.x - Graphite.S2 - area.x), area.height);
+        Controls.State tile = controls.state("mod.tile." + feature.id(), tileHit, true);
+        boolean selected = open == feature && !detailClosing;
+        Graphite.overlay(ui, area, Graphite.R_CONTROL,
+                selected ? 0f : tile.hover, selected ? 1f : tile.press * 0.5f);
+
+        float mark = GraphiteTokens.SIZE_MOD_ICON;
+        Graphite.modMark(ui, new Rect(area.x + Graphite.S4, area.centreY() - mark / 2f, mark, mark),
+                Icon.of(feature.icon()), visuallyEnabled ? 1f : 0f, selected ? 0f : tile.hover);
+
+        float textX = area.x + Graphite.S4 + mark + Graphite.S3;
+        float textRoom = Math.max(0f, toggle.x - Graphite.S3 - textX);
+        Type title = Graphite.floor(ui, Graphite.UI);
+        Type description = Graphite.floor(ui, Graphite.SMALL);
+        ui.text(Text.fit(ui, feature.name(), title, textRoom), textX,
+                area.y + 13f + ui.ascent(title), title, Graphite.TEXT);
+        ui.text(Text.fit(ui, feature.description(), description, textRoom), textX,
+                area.y + 34f + ui.ascent(description), description, Graphite.TEXT_SECONDARY);
+
+        if (feature.switchable()) {
+            float on = controls.towards("mod.toggle." + feature.id() + "#on",
+                    visuallyEnabled, GraphiteTokens.MOTION_FAST);
+            Graphite.switchControl(ui, toggle, on, true);
         }
-        if (drawerClosing && drawer.settled(context.now()) && drawn <= 0.001f) {
-            open = null;
-            drawerClosing = false;
+
+        boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
+        if (tile.clicked && configurable && !switchState.clicked) {
+            openDetail(context, feature);
         }
+        if (!last) {
+            Graphite.hairline(ui, area.x + Graphite.S4, area.right() - Graphite.S4, area.bottom());
+        }
+    }
+
+    /** Four-device-pixel thumb; no track and no warm legacy scrollbar. */
+    private void graphiteScrollbar(Renderer ui, Rect viewport, float offset,
+            float contentHeight, float now) {
+        if (contentHeight <= viewport.height || contentHeight <= 0f) {
+            return;
+        }
+        float handle = Math.max(32f, viewport.height * viewport.height / contentHeight);
+        float travel = viewport.height - handle;
+        float progress = offset / Math.max(1f, contentHeight - viewport.height);
+        // The shared scrollbar geometry: 4 wide, 3 in from the edge, 20%.
+        float x = viewport.right() - 4f - 3f;
+        float y = viewport.y + travel * progress;
+        ui.rounded(x, y, x + 4f, y + handle, 2f,
+                net.fathom.optimizations.generated.FathomTheme.Tokens.CONTROL_SCROLLBAR);
     }
 
     private void empty(HubContext context, Rect body) {
         Renderer ui = context.ui();
-        String message = context.search().isEmpty()
-                ? "Nothing in this category."
-                : "Nothing matches “" + context.search() + "”.";
-        ui.text(message, body.x, body.y + Skin.S6 + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_MUTED);
-        if (!context.search().isEmpty()) {
-            Rect button = new Rect(body.x, body.y + Skin.S6 + 26f, 140f, Skin.H_MD);
-            if (context.controls().secondary(ui, "mods.clearsearch", button, "Clear search", true)) {
-                context.setSearch("");
-            }
+        if (context.search().isEmpty()) {
+            Graphite.emptyState(ui, body, Icon.GRID, "No mods in this view",
+                    "Choose another category to see the rest.");
+        } else {
+            Graphite.emptyState(ui, body, Icon.SEARCH, "No matching mods",
+                    "Nothing matches “" + context.search() + "”.");
         }
     }
 
@@ -230,93 +407,97 @@ final class ModsSection implements Section {
      * what that shape of choice looks like everywhere else.
      */
     private void categories(HubContext context, Rect area) {
-        List<Category> present = new ArrayList<Category>();
-        for (Category category : Category.values()) {
-            if (!context.features().inCategory(category).isEmpty()) {
-                present.add(category);
-            }
-        }
-        String[] labels = new String[present.size() + 1];
-        labels[0] = "All";
         int selected = 0;
-        for (int index = 0; index < present.size(); index++) {
-            labels[index + 1] = present.get(index).label();
-            if (present.get(index) == filter) {
+        for (int index = 0; index < presentCategories.size(); index++) {
+            if (presentCategories.get(index) == filter) {
                 selected = index + 1;
             }
         }
 
         int chosen = context.controls().segmentedNatural(
-                context.ui(), "mods.filter", area, labels, selected);
+                context.ui(), "mods.filter", area, categoryLabels, selected);
         if (chosen != selected) {
-            filter = chosen == 0 ? null : present.get(chosen - 1);
+            filter = chosen == 0 ? null : presentCategories.get(chosen - 1);
             scroller.reset();
             cardsEnteredAt = context.now();
         }
     }
 
-    private void card(HubContext context, FathomModule feature, Rect area) {
+    private void cacheCategories(HubContext context) {
+        presentCategories.clear();
+        for (Category category : Category.values()) {
+            for (FathomModule feature : modules) {
+                if (feature.category() == category) {
+                    presentCategories.add(category);
+                    break;
+                }
+            }
+        }
+        categoryLabels = new String[presentCategories.size() + 1];
+        categoryLabels[0] = "All";
+        for (int index = 0; index < presentCategories.size(); index++) {
+            categoryLabels[index + 1] = presentCategories.get(index).label();
+        }
+    }
+
+    /**
+     * One module: a row in the list's group, not a card. The launcher's list
+     * item -- a hairline above it, a faint fill under the pointer, the item's
+     * mark, its title and one line, its controls on the right.
+     */
+    private void moduleRow(HubContext context, FathomModule feature, Rect area, float radius, boolean first) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
-        Rect card = area;
-        Controls.State surface = controls.state("mod.card." + feature.id(), card, true);
+        Controls.State surface = controls.state("mod.row." + feature.id(), area, true);
         boolean visuallyEnabled = feature.enabled() || FORCE_ENABLED_QA;
-        float enabled = controls.towards("mod.card." + feature.id() + "#enabled",
+        float enabled = controls.towards("mod.row." + feature.id() + "#enabled",
                 visuallyEnabled, Timing.TOGGLE);
-        float selected = controls.towards("mod.card." + feature.id() + "#selected",
-                feature == open && !drawerClosing, Timing.NAVIGATION);
-        FathomComponents.card(ui, card, surface.hover, Math.max(enabled * 0.82f, selected));
-
-        Rect iconBox = new Rect(card.x + Skin.CARD_PADDING, card.y + Skin.CARD_PADDING, 40f, 40f);
-        int iconFace = Skin.mix(Skin.RECESSED, Skin.ENERGY, enabled * 0.18f);
-        ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(),
-                Skin.R_MEDIUM, iconFace);
-        int icon = Skin.mix(Skin.TEXT_FAINT, Skin.ENERGY_MARK, enabled);
-        ui.icon(Icon.of(feature.icon()), iconBox.centreX() - ICON / 2f,
-                iconBox.centreY() - ICON / 2f, ICON,
-                VisualEffects.hoverBrighten(icon, surface.hover));
-
-        float titleX = iconBox.right() + Skin.S3;
-        float titleRoom = card.right() - Skin.CARD_PADDING - titleX;
-        ui.text(Text.fit(ui, feature.name(), Type.ROW_TITLE, titleRoom), titleX,
-                card.y + Skin.CARD_PADDING + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE,
-                Skin.mix(Skin.TEXT_MUTED, Skin.TEXT,
-                        Math.max(Math.max(enabled, selected * 0.82f), surface.hover * 0.85f)));
-        if (Text.overflows(ui, feature.name(), Type.ROW_TITLE, titleRoom)) {
-            controls.tooltip(surface, card, feature.name());
+        if (surface.hover > 0.01f) {
+            ui.rounded(area.x, area.y, area.right(), area.bottom(), radius,
+                    Skin.scaleAlpha(Skin.FILL_HOVER, surface.hover));
+        } else if (!first) {
+            ui.fill(area.x + Skin.CARD_PADDING, area.y, area.right() - Skin.CARD_PADDING,
+                    area.y + Skin.HAIRLINE, Skin.EDGE_RECESSED);
         }
 
-        Rect description = new Rect(card.x + Skin.CARD_PADDING, card.y + 68f,
-                card.width - Skin.CARD_PADDING * 2f, 20f);
-        ui.text(Text.fit(ui, feature.description(), Type.SMALL, description.width),
-                description.x, Controls.baseline(ui, description, Type.SMALL), Type.SMALL,
+        Rect iconBox = new Rect(area.x + Skin.CARD_PADDING, area.centreY() - 20f, 40f, 40f);
+        Graphite.modMark(ui, iconBox, Icon.of(feature.icon()), enabled, surface.hover);
+
+        boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
+        float right = area.right() - Skin.CARD_PADDING;
+        Rect toggle = feature.switchable()
+                ? new Rect(right - Controls.TOGGLE_WIDTH,
+                        area.centreY() - Controls.TOGGLE_HEIGHT / 2f,
+                        Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT)
+                : new Rect(right, area.y, 0f, 0f);
+        Rect options = configurable
+                ? new Rect(toggle.x - Skin.S3 - 90f, area.centreY() - Skin.H_SM / 2f,
+                        90f, Skin.H_SM)
+                : new Rect(toggle.x, area.y, 0f, 0f);
+        float metaRight = configurable ? options.x : toggle.x;
+        float titleX = iconBox.right() + Skin.S3;
+        float titleRoom = Math.max(0f, metaRight - titleX - Skin.S5);
+        ui.text(Text.fit(ui, feature.name(), Type.ROW_TITLE, titleRoom), titleX,
+                area.y + 14f + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE,
+                Skin.mix(Skin.TEXT_MUTED, Skin.TEXT,
+                        Math.max(enabled, surface.hover * 0.85f)));
+        if (Text.overflows(ui, feature.name(), Type.ROW_TITLE, titleRoom)) {
+            controls.tooltip(surface, area, feature.name());
+        }
+
+        Rect description = new Rect(titleX, area.y + 37f, titleRoom, 18f);
+        ui.text(Text.fit(ui, feature.description(), Type.SMALL, titleRoom),
+                titleX, Controls.baseline(ui, description, Type.SMALL), Type.SMALL,
                 Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, surface.hover * 0.42f));
 
-        Rect footer = new Rect(card.x + Skin.CARD_PADDING, card.bottom() - Skin.CARD_PADDING - 26f,
-                card.width - Skin.CARD_PADDING * 2f, 26f);
-        boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
-        Rect toggle = feature.switchable()
-                ? footer.vcentreRight(0f, Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT)
-                : new Rect(footer.right(), footer.y, 0f, footer.height);
-        Rect options = configurable
-                ? new Rect(toggle.x - Skin.S2 - 84f, footer.y, 84f, footer.height)
-                : new Rect(toggle.x, footer.y, 0f, footer.height);
-        float metadataRight = configurable ? options.x - Skin.S2 : toggle.x - Skin.S2;
-        String badge = compactBadge(feature);
-        String metadata = (visuallyEnabled ? "Enabled" : "Disabled") + "  ·  "
-                + feature.category().label()
-                + (badge.isEmpty() ? "" : "  ·  " + badge);
-        float dot = 5f;
-        ui.rounded(footer.x, footer.centreY() - dot / 2f,
-                footer.x + dot, footer.centreY() + dot / 2f, dot / 2f,
-                visuallyEnabled ? Skin.ENERGY_MARK : Skin.TEXT_DISABLED);
-        ui.text(Text.fit(ui, metadata, Type.CAPTION,
-                        Math.max(0f, metadataRight - footer.x - dot - Skin.S2)),
-                footer.x + dot + Skin.S2, Controls.baseline(ui, footer, Type.CAPTION),
+        String metadata = metadata(feature);
+        ui.textRight(Text.fit(ui, metadata, Type.CAPTION,
+                        Math.max(0f, metaRight - titleX - Skin.S3)),
+                metaRight - Skin.S3, area.y + 14f + ui.ascent(Type.CAPTION),
                 Type.CAPTION, visuallyEnabled ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
         if (configurable) {
-            if (controls.recessedAction(ui, "mod.options." + feature.id(), options, "Options", true)) {
-                openDrawer(context, feature);
+            if (controls.recessedAction(ui, "mod.options." + feature.id(), options, "Configure", true)) {
+                openDetail(context, feature);
             }
         }
         if (feature.switchable()) {
@@ -326,14 +507,46 @@ final class ModsSection implements Section {
         } else {
             float width = Controls.badgeWidth(ui, feature.implementation().label());
             controls.badge(ui, "mod.implementation." + feature.id(), feature.implementation().label(),
-                    footer.vcentreRight(0f, width, 20f), Skin.WARN);
+                    new Rect(right - width, area.centreY() - 10f, width, 20f), Skin.WARN);
         }
 
         // Clicking unused card space is an Options shortcut; action controls
         // above have separate bounds and therefore retain their own behavior.
         if (configurable && surface.clicked) {
-            openDrawer(context, feature);
+            openDetail(context, feature);
         }
+    }
+
+    /** A row's metadata line, rebuilt only when its key or its status word changes. */
+    private String metadata(FathomModule feature) {
+        String key = "";
+        for (Keybind keybind : feature.keybinds()) {
+            if (keybind.isBound()) {
+                key = keybind.keyName();
+                break;
+            }
+        }
+        String badge = compactBadge(feature);
+        RowMeta meta = rowMeta.get(feature);
+        if (meta == null) {
+            meta = new RowMeta();
+            rowMeta.put(feature, meta);
+        }
+        if (!key.equals(meta.key) || !badge.equals(meta.badge)) {
+            meta.key = key;
+            meta.badge = badge;
+            meta.text = feature.category().label()
+                    + (key.isEmpty() ? "" : "  ·  " + key)
+                    + (badge.isEmpty() ? "" : "  ·  " + badge);
+        }
+        return meta.text;
+    }
+
+    /** The parts a metadata line was built from, and the line. */
+    private static final class RowMeta {
+        String key;
+        String badge;
+        String text;
     }
 
     /**
@@ -373,164 +586,520 @@ final class ModsSection implements Section {
         return !feature.compatibility().satisfied(inWorld, onServer);
     }
 
-    private void openDrawer(HubContext context, FathomModule feature) {
-        if (feature == open && !drawerClosing) {
-            drawerClosing = true;
-        } else {
-            open = feature;
-            drawerClosing = false;
-            drawerOpenedAt = context.now();
-        }
-        drawerScroll.reset();
+    private void openDetail(HubContext context, FathomModule feature) {
+        open = feature;
+        openSettings = feature.settings();
+        detailClosing = false;
+        detail.set(0f, context.now());
+        detail.to(1f, context.now(), Timing.DETAIL);
+        detailScroll.reset();
+        conflictFingerprint = Integer.MIN_VALUE;
         context.keybindCapture().cancel();
         editing = null;
+        context.controls().clearFocus();
+        context.controls().closePopover();
     }
 
     // -----------------------------------------------------------------------
-    // The settings drawer
+    // Mockup B detail overlay
     // -----------------------------------------------------------------------
 
-    private void settingsDrawer(HubContext context, Rect area, float shown) {
+    /** Dense 360dp overlay, with one shadow and rows directly inside it. */
+    private void graphiteDetailPanel(HubContext context, Rect panel) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
-        // Slides in from the right edge and fades. A drawer, not a curtain.
-        Rect panel = area.offset((1f - shown) * 28f, 0f);
+        Graphite.surface(ui, panel, Graphite.R_PANEL, Graphite.Material.DENSE, true);
 
-        ui.pushAlpha(shown);
-        FathomComponents.floatingPanel(ui, panel);
+        Rect inner = panel.inset(Graphite.PAD);
+        Rect icon = new Rect(inner.x, inner.y, 40f, 40f);
+        Graphite.modMark(ui, icon, Icon.of(open.icon()), open.enabled() ? 1f : 0f, 0f);
 
-        Rect inner = panel.inset(Skin.S5, Skin.S5);
-        Rect head = inner.top(52f);
-
-        // Noted, not applied: the rest of this method draws from `open`, and
-        // clearing it here left a null behind a control that had already been
-        // hit -- which is a crash inside a render call, and was one.
-        Rect close = head.vcentreRight(0f, ACTION, ACTION);
-        boolean closing = controls.iconButton(ui, "drawer.close", close, Icon.CLOSE, false, true);
-
-        float titleRight = close.x - Skin.S3;
-        if (open.switchable()) {
-            Rect toggle = head.vcentreRight(ACTION + Skin.S3, Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT);
-            if (controls.toggle(ui, "drawer.enabled", toggle, open.enabled(), true)) {
-                context.setFeatureEnabled(open, !open.enabled());
-            }
-            titleRight = toggle.x - Skin.S3;
+        Rect close = new Rect(inner.right() - 32f, inner.y, 32f, 32f);
+        Controls.State closeState = controls.state("detail.close", close, true);
+        Graphite.overlay(ui, close, close.height / 2f, Math.max(closeState.hover, closeState.press * 1.6f), 0f);
+        ui.icon(Icon.CLOSE, close.centreX() - 8f, close.centreY() - 8f, 16f,
+                net.fathom.optimizations.core.ui.Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, closeState.hover));
+        controls.tooltip(closeState, close, "Close");
+        if (closeState.clicked) {
+            closeDetail(context);
         }
 
-        Rect moduleIcon = new Rect(head.x, head.y, 36f, 36f);
-        // The only light in the drawer: the selected module's header icon.
-        VisualEffects.layeredSurface(ui, moduleIcon, Skin.R_MEDIUM,
-                Skin.mix(Skin.RECESSED, Skin.ENERGY, 0.22f), 0f);
-        ui.outline(moduleIcon.x, moduleIcon.y, moduleIcon.right(), moduleIcon.bottom(),
-                Skin.R_MEDIUM, Skin.BORDER_STANDARD,
-                Skin.scaleAlpha(Skin.ENERGY_EDGE, shown));
-        ui.icon(Icon.of(open.icon()), moduleIcon.centreX() - 11f,
-                moduleIcon.centreY() - 11f, 22f, Skin.ENERGY_MARK);
-        ui.text(Text.fit(ui, open.name(), Type.SECTION, titleRight - head.x - 46f), head.x + 46f,
-                head.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
-        ui.text(Text.fit(ui, "by " + open.owner(), Type.CAPTION, titleRight - head.x - 46f), head.x + 46f,
-                head.y + 24f + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_DISABLED);
+        float titleX = icon.right() + Graphite.S3;
+        Type heading = Graphite.floor(ui, Graphite.HEADING);
+        Type data = Graphite.floor(ui, Graphite.DATA_S);
+        ui.text(Text.fit(ui, open.name(), heading, close.x - titleX - Graphite.S2),
+                titleX, inner.y + ui.ascent(heading), heading, Graphite.TEXT);
+        String meta = open.category().label() + " · " + open.owner();
+        ui.text(Text.fit(ui, meta, data, close.x - titleX - Graphite.S2),
+                titleX, inner.y + 24f + ui.ascent(data), data, Graphite.TEXT_SECONDARY);
 
-        // Clear of the header's red rule, which sits on the header's last unit.
-        Rect description = inner.belowTop(62f);
-        List<String> lines = Text.wrap(ui, open.description(), Type.SMALL, description.width);
-        float y = description.y;
-        for (int index = 0; index < Math.min(3, lines.size()); index++) {
-            ui.text(lines.get(index), description.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
-            y += 17f;
-        }
-        y += Skin.S3;
-        ModulePreview preview = ModulePreview.of(open);
-        if (preview != null && inner.height > preview.height() + 200f) {
-            // Only when there is room left for settings under it. A preview that
-            // squeezed the rows it previews would be the wrong way round.
-            preview.draw(ui, open, new Rect(inner.x, y, inner.width, preview.height()));
-            y += preview.height() + Skin.S3;
-        }
-        Controls.separator(ui, inner.x, y, inner.width);
-        y += Skin.S3;
+        float top = inner.y + 56f;
+        Graphite.hairline(ui, inner.x, inner.right(), top);
+        top += Graphite.S2;
+        Rect viewport = Rect.of(inner.x, top, inner.right(), inner.bottom());
 
-        boolean resettable = open.changed();
-        boolean hudEditable = hasHudWidget(context, open);
-        float footer = resettable || hudEditable ? Skin.H_MD + Skin.S4 : 0f;
-        Rect viewport = Rect.of(inner.x, y, inner.right(), inner.bottom() - footer);
-        float contentHeight = (open.settings().size() + open.keybinds().size()) * SETTING_ROW
-                + conflictLines(context) * CONFLICT_ROW;
-        float offset = drawerScroll.offset(context.delta(), contentHeight, viewport.height);
-
-        // The settings sit in a sunken well inside the drawer's dense glass:
-        // one flat, warm deepening, not a second pane.
-        Rect well = Rect.of(viewport.x - Skin.S2, viewport.y - Skin.S2,
-                viewport.right() + Skin.S2, viewport.bottom() + Skin.S2);
-        ui.rounded(well.x, well.y, well.right(), well.bottom(), Skin.R_MEDIUM, Skin.RECESSED);
-        ui.outline(well.x, well.y, well.right(), well.bottom(), Skin.R_MEDIUM,
-                Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
-
+        float contentHeight = graphiteDetailHeight();
+        float offset = detailScroll.offset(context.delta(), contentHeight, viewport.height);
+        float y = viewport.y - offset;
         ui.clip(viewport.x, viewport.y, viewport.right(), viewport.bottom());
-        float rowY = viewport.y - offset;
-        for (Setting setting : open.settings()) {
-            Rect row = new Rect(viewport.x, rowY, viewport.width - Skin.S3, SETTING_ROW);
+
+        Rect enabledRow = new Rect(viewport.x, y, viewport.width, 40f);
+        graphiteEnabledRow(context, enabledRow);
+        y += enabledRow.height;
+
+        for (Setting setting : openSettings) {
+            float height = setting.description().isEmpty() ? 40f : 56f;
+            Rect row = new Rect(viewport.x, y, viewport.width, height);
             if (row.bottom() >= viewport.y && row.y <= viewport.bottom()) {
-                settingRow(context, setting, row);
+                graphiteSettingRow(context, setting, row);
             }
-            rowY += SETTING_ROW;
+            y += height;
         }
         for (Keybind keybind : open.keybinds()) {
-            Rect row = new Rect(viewport.x, rowY, viewport.width - Skin.S3, SETTING_ROW);
+            Rect row = new Rect(viewport.x, y, viewport.width, 40f);
             if (row.bottom() >= viewport.y && row.y <= viewport.bottom()) {
-                keybindRow(context, keybind, row);
+                graphiteKeybindRow(context, keybind, row);
             }
-            rowY += SETTING_ROW;
-            String clash = conflict(context, keybind);
-            if (!clash.isEmpty()) {
-                ui.text(Text.fit(ui, clash, Type.CAPTION, viewport.width - Skin.S3), viewport.x,
-                        rowY + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.WARN);
-                rowY += CONFLICT_ROW;
-            }
+            y += row.height;
         }
+        ui.unclip();
+        graphiteDetailScrollbar(ui, viewport, offset, contentHeight);
+    }
+
+    private float graphiteDetailHeight() {
+        float height = 40f;
+        for (Setting setting : openSettings) {
+            height += setting.description().isEmpty() ? 40f : 56f;
+        }
+        height += open.keybinds().size() * 40f;
+        return height;
+    }
+
+    private void graphiteEnabledRow(HubContext context, Rect row) {
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        Type label = Graphite.floor(ui, Graphite.UI);
+        ui.text("Enabled", row.x, Graphite.baseline(ui, row, label), label, Graphite.TEXT);
+        if (open.switchable()) {
+            Rect toggle = new Rect(row.right() - Graphite.SWITCH_W,
+                    row.centreY() - Graphite.SWITCH_H / 2f,
+                    Graphite.SWITCH_W, Graphite.SWITCH_H);
+            Controls.State state = controls.state("detail.enabled", toggle, true);
+            if (state.clicked) {
+                context.setFeatureEnabled(open, !open.enabled());
+                visibleSearch = null;
+                visibleStateFilter = -1;
+            }
+            float on = controls.towards("detail.enabled#on", open.enabled(), GraphiteTokens.MOTION_FAST);
+            Graphite.switchControl(ui, toggle, on, true);
+        }
+        Graphite.hairline(ui, row.x, row.right(), row.bottom());
+    }
+
+    private void graphiteSettingRow(HubContext context, Setting setting, Rect row) {
+        Renderer ui = context.ui();
+        boolean hovered = context.controls().pointerOverVisible(row);
+        Graphite.overlay(ui, row, Graphite.R_CONTROL,
+                context.controls().towards("detail.row." + setting.id(), hovered,
+                        GraphiteTokens.MOTION_FAST), 0f);
+
+        Type label = Graphite.floor(ui, Graphite.UI);
+        Type small = Graphite.floor(ui, Graphite.SMALL);
+        float controlWidth = setting.kind() == Setting.Kind.TOGGLE ? Graphite.SWITCH_W : 120f;
+        Rect control = new Rect(row.right() - controlWidth,
+                row.centreY() - (setting.kind() == Setting.Kind.TOGGLE ? Graphite.SWITCH_H : 32f) / 2f,
+                controlWidth, setting.kind() == Setting.Kind.TOGGLE ? Graphite.SWITCH_H : 32f);
+        float room = Math.max(0f, control.x - row.x - Graphite.S4);
+        float labelY = setting.description().isEmpty()
+                ? Graphite.baseline(ui, row, label)
+                : row.y + 10f + ui.ascent(label);
+        ui.text(Text.fit(ui, setting.label(), label, room), row.x, labelY, label, Graphite.TEXT);
+        if (!setting.description().isEmpty()) {
+            ui.text(Text.fit(ui, setting.description(), small, room), row.x,
+                    row.y + 31f + ui.ascent(small), small, Graphite.TEXT_SECONDARY);
+        }
+        graphiteSettingControl(context, setting, control);
+        Graphite.hairline(ui, row.x, row.right(), row.bottom());
+    }
+
+    private void graphiteSettingControl(HubContext context, Setting setting, Rect control) {
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        String id = "detail.setting." + setting.id();
+        Controls.State state = controls.state(id, control, true);
+        switch (setting.kind()) {
+            case TOGGLE: {
+                Setting.Toggle toggle = (Setting.Toggle) setting;
+                if (state.clicked) {
+                    toggle.set(!toggle.get());
+                    edited(context, setting);
+                }
+                float on = controls.towards(id + "#on", toggle.get(), GraphiteTokens.MOTION_FAST);
+                Graphite.switchControl(ui, control, on, true);
+                return;
+            }
+            case SLIDER: {
+                Setting.Slider slider = (Setting.Slider) setting;
+                if (state.pressed) {
+                    double next = (context.pointer().x() - control.x) / Math.max(1f, control.width);
+                    slider.setFraction(Math.max(0d, Math.min(1d, next)));
+                    edited(context, setting);
+                }
+                float trackY = control.centreY() - 2f;
+                ui.rounded(control.x, trackY, control.right(), trackY + 4f, 2f,
+                        GraphiteTokens.COLOR_SLIDER_TRACK);
+                float knobX = control.x + (float) slider.fraction() * control.width;
+                ui.rounded(control.x, trackY, knobX, trackY + 4f, 2f, Graphite.TEXT);
+                ui.rounded(knobX - 7f, control.centreY() - 7f,
+                        knobX + 7f, control.centreY() + 7f, 7f, Graphite.TEXT);
+                Type data = Graphite.floor(ui, Graphite.DATA_S);
+                ui.textRight(slider.display(), control.right(), control.y - 2f, data, Graphite.TEXT_TERTIARY);
+                return;
+            }
+            case CHOICE: {
+                Setting.Choice choice = (Setting.Choice) setting;
+                if (state.clicked) {
+                    choice.advance();
+                    edited(context, setting);
+                }
+                graphiteCompactControl(ui, control, state, choice.display());
+                return;
+            }
+            case INTEGER: {
+                Setting.Whole whole = (Setting.Whole) setting;
+                if (state.clicked) {
+                    whole.nudge(whole.atMaximum() ? -1 : 1);
+                    edited(context, setting);
+                }
+                graphiteCompactControl(ui, control, state, whole.display());
+                return;
+            }
+            case TEXT: {
+                Setting.Text text = (Setting.Text) setting;
+                if (state.clicked) {
+                    editing = editing == text ? null : text;
+                    context.keybindCapture().cancel();
+                }
+                graphiteCompactControl(ui, control, state, text.get());
+                return;
+            }
+            case KEY: {
+                Setting.Key key = (Setting.Key) setting;
+                if (state.clicked) {
+                    context.keybindCapture().toggle(key.binding());
+                    editing = null;
+                }
+                graphiteCompactControl(ui, control, state,
+                        context.keybindCapture().capturing(key.binding()) ? "Press a key…" : key.binding().keyName());
+                return;
+            }
+            case COLOUR:
+            default:
+                graphiteCompactControl(ui, control, state, setting.display());
+        }
+    }
+
+    private void graphiteCompactControl(Renderer ui, Rect control, Controls.State state, String value) {
+        ui.rounded(control.x, control.y, control.right(), control.bottom(), Graphite.R_CONTROL,
+                net.fathom.optimizations.core.ui.Colour.scaleAlpha(Graphite.STATE_HOVER,
+                        0.5f + state.hover * 0.5f));
+        Graphite.rim(ui, control, Graphite.R_CONTROL,
+                net.fathom.optimizations.core.ui.Colour.mix(Graphite.RIM, Graphite.RIM_HOVER, state.hover));
+        Type data = Graphite.floor(ui, Graphite.DATA_S);
+        ui.textCentred(Text.fit(ui, value, data, control.width - Graphite.S2),
+                control.centreX(), Graphite.baseline(ui, control, data), data, Graphite.TEXT);
+    }
+
+    private void graphiteKeybindRow(HubContext context, Keybind keybind, Rect row) {
+        Renderer ui = context.ui();
+        Type label = Graphite.floor(ui, Graphite.UI);
+        ui.text(keybind.label(), row.x, Graphite.baseline(ui, row, label), label, Graphite.TEXT);
+        Rect control = new Rect(row.right() - 120f, row.y + 4f, 120f, 32f);
+        Controls.State state = context.controls().state("detail.key." + keybind.id(), control, true);
+        if (state.clicked) {
+            context.keybindCapture().toggle(keybind);
+            editing = null;
+        }
+        graphiteCompactControl(ui, control, state,
+                context.keybindCapture().capturing(keybind) ? "Press a key…" : keybind.keyName());
+        Graphite.hairline(ui, row.x, row.right(), row.bottom());
+    }
+
+    private void graphiteDetailScrollbar(Renderer ui, Rect viewport, float offset, float contentHeight) {
+        graphiteScrollbar(ui, viewport, offset, contentHeight, 0f);
+    }
+
+    // -----------------------------------------------------------------------
+    // The previous full-page configuration view (retained for the unrolled
+    // sections, but no longer used by the proof-pass Mods target).
+    // -----------------------------------------------------------------------
+
+    private void settingsPage(HubContext context, Rect area) {
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        Rect head = area.top(DETAIL_HEADER);
+
+        // The way back names where it goes. Escape does the same.
+        Rect back = new Rect(head.x - Skin.S2, head.y, Controls.backWidth(ui, title()), Skin.H_MD);
+        if (controls.back(ui, "detail.back", back, title())) {
+            closeDetail(context);
+        }
+
+        Rect moduleIcon = new Rect(head.x, back.bottom() + Skin.S3, 40f, 40f);
+        Graphite.modMark(ui, moduleIcon, Icon.of(open.icon()), open.enabled() ? 1f : 0f, 0f);
+
+        float titleX = moduleIcon.right() + Skin.S3;
+        float actionsLeft = head.right();
+        if (open.switchable()) {
+            Rect toggle = new Rect(head.right() - Controls.TOGGLE_WIDTH,
+                    moduleIcon.centreY() - Controls.TOGGLE_HEIGHT / 2f,
+                    Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT);
+            if (controls.toggle(ui, "detail.enabled", toggle, open.enabled(), true)) {
+                context.setFeatureEnabled(open, !open.enabled());
+            }
+            actionsLeft = toggle.x - Skin.S4;
+        }
+        ui.text(Text.fit(ui, open.name(), Type.SECTION, Math.max(0f, actionsLeft - titleX)),
+                titleX, moduleIcon.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
+        String metadata = open.category().label() + "  ·  by " + open.owner()
+                + "  ·  " + (open.enabled() ? "Enabled" : "Disabled");
+        ui.text(Text.fit(ui, metadata, Type.CAPTION, Math.max(0f, actionsLeft - titleX)),
+                titleX, moduleIcon.y + 25f + ui.ascent(Type.CAPTION), Type.CAPTION,
+                open.enabled() ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
+
+        float footerHeight = Skin.H_MD + Skin.S4;
+        Rect viewport = Rect.of(area.x, head.bottom() + Skin.S4,
+                area.right(), area.bottom() - footerHeight);
+        refreshConflictCache(context);
+        float contentHeight = detailContentHeight(context);
+        float offset = detailScroll.offset(context.delta(), contentHeight, viewport.height);
+
+        ui.clip(viewport.x, viewport.y, viewport.right(), viewport.bottom());
+        float y = viewport.y - offset;
+        y = detailIntro(context, viewport, y);
+        y = settingsGroup(context, viewport, y, false,
+                "Behaviour", "How this module works.");
+        y = settingsGroup(context, viewport, y, true,
+                "Appearance", "Typography, colour and surface treatment.");
+        y = keybindGroup(context, viewport, y);
         VisualEffects.scrollEdgeFade(ui, viewport, offset > 0.5f,
                 offset + viewport.height < contentHeight - 0.5f);
         ui.unclip();
-        drawerScroll.rail(ui, viewport, context.pointer(), context.now());
+        detailScroll.rail(ui, viewport, context.pointer(), context.now());
 
-        // Reset appears only once there is something to undo, so it is not a
-        // permanent invitation to lose your settings.
+        boolean hudEditable = hasHudWidget(context, open);
+        Rect footer = new Rect(area.x, area.bottom() - Skin.H_MD, area.width, Skin.H_MD);
         if (hudEditable) {
-            Rect button = new Rect(inner.x, inner.bottom() - Skin.H_MD, 124f, Skin.H_MD);
-            if (controls.secondary(ui, "drawer.hud", button, "HUD Editor", true)) {
+            Rect button = new Rect(footer.x, footer.y, 132f, footer.height);
+            if (controls.secondary(ui, "detail.hud", button, "Edit position", true)) {
                 context.editHud();
             }
         }
-        if (resettable) {
-            Rect button = new Rect(inner.right() - 100f, inner.bottom() - Skin.H_MD, 100f, Skin.H_MD);
-            if (controls.danger(ui, "drawer.reset", button, "Reset", true)) {
+        if (open.changed()) {
+            Rect button = footer.vcentreRight(0f, 116f, footer.height);
+            if (controls.danger(ui, "detail.reset", button, "Reset defaults", true)) {
                 open.resetToDefaults();
                 edited(context, null);
             }
         }
-        ui.popAlpha();
-
-        if (closing) {
-            drawerClosing = true;
-            context.keybindCapture().cancel();
-            editing = null;
-        }
     }
 
-    private void settingRow(HubContext context, Setting setting, Rect area) {
+    private void closeDetail(HubContext context) {
+        if (open == null || detailClosing) {
+            return;
+        }
+        detailClosing = true;
+        detail.to(0f, context.now(), Timing.DETAIL);
+        context.keybindCapture().cancel();
+        context.controls().closePopover();
+        context.controls().clearFocus();
+        editing = null;
+    }
+
+    private float detailContentHeight(HubContext context) {
+        float height = introHeight();
+        ModulePreview preview = ModulePreview.of(open);
+        if (preview != null) {
+            height += Skin.S4 + preview.height();
+        }
+        float behaviour = settingsGroupHeight(context, false);
+        float appearance = settingsGroupHeight(context, true);
+        float keys = keybindGroupHeight(context);
+        if (behaviour > 0f) {
+            height += Skin.SECTION_GAP + behaviour;
+        }
+        if (appearance > 0f) {
+            height += Skin.SECTION_GAP + appearance;
+        }
+        if (keys > 0f) {
+            height += Skin.SECTION_GAP + keys;
+        }
+        return height + Skin.S4;
+    }
+
+    private float introHeight() {
+        return 48f;
+    }
+
+    /**
+     * What the module is, as the page's own type -- not a panel. A box around
+     * one sentence was one more container between the reader and the settings.
+     */
+    private float detailIntro(HubContext context, Rect viewport, float y) {
+        Rect intro = new Rect(viewport.x, y, viewport.width - Skin.S3, introHeight());
+        Rect text = intro.inset(Skin.S1, 0f);
+        context.ui().text(Text.fit(context.ui(), open.description(), Type.BODY, text.width),
+                text.x, text.y + context.ui().ascent(Type.BODY), Type.BODY, Skin.TEXT_MUTED);
+        String note = compactBadge(open);
+        if (!note.isEmpty()) {
+            context.ui().text(note, text.x, text.y + 27f + context.ui().ascent(Type.CAPTION),
+                    Type.CAPTION, unmet(open) ? Skin.WARN : Skin.TEXT_FAINT);
+        }
+        y = intro.bottom();
+        ModulePreview preview = ModulePreview.of(open);
+        if (preview != null) {
+            y += Skin.S4;
+            Rect previewArea = new Rect(viewport.x, y, viewport.width - Skin.S3, preview.height());
+            preview.draw(context.ui(), open, previewArea);
+            y = previewArea.bottom();
+        }
+        return y;
+    }
+
+    private float settingsGroupHeight(HubContext context, boolean appearance) {
+        int count = 0;
+        float rows = 0f;
+        for (Setting setting : openSettings) {
+            if (isAppearance(setting) != appearance) {
+                continue;
+            }
+            count++;
+            rows += FathomSettingRows.height(setting.description());
+            if (setting instanceof Setting.Key
+                    && !conflict(context, ((Setting.Key) setting).binding()).isEmpty()) {
+                rows += CONFLICT_ROW;
+            }
+        }
+        return count == 0 ? 0f : FathomSettingRows.SECTION_HEADING + rows;
+    }
+
+    private float settingsGroup(
+            HubContext context, Rect viewport, float y, boolean appearance,
+            String title, String description) {
+        int count = 0;
+        for (Setting setting : openSettings) {
+            if (isAppearance(setting) == appearance) {
+                count++;
+            }
+        }
+        if (count == 0) {
+            return y;
+        }
+        y += Skin.SECTION_GAP;
+        Rect heading = new Rect(viewport.x, y, viewport.width - Skin.S3,
+                FathomSettingRows.SECTION_HEADING);
+        FathomSettingRows.heading(context.ui(), heading, title, description);
+        y = heading.bottom();
+
+        float rowsHeight = settingsGroupHeight(context, appearance) - FathomSettingRows.SECTION_HEADING;
+        Rect surface = new Rect(viewport.x, y, viewport.width - Skin.S3, rowsHeight);
+        FathomSettingRows.surface(context.ui(), surface);
+        int drawn = 0;
+        for (Setting setting : openSettings) {
+            if (isAppearance(setting) != appearance) {
+                continue;
+            }
+            drawn++;
+            float rowHeight = FathomSettingRows.height(setting.description());
+            Rect row = new Rect(surface.x, y, surface.width, rowHeight);
+            if (row.bottom() >= viewport.y && row.y <= viewport.bottom()) {
+                settingRow(context, setting, row, drawn == count);
+            }
+            y += rowHeight;
+            if (setting instanceof Setting.Key) {
+                String clash = conflict(context, ((Setting.Key) setting).binding());
+                if (!clash.isEmpty()) {
+                    context.ui().text(Text.fit(context.ui(), clash, Type.CAPTION,
+                                    surface.width - Skin.CARD_PADDING * 2f),
+                            surface.x + Skin.CARD_PADDING,
+                            y + context.ui().ascent(Type.CAPTION), Type.CAPTION, Skin.WARN);
+                    y += CONFLICT_ROW;
+                }
+            }
+        }
+        return y;
+    }
+
+    private float keybindGroupHeight(HubContext context) {
+        if (open.keybinds().isEmpty()) {
+            return 0f;
+        }
+        float rows = 0f;
+        for (Keybind keybind : open.keybinds()) {
+            rows += FathomSettingRows.COMPACT_ROW;
+            if (!conflict(context, keybind).isEmpty()) {
+                rows += CONFLICT_ROW;
+            }
+        }
+        return FathomSettingRows.SECTION_HEADING + rows;
+    }
+
+    private float keybindGroup(HubContext context, Rect viewport, float y) {
+        if (open.keybinds().isEmpty()) {
+            return y;
+        }
+        y += Skin.SECTION_GAP;
+        Rect heading = new Rect(viewport.x, y, viewport.width - Skin.S3,
+                FathomSettingRows.SECTION_HEADING);
+        FathomSettingRows.heading(context.ui(), heading, "Keybinds",
+                "Click a key, then press its replacement. Esc keeps it; Backspace clears it.");
+        y = heading.bottom();
+        float rowsHeight = keybindGroupHeight(context) - FathomSettingRows.SECTION_HEADING;
+        Rect surface = new Rect(viewport.x, y, viewport.width - Skin.S3, rowsHeight);
+        FathomSettingRows.surface(context.ui(), surface);
+        for (int index = 0; index < open.keybinds().size(); index++) {
+            Keybind keybind = open.keybinds().get(index);
+            Rect row = new Rect(surface.x, y, surface.width, FathomSettingRows.COMPACT_ROW);
+            if (row.bottom() >= viewport.y && row.y <= viewport.bottom()) {
+                keybindRow(context, keybind, row, index == open.keybinds().size() - 1);
+            }
+            y += row.height;
+            String clash = conflict(context, keybind);
+            if (!clash.isEmpty()) {
+                context.ui().text(Text.fit(context.ui(), clash, Type.CAPTION,
+                                surface.width - Skin.CARD_PADDING * 2f),
+                        surface.x + Skin.CARD_PADDING,
+                        y + context.ui().ascent(Type.CAPTION), Type.CAPTION, Skin.WARN);
+                y += CONFLICT_ROW;
+            }
+        }
+        return y;
+    }
+
+    private boolean isAppearance(Setting setting) {
+        Boolean cached = appearanceSettings.get(setting);
+        if (cached != null) {
+            return cached.booleanValue();
+        }
+        String id = setting.id().toLowerCase(java.util.Locale.ROOT);
+        boolean appearance = setting.kind() == Setting.Kind.COLOUR
+                || id.contains("font") || id.contains("colour") || id.contains("color")
+                || id.contains("opacity") || id.contains("background") || id.contains("border")
+                || id.contains("padding") || id.contains("radius") || id.contains("shadow")
+                || id.contains("spacing") || id.contains("style");
+        appearanceSettings.put(setting, Boolean.valueOf(appearance));
+        return appearance;
+    }
+
+    private void settingRow(HubContext context, Setting setting, Rect area, boolean last) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
-        Rect row = area.inset(0f, 2f);
-        boolean hovered = row.contains(context.pointer().x(), context.pointer().y());
-        controls.rowBackground(ui, "setting.row." + open.id() + "." + setting.id(),
-                row, hovered, false);
-
-        float controlWidth = controlWidth(setting, row.width);
-
-        ui.text(Text.fit(ui, setting.label(), Type.BODY, row.width - controlWidth - Skin.S4), row.x,
-                Controls.baseline(ui, row, Type.BODY), Type.BODY, hovered ? Skin.TEXT : Skin.TEXT_MUTED);
-
-        Rect control = row.vcentreRight(0f, controlWidth, controlHeight(setting));
+        boolean hovered = context.controls().pointerOverVisible(area);
+        float controlWidth = controlWidth(setting, area.width);
+        Rect control = FathomSettingRows.row(ui, controls,
+                "setting.row." + open.id() + "." + setting.id(),
+                area, setting.label(), setting.description(), controlWidth,
+                controlHeight(setting), true, hovered, last);
         String id = "set." + open.id() + "." + setting.id();
         switch (setting.kind()) {
             case TOGGLE: {
@@ -548,13 +1117,17 @@ final class ModsSection implements Section {
                     slider.setFraction(next);
                     edited(context, setting);
                 }
-                ui.textRight(slider.display(), control.x - Skin.S3, Controls.baseline(ui, row, Type.CAPTION),
+                ui.textRight(slider.display(), control.x - Skin.S3, Controls.baseline(ui, area, Type.CAPTION),
                         Type.CAPTION, Skin.TEXT_FAINT);
                 break;
             }
             case CHOICE: {
                 Setting.Choice choice = (Setting.Choice) setting;
-                String[] options = choice.options().toArray(new String[0]);
+                String[] options = choiceOptions.get(choice);
+                if (options == null) {
+                    options = choice.options().toArray(new String[choice.options().size()]);
+                    choiceOptions.put(choice, options);
+                }
                 int chosen = controls.dropdown(ui, id, control, options, choice.index());
                 if (chosen != choice.index() && chosen >= 0 && chosen < options.length) {
                     choice.set(options[chosen]);
@@ -609,7 +1182,7 @@ final class ModsSection implements Section {
     /**
      * Record an edit made here.
      *
-     * <p>Two things follow from a value changing in this drawer: the profile is
+     * <p>Two things follow from a value changing on this page: the profile is
      * dirty, and the module may want to keep its other settings consistent — a
      * crosshair preset writes the shape it names, and editing that shape turns
      * the preset row to Custom. The module is told through its own declared
@@ -680,11 +1253,51 @@ final class ModsSection implements Section {
      * nothing would be wrong in the first case, which is the common one.
      */
     private String conflict(HubContext context, Keybind keybind) {
+        String cached = conflictCache.get(keybind);
+        if (cached != null) {
+            return cached;
+        }
+        String calculated = calculateConflict(context, keybind);
+        conflictCache.put(keybind, calculated);
+        return calculated;
+    }
+
+    private void refreshConflictCache(HubContext context) {
+        int fingerprint = bindingFingerprint(context);
+        if (fingerprint != conflictFingerprint) {
+            conflictFingerprint = fingerprint;
+            conflictCache.clear();
+        }
+    }
+
+    private int bindingFingerprint(HubContext context) {
+        int value = 17;
+        for (FathomModule module : modules) {
+            for (Keybind binding : module.keybinds()) {
+                value = value * 31 + binding.key();
+            }
+        }
+        for (Setting setting : openSettings) {
+            if (setting instanceof Setting.Key) {
+                value = value * 31 + ((Setting.Key) setting).binding().key();
+            }
+        }
+        value = value * 31 + context.hud().hubKey().key();
+        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        if (client != null && client.options != null && client.options.allKeys != null) {
+            for (net.minecraft.client.option.KeyBinding vanilla : client.options.allKeys) {
+                value = value * 31 + (vanilla == null ? 0 : vanilla.getCode());
+            }
+        }
+        return value;
+    }
+
+    private String calculateConflict(HubContext context, Keybind keybind) {
         if (!keybind.isBound()) {
             return "";
         }
         List<String> others = new ArrayList<String>();
-        for (FathomModule module : context.features().all()) {
+        for (FathomModule module : modules) {
             for (Keybind other : module.keybinds()) {
                 if (other != keybind && other.key() == keybind.key() && !others.contains(module.name())) {
                     others.add(module.name());
@@ -723,33 +1336,14 @@ final class ModsSection implements Section {
         return out.append('.').toString();
     }
 
-    /** How many extra rows the conflict notes need, for the scroll height. */
-    private int conflictLines(HubContext context) {
-        int lines = 0;
-        for (Keybind keybind : open.keybinds()) {
-            if (!conflict(context, keybind).isEmpty()) {
-                lines++;
-            }
-        }
-        for (Setting setting : open.settings()) {
-            if (setting instanceof Setting.Key && !conflict(context, ((Setting.Key) setting).binding()).isEmpty()) {
-                lines++;
-            }
-        }
-        return lines;
-    }
-
-    private void keybindRow(HubContext context, Keybind keybind, Rect area) {
+    private void keybindRow(HubContext context, Keybind keybind, Rect area, boolean last) {
         Renderer ui = context.ui();
-        Rect row = area.inset(0f, 2f);
-        boolean hovered = row.contains(context.pointer().x(), context.pointer().y());
+        boolean hovered = context.controls().pointerOverVisible(area);
         boolean waiting = context.keybindCapture().capturing(keybind);
-        context.controls().rowBackground(ui, "key.row." + open.id() + "." + keybind.id(),
-                row, hovered, waiting);
-
-        Rect control = row.vcentreRight(0f, 110f, Skin.H_SM);
-        ui.text(Text.fit(ui, keybind.label(), Type.BODY, row.width - control.width - Skin.S4), row.x,
-                Controls.baseline(ui, row, Type.BODY), Type.BODY, hovered ? Skin.TEXT : Skin.TEXT_MUTED);
+        Rect control = FathomSettingRows.row(ui, context.controls(),
+                "key.row." + open.id() + "." + keybind.id(), area,
+                keybind.label(), waiting ? "Press a key; Escape cancels and Backspace clears." : "",
+                140f, Skin.H_SM, true, hovered || waiting, last);
         if (context.controls().keybind(ui, "key." + keybind.id(), control, keybind.keyName(), waiting)) {
             context.keybindCapture().toggle(keybind);
         }
@@ -762,7 +1356,7 @@ final class ModsSection implements Section {
     @Override
     public void scroll(int notches) {
         if (open != null) {
-            drawerScroll.wheel(notches);
+            detailScroll.wheel(notches);
         } else {
             scroller.wheel(notches);
         }
@@ -776,6 +1370,10 @@ final class ModsSection implements Section {
     public boolean key(HubContext context, char character, int keyCode) {
         if (editing != null) {
             return type(context, character, keyCode);
+        }
+        if (open != null && keyCode == Keyboard.KEY_ESCAPE) {
+            closeDetail(context);
+            return true;
         }
         return false;
     }
@@ -805,13 +1403,19 @@ final class ModsSection implements Section {
     }
 
     private List<FathomModule> visible(HubContext context) {
-        List<FathomModule> out = new ArrayList<FathomModule>();
-        for (FathomModule feature : context.features().matching(context.search())) {
-            if (filter == null || feature.category() == filter) {
-                out.add(feature);
-            }
+        String search = context.search();
+        if (search.equals(visibleSearch) && stateFilter == visibleStateFilter) {
+            return visibleModules;
         }
-        return out;
+        visibleModules.clear();
+        for (FathomModule feature : context.features().matching(context.search())) {
+            if (stateFilter == 1 && !feature.enabled()) continue;
+            if (stateFilter == 2 && feature.enabled()) continue;
+            visibleModules.add(feature);
+        }
+        visibleSearch = search;
+        visibleStateFilter = stateFilter;
+        return visibleModules;
     }
 
     private static float clamp(float value, float low, float high) {

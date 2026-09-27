@@ -345,9 +345,9 @@ final class ArmourWidget implements HudWidget {
             int danger = (int) Math.round(Widgets.optionNumber("armour", "danger", 20));
             int warn = (int) Math.round(Widgets.optionNumber("armour", "warn", 50));
             if (percent <= danger) {
-                rgb = 0xE0505C;
+                rgb = net.fathom.optimizations.generated.GraphiteTokens.COLOR_STATUS_ERROR & 0xFFFFFF;
             } else if (percent <= warn) {
-                rgb = 0xE0B341;
+                rgb = net.fathom.optimizations.generated.GraphiteTokens.COLOR_STATUS_WARN & 0xFFFFFF;
             }
         }
         return (alpha << 24) | (rgb & 0x00FFFFFF);

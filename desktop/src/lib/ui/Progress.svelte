@@ -1,7 +1,7 @@
 <!--
   Progress.
 
-  A sunken channel with an ivory fill. `value` is 0–1; `null` means the work has
+  A thin neutral line with a brighter fill. `value` is 0–1; `null` means the work has
   no measurable fraction, and the fill drifts across the channel instead of
   parking at a made-up percentage -- a bar that lies about how far along it is
   is worse than no bar.
@@ -36,14 +36,14 @@
     position: relative;
     display: block;
     overflow: hidden;
-    background-color: var(--control-fill-sunken);
+    background-color: var(--control-slider-track);
   }
 
+  /* A line, not a trough: 3px, the slider's own channel and fill. */
   .channel.bar {
     width: 100%;
-    height: 4px;
+    height: 3px;
     border-radius: var(--radius-pill);
-    box-shadow: var(--control-rim);
   }
 
   /* Along the bottom edge of a control, inheriting its corners. */
@@ -60,7 +60,7 @@
     display: block;
     height: 100%;
     border-radius: inherit;
-    background-color: var(--palette-ivory-100);
+    background-color: var(--control-slider-fill);
     transition: width var(--motion-state) var(--ease-standard);
   }
 

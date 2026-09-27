@@ -1,6 +1,15 @@
 package net.fathom.optimizations.fabric.menu;
 
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+
+import javax.imageio.ImageIO;
+
+import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 
@@ -12,17 +21,11 @@ import net.minecraft.client.render.VertexFormats;
 import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
 
 /**
- * The menu background's presentation: the picture's cover crop, the
- * launcher's warm scrim over it, and the warm field when there is no picture.
+ * The approved bg_5rain poster and the presentation shared with video frames.
  *
- * <h2>The launcher's grade, not a new one</h2>
- *
- * <p>The scrim is {@code system.backdrop.scrim} from the theme manifest: a
- * warm umber deepening that is strongest at the top edge (where the account
- * control sits) and the bottom edge (where the dock and footer sit), and almost
- * nothing through the middle, where the photograph is the point. The field is
- * {@code system.backdrop.fallback}: the same photograph's colours, as bands.
- * No navy wash, no black, and the picture itself is not filtered.
+ * <p>The cool neutral scrim matches {@code system.backdrop.scrim}; it preserves
+ * the rainy bridge while seating white controls. A neutral field appears only
+ * if this exact poster genuinely fails to load.
  *
  * <h2>Cost</h2>
  *
@@ -32,31 +35,38 @@ import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
  */
 final class MenuPoster {
 
+    private static final String POSTER_RESOURCE =
+            "/assets/fathom-optimizations/textures/menu/main-menu-bg.png";
     private static final float SOURCE_ASPECT = 16f / 9f;
 
     /**
-     * The launcher's scrim, top to bottom: position (0-1) and umber opacity.
-     * {@code rgba(26, 16, 6, a)} at 0%, 22%, 50%, 78% and 100%.
+     * The launcher's cool scrim, top to bottom, at five shared stops.
      */
     private static final float[] SCRIM_AT = {0f, 0.22f, 0.50f, 0.78f, 1f};
-    private static final float[] SCRIM_ALPHA = {0.30f, 0.08f, 0.03f, 0.12f, 0.40f};
-    private static final int SCRIM_R = 26;
-    private static final int SCRIM_G = 16;
-    private static final int SCRIM_B = 6;
+    private static final float[] SCRIM_ALPHA = {0.14f, 0.03f, 0.02f, 0.07f, 0.18f};
+    private static final int SCRIM_R = 4;
+    private static final int SCRIM_G = 9;
+    private static final int SCRIM_B = 12;
 
-    /** The launcher's fallback field: the photograph's own colours, as bands. */
+    /** Neutral failure field, used only if the approved poster cannot load. */
     private static final float[] FIELD_AT = {0f, 0.28f, 0.52f, 0.76f, 1f};
-    private static final int[] FIELD_RGB = {0x6D6843, 0x857750, 0x9C7F4F, 0x74532F, 0x2A1C0E};
+    private static final int[] FIELD_RGB = {0x172630, 0x122029, 0x0D181E, 0x0A1419, 0x071015};
+    private static int texture = -1;
 
     private MenuPoster() {}
 
-    /** Nothing to release: the poster no longer owns a texture. */
+    /** Release the classpath poster texture on a resource reload. */
     static void dispose() {
+        if (texture > 0) {
+            GlStateManager.bindTexture(0);
+            GL11.glDeleteTextures(texture);
+        }
+        texture = -1;
     }
 
-    /** A picture that cannot be shown gives the warm field. */
+    /** Hold the approved poster until the first video frame is available. */
     static void draw(MinecraftClient client) {
-        drawFlat(client);
+        if (bind()) drawTexture(client, texture); else drawFlat(client);
     }
 
     /** The warm field, for when there is no picture behind the menu. */
@@ -147,5 +157,62 @@ final class MenuPoster {
         GL11.glShadeModel(GL11.GL_FLAT);
         GlStateManager.enableAlphaTest();
         GlStateManager.enableTexture();
+    }
+
+    /** Load the exact approved poster once; no generated or alternate image. */
+    private static boolean bind() {
+        if (texture > 0) {
+            GlStateManager.bindTexture(texture);
+            return true;
+        }
+        if (texture == 0) return false;
+        try {
+            BufferedImage image;
+            try (InputStream stream = MenuPoster.class.getResourceAsStream(POSTER_RESOURCE)) {
+                if (stream == null) {
+                    texture = 0;
+                    System.err.println("[Fathom] Main-menu poster is missing: " + POSTER_RESOURCE);
+                    return false;
+                }
+                image = ImageIO.read(stream);
+            }
+            if (image == null) {
+                texture = 0;
+                System.err.println("[Fathom] Main-menu poster could not be decoded: "
+                        + POSTER_RESOURCE);
+                return false;
+            }
+
+            int width = image.getWidth();
+            int height = image.getHeight();
+            ByteBuffer pixels = BufferUtils.createByteBuffer(width * height * 4);
+            int[] row = new int[width];
+            for (int y = 0; y < height; y++) {
+                image.getRGB(0, y, width, 1, row, 0, width);
+                for (int x = 0; x < width; x++) {
+                    int argb = row[x];
+                    pixels.put((byte) ((argb >> 16) & 0xFF));
+                    pixels.put((byte) ((argb >> 8) & 0xFF));
+                    pixels.put((byte) (argb & 0xFF));
+                    pixels.put((byte) ((argb >>> 24) & 0xFF));
+                }
+            }
+            pixels.flip();
+
+            texture = GL11.glGenTextures();
+            GlStateManager.bindTexture(texture);
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8,
+                    width, height, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+            System.out.println("[Fathom] Main-menu poster uploaded: " + width + "x" + height + ".");
+            return true;
+        } catch (IOException | RuntimeException failure) {
+            texture = 0;
+            System.err.println("[Fathom] Main-menu poster failed to upload: " + failure.getMessage());
+            return false;
+        }
     }
 }

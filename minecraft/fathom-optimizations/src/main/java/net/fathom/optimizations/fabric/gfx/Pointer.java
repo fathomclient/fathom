@@ -116,6 +116,10 @@ public final class Pointer {
             }
         }
         wheel = Mouse.getDWheel();
+        if (net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE) {
+            // The scripted benchmark's scrolling phase, and nothing otherwise.
+            wheel += net.fathom.optimizations.fabric.bench.PerfBench.benchWheelNotches() * WHEEL_DELTA;
+        }
         started = true;
     }
 

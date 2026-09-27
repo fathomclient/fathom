@@ -236,19 +236,6 @@ public abstract class TextWidget implements HudWidget {
      * rows mean the same thing wherever they are drawn.
      */
     static void backdrop(FathomModule module, int x, int y, int width, int height, int alpha) {
-        if (HudStyle.background(module)) {
-            // The plate takes a fraction of the widget's opacity, so turning a
-            // widget down turns the whole thing down rather than leaving a solid
-            // rectangle behind faded text.
-            int plateAlpha = HudStyle.backgroundAlpha(module) * alpha / 255;
-            Plate.draw(x, y, width, height,
-                    (plateAlpha << 24) | (HudStyle.backgroundColour(module) & 0x00FFFFFF),
-                    HudStyle.radius(module),
-                    HudStyle.dropShadow(module));
-        }
-        if (HudStyle.border(module)) {
-            Plate.border(x, y, width, height, HudStyle.radius(module), HudStyle.borderWidth(module),
-                    (alpha << 24) | (HudStyle.borderColour(module) & 0x00FFFFFF));
-        }
+        HudSurface.draw(module, x, y, width, height, alpha);
     }
 }

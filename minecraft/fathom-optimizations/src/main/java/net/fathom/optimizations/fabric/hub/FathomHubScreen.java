@@ -23,37 +23,43 @@ import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.hud.FathomHud;
-import net.fathom.optimizations.fabric.ui.BrandMark;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.Graphite;
+import net.fathom.optimizations.core.ui.Colour;
+import net.fathom.optimizations.core.ui.anim.Ease;
+import net.fathom.optimizations.generated.GraphiteTokens;
 
 /**
  * Fathom Hub — the screen Right Shift opens.
  *
  * <h2>What this is</h2>
  *
- * <p>The launcher, in the game: one pane of the launcher's standard glass --
- * warm umber, a lit top edge, a faint rim -- over the world under a warm scrim,
- * the Surface wordmark in its header, the launcher's ivory and champagne type,
- * its spacing, radii, durations and typeface. Not a config screen with
- * Fathom's colours on it.
+ * <p>The launcher, in the game: its composition over its background. There is
+ * no application window. The approved bg_5rain recording is the page under a
+ * light scrim, and the Hub's
+ * parts float over it the way the launcher's rail, selectors and Play control
+ * float over the recording:
  *
  * <pre>
- *   +-------------------------------------------------------+
- *   | FATHOM   Profile  Session           Search  HUD   x   |  header region
- *   +-------------+-----------------------------------------+
- *   |  Mods       |  Heading                                |
- *   |  HUD        |  subtitle                               |
- *   |  Profile    |  content                                |
- *   +-------------+-----------------------------------------+
+ *    FATHOM  (Profile v)  Session              (Search) (HUD Editor)  x
+ *
+ *   ( Mods        )    Heading
+ *   ( Performance )    subtitle
+ *   ( Profiles    )    ( light group of rows ...                       )
+ *   ( Quick       )
+ *
+ *   ( Launcher    )
+ *   ( Diagnostics )
  * </pre>
  *
- * <p>The header and the rail are regions of the one pane, divided by
- * hairlines -- not further panes laid on top of it. The current section is the
- * denser capsule in the rail with the brighter rim, and no marker bar. Cards
- * inside the content are flat fills; only what floats over everything (menus,
- * drawers) is dense glass. There is no blur anywhere: see {@code Skin}.
+ * <p>The header is loose capsules, not a bar. Navigation is two floating
+ * groups of light glass; the current section is the standard-glass capsule
+ * with the brighter rim, and no marker bar. The content area is open: the
+ * page's own groups are light glass, rows inside them are not cards, and only
+ * what floats over everything (menus, popovers) is dense. There is no blur
+ * anywhere: see {@code Skin}.
  *
  * <h2>It takes the screen</h2>
  *
@@ -66,9 +72,9 @@ import net.fathom.optimizations.fabric.ui.Skin;
  *
  * <h2>No themes, and the world as context</h2>
  *
- * <p>The world behind is deepened with a warm scrim and left there as context.
- * There is no photograph and no theme picker in here: a menu inside a game is
- * already sitting on the most decorated background it will ever have.
+ * <p>In a world, the world is the background, deepened only enough for ivory
+ * type to hold. With no world -- opened from the title screen -- it is the
+ * launcher's photograph, as the title screen draws it, never an empty frame.
  *
  * <h2>Input does not come from Minecraft</h2>
  *
@@ -82,12 +88,31 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     private static final String SEARCH_ID = "hub.search";
 
+
     /**
-     * The header wordmark's cap height. At GUI scale 2 and above this is the
-     * brand's reduced tier -- the one-pixel refraction -- which is what a
-     * wordmark this size should carry.
+     * The approved bg_5rain recording. The shared player pauses decoding and
+     * holds its last frame whenever the game window loses focus.
      */
-    private static final float BRAND_CAP = 13f;
+    private final Runnable backdropPass = new Runnable() {
+        @Override
+        public void run() {
+            net.fathom.optimizations.fabric.menu.FathomMenuScreen.drawBackdrop(client);
+        }
+    };
+    /** Mockup B's reference canvas and the content frame inside it, in dp. */
+    private static final float FRAME_WIDTH = 1040f;
+    private static final float FRAME_HEIGHT = 600f;
+    private static final float RAIL_WIDTH = 184f;
+    private static final float RAIL_TOP = 52f;
+    private static final float RAIL_ITEM = GraphiteTokens.SIZE_CONTROL;
+    private static final float RAIL_GAP = GraphiteTokens.SPACE_1;
+    private static final float CONTENT_X = 200f;
+    private static final float TELEMETRY_LINE = 16f;
+
+    /** Telemetry text, rebuilt at 4 Hz rather than every frame. */
+    private String telemetryFps = "";
+    private String telemetryMemory = "";
+    private float telemetryAt = -1f;
 
     private final FathomHud hud;
     private final Controls controls = new Controls();
@@ -110,7 +135,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private long closeStartedNs;
 
     private Rect panel = new Rect(0f, 0f, 0f, 0f);
-    private Rect searchBox = new Rect(0f, 0f, 0f, 0f);
 
     public FathomHubScreen(FathomHud hud) {
         this.hud = hud;
@@ -121,19 +145,23 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         buttons.clear();
         if (context == null) {
             context = new HubContext(client, hud, Runtime.features(), controls, this, pointer);
+            sections.add(new QuickSection());
             sections.add(new ModsSection());
             sections.add(new PerformanceSection());
             sections.add(new ProfilesSection());
-            sections.add(new QuickSection());
-            sections.add(new LauncherSection());
             sections.add(new DiagnosticsSection());
+            sections.add(new LauncherSection());
 
             float now = Gfx.clock().seconds();
-            transition = new Transition(Timing.HUB_ENTER, Timing.HUB_EXIT);
+            transition = new Transition(GraphiteTokens.MOTION_PANEL, GraphiteTokens.MOTION_CLOSE,
+                    Ease.Curve.GRAPHITE, Ease.Curve.GRAPHITE);
             transition.open(now);
             openedAtNs = System.nanoTime();
-            pageSwap = new Motion(1f, Timing.NAVIGATION);
-            sections.get(0).opened(context);
+            pageSwap = new Motion(1f, GraphiteTokens.MOTION_PANEL, Ease.Curve.GRAPHITE);
+            // Mods is where the Hub opens.
+            current = 1;
+            previous = 1;
+            sections.get(current).opened(context);
             selectCaptureSection();
         }
         // Also reset on return from a child screen. A release that happened in
@@ -179,6 +207,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     @Override
     public void render(int ignoredMouseX, int ignoredMouseY, float ignoredDelta) {
+        // One video pass; panels add tint and rims, never another blur/capture.
+        Gfx.isolated(backdropPass);
         Renderer ui = Gfx.beginScreen(client, Runtime.uiScale());
         float delta = Gfx.screenDelta();
         boolean restorePrevious = false;
@@ -188,16 +218,24 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             // Offered to the page before anything else sees it, so a keybind
             // waiting for a mouse button gets the button rather than a click on
             // whatever is underneath the cursor.
+            //
+            // Except the left button. It is how somebody moves on -- clicks
+            // another row, another control, empty space -- and binding it there
+            // turned "I changed my mind" into an attack key bound to a module.
+            // While a key is listening, a left click cancels and does nothing
+            // else; the old key stays. The other buttons still bind.
             for (int button = 0; button < pointer.buttonCount(); button++) {
                 if (pointer.pressed(button) && context.keybindCapture().active()) {
-                    if (context.keybindCapture().mouse(button) == KeybindCaptureState.Outcome.BOUND) {
+                    if (button == 0) {
+                        context.keybindCapture().cancel();
+                    } else if (context.keybindCapture().mouse(button) == KeybindCaptureState.Outcome.BOUND) {
                         context.markDirty();
                     }
                     pointer.consume(button);
                     break;
                 }
             }
-            controls.begin(pointer, delta);
+            controls.begin(pointer, delta, ui);
             context.setDelta(delta);
 
             layout(ui);
@@ -247,8 +285,14 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         return String.format(java.util.Locale.ROOT, "%.1f", nanos / 1_000_000d);
     }
 
+    /** The section a visual-QA run photographs: over the world, or over the title screen. */
+    private static String captureTarget() {
+        String world = System.getProperty("fathom.captureHubWorld", "").trim();
+        return world.isEmpty() ? System.getProperty("fathom.captureUi", "") : world;
+    }
+
     private void selectCaptureSection() {
-        String target = System.getProperty("fathom.captureUi", "");
+        String target = captureTarget();
         for (int index = 0; index < sections.size(); index++) {
             if (sections.get(index).title().equalsIgnoreCase(target)) {
                 current = index;
@@ -260,7 +304,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     }
 
     private void captureSettledFrame() {
-        String target = System.getProperty("fathom.captureUi", "");
+        String target = captureTarget();
         captureFrames++;
         if (captured || target.isEmpty() || "menu".equalsIgnoreCase(target)
                 || "hud".equalsIgnoreCase(target)
@@ -303,237 +347,125 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         client.scheduleStop();
     }
 
+    /**
+     * Mockup B: the content frame, 1040x600dp, centred on the screen and never
+     * drawn. On a screen smaller than the reference canvas it shrinks to fit
+     * with a 16dp game-menu margin; the extra width on a wider one stays
+     * backdrop.
+     */
     private void layout(Renderer ui) {
-        float availableWidth = Math.max(320f, ui.width() - Skin.S6 * 2f);
-        float availableHeight = Math.max(240f, ui.height() - Skin.S6 * 2f);
-        float width = clamp(ui.width() * Skin.SCREEN_FRACTION_X,
-                Math.min(Skin.MIN_WIDTH, availableWidth), Math.min(Skin.MAX_WIDTH, availableWidth));
-        float height = clamp(ui.height() * Skin.SCREEN_FRACTION_Y,
-                Math.min(Skin.MIN_HEIGHT, availableHeight), Math.min(Skin.MAX_HEIGHT, availableHeight));
-        panel = Skin.pixelAligned(ui,
-                new Rect((ui.width() - width) / 2f, (ui.height() - height) / 2f, width, height));
-    }
-
-    private static float clamp(float value, float low, float high) {
-        float top = Math.max(low, high);
-        return value < low ? low : (value > top ? top : value);
+        float margin = GraphiteTokens.LAYOUT_GAME_MARGIN;
+        float width = Math.min(FRAME_WIDTH, ui.width() - margin * 2f);
+        float height = Math.min(FRAME_HEIGHT, ui.height() - margin * 2f);
+        panel = new Rect((ui.width() - width) / 2f, (ui.height() - height) / 2f, width, height);
     }
 
     private void draw(Renderer ui) {
         float now = Gfx.clock().seconds();
         float open = transition.enter(now);
-        float exit = transition.exit(now);
         float shown = transition.visibility(now);
 
-        // The world, deepened with the warm scrim and left as context.
-        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.scaleAlpha(Skin.SCRIM, shown));
-
+        // Groups fade and rise 8dp on entry; on exit they fade.
         ui.pushAlpha(shown);
-        // Rises and grows a little as it arrives. Small enough that nobody reads
-        // it as an effect; absent, the hub appears rather than opens.
-        float scale = 0.990f + 0.010f * open - 0.004f * exit;
-        ui.pushTransform(0f, (1f - open) * 8f + exit * 3f,
-                scale, panel.centreX(), panel.centreY());
+        ui.pushTransform(0f, (1f - open) * GraphiteTokens.MOTION_TRAVEL);
 
-        FathomComponents.window(ui, panel);
-
-        Rect header = panel.top(Skin.HEADER_HEIGHT);
-        Rect body = panel.belowTop(Skin.HEADER_HEIGHT);
-        float sidebarWidth = Math.min(Skin.SIDEBAR_WIDTH,
-                Math.max(148f, panel.width * 0.18f));
-        Rect rail = body.left(sidebarWidth);
-        Rect content = body.rightOf(sidebarWidth);
-
-        chrome(ui, header, rail);
-        header(ui, header);
-
+        header(ui);
+        Rect rail = new Rect(panel.x, panel.y + RAIL_TOP, RAIL_WIDTH, railHeight());
         rail(ui, rail);
+        Rect content = Rect.of(panel.x + Math.min(CONTENT_X, panel.width * 0.2f), panel.y + RAIL_TOP,
+                panel.right(), panel.bottom());
         content(ui, content);
 
-        // Popovers last, and inside the panel's transform: a dropdown drawn
-        // outside it would sit a pixel or two from the control that opened it
-        // while the panel is still animating in.
+        // Popovers last, and inside the composition's transform.
         controls.drawOverlays(ui);
 
         ui.popTransform();
         ui.popAlpha();
     }
 
-    /** The header and rail regions: hairlines only, on the window's own glass. */
-    private void chrome(Renderer ui, Rect header, Rect rail) {
-        FathomComponents.topBar(ui, header);
-        FathomComponents.sidebar(ui, rail);
-    }
+    /**
+     * The wordmark at the frame's left, centred on y 78; Close at the right
+     * edge, Edit HUD 8dp to its left. No bar, no picker, no session line.
+     */
+    private void header(Renderer ui) {
+        float cap = GraphiteTokens.WORDMARK_CAP_GAME;
+        float centre = panel.y + 18f;
+        Graphite.wordmark(ui, panel.x, centre - cap / 2f, cap);
 
-    private void header(Renderer ui, Rect header) {
-        Rect inner = header.inset(Skin.S5, 0f);
-        float cursor = inner.x;
-
-        // The Surface wordmark, at the header's size. Rasterised once for the
-        // current scale and drawn as one quad; placed by its cap, centred.
-        float cap = BRAND_CAP;
-        float wordmarkTop = Skin.snap(ui, header.centreY() - cap / 2f);
-        cursor += BrandMark.wordmark(ui, Skin.snap(ui, cursor), wordmarkTop, cap);
-        cursor += Skin.S6;
-
-        // Header actions are laid out from the right. HUD Editor stays visible
-        // at every supported width; session detail yields first on small UIs.
-        Rect close = inner.vcentreRight(Skin.S1, Controls.ICON_BUTTON, Controls.ICON_BUTTON);
-        float rightOffset = Controls.ICON_BUTTON + Skin.S3 + Skin.S1;
-        float hudWidth = 112f;
-        Rect hudEditor = inner.vcentreRight(rightOffset, hudWidth, Skin.H_MD);
-        rightOffset += hudWidth + Skin.S3;
-        boolean searchable = sections.get(current).searchable();
-        float searchWidth = Math.min(280f, Math.max(156f, panel.width * 0.22f));
-        searchBox = searchable
-                ? inner.vcentreRight(rightOffset, searchWidth, Skin.H_MD)
-                : new Rect(0f, 0f, 0f, 0f);
-
-        if (controls.iconButton(ui, "hub.close", close, Icon.CLOSE, false, true)) {
+        // The launcher's window controls: a round 32dp target, secondary ink
+        // that comes up to full strength under the pointer, a denser veil
+        // while pressed, and its name after the tooltip delay.
+        Rect close = new Rect(panel.right() - 32f, panel.y + 2f, 32f, 32f);
+        Controls.State closeState = controls.state("hub.close", close, true);
+        Graphite.overlay(ui, close, close.height / 2f, Math.max(closeState.hover, closeState.press * 1.6f), 0f);
+        ui.icon(Icon.CLOSE, close.centreX() - Graphite.ICON_INLINE / 2f,
+                close.centreY() - Graphite.ICON_INLINE / 2f, Graphite.ICON_INLINE,
+                Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, closeState.hover));
+        controls.tooltip(closeState, close, "Close");
+        if (closeState.clicked) {
             beginClose();
         }
-        if (controls.secondary(ui, "hub.hud-editor", hudEditor, "HUD Editor", true)) {
+
+        // Edit HUD: a secondary capsule with the HUD-editor glyph, as the
+        // launcher draws an action with an icon.
+        Type label = Graphite.floor(ui, Graphite.UI);
+        String edit = "Edit HUD";
+        float editIcon = Graphite.ICON_INLINE;
+        float editWidth = ui.measure(edit, label) + editIcon + Graphite.S2 + 14f * 2f;
+        Rect editHud = new Rect(close.x - Graphite.S2 - editWidth, close.y, editWidth, 32f);
+        Controls.State editState = controls.state("hub.hud-editor", editHud, true);
+        Graphite.surface(ui, editHud, editHud.height / 2f, Graphite.Material.LIGHT,
+                editState.hover, editState.press, 0f, false);
+        ui.icon(Icon.MOVE, editHud.x + 14f, editHud.centreY() - editIcon / 2f, editIcon,
+                Graphite.TEXT_SECONDARY);
+        ui.text(edit, editHud.x + 14f + editIcon + Graphite.S2, Graphite.baseline(ui, editHud, label),
+                label, Graphite.TEXT);
+        controls.focusRing(ui, editState, editHud, editHud.height / 2f);
+        if (editState.clicked) {
             context.editHud();
         }
-        if (searchable) {
-            search(ui);
-        }
 
-        float room = (searchable ? searchBox.x : hudEditor.x) - cursor - Skin.S5;
-        if (room > 60f) {
-            sessionLine(ui, header, cursor, room);
-        }
-    }
-
-    /** The last profile operation that failed, shown in place of the location until the next one works. */
-    private String profileProblem = "";
-
-    /**
-     * The live Fathom Profile, as a picker, and where the player is.
-     *
-     * <p>The name here used to be the launcher's installation, or "Development
-     * Profile" under Gradle. It is the loadout now, and choosing another one
-     * switches it live — modules, settings, HUD and keys, without a restart.
-     */
-    private void sessionLine(Renderer ui, Rect header, float x, float room) {
-        net.fathom.optimizations.fabric.profile.ProfileRuntime profiles = hud.profiles();
-        float pickerWidth = 0f;
-        if (profiles != null) {
-            java.util.List<net.fathom.optimizations.core.profile.FathomProfile> all = profiles.cachedProfiles();
-            String[] options = new String[all.size() + 1];
-            int selected = 0;
-            for (int index = 0; index < all.size(); index++) {
-                options[index] = all.get(index).name();
-                if (all.get(index).id().equals(profiles.liveId())) {
-                    selected = index;
-                }
-            }
-            options[all.size()] = "+ New profile";
-            pickerWidth = Math.min(room * 0.5f, Math.max(150f, ui.measure(profiles.liveName(), Type.BODY) + 48f));
-            Rect picker = new Rect(x, header.centreY() - Skin.H_MD / 2f, pickerWidth, Skin.H_MD);
-            int chosen = controls.dropdown(ui, "hub.profile", picker, options, selected);
-            if (chosen != selected && chosen >= 0) {
-                try {
-                    if (chosen == all.size()) {
-                        profiles.create("New profile");
-                    } else {
-                        profiles.switchTo(all.get(chosen).id());
-                    }
-                    profileProblem = "";
-                } catch (net.fathom.optimizations.core.profile.ProfileException failure) {
-                    profileProblem = failure.getMessage();
-                }
-            }
-        }
-
-        float textX = x + pickerWidth + (pickerWidth > 0f ? Skin.S3 : 0f);
-        String notice = profiles == null ? "" : profiles.notice();
-        String shown;
-        int colour;
-        if (!profileProblem.isEmpty()) {
-            shown = profileProblem;
-            colour = Skin.WARN;
-        } else if (!notice.isEmpty()) {
-            shown = notice;
-            colour = Skin.GOOD;
-        } else {
-            shown = Session.describe(client);
-            colour = Skin.TEXT_FAINT;
-        }
-        if (shown != null && !shown.isEmpty() && textX + 40f < x + room) {
-            ui.text(Text.fit(ui, shown, Type.BODY, x + room - textX), textX,
-                    Controls.baseline(ui, header, Type.BODY), Type.BODY, colour);
-        }
-
+        // A module that needs a restart says so, quietly, beside the wordmark.
         String restart = context.restartNote();
         if (restart != null) {
-            Rect badge = new Rect(x, header.bottom() + Skin.S2, room, 20f);
-            controls.badge(ui, "hub.restart", restart + " — restart required", badge, Skin.WARN);
+            Type small = Graphite.floor(ui, Graphite.SMALL);
+            float x = panel.x + Graphite.wordmarkWidth(ui, cap) + Graphite.S6;
+            ui.text(Text.fit(ui, restart + " needs a restart", small, editHud.x - x - Graphite.S4),
+                    x, centre + ui.ascent(small) / 2f, small, Graphite.TEXT_SECONDARY);
         }
     }
 
-    private void search(Renderer ui) {
-        Controls.State s = controls.state(SEARCH_ID, searchBox, true);
-        boolean focused = controls.focused(SEARCH_ID);
-        float focus = controls.towards(SEARCH_ID + "#focus", focused, Timing.STANDARD);
-        float response = Math.max(s.hover, focus);
-        // Focus is a brighter rim; no glow.
-        float radius = Skin.pill(searchBox);
-        ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), radius,
-                Skin.mix(Skin.RECESSED, Skin.SURFACE_HOVER, Math.max(s.hover * 0.6f, focus)));
-        ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), radius,
-                Skin.BORDER_STANDARD + focus * (Skin.BORDER_ENERGIZED - Skin.BORDER_STANDARD),
-                Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover), Skin.ENERGY_EDGE, focus));
-
-        float icon = 13f;
-        ui.icon(Icon.SEARCH, searchBox.x + Skin.S3, searchBox.centreY() - icon / 2f, icon,
-                Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, response));
-
-        String value = context.search();
-        float textX = searchBox.x + Skin.S3 + icon + Skin.S2;
-        float baseline = Controls.baseline(ui, searchBox, Type.BODY);
-        float room = searchBox.right() - textX - Skin.S3 - (value.isEmpty() ? 0f : 22f);
-        if (value.isEmpty()) {
-            ui.text("Search", textX, baseline, Type.BODY,
-                    Skin.mix(Skin.TEXT_DISABLED, Skin.TEXT_FAINT, response));
-        } else {
-            ui.text(Text.fit(ui, value, Type.BODY, room), textX, baseline, Type.BODY, Skin.TEXT);
-            Rect clear = searchBox.vcentreRight(Skin.S1, 22f, 22f);
-            if (controls.iconButton(ui, "hub.search.clear", clear, Icon.CLOSE, false, true)) {
-                context.setSearch("");
-            }
-        }
-        if (focused) {
-            // A caret on the animation clock, not on a tick counter.
-            float phase = (Gfx.clock().seconds() % 1.06f) / 1.06f;
-            if (phase < 0.55f) {
-                float caretX = textX + Math.min(room, ui.measure(value, Type.BODY)) + 1.5f;
-                ui.fill(caretX, searchBox.y + 7f, caretX + 1.5f, searchBox.bottom() - 7f, Skin.TEXT_MUTED);
-            }
-        }
+    private float railHeight() {
+        int count = sections.size();
+        float items = count * RAIL_ITEM + (count - 1) * RAIL_GAP;
+        return Graphite.S2 + items + Graphite.S2 + 1f + Graphite.S2 + TELEMETRY_LINE * 2f + Graphite.S2;
     }
 
+    /**
+     * The section rail: one Light group, 184dp wide, radius 12, 8dp padding,
+     * six items 36dp tall and 4dp apart. The current section is the selected
+     * overlay with a 16% rim and primary text -- no colour. Under a hairline,
+     * two lines of live telemetry in Geist Mono, each after a 6dp signal dot:
+     * the only cyan on the screen, and only while the game is running.
+     */
     private void rail(Renderer ui, Rect rail) {
         float now = Gfx.clock().seconds();
-        Rect inner = rail.inset(Skin.S3, Skin.S4);
-        // No heading and no marker: the rail is plainly navigation, and the
-        // current section is the denser capsule with the brighter rim.
-        float startY = inner.y;
-        float groupGap = Skin.S4;
-        float rowHeight = Math.min(46f,
-                (inner.height - groupGap) / sections.size());
-
-        float y = startY;
+        Graphite.surface(ui, rail, Graphite.R_PANEL, Graphite.Material.LIGHT, false);
+        Type label = Graphite.floor(ui, Graphite.UI);
+        float y = rail.y + Graphite.S2;
         for (int index = 0; index < sections.size(); index++) {
             Section section = sections.get(index);
-            if (index == 4) {
-                y += groupGap;
-                FathomComponents.divider(ui, inner.x + Skin.S2, inner.right() - Skin.S2,
-                        y - groupGap / 2f);
-            }
-            Rect row = new Rect(inner.x, y, inner.width, rowHeight - 4f);
-            if (controls.navItem(ui, "rail." + index, row, section.icon(), section.title(),
-                    index == current) && index != current) {
+            Rect item = new Rect(rail.x + Graphite.S2, y, rail.width - Graphite.S2 * 2f, RAIL_ITEM);
+            boolean selected = index == current;
+            Controls.State state = controls.state("rail." + index, item, true);
+            float on = controls.towards("rail." + index + "#selected", selected, GraphiteTokens.MOTION_FAST);
+            // Concentric with the rail: its radius less its 8dp padding.
+            Graphite.overlay(ui, item, Graphite.R_PANEL - Graphite.S2, state.hover * (1f - on), on);
+            int ink = Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, Math.max(on, state.hover));
+            ui.icon(section.icon(), item.x + 12f, item.centreY() - Graphite.ICON_INLINE / 2f,
+                    Graphite.ICON_INLINE, ink);
+            ui.text(section.title(), item.x + 36f, Graphite.baseline(ui, item, label), label, ink);
+            if (state.clicked && !selected) {
                 previous = current;
                 current = index;
                 pageSwap.set(0f, now);
@@ -542,24 +474,52 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                 context.keybindCapture().cancel();
                 sections.get(current).opened(context);
             }
-            y += rowHeight;
+            y += RAIL_ITEM + RAIL_GAP;
+        }
+        y += Graphite.S2 - RAIL_GAP;
+        Graphite.hairline(ui, rail.x + Graphite.S2, rail.right() - Graphite.S2, y);
+        y += 1f + Graphite.S2;
+        telemetry(ui, rail.x + Graphite.S2 + 4f, y, now);
+    }
+
+    /** Frame rate and memory, 4 Hz, in Data S. The dot is signal only while live. */
+    private void telemetry(Renderer ui, float x, float y, float now) {
+        if (telemetryAt < 0f || now - telemetryAt >= 0.25f) {
+            telemetryAt = now;
+            telemetryFps = Math.round(Gfx.frames().fps()) + " FPS";
+            java.lang.Runtime memory = java.lang.Runtime.getRuntime();
+            float used = (memory.totalMemory() - memory.freeMemory()) / (1024f * 1024f * 1024f);
+            float max = memory.maxMemory() / (1024f * 1024f * 1024f);
+            telemetryMemory = String.format(java.util.Locale.ROOT, "%.1f / %.1f GB", used, max);
+        }
+        boolean live = !client.isPaused();
+        int value = live ? Graphite.TEXT : Graphite.TEXT_SECONDARY;
+        Type data = Graphite.floor(ui, Graphite.DATA_S);
+        float dot = 6f;
+        String[] lines = {telemetryFps, telemetryMemory};
+        for (int line = 0; line < lines.length; line++) {
+            Rect row = new Rect(x, y + line * TELEMETRY_LINE, 150f, TELEMETRY_LINE);
+            if (live) {
+                ui.rounded(row.x, row.centreY() - dot / 2f, row.x + dot, row.centreY() + dot / 2f,
+                        dot / 2f, Graphite.SIGNAL);
+            }
+            ui.text(lines[line], row.x + dot + Graphite.S2, Graphite.baseline(ui, row, data), data, value);
         }
     }
 
     private void content(Renderer ui, Rect content) {
         Section section = sections.get(current);
-        Rect inner = content.inset(Skin.PAGE_INSET_X, Skin.PAGE_INSET_Y);
+        // Open: the page starts level with the rail and has no pane of its own.
+        Rect inner = content;
 
-        // The page slides in from the direction the rail moved, which makes a
-        // section change read as movement between pages rather than a redraw.
+        // A page change fades and rises 8dp over 180ms.
         float swap = pageSwap.value(Gfx.clock().seconds());
-        float direction = current >= previous ? 1f : -1f;
-        float slide = (1f - swap) * 22f * direction;
+        float rise = (1f - swap) * GraphiteTokens.MOTION_TRAVEL;
 
-        ui.clip(content.x, content.y, content.right(), content.bottom());
+        ui.clip(content.x - Graphite.S6, content.y - Graphite.S2, content.right() + Graphite.S6,
+                content.bottom() + Graphite.S6);
         ui.pushAlpha(swap);
-        ui.pushTransform(slide, 0f, 0.994f + swap * 0.006f,
-                content.centreX(), content.centreY());
+        ui.pushTransform(0f, rise);
 
         Rect body;
         if (section.ownsHeading()) {
@@ -574,9 +534,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         ui.popAlpha();
         ui.unclip();
 
-        // The wheel belongs to whatever is under the pointer.
         int notches = pointer.wheelNotches();
-        if (notches != 0 && content.contains(pointer.x(), pointer.y())) {
+        // Anywhere over the Hub: the rail and header do not scroll, so a wheel
+        // turned over them means the page. (A scripted benchmark's
+        // synthetic wheel is not tied to wherever an unfocused pointer sits.)
+        if (notches != 0 && (panel.contains(pointer.x(), pointer.y())
+                || net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE)) {
             section.scroll(notches);
         }
     }
@@ -684,6 +647,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     @Override
     public void removed() {
+        net.fathom.optimizations.fabric.menu.FathomMenuScreen.stopBackdropPlayback();
         if (context != null && context.dirty()) {
             String failure = hud.saveAll();
             if (failure != null) {

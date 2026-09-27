@@ -8,7 +8,7 @@ import java.util.Arrays;
  * <h2>Why geometry lives here and not in the widget</h2>
  *
  * <p>Two things draw a crosshair: the HUD, through Minecraft's tessellator in
- * scaled GUI pixels, and the preview in the settings drawer, through Fathom's
+ * scaled GUI pixels, and the preview on the module detail page, through Fathom's
  * renderer in logical units. If each worked out its own arms and gaps they
  * would disagree the first time somebody changed one of them, and the preview
  * would be a picture of a different crosshair. So both ask this class for the

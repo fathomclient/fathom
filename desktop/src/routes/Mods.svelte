@@ -35,9 +35,11 @@
     Puzzle,
     Download,
     Check,
+    CircleCheck,
     RefreshCw,
     ExternalLink,
     ChevronRight,
+    ListFilter,
   } from '@lucide/svelte';
 
   import Page from '../lib/ui/Page.svelte';
@@ -46,6 +48,9 @@
   import Button from '../lib/ui/Button.svelte';
   import Segmented from '../lib/ui/Segmented.svelte';
   import Notice from '../lib/ui/Notice.svelte';
+  import SearchField from '../lib/ui/SearchField.svelte';
+  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import Progress from '../lib/ui/Progress.svelte';
   import ModDetail from './mods/ModDetail.svelte';
   import { tooltip } from '../lib/tooltip';
   import { EASE, MOTION_HOVER, MOTION_PAGE, MOTION_STAGGER } from '../lib/motion';
@@ -380,7 +385,7 @@
       <svelte:fragment slot="actions">
         {#if view.loaderSupportsMods}
           <Button variant="primary" disabled={busy} onClick={addOne}>
-            <FolderOpen size={14} strokeWidth={2.2} />
+            <FolderOpen size={14} />
             Add JAR
           </Button>
         {/if}
@@ -415,17 +420,20 @@
            page of controls that cannot do anything. -->
       {#if view.loaderNotice}
         <Section material>
-          <div class="loader-block" in:fade={{ duration: MOTION_PAGE, easing: EASE }}>
-            <Puzzle size={22} strokeWidth={1.6} />
-            <span class="loader-message">{view.loaderNotice.message}</span>
-            <span class="loader-warning">{view.loaderNotice.warning}</span>
-            <Button
-              variant="primary"
-              disabled={busy}
-              onClick={() => void switchLoader(view!.loaderNotice!.target)}
+          <div in:fade={{ duration: MOTION_PAGE, easing: EASE }}>
+            <EmptyState
+              icon={Puzzle}
+              title={view.loaderNotice.message.replace(/\.$/, '')}
+              detail={view.loaderNotice.warning}
             >
-              {view.loaderNotice.action}
-            </Button>
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={() => void switchLoader(view!.loaderNotice!.target)}
+              >
+                {view.loaderNotice.action}
+              </Button>
+            </EmptyState>
           </div>
         </Section>
       {:else if !view.loaderLaunchable}
@@ -469,7 +477,7 @@
                         disabled={busy}
                         onClick={() => void addComponent(component.id, component.name)}
                       >
-                        <Download size={13} strokeWidth={2} />
+                        <Download size={14} />
                         Install
                       </Button>
                     {/if}
@@ -479,7 +487,7 @@
                       use:tooltip={'Details'}
                       on:click={() => open('component', component.id)}
                     >
-                      <ChevronRight size={16} strokeWidth={2.2} />
+                      <ChevronRight size={16} />
                     </button>
                   </div>
                 </div>
@@ -494,16 +502,9 @@
               {#if searchable || chips.length > 2}
                 <div class="toolbar">
                   {#if searchable}
-                    <label class="search">
-                      <Search size={15} strokeWidth={2} />
-                      <input
-                        class="ui-field"
-                        bind:value={query}
-                        placeholder="Filter mods"
-                        spellcheck="false"
-                        aria-label="Filter mods"
-                      />
-                    </label>
+                    <div class="search">
+                      <SearchField bind:value={query} placeholder="Filter mods" />
+                    </div>
                   {/if}
                   {#if chips.length > 2}
                     <div class="chips" role="group" aria-label="Show">
@@ -550,22 +551,41 @@
                         use:tooltip={'Configure'}
                         on:click={() => open('mod', row.id)}
                       >
-                        <ChevronRight size={16} strokeWidth={2.2} />
+                        <ChevronRight size={16} />
                       </button>
                     </div>
                   </div>
                 {/each}
 
                 {#if rows.length === 0}
-                  <p class="none">{query ? 'No mod matches that.' : 'Nothing in this group.'}</p>
+                  {#if query}
+                    <EmptyState
+                      compact
+                      icon={Search}
+                      title="No matching mods"
+                      detail="Nothing installed matches “{query.trim()}”."
+                    />
+                  {:else}
+                    <EmptyState
+                      compact
+                      icon={ListFilter}
+                      title="Nothing in this group"
+                      detail="Choose another filter to see the rest of the list."
+                    />
+                  {/if}
                 {/if}
               </Section>
             </section>
           {:else}
-            <div class="empty" in:fade={{ duration: MOTION_PAGE, easing: EASE }}>
-              <span class="empty-title">No mods yet</span>
-              <span class="empty-detail">Drop a mod JAR onto the window, or add one.</span>
-            </div>
+            <Section material>
+              <div in:fade={{ duration: MOTION_PAGE, easing: EASE }}>
+                <EmptyState
+                  icon={Puzzle}
+                  title="No mods yet"
+                  detail="Drop a mod JAR onto the window, or browse Modrinth for this version."
+                />
+              </div>
+            </Section>
           {/if}
         {/if}
 
@@ -573,19 +593,15 @@
         {#if tab === 'browse'}
           <section class="library">
             <div class="toolbar">
-              <label class="search wide">
-                <Search size={15} strokeWidth={2} />
-                <input
-                  class="ui-field"
-                  bind:value={browseQuery}
-                  placeholder="Search Modrinth"
-                  spellcheck="false"
-                  aria-label="Search Modrinth"
-                  on:keydown={(event) => event.key === 'Enter' && void search()}
-                />
-              </label>
+              <!-- svelte-ignore a11y-no-static-element-interactions -->
+              <div
+                class="search wide"
+                on:keydown={(event) => event.key === 'Enter' && void search()}
+              >
+                <SearchField bind:value={browseQuery} placeholder="Search Modrinth" />
+              </div>
               <Button variant="primary" disabled={browsing} onClick={search}>
-                {browsing ? 'Searching…' : 'Search'}
+                {browsing ? 'Searching' : 'Search'}
               </Button>
             </div>
 
@@ -604,10 +620,10 @@
                     </div>
                     <div class="controls">
                       {#if hit.installed}
-                        <span class="installed"><Check size={14} strokeWidth={2.4} /> Installed</span>
+                        <span class="installed"><Check size={14} /> Installed</span>
                       {:else}
                         <Button disabled={busy} onClick={() => void install(hit.project, hit.title)}>
-                          <Download size={13} strokeWidth={2} />
+                          <Download size={14} />
                           Install
                         </Button>
                       {/if}
@@ -617,26 +633,39 @@
                         use:tooltip={'Open its page'}
                         on:click={() => void openProjectPage(hit.slug)}
                       >
-                        <ExternalLink size={15} strokeWidth={2} />
+                        <ExternalLink size={16} />
                       </button>
                     </div>
                   </div>
                 {/each}
 
                 {#if browse.rows.length === 0}
-                  <p class="none">Nothing on Modrinth matches that for this version and loader.</p>
+                  <EmptyState
+                    compact
+                    icon={Search}
+                    title="No results"
+                    detail="Nothing on Modrinth matches that for {view.loader} and Minecraft {view.minecraft}."
+                  />
                 {/if}
               {:else if !browsing}
-                <p class="none">Search for a mod, or press Search to see what is available.</p>
+                <EmptyState
+                  compact
+                  icon={Search}
+                  title="Search Modrinth"
+                  detail="Only builds for {view.loader} and Minecraft {view.minecraft} are listed."
+                />
               {:else}
-                <p class="none">Searching…</p>
+                <div class="loading">
+                  <span>Searching Modrinth</span>
+                  <Progress label="Searching Modrinth" />
+                </div>
               {/if}
             </Section>
 
             {#if browse?.more}
               <div class="more">
                 <Button disabled={browsing} onClick={more}>
-                  {browsing ? 'Loading…' : `Show more (${browse.total} found)`}
+                  {browsing ? 'Loading' : `Show more (${browse.total} found)`}
                 </Button>
               </div>
             {/if}
@@ -663,28 +692,33 @@
                     </div>
                     <div class="controls">
                       <Button disabled={busy} onClick={() => void install(update.project, update.name)}>
-                        <RefreshCw size={13} strokeWidth={2} />
+                        <RefreshCw size={14} />
                         Update
                       </Button>
                     </div>
                   </div>
                 {/each}
                 {#if updates.rows.length === 0}
-                  <p class="none">
-                    Everything Fathom can check is up to date.
-                    {#if updates.total > updates.checkable}
-                      {updates.total - updates.checkable} of your mods are files you added, which
-                      Fathom has nothing to check against.
-                    {/if}
-                  </p>
+                  <EmptyState
+                    compact
+                    icon={CircleCheck}
+                    title="Everything is up to date"
+                    detail={updates.total > updates.checkable
+                      ? `${updates.total - updates.checkable} of your mods are files you added, which Fathom has nothing to check against.`
+                      : 'Every mod Fathom can check is on its newest build.'}
+                  />
                 {/if}
               {:else}
-                <p class="none">Checking…</p>
+                <div class="loading">
+                  <span>Checking for updates</span>
+                  <Progress label="Checking for updates" />
+                </div>
               {/if}
             </Section>
             <div class="more">
               <Button disabled={checking} onClick={checkUpdates}>
-                {checking ? 'Checking…' : 'Check again'}
+                <RefreshCw size={14} />
+                {checking ? 'Checking' : 'Check again'}
               </Button>
             </div>
           </section>
@@ -700,7 +734,14 @@
               </Notice>
             {/each}
             {#if view.problems.length === 0}
-              <p class="none open">Nothing wrong with this set.</p>
+              <Section material>
+                <EmptyState
+                  compact
+                  icon={CircleCheck}
+                  title="No issues"
+                  detail="Nothing in this set conflicts or is missing."
+                />
+              </Section>
             {/if}
           </section>
         {/if}
@@ -716,13 +757,13 @@
                 JAR here.
               </p>
               <div class="drop" class:active={dropping}>
-                <FolderOpen size={18} strokeWidth={1.8} />
+                <FolderOpen size={18} />
                 <span>{dropping ? 'Let go to add it' : 'Drop OptiFine here'}</span>
               </div>
 
               <div class="optifine-actions">
                 <Button onClick={() => void openPage('optifine')}>
-                  <Download size={13} strokeWidth={2} />
+                  <Download size={14} />
                   Get OptiFine
                 </Button>
                 <!-- The full flow, for somebody who has the file but not a
@@ -731,7 +772,7 @@
                      looking at this profile's mods. -->
                 <Button onClick={onAddOptiFine}>Add OptiFine…</Button>
                 <Button disabled={busy} onClick={addOne}>
-                  <FolderOpen size={13} strokeWidth={2} />
+                  <FolderOpen size={14} />
                   Add my JAR
                 </Button>
               </div>
@@ -767,30 +808,27 @@
   }
 
   .search {
-    position: relative;
-    display: flex;
-    align-items: center;
     flex: 0 1 280px;
     min-width: 200px;
-    color: var(--color-text-tertiary);
   }
 
   .search.wide {
     flex: 1 1 320px;
   }
 
-  .search :global(svg) {
-    position: absolute;
-    left: var(--space-3);
-    pointer-events: none;
-  }
-
-  .search input {
-    padding-left: var(--space-10);
-  }
-
-  .search:focus-within {
+  /* Work under way inside a list: one line of status and a thin line under
+     it, in the space the rows will take. */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-5) var(--space-4);
+    font-size: var(--type-secondary-size);
     color: var(--color-text-secondary);
+  }
+
+  .loading :global(.channel) {
+    max-width: 200px;
   }
 
   .chips {
@@ -807,7 +845,7 @@
   /* -- a library row -----------------------------------------------------------
      A mark, the name and what it is, and on the right the one control that
      matters plus the way into its page. No pill per row: a mod that is on is
-     the one with full ivory type and a lit mark; one that is off recedes. */
+     the one with full neutral type and a lit mark; one that is off recedes. */
   .item {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -815,7 +853,7 @@
     gap: var(--space-4);
     padding: var(--space-3) var(--space-4);
     border-radius: max(var(--radius-inner-min), calc(var(--surface-radius, var(--radius-lg)) - 2px));
-    box-shadow: 0 -1px 0 var(--control-hairline);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
     transition: background-color var(--motion-hover) var(--ease-standard);
   }
 
@@ -871,7 +909,7 @@
   }
 
   button.name:focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: var(--focus-ring-width) solid var(--color-focus);
     outline-offset: 2px;
     border-radius: var(--radius-xs);
   }
@@ -945,52 +983,6 @@
     font-size: var(--type-secondary-size);
     line-height: var(--type-secondary-leading);
     color: var(--color-text-secondary);
-  }
-
-  .none.open {
-    padding: var(--space-2) var(--space-1);
-  }
-
-  /* -- empty ------------------------------------------------------------------- */
-  .empty {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-1);
-  }
-
-  .empty-title {
-    font-size: var(--type-heading-size);
-    font-weight: var(--type-heading-weight);
-    color: var(--color-text);
-  }
-
-  .empty-detail {
-    font-size: var(--type-secondary-size);
-    color: var(--color-text-secondary);
-  }
-
-  /* -- the loader's own way out ---------------------------------------------- */
-  .loader-block {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-8) var(--space-6);
-    color: var(--color-text-secondary);
-    text-align: center;
-  }
-
-  .loader-message {
-    font-size: var(--type-heading-size);
-    font-weight: var(--type-heading-weight);
-    color: var(--color-text);
-  }
-
-  .loader-warning {
-    max-width: 52ch;
-    margin-bottom: var(--space-2);
-    font-size: var(--type-secondary-size);
   }
 
   /* -- OptiFine ---------------------------------------------------------------- */

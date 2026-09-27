@@ -28,7 +28,7 @@
   {#if label}
     {#if collapsible}
       <button class="head interactive" on:click={() => (open = !open)}>
-        <span class="chevron" class:open><ChevronRight size={14} strokeWidth={2.4} /></span>
+        <span class="chevron" class:open><ChevronRight size={14} /></span>
         <span class="label on-footage">{label}</span>
         {#if summary}<span class="summary on-footage tnum">{summary}</span>{/if}
       </button>
@@ -73,7 +73,7 @@
     color: var(--color-text);
   }
 
-  /* Sentence case, on the photograph, with the warm edge that keeps it legible
+  /* Sentence case, on the photograph, with the dark edge that keeps it legible
      over bright sky. */
   .label {
     font-size: var(--type-label-size);

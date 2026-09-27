@@ -48,13 +48,13 @@
   aria-modal="true"
   aria-labelledby={titleId}
   style="--sheet-width: {width}px"
-  in:fly={{ x: 48, duration: MOTION_SURFACE, easing: EASE }}
-  out:fly={{ x: 48, duration: MOTION_EXIT, easing: EASE_EXIT }}
+  in:fly={{ x: 8, duration: MOTION_SURFACE, easing: EASE }}
+  out:fade={{ duration: MOTION_EXIT, easing: EASE_EXIT }}
 >
   <header>
     <h2 id={titleId}>{title}</h2>
     <button class="ui-icon-button small" aria-label="Close" use:tooltip={'Close'} on:click={onClose}>
-      <X size={16} strokeWidth={2.2} />
+      <X size={16} />
     </button>
   </header>
 
@@ -129,6 +129,6 @@
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-4) var(--space-5) var(--space-5);
-    box-shadow: 0 -1px 0 var(--control-hairline);
+    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
   }
 </style>

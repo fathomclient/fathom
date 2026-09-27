@@ -104,10 +104,13 @@ final class PerformanceSection implements Section {
         Controls.label(ui, "Interface", area.x, cursor);
         cursor += labelHeight;
         float interfaceLine = ui.lineHeight(Type.ROW_TITLE) + ui.lineHeight(Type.SMALL);
-        Rect interfaceRow = new Rect(area.x, cursor, area.width,
-                interfaceLine * 2f + Skin.S3);
-        qualityRow(context, interfaceRow);
-        cursor = interfaceRow.bottom() + Skin.S5;
+        // A group of its own, as on Quick: its rows' descriptions need the
+        // group's glass under them to hold over a bright sky.
+        Rect interfaceGroup = new Rect(area.x, cursor, area.width,
+                interfaceLine * 2f + Skin.S3 + Skin.S3 * 2f);
+        FathomComponents.panel(ui, interfaceGroup);
+        qualityRow(context, interfaceGroup.inset(Skin.CARD_PADDING, Skin.S3));
+        cursor = interfaceGroup.bottom() + Skin.S5;
 
         Controls.label(ui, "Preset", area.x, cursor);
         cursor += labelHeight;
@@ -124,7 +127,12 @@ final class PerformanceSection implements Section {
             layerHeight += layerRows.get(index).height();
         }
         float contentHeight = layerHeight + GROUP + entries.size() * ROW;
-        float offset = scroller.offset(context.delta(), contentHeight, body.height);
+        // Every setting below the presets in one group of light glass, its
+        // sub-headings inside it -- not rows loose on the background.
+        FathomComponents.group(ui, body, Skin.R_CARD);
+        Rect list = body.inset(Skin.S2);
+        float offset = scroller.offset(context.delta(), contentHeight, list.height);
+        body = list;
 
         ui.clip(body.x, body.y, body.right(), body.bottom());
         float y = body.y - offset;
@@ -141,7 +149,7 @@ final class PerformanceSection implements Section {
         Rect engineHeader = new Rect(body.x, y, body.width - Skin.S3, GROUP);
         y += GROUP;
         if (engineHeader.bottom() >= body.y && engineHeader.y <= body.bottom()) {
-            Controls.label(ui, "Engine optimizations", engineHeader.x, engineHeader.y + Skin.S3);
+            Controls.label(ui, "Engine optimizations", engineHeader.x + Skin.S3, engineHeader.y + Skin.S3);
         }
         for (int index = 0; index < entries.size(); index++) {
             Rect row = new Rect(body.x, y + index * ROW, body.width - Skin.S3, ROW);
@@ -217,7 +225,7 @@ final class PerformanceSection implements Section {
         void draw(HubContext context, FathomModule module, Rect area) {
             Renderer ui = context.ui();
             if (heading != null) {
-                Controls.label(ui, heading, area.x, area.y + Skin.S3);
+                Controls.label(ui, heading, area.x + Skin.S3, area.y + Skin.S3);
                 return;
             }
             if (module == null) {
@@ -229,7 +237,7 @@ final class PerformanceSection implements Section {
             }
             Controls controls = context.controls();
             Rect row = area.inset(0f, 2f);
-            boolean hovered = row.contains(context.pointer().x(), context.pointer().y());
+            boolean hovered = context.controls().pointerOverVisible(row);
             controls.rowBackground(ui, "perf.layer.row." + settingId, row, hovered, false);
 
             float controlWidth = setting.kind() == Setting.Kind.TOGGLE
@@ -245,7 +253,7 @@ final class PerformanceSection implements Section {
                     top + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
             ui.text(Text.fit(ui, setting.description(), Type.SMALL, room), row.x + Skin.S3,
                     top + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.SMALL), Type.SMALL,
-                    Skin.TEXT_DISABLED);
+                    Skin.TEXT_FAINT);
 
             String id = "perf.layer." + settingId;
             switch (setting.kind()) {
@@ -343,12 +351,15 @@ final class PerformanceSection implements Section {
                 millis(frames.uiMeanMillis()), "ms of that");
     }
 
+    /** Live measurements: Geist Mono, so the digits hold still as they change. */
+    private static final Type STAT = new Type(24f, Type.Weight.MONO_MEDIUM);
+
     private void meter(HubContext context, Rect area, String label, String value, String unit) {
         Renderer ui = context.ui();
         FathomComponents.card(ui, area, 0f, 0f);
         Controls.label(ui, label, area.x + Skin.S3, area.y + Skin.S3);
         float baseline = area.bottom() - Skin.S4;
-        float width = ui.text(value, area.x + Skin.S3, baseline, Type.DISPLAY, Skin.TEXT);
+        float width = ui.text(value, area.x + Skin.S3, baseline, STAT, Skin.TEXT);
         ui.text(Text.fit(ui, unit, Type.SMALL, area.width - width - Skin.S5), area.x + Skin.S3 + width + Skin.S2,
                 baseline, Type.SMALL, Skin.TEXT_FAINT);
     }
@@ -359,23 +370,25 @@ final class PerformanceSection implements Section {
 
     private void presets(HubContext context, SwitchBoard switches, Rect area) {
         Preset[] presets = Preset.values();
-        String[] labels = new String[presets.length];
+        String[] labels = new String[presets.length + 1];
         for (int index = 0; index < presets.length; index++) {
             labels[index] = presets[index].label();
         }
-        // No preset is "selected": applying one sets a group of switches that
-        // the user can then change individually, so the control reports the
-        // action rather than a state. Buttons, not a segmented control.
-        float cell = Math.min(190f, (area.width - Skin.S2 * (presets.length - 1)) / presets.length);
+        labels[presets.length] = "Custom";
+        // The launcher's preset control: a segmented choice that says which
+        // preset is in effect, and "Custom" once a switch has been changed by
+        // hand. Choosing Custom changes nothing; it is where the board already is.
+        Preset current = switches.matchingPreset();
+        int selected = presets.length;
         for (int index = 0; index < presets.length; index++) {
-            Rect button = new Rect(area.x + (cell + Skin.S2) * index, area.y, cell, area.height);
-            if (button.right() > area.right()) {
-                break;
+            if (presets[index] == current) {
+                selected = index;
             }
-            if (context.controls().secondary(context.ui(), "preset." + index, button, labels[index], true)) {
-                switches.applyPreset(presets[index]);
-                context.markDirty();
-            }
+        }
+        int chosen = context.controls().segmentedNatural(context.ui(), "presets", area, labels, selected);
+        if (chosen != selected && chosen >= 0 && chosen < presets.length) {
+            switches.applyPreset(presets[chosen]);
+            context.markDirty();
         }
     }
 
@@ -390,7 +403,7 @@ final class PerformanceSection implements Section {
         // offer a control that changed a boolean nothing read.
         boolean live = entry.runsInGame() && entry.isGameSide();
         boolean jvm = !entry.isGameSide();
-        boolean hovered = row.contains(context.pointer().x(), context.pointer().y());
+        boolean hovered = context.controls().pointerOverVisible(row);
         controls.rowBackground(ui, "perf." + entry.id(), row, hovered, false);
 
         float room;
@@ -413,7 +426,7 @@ final class PerformanceSection implements Section {
             controls.badge(ui, "perf.badge." + entry.id(), state, badge,
                     jvm ? Skin.WARN : Skin.TEXT_DISABLED);
             room = badge.x - row.x - Skin.S5;
-            if (jvm && badge.contains(context.pointer().x(), context.pointer().y())
+            if (jvm && context.controls().pointerOverVisible(badge)
                     && context.pointer().released(0)) {
                 context.needsRestart(entry.name());
             }

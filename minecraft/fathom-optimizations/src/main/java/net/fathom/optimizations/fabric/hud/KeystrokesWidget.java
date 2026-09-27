@@ -73,11 +73,11 @@ public final class KeystrokesWidget implements HudWidget {
     }
 
     private static int keySize() {
-        return (int) Math.round(Widgets.optionNumber("keystrokes", "key.size", 16));
+        return (int) Math.round(Widgets.optionNumber("keystrokes", "key.size", 18));
     }
 
     private static int keyGap() {
-        return (int) Math.round(Widgets.optionNumber("keystrokes", "key.gap", 2));
+        return (int) Math.round(Widgets.optionNumber("keystrokes", "key.gap", 3));
     }
 
     private static int pad() {
@@ -226,15 +226,15 @@ public final class KeystrokesWidget implements HudWidget {
 
         static KeyStyle read(FathomModule module, int alpha) {
             KeyStyle style = SHARED;
-            style.keyAlpha = alpha * (int) Widgets.optionNumber("keystrokes", "key.opacity", 80) / 100;
-            style.pressedFill = Widgets.optionColour("keystrokes", "key.pressed.fill", 0x373B44);
-            style.unpressedFill = Widgets.optionColour("keystrokes", "key.unpressed.fill", 0x111318);
+            style.keyAlpha = alpha * (int) Widgets.optionNumber("keystrokes", "key.opacity", 88) / 100;
+            style.pressedFill = Widgets.optionColour("keystrokes", "key.pressed.fill", 0x3A3A3A);
+            style.unpressedFill = Widgets.optionColour("keystrokes", "key.unpressed.fill", 0x1A1A1A);
             style.background = Widgets.option("keystrokes", "key.background", true);
             style.border = Widgets.option("keystrokes", "key.border", true);
-            style.borderColour = Widgets.optionColour("keystrokes", "key.border.colour", 0x5C6573);
+            style.borderColour = Widgets.optionColour("keystrokes", "key.border.colour", 0x5C5C5C);
             style.borderWidth = (int) Widgets.optionNumber("keystrokes", "key.border.width", 1);
-            style.pressedText = Widgets.optionColour("keystrokes", "key.pressed.text", 0xFFFFFF);
-            style.unpressedText = Widgets.optionColour("keystrokes", "key.unpressed.text", 0xE7EAF0);
+            style.pressedText = Widgets.optionColour("keystrokes", "key.pressed.text", 0xF2F2F2);
+            style.unpressedText = Widgets.optionColour("keystrokes", "key.unpressed.text", 0xCCCCCC);
             style.radius = Math.min(HudStyle.radius(module), keySize() / 2);
             style.shadow = HudStyle.textShadow(module);
             return style;

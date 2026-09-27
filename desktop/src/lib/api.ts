@@ -683,6 +683,34 @@ const FIXTURE_HOME: HomeView = {
   },
 };
 
+// Visual-QA-only happy path. The ordinary browser fixture stays deliberately
+// awkward; `?proof=home` lets screenshot automation verify the designed Play
+// hierarchy without weakening the signed-out state.
+const FIXTURE_HOME_PROOF: HomeView = {
+  ...FIXTURE_HOME,
+  profile: {
+    ...FIXTURE_HOME.profile!,
+    loader: 'Legacy Fabric',
+    enabledMods: 11,
+    preset: 'Balanced',
+  },
+  action: {
+    label: 'PLAY',
+    detail: 'Ready to launch',
+    command: 'play',
+    ready: true,
+    developerNote: null,
+  },
+  account: {
+    name: 'Player',
+    signedIn: true,
+    development: false,
+    uuid: null,
+    avatar: null,
+    remembered: true,
+  },
+};
+
 const FIXTURE_STATUS: ShellStatus = {
   version: '0.1.0',
   offline: false,
@@ -785,7 +813,11 @@ const FIXTURE_RECOVERY: RecoveryView = {
 };
 
 export async function homeView(): Promise<HomeView> {
-  if (!inTauri) return FIXTURE_HOME;
+  if (!inTauri) {
+    const proof = typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('proof') === 'home';
+    return proof ? FIXTURE_HOME_PROOF : FIXTURE_HOME;
+  }
   return invoke<HomeView>('home_view');
 }
 

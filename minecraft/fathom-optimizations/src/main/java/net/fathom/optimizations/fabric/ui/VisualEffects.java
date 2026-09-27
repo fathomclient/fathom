@@ -45,8 +45,12 @@ public final class VisualEffects {
     public static final float MODAL_SHADOW_STRENGTH = 1.00f;
     /** Shared intensity of the keyboard-focus ring. */
     public static final float FOCUS_INTENSITY = 0.78f;
-    /** Surface relief from top edge to lower face: a warm deepening, never a sheen. */
-    public static final float SURFACE_DEPTH = 0.16f;
+    /**
+     * Surface relief from top edge to lower face. Zero: the launcher's control
+     * fills are flat, and a deepening gradient under a control is exactly the
+     * kind of decoration the two surfaces must not disagree on.
+     */
+    public static final float SURFACE_DEPTH = 0f;
 
     private static final Shadow PANEL_SHADOW = Shadow.PANEL.withStrength(SHADOW_STRENGTH);
     private static final Shadow OVERLAY_SHADOW = Shadow.DROPDOWN.withStrength(OVERLAY_SHADOW_STRENGTH);
@@ -79,18 +83,21 @@ public final class VisualEffects {
     }
 
 
-    /** Soft top/bottom mask for clipped scrolling content. */
+    /**
+     * Where clipped scrolling content continues: a hairline at the cut edge.
+     *
+     * <p>Not a fade. A fade is a band of colour, and over transparent glass
+     * a band of umber reads as a brown bar across the list.
+     */
     public static void scrollEdgeFade(Renderer ui, Rect viewport, boolean top, boolean bottom) {
-        float depth = Math.min(18f, viewport.height * 0.12f);
-        int shade = Skin.scaleAlpha(Skin.BACKGROUND, 0.72f);
-        int clear = Skin.fade(Skin.BACKGROUND, 0f);
+        float inset = Math.min(Skin.S6, viewport.width * 0.08f);
         if (top) {
-            ui.gradient(viewport.x, viewport.y, viewport.right(), viewport.y + depth,
-                    0f, shade, clear);
+            ui.fill(viewport.x + inset, viewport.y, viewport.right() - inset,
+                    viewport.y + Skin.HAIRLINE, Skin.EDGE_RECESSED);
         }
         if (bottom) {
-            ui.gradient(viewport.x, viewport.bottom() - depth, viewport.right(), viewport.bottom(),
-                    0f, clear, shade);
+            ui.fill(viewport.x + inset, viewport.bottom() - Skin.HAIRLINE,
+                    viewport.right() - inset, viewport.bottom(), Skin.EDGE_RECESSED);
         }
     }
 

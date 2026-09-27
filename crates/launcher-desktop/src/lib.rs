@@ -165,20 +165,18 @@ fn background(state: tauri::State<'_, State>) -> Result<String, String> {
 /// value ends up inside a URL, and "the WebView asked for it" is not a reason
 /// to trust a string.
 ///
-/// Fathom's backgrounds are curated, and right now there is one. The gameplay
-/// recordings, their stills, and the plain gradient that used to be listed here
-/// are retired: a preference naming one of them is migrated to the default when
-/// it is read (`migrate_appearance`), and this list refuses them if asked.
+/// Fathom's backgrounds are curated, and right now there is one approved
+/// recording. Any other stored preference is migrated to it when read.
 ///
 /// Every id here must appear in `desktop/src/lib/backgrounds.ts`, which is the
 /// catalogue the interface offers. The test at the bottom of this file reads
 /// that catalogue and fails if the two disagree.
-const BACKGROUNDS: [&str; 1] = ["golden-hour"];
+const BACKGROUNDS: [&str; 1] = ["bg_5rain"];
 
 /// What a first run shows, and what any retired, unknown or unreadable
 /// preference becomes. `desktop/src/lib/backgrounds.ts` carries the same
 /// default for the moment before this answer arrives.
-const DEFAULT_BACKGROUND: &str = "golden-hour";
+const DEFAULT_BACKGROUND: &str = "bg_5rain";
 
 /// The approved id a stored or requested value names, if it names one.
 fn normalise(raw: &str) -> Option<&'static str> {
@@ -608,11 +606,11 @@ mod tests {
     /// Every retired background, the old gradient, and the pre-underscore
     /// spellings of the first recordings migrate to the approved default.
     #[test]
-    fn retired_backgrounds_migrate_to_golden_hour() {
+    fn retired_backgrounds_migrate_to_bg_5rain() {
         for retired in [
             "bg_1",
             "bg1",
-            "bg_5rain",
+            "golden-hour",
             "bg_6midnight",
             "bg_6pull_neon-grid",
             "bg_6pull_red-tower",
@@ -640,7 +638,7 @@ mod tests {
         assert!(migrate_appearance(&mut stored));
         assert_eq!(
             stored.get("background").and_then(|v| v.as_str()),
-            Some("golden-hour")
+            Some("bg_5rain")
         );
         assert!(stored.get("animated_background").is_none());
         assert_eq!(
@@ -656,7 +654,7 @@ mod tests {
     /// every start.
     #[test]
     fn an_approved_preference_is_not_rewritten() {
-        let mut stored = parse_appearance(r#"{"background":"golden-hour","reduce_blur":true}"#);
+        let mut stored = parse_appearance(r#"{"background":"bg_5rain","reduce_blur":true}"#);
         assert!(!migrate_appearance(&mut stored));
     }
 
@@ -681,7 +679,7 @@ mod tests {
     /// Each writer must keep the other's keys.
     #[test]
     fn appearance_writers_keep_each_others_keys() {
-        let mut stored = parse_appearance(r#"{"background":"golden-hour"}"#);
+        let mut stored = parse_appearance(r#"{"background":"bg_5rain"}"#);
         AppearanceModes {
             reduce_transparency: true,
             reduce_blur: false,
@@ -689,7 +687,7 @@ mod tests {
         .store_into(&mut stored);
         assert_eq!(
             stored.get("background").and_then(|v| v.as_str()),
-            Some("golden-hour")
+            Some("bg_5rain")
         );
         assert_eq!(
             AppearanceModes::from_stored(&stored),
@@ -749,7 +747,7 @@ mod tests {
             "",
             "bg_1/../..",
             "http://elsewhere",
-            "bg_5rain",
+            "golden-hour",
             "static",
         ] {
             assert_eq!(normalise(hostile), None, "{hostile} should be refused");

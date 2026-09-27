@@ -1,6 +1,7 @@
 package net.fathom.optimizations.fabric.hud;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.lwjgl.input.Keyboard;
@@ -30,6 +31,8 @@ import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 import net.fathom.optimizations.fabric.ui.VisualEffects;
+import net.fathom.optimizations.fabric.ui.Graphite;
+import net.fathom.optimizations.generated.FathomTheme.Tokens;
 
 /**
  * The HUD editor: arrange your screen while looking at your screen.
@@ -84,6 +87,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
     /** The corner handle's side, in scaled pixels. */
     private static final int HANDLE = 6;
+    private static final List<Snap.Guide> NO_GUIDES = Collections.emptyList();
 
     private static final float TOOLBAR_HEIGHT = 52f;
 
@@ -126,7 +130,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private int grabOffsetY;
     private float resizeStartScale;
     private int resizeStartX;
-    private List<Snap.Guide> guides = new ArrayList<Snap.Guide>();
+    private List<Snap.Guide> guides = NO_GUIDES;
+    /** Reused while dragging; building this list must not create garbage per mouse move. */
+    private final List<Snap.Box> snapBoxes = new ArrayList<Snap.Box>();
 
     private final EditorPrefs prefs;
     /** Where the dragged widget is, drawn beside it while it moves. */
@@ -137,6 +143,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private boolean captured;
     private boolean transitionStarted;
     private boolean closing;
+    private int benchmarkDragFrame;
 
     /** Logical units per Minecraft scaled pixel, recomputed every frame. */
     private float mcToLogical = 1f;
@@ -164,8 +171,11 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
      */
     private boolean barYields;
 
-    /** The same, for the inspector panel in the top right. */
+    /** The same, for the inspector panel. */
     private boolean inspectorYields;
+
+    /** Which corner the inspector sits in; see {@link #placeInspector}. */
+    private int inspectorCorner;
 
     public HudEditorScreen(FathomHud hud) {
         this.hud = hud;
@@ -242,11 +252,17 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             // to know whether to respond, and so does the widget hit test.
             barYields = chromeYields(
                     Rect.of(0f, ui.height() - TOOLBAR_HEIGHT, ui.width(), ui.height()), mouseX, mouseY);
+            placeInspector(ui);
             inspectorYields = selected != null && chromeYields(inspectorArea(ui), mouseX, mouseY);
 
             input(ui);
 
-            if (dragging != null) {
+            boolean benchmarkDragging = net.fathom.optimizations.fabric.bench.PerfBench.benchHudDrag();
+            if (benchmarkDragging) {
+                benchmarkDrag();
+            }
+
+            if (!benchmarkDragging && dragging != null) {
                 drag(mouseX, mouseY);
             } else if (resizing != null) {
                 resize(mouseX);
@@ -263,7 +279,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
             // A very light wash, so the editor is distinguishable from the game
             // without hiding what the HUD has to sit over.
-            ui.fill(0f, 0f, ui.width(), ui.height(), Skin.argb(0.22f, 0x000000));
+            ui.fill(0f, 0f, ui.width(), ui.height(), Skin.fade(Tokens.COLOR_SHADOW, 0.24f));
 
             if (prefs.grid()) {
                 grid(ui);
@@ -393,7 +409,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
      * visible, which is the entire reason the editor is over the game.
      */
     private void grid(GlRenderer ui) {
-        int colour = Skin.argb(0.18f, 0xFFFFFF);
+        int colour = Skin.argb(0.16f, Skin.ACCENT);
         float dot = Math.max(1f, mcToLogical);
         for (int x = GRID; x < screenWidth; x += GRID) {
             for (int y = GRID; y < screenHeight; y += GRID) {
@@ -413,7 +429,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
      * will describe as "not working".
      */
     private void safeBounds(GlRenderer ui) {
-        int colour = Skin.argb(0.34f, 0xE0505C);
+        int colour = Skin.argb(0.34f, Skin.ACCENT_DEEP);
 
         // The hotbar: 182 wide plus the health and hunger rows above it. These
         // are vanilla's own numbers, not estimates.
@@ -422,15 +438,17 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         dashed(ui, hotbarLeft, screenHeight - 39, hotbarLeft + hotbarWidth, screenHeight, colour);
         label(ui, "Hotbar", toLogical(hotbarLeft) + 2f, toLogical(screenHeight - 39) - 18f);
 
-        dashed(ui, 0, screenHeight - 48 - 80, 320, screenHeight - 48, Skin.argb(0.20f, 0xE0505C));
+        dashed(ui, 0, screenHeight - 48 - 80, 320, screenHeight - 48,
+                Skin.argb(0.20f, Skin.ACCENT_DEEP));
         label(ui, "Chat", 4f, toLogical(screenHeight - 48 - 80) - 18f);
 
-        dashed(ui, 0, 0, screenWidth, 80, Skin.argb(0.14f, 0xE0505C));
+        dashed(ui, 0, 0, screenWidth, 80, Skin.argb(0.14f, Skin.ACCENT_DEEP));
         label(ui, "F3", 4f, toLogical(80) + 4f);
     }
 
     private void label(GlRenderer ui, String text, float x, float y) {
-        ui.text(text, x, y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.argb(0.65f, 0xE0505C));
+        ui.text(text, x, y + ui.ascent(Type.CAPTION), Type.CAPTION,
+                Skin.argb(0.68f, Skin.ACCENT));
     }
 
     /** A dashed rectangle, so it reads as a boundary rather than a box. */
@@ -452,8 +470,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         }
     }
 
+    /** Snap guides: the signal colour, the one place the editor uses it besides focus. */
     private void drawGuides(GlRenderer ui) {
-        int colour = Skin.argb(0.65f, 0xE0505C);
+        int colour = Skin.scaleAlpha(Tokens.COLOR_SIGNAL, 0.72f);
         float thickness = Math.max(1f, mcToLogical);
         for (Snap.Guide guide : guides) {
             if (guide.vertical) {
@@ -472,36 +491,48 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             boolean active = positioned.widget.id().equals(dragging)
                     || positioned.widget.id().equals(resizing)
                     || positioned.widget.id().equals(selected);
-            if (!hovered && !active) {
-                continue;
-            }
             float l = toLogical(positioned.box.x);
             float t = toLogical(positioned.box.y);
             float r = toLogical(positioned.box.right());
             float b = toLogical(positioned.box.bottom());
+            if (active) {
+                // Dense means a deeper neutral substrate, never a glow. Drawn
+                // only in edit mode and only for the selected widget.
+                ui.rounded(l - 1f, t - 1f, r + 1f, b + 1f, Skin.R_SMALL,
+                        Skin.fade(Tokens.COLOR_SHADOW, 0.22f));
+            }
+            // Selected is the editor's focus: the signal outline. Hover and rest
+            // are neutral.
             ui.outline(l - 2f, t - 2f, r + 2f, b + 2f, Skin.R_SMALL, Skin.HAIRLINE,
-                    active ? Skin.ACCENT_STRONG : Skin.argb(0.42f, 0xFFFFFF));
+                    active ? Tokens.COLOR_SIGNAL
+                            : hovered ? Skin.argb(0.58f, Skin.ACCENT)
+                                    : Skin.argb(0.24f, Skin.ACCENT_DEEP));
 
             if (active) {
                 // The resize handle, bottom-right, which is where every resize
                 // handle has been since windows had corners.
                 float handle = toLogical(HANDLE);
-                ui.rounded(r - handle, b - handle, r + handle, b + handle, handle, Skin.ACCENT_STRONG);
+                ui.rounded(r - handle, b - handle, r + handle, b + handle, handle, Skin.TEXT);
             }
             if (active && !readout.isEmpty()
                     && positioned.widget.id().equals(dragging == null ? resizing : dragging)) {
                 // Beside the widget, and below it when it is near the top, so
                 // the numbers stay on screen while it is dragged into a corner.
-                float labelWidth = ui.measure(readout, Type.CAPTION) + Skin.S3;
+                // Coordinates are measured values: Geist Mono, like every
+                // other live number.
+                Type data = Graphite.floor(ui, Graphite.DATA_S);
+                float labelWidth = ui.measure(readout, data) + Skin.S3;
                 float labelTop = t - 24f < 0f ? b + 6f : t - 24f;
-                ui.rounded(l - 2f, labelTop, l - 2f + labelWidth, labelTop + 18f,
-                        Skin.R_SMALL, Skin.OVERLAY);
-                ui.text(readout, l + 4f, labelTop + 13f, Type.CAPTION, Skin.TEXT);
+                Rect plate = new Rect(l - 2f, labelTop, labelWidth, 18f);
+                ui.rounded(plate.x, plate.y, plate.right(), plate.bottom(), Tokens.RADIUS_XS, Skin.OVERLAY);
+                ui.text(readout, l + 4f, Graphite.baseline(ui, plate, data), data, Skin.TEXT);
             }
             if (hovered && dragging == null && resizing == null) {
                 float labelWidth = ui.measure(positioned.widget.name(), Type.CAPTION) + Skin.S3;
-                ui.rounded(l - 2f, t - 24f, l - 2f + labelWidth, t - 6f, Skin.R_SMALL, Skin.OVERLAY);
-                ui.text(positioned.widget.name(), l + 4f, t - 11f, Type.CAPTION, Skin.TEXT);
+                Rect plate = new Rect(l - 2f, t - 24f, labelWidth, 18f);
+                ui.rounded(plate.x, plate.y, plate.right(), plate.bottom(), Tokens.RADIUS_XS, Skin.OVERLAY);
+                ui.text(positioned.widget.name(), l + 4f, Controls.baseline(ui, plate, Type.CAPTION),
+                        Type.CAPTION, Skin.TEXT);
             }
         }
     }
@@ -688,7 +719,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         y += 16f + Skin.H_SM + Skin.S3;
 
         y = sliderRow(ui, inner, y, "insp.scale", "Scale", Math.round(placement.scale() * 100) + "%",
-                (placement.scale() - 0.5f) / 1.5f, widget, true);
+                (placement.scale() - Placement.MIN_SCALE)
+                        / (Placement.MAX_SCALE - Placement.MIN_SCALE), widget, true);
         y = sliderRow(ui, inner, y, "insp.opacity", "Opacity", Math.round(placement.opacity() * 100) + "%",
                 placement.opacity(), widget, false);
 
@@ -729,7 +761,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         }
     }
 
-    /** One labelled slider in the inspector. Scale runs 0.5 to 2, opacity 0 to 1. */
+    /** One labelled slider in the inspector. Bounds come from the persisted placement type. */
     private float sliderRow(
             GlRenderer ui, Rect inner, float y, String id, String label, String value, float fraction,
             Widget widget, boolean scale) {
@@ -740,7 +772,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         if (Math.abs(next - fraction) > 0.001d) {
             Placement placement = hud.placement(widget.id());
             hud.place(widget.id(), scale
-                    ? placement.withScale((float) (0.5d + next * 1.5d))
+                    ? placement.withScale((float) (Placement.MIN_SCALE
+                            + next * (Placement.MAX_SCALE - Placement.MIN_SCALE)))
                     : placement.withOpacity((float) next));
             problem = hud.save();
         }
@@ -773,7 +806,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             dragging = null;
             resizing = null;
             readout = "";
-            guides = new ArrayList<Snap.Guide>();
+            guides = NO_GUIDES;
             // Saved on release rather than on every mouse-move: one file write
             // per drag instead of one per frame.
             problem = hud.save();
@@ -859,7 +892,54 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     private Rect inspectorArea(GlRenderer ui) {
-        return new Rect(ui.width() - INSPECTOR_WIDTH - Skin.S5, Skin.S5, INSPECTOR_WIDTH, INSPECTOR_HEIGHT);
+        return inspectorAt(ui, inspectorCorner);
+    }
+
+    /** Top right, top left, bottom right, bottom left: the order they are tried in. */
+    private Rect inspectorAt(GlRenderer ui, int corner) {
+        float margin = Skin.S5;
+        float left = corner % 2 == 0 ? ui.width() - INSPECTOR_WIDTH - margin : margin;
+        float top = corner < 2 ? margin : ui.height() - TOOLBAR_HEIGHT - margin - INSPECTOR_HEIGHT;
+        return new Rect(left, top, INSPECTOR_WIDTH, INSPECTOR_HEIGHT);
+    }
+
+    /**
+     * Put the inspector in the corner that covers the least of the HUD.
+     *
+     * <p>It used to be pinned top right, which is where clocks, ping and
+     * coordinates usually live, so the panel sat over exactly the widgets it
+     * was being used to adjust. Top right is still preferred; another corner
+     * is taken only when it covers less. Held still while a drag or resize is
+     * under way, so the panel never jumps away from under the pointer -- the
+     * yield (it fades when a widget is worked on beneath it) covers that case.
+     */
+    private void placeInspector(GlRenderer ui) {
+        if (dragging != null || resizing != null) {
+            return;
+        }
+        int best = 0;
+        float bestCover = Float.MAX_VALUE;
+        for (int corner = 0; corner < 4; corner++) {
+            Rect area = inspectorAt(ui, corner);
+            float cover = 0f;
+            for (FathomHud.Positioned positioned : boxes()) {
+                Rect widget = Rect.of(toLogical(positioned.box.x), toLogical(positioned.box.y),
+                        toLogical(positioned.box.right()), toLogical(positioned.box.bottom()));
+                Rect overlap = area.intersect(widget);
+                if (!overlap.empty()) {
+                    cover += overlap.width * overlap.height;
+                }
+            }
+            // A clear corner wins outright; the preferred one wins ties.
+            if (cover < bestCover - 0.5f) {
+                best = corner;
+                bestCover = cover;
+            }
+            if (bestCover == 0f) {
+                break;
+            }
+        }
+        inspectorCorner = best;
     }
 
     private void drag(int mouseX, int mouseY) {
@@ -872,7 +952,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         int wantedY = mouseY - grabOffsetY;
 
         if (freehand()) {
-            guides = new ArrayList<Snap.Guide>();
+            guides = NO_GUIDES;
             place(target, wantedX, wantedY);
             return;
         }
@@ -883,22 +963,50 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         if (prefs.grid()) {
             wantedX = Math.round(wantedX / (float) GRID) * GRID;
             wantedY = Math.round(wantedY / (float) GRID) * GRID;
-            guides = new ArrayList<Snap.Guide>();
+            guides = NO_GUIDES;
             place(target, wantedX, wantedY);
             return;
         }
 
         Snap.Box wanted = new Snap.Box(wantedX, wantedY, target.box.width, target.box.height);
-        List<Snap.Box> others = new ArrayList<Snap.Box>();
+        snapBoxes.clear();
         for (FathomHud.Positioned other : boxes()) {
             if (!other.widget.id().equals(dragging)) {
-                others.add(other.box);
+                snapBoxes.add(other.box);
             }
         }
 
-        Snap.Result snapped = Snap.snap(wanted, others, screenWidth, screenHeight, prefs.snapPixels());
+        Snap.Result snapped = Snap.snap(wanted, snapBoxes, screenWidth, screenHeight, prefs.snapPixels());
         guides = snapped.guides();
         place(target, snapped.x, snapped.y);
+    }
+
+    /**
+     * Development benchmark only: feeds the ordinary drag and snap path a
+     * deterministic back-and-forth pointer. It never exists in a normal run.
+     */
+    private void benchmarkDrag() {
+        List<FathomHud.Positioned> available = boxes();
+        if (available.isEmpty()) {
+            return;
+        }
+        FathomHud.Positioned target = dragging == null ? available.get(0) : find(dragging);
+        if (target == null) {
+            return;
+        }
+        if (dragging == null) {
+            dragging = target.widget.id();
+            selected = target.widget.name();
+            grabOffsetX = Math.max(1, target.box.width / 2);
+            grabOffsetY = Math.max(1, target.box.height / 2);
+        }
+        int room = Math.max(1, screenWidth - target.box.width - 24);
+        int cycle = benchmarkDragFrame++ % 240;
+        int across = cycle <= 120 ? cycle : 240 - cycle;
+        int wantedX = 12 + Math.round(room * (across / 120f));
+        int wantedY = Math.max(12, Math.min(screenHeight - target.box.height - 64,
+                screenHeight / 3 + Math.round((float) Math.sin(benchmarkDragFrame * 0.05f) * 24f)));
+        drag(wantedX + grabOffsetX, wantedY + grabOffsetY);
     }
 
     /**
@@ -915,13 +1023,13 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         if (target == null) {
             return;
         }
-        List<Snap.Box> others = new ArrayList<Snap.Box>();
+        snapBoxes.clear();
         for (FathomHud.Positioned other : boxes()) {
             if (!other.widget.id().equals(widgetId)) {
-                others.add(other.box);
+                snapBoxes.add(other.box);
             }
         }
-        Snap.Box moved = Snap.separate(target.box, others, screenWidth, screenHeight, 2);
+        Snap.Box moved = Snap.separate(target.box, snapBoxes, screenWidth, screenHeight, 2);
         if (moved != target.box) {
             place(target, moved.x, moved.y);
             note = target.widget.name() + " moved clear of its neighbour.";
