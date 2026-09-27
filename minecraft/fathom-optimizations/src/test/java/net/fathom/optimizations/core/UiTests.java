@@ -90,6 +90,10 @@ public final class UiTests {
 
         colourChannelsPackAndClamp();
 
+        // -- rims and the background choice ----------------------------------
+        aRimIsOneDevicePixelAtEveryScale();
+        theBackgroundChoiceIsReadFromTheLaunchersFileAndValidated();
+
         // -- vector renderer state -------------------------------------------
         nestedClipsIntersect();
         aReplacingClipEscapesItsParentAndPopsBack();
@@ -750,7 +754,7 @@ public final class UiTests {
      * fits without depending on a font file being present, and the code under
      * test only ever asks this object how wide something is.
      */
-    static final class FakeRenderer implements Renderer {
+    static class FakeRenderer implements Renderer {
         static final float PER_CHARACTER = 6f;
 
         @Override
@@ -874,6 +878,49 @@ public final class UiTests {
             prefs.setScaleLabel(labels[index]);
             check(prefs.scaleChoice() == index, labels[index] + " did not survive being saved");
         }
+    }
+
+    /**
+     * A rim is one device pixel at 1x, 1.25x, 1.5x, 2x and 3x -- never a
+     * logical unit that grows with the interface -- and a focus ring is two.
+     */
+    private static void aRimIsOneDevicePixelAtEveryScale() {
+        for (final float scale : new float[] {1f, 1.25f, 1.5f, 2f, 3f}) {
+            final float[] drawn = new float[1];
+            Renderer ui = new FakeRenderer() {
+                @Override
+                public void outline(float left, float top, float right, float bottom, float radius,
+                        float thickness, int argb) {
+                    drawn[0] = thickness;
+                }
+
+                @Override
+                public float scale() {
+                    return scale;
+                }
+            };
+            ui.rim(0f, 0f, 40f, 36f, 12f, 0xFFFFFFFF);
+            check(Math.abs(drawn[0] * scale - 1f) < 1e-5f, "a rim is one device pixel at " + scale + "x");
+            ui.focusRing(0f, 0f, 40f, 36f, 12f, 2f, 0xFFFFFFFF);
+            check(Math.abs(drawn[0] * scale - 2f) < 1e-5f, "a focus ring is two device pixels at " + scale + "x");
+            check(Math.abs(ui.pixel() * scale - 1f) < 1e-5f, "pixel() is one device pixel at " + scale + "x");
+        }
+        pass("a rim is one device pixel, and a focus ring two, at every interface scale");
+    }
+
+    private static void theBackgroundChoiceIsReadFromTheLaunchersFileAndValidated() {
+        String[] ids = {"bg_5rain", "bg_6midnight", "graphite"};
+        check("bg_6midnight".equals(net.fathom.optimizations.core.ui.BackgroundChoice.resolve(
+                "{\"reduce_blur\":true,\"background\": \"bg_6midnight\"}", ids, "bg_5rain")),
+                "the launcher's choice is read");
+        check("bg_5rain".equals(net.fathom.optimizations.core.ui.BackgroundChoice.resolve(
+                "{\"background\":\"../../secret\"}", ids, "bg_5rain")),
+                "a value outside the catalogue becomes the default");
+        check("bg_5rain".equals(net.fathom.optimizations.core.ui.BackgroundChoice.resolve(
+                "not json", ids, "bg_5rain")), "an unreadable file is the default");
+        check("bg_5rain".equals(net.fathom.optimizations.core.ui.BackgroundChoice.resolve(
+                null, ids, "bg_5rain")), "no file is the default");
+        pass("the background choice is read from the launcher's file and validated");
     }
 
     private static void check(boolean condition, String what) {

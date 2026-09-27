@@ -24,6 +24,7 @@
   store; the network is not touched at any point in this flow.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount } from 'svelte';
   import { Download, FolderOpen, HardDriveDownload, Layers, ShieldCheck, TriangleAlert } from '@lucide/svelte';
 
@@ -173,17 +174,17 @@
        ways rather than a primary action and a fallback. -->
   <div class="actions">
     <Button onClick={() => void openPage('optifine')}>
-      <Download size={14} />
+      <Download size={ICON.inline} />
       Open OptiFine Downloads
     </Button>
     <Button variant="primary" disabled={busy} onClick={() => void choose()}>
-      <FolderOpen size={14} />
+      <FolderOpen size={ICON.inline} />
       Choose JAR
     </Button>
   </div>
 
   <div class="drop" class:active={dropping} class:done={!!jar}>
-    <HardDriveDownload size={20} />
+    <HardDriveDownload size={ICON.tile} />
     <span class="headline">
       {dropping ? 'Let go to add it' : jar ? jar.fileName : 'Drop the OptiFine JAR anywhere on this window'}
     </span>
@@ -254,7 +255,7 @@
             {#if fit.note}<span class="quiet">{fit.note}</span>{/if}
             {#if fit.needsBridge && jar.bridge}
               <span class="needs">
-                <TriangleAlert size={12} />
+                <TriangleAlert size={ICON.caption} />
                 Needs {jar.bridge.name}, which this profile does not have yet.
               </span>
             {/if}
@@ -286,7 +287,7 @@
   {#if added}
     <Section label="Added" material>
       <p class="added">
-        <span class="added-mark"><ShieldCheck size={16} /></span>
+        <span class="added-mark"><ShieldCheck size={ICON.inline} /></span>
         {added.message}
       </p>
       {#if added.standdowns.length > 0}

@@ -14,11 +14,12 @@
 
     WHAT IS BAKED IN, AND WHAT IS NOT
 
-      blur        Baked. A moderate Gaussian (sigma 10 at 720p). CSS could blur
-                  at runtime and it would look fine on a discrete GPU, but a
-                  full-screen blur every frame is real work on integrated
-                  graphics, and this costs nothing once. The CSS layer adds only
-                  a light extra treatment on top, which stays tunable.
+      blur        NONE. It used to be baked in (sigma 10, then 3.5), and it is
+                  why the launcher's backgrounds looked soft and low quality:
+                  blur is the one change here that cannot be undone without the
+                  source files. The background is the user's chosen atmosphere
+                  and keeps its detail; the glass above it is what makes text
+                  readable, not a defocused picture.
 
       grade       Baked, per clip. The sources have very different exposure;
                   without normalising them no single overlay can serve them all.
@@ -60,21 +61,19 @@ if (-not $PSBoundParameters.ContainsKey('Output') -or [string]::IsNullOrWhiteSpa
 $hasOnly = $PSBoundParameters.ContainsKey('Only') -and $Only
 
 # -- output shape ---------------------------------------------------------
-$Width           = 1600
-$Height          = 900
+$Width           = 1920
+$Height          = 1080
 $Fps             = 30
 $CrossfadeFrames = 24    # 0.8s dissolve at the wrap point
-# A cinematic defocus, not a frosting.
-#
-# This was 10, which destroyed the scene: at 1280x720 a sigma of 10 removes
-# every block edge and leaves coloured shapes. The point of the background is
-# that it is recognisably Minecraft, and foreground glass -- not blur -- is what
-# makes text readable over it. Blur is destructive, so raising this is the one
-# change here that CANNOT be undone by re-grading: it needs the source files.
-$BlurSigma       = 3.5
-# Lower than before, because there is now detail worth preserving. At sigma 10
-# the footage compressed to nothing whatever the CRF; at 3.5 it does not.
-$Crf             = 30
+# No defocus at all. This was 10, which destroyed the scene, then 3.5, which
+# still left every background soft: the point of the background is that it is
+# recognisably Minecraft, and foreground glass -- not blur -- is what makes text
+# readable over it. Blur is destructive, so raising this is the one change here
+# that CANNOT be undone by re-grading: it needs the source files.
+$BlurSigma       = 0
+# Detail is kept, so it has to survive the encoder: CRF 23 holds the rain and
+# leaf texture that CRF 30 smeared (compared frame by frame against the source).
+$Crf             = 23
 
 # Start offsets chosen for stable exposure; bg_2 fades from day to night across
 # its first 24 seconds, so it starts at 30s. Gammas solved by bisection against
@@ -137,8 +136,9 @@ foreach ($clip in $selected) {
     $needed   = $LoopFrames + $CrossfadeFrames
     $duration = [math]::Round(($needed + 6) / $Fps, 3)
 
+    $blur = if ($BlurSigma -gt 0) { "gblur=sigma=$($BlurSigma):steps=3," } else { '' }
     $graded = "fps=$Fps,scale=$($Width):$($Height):flags=lanczos," +
-              "gblur=sigma=$($BlurSigma):steps=3," +
+              $blur +
               "eq=gamma=$($clip.Gamma):saturation=$($clip.Saturation)," +
               "setpts=PTS-STARTPTS"
 
@@ -175,12 +175,13 @@ foreach ($clip in $selected) {
         $target
     if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed for $name (exit $LASTEXITCODE)." }
 
-    # A poster frame, shown for the instant before the video decodes so a
-    # background change never flashes empty.
-    & $ffmpegExe -v error -y -ss $clip.Start -i $clipPath -frames:v 1 `
-        -vf "scale=640:360:flags=lanczos,gblur=sigma=2:steps=3,eq=gamma=$($clip.Gamma):saturation=$($clip.Saturation)" `
-        -q:v 4 (Join-Path $outRoot "$name.jpg")
-    if ($LASTEXITCODE -ne 0) { throw "poster generation failed for $name." }
+    # The fallback still: frame 0 of the finished video, at its full size. The
+    # launcher shows it until the first frame decodes and instead of the video
+    # if it cannot play, so it must be the same picture -- not the 640x360
+    # poster this used to be, which was being stretched to full screen.
+    # Thumbnails and the game's copy come from tools/prepare-background-library.mjs.
+    & $ffmpegExe -v error -y -i $target -frames:v 1 -q:v 2 (Join-Path $outRoot "$name.jpg")
+    if ($LASTEXITCODE -ne 0) { throw "still generation failed for $name." }
 
     $size = (Get-Item $target).Length
     '{0}: {1}x{2} @ {3} fps, {4:N1} MB' -f $name, $Width, $Height, $Fps, ($size / 1MB) | Write-Host

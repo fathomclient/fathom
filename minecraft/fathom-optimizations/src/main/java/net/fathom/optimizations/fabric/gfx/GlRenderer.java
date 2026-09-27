@@ -749,6 +749,9 @@ public final class GlRenderer implements Renderer {
         if (Colour.invisible(colour) || icon == null) {
             return;
         }
+        if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED) {
+            net.fathom.optimizations.core.ui.render.GeometryDebug.icon(this, x, y, size);
+        }
         int pixels = Math.max(6, Math.round(deviceSize(size)));
         Icons.Entry entry = icons.entry(icon, pixels, deviceSize(Icons.strokeUnits(size)));
         batch.bind(icons.atlas().texture());

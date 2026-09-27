@@ -241,7 +241,7 @@ public final class Skin {
     public static final float R_LG = R_CARD;
     public static final float R_XL = R_PANEL;
 
-    /** Three control heights. A control that is none of these will not line up. */
+    /** Three control heights -- compact 32, standard 36, primary 44 (`metrics`). A control that is none of these will not line up. */
     public static final float H_SM = Tokens.CONTROL_HEIGHT_SM;
     public static final float H_MD = Tokens.CONTROL_HEIGHT_MD;
     public static final float H_LG = Tokens.CONTROL_HEIGHT_LG;
@@ -257,11 +257,14 @@ public final class Skin {
     public static final float COLUMN = FathomTheme.DIM_COLUMN;
     public static final float COLUMN_WIDE = FathomTheme.DIM_COLUMN_WIDE;
 
-    /** A hairline. One logical unit, which is one device pixel at 1×. */
-    public static final float HAIRLINE = FathomTheme.DIM_HAIRLINE;
-    public static final float BORDER_STANDARD = 1f;
-    public static final float BORDER_ENERGIZED = 1.4f;
-    public static final float BORDER_SELECTED = 1.8f;
+    /*
+     * There is no HAIRLINE or BORDER_* thickness here any more, deliberately.
+     * They were logical units -- "1" was 1.5 device pixels at 1080p, which the
+     * GL backend rounded to 2 and NanoVG smeared over three rows, and
+     * BORDER_SELECTED (1.8) made a selected control visibly thicker. A border
+     * is {@code ui.rim(...)} (one device pixel, snapped) and a divider is
+     * {@code ui.pixel()} tall. State changes a rim's colour, never its width.
+     */
 
     /** The hub's own frame. */
     public static final float HEADER_HEIGHT = FathomTheme.DIM_HUB_HEADER_HEIGHT;
@@ -270,7 +273,16 @@ public final class Skin {
     public static final float RAIL_WIDTH = FathomTheme.DIM_RAIL_WIDTH;
     public static final float RAIL_TRAY_WIDTH = FathomTheme.DIM_RAIL_TRAY_WIDTH;
     public static final float RAIL_ROW = FathomTheme.DIM_RAIL_ROW;
-    public static final float ROW_HEIGHT = 52f;
+    /** List rows: {@code Metrics.ROW} (48), dense {@code Metrics.ROW_DENSE} (40). */
+    public static final float ROW_HEIGHT = FathomTheme.Metrics.ROW;
+    public static final float ROW_DENSE = FathomTheme.Metrics.ROW_DENSE;
+
+    /** Icon sizes by role -- navigation, inline in a control or row, in a tile. */
+    public static final float ICON_NAV = FathomTheme.Metrics.ICON_NAV;
+    public static final float ICON_INLINE = FathomTheme.Metrics.ICON_INLINE;
+    public static final float ICON_TILE = FathomTheme.Metrics.ICON_TILE;
+    /** A module or item mark. */
+    public static final float TILE = FathomTheme.Metrics.TILE;
 
     /** In-game composition tokens; pages use these rather than local guesses. */
     public static final float SIDEBAR_WIDTH = 172f;

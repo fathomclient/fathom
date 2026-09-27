@@ -503,7 +503,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             }
             // Selected is the editor's focus: the signal outline. Hover and rest
             // are neutral.
-            ui.outline(l - 2f, t - 2f, r + 2f, b + 2f, Skin.R_SMALL, Skin.HAIRLINE,
+            ui.rim(l - 2f, t - 2f, r + 2f, b + 2f, Skin.R_SMALL,
                     active ? Tokens.COLOR_SIGNAL
                             : hovered ? Skin.argb(0.58f, Skin.ACCENT)
                                     : Skin.argb(0.24f, Skin.ACCENT_DEEP));
@@ -557,7 +557,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         ui.pushAlpha(barYields ? 0.18f : 1f);
 
         ui.fill(bar.x, bar.y, bar.right(), bar.bottom(), Skin.fade(Skin.CHROME, 0.94f));
-        ui.fill(bar.x, bar.y, bar.right(), bar.y + Skin.HAIRLINE, Skin.CHROME_LINE_STRONG);
+        ui.fill(bar.x, bar.y, bar.right(), bar.y + ui.pixel(), Skin.CHROME_LINE_STRONG);
 
         if (controls.primary(ui, "edit.done", keys[0], "Done", true)) {
             close();

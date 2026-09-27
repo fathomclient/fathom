@@ -1,5 +1,7 @@
 package net.fathom.optimizations.fabric.ui;
 
+import net.fathom.optimizations.generated.FathomTheme;
+
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Renderer;
@@ -15,8 +17,14 @@ import net.fathom.optimizations.core.ui.render.Type;
  */
 public final class FathomSettingRows {
 
-    public static final float ROW = 64f;
-    public static final float COMPACT_ROW = 54f;
+    /**
+     * One setting row height, described or not: {@code Metrics.ROW}. A row
+     * with a detail line used to be 64 and one without 54, so two switches in
+     * one group sat in rows of different heights.
+     */
+    public static final float ROW = FathomTheme.Metrics.ROW;
+    /** Kept for callers; the same height -- identical rows are identical. */
+    public static final float COMPACT_ROW = ROW;
     public static final float SECTION_HEADING = 43f;
 
     private FathomSettingRows() {}
@@ -28,17 +36,17 @@ public final class FathomSettingRows {
 
     /** Draw a section name and its optional one-line explanation. */
     public static void heading(Renderer ui, Rect area, String title, String description) {
-        ui.text(title, area.x, area.y + ui.ascent(Type.ROW_TITLE),
+        ui.text(title, area.x, Controls.stackTitle(ui, area.y, Type.ROW_TITLE),
                 Type.ROW_TITLE, Skin.TEXT);
         if (description != null && !description.isEmpty()) {
             ui.text(Text.fit(ui, description, Type.SMALL, area.width), area.x,
-                    area.y + 20f + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
+                    Controls.stackDetail(ui, area.y, Type.ROW_TITLE, Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
         }
     }
 
     /** Height of a setting row; explained values get room for a second line. */
     public static float height(String description) {
-        return description == null || description.isEmpty() ? COMPACT_ROW : ROW;
+        return ROW;
     }
 
     /**
@@ -76,14 +84,16 @@ public final class FathomSettingRows {
                 : Skin.TEXT_DISABLED;
         int descriptionColour = enabled ? Skin.TEXT_FAINT : Skin.scaleAlpha(Skin.TEXT_DISABLED, 0.72f);
 
-        float titleY = description == null || description.isEmpty()
-                ? Controls.baseline(ui, area, Type.BODY_STRONG)
-                : area.y + 17f + ui.ascent(Type.BODY_STRONG) / 2f;
+        boolean described = description != null && !description.isEmpty();
+        float top = Controls.stackTop(ui, area, Type.BODY_STRONG, Type.SMALL);
+        float titleY = described
+                ? Controls.stackTitle(ui, top, Type.BODY_STRONG)
+                : Controls.baseline(ui, area, Type.BODY_STRONG);
         ui.text(Text.fit(ui, label, Type.BODY_STRONG, textRoom), textX,
                 titleY, Type.BODY_STRONG, titleColour);
-        if (description != null && !description.isEmpty()) {
+        if (described) {
             ui.text(Text.fit(ui, description, Type.SMALL, textRoom), textX,
-                    area.y + 34f + ui.ascent(Type.SMALL), Type.SMALL, descriptionColour);
+                    Controls.stackDetail(ui, top, Type.BODY_STRONG, Type.SMALL), Type.SMALL, descriptionColour);
         }
 
         if (!last) {

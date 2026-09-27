@@ -71,6 +71,6 @@ public final class FathomComponents {
 
     /** A divider for actual structural separation, never for decorating text. */
     public static void divider(Renderer ui, float left, float right, float y) {
-        ui.fill(left, y, right, y + Skin.HAIRLINE, Skin.EDGE_RECESSED);
+        ui.fill(left, y, right, y + ui.pixel(), Skin.EDGE_RECESSED);
     }
 }

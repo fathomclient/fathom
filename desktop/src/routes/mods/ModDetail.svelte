@@ -16,6 +16,7 @@
   only lays them out with room to read them.
 -->
 <script lang="ts">
+  import { ICON } from '../../lib/metrics.generated';
   import { ArrowLeft, Download, ExternalLink, Trash2 } from '@lucide/svelte';
 
   import Page from '../../lib/ui/Page.svelte';
@@ -68,7 +69,7 @@
 <Page {title} {summary} wide>
   <svelte:fragment slot="lead">
     <button class="ui-capsule small material-clear material-interactive" on:click={onBack}>
-      <ArrowLeft size={14} />
+      <ArrowLeft size={ICON.inline} />
       Mods
     </button>
   </svelte:fragment>
@@ -109,7 +110,7 @@
             <svelte:fragment slot="control">
               {#if mod.slug}
                 <Button onClick={() => mod?.slug && onOpenProject(mod.slug)}>
-                  <ExternalLink size={14} />
+                  <ExternalLink size={ICON.inline} />
                   Project page
                 </Button>
               {/if}
@@ -126,13 +127,13 @@
             <svelte:fragment slot="control">
               {#if component.installable}
                 <Button variant="primary" disabled={busy} onClick={onInstall}>
-                  <Download size={14} />
+                  <Download size={ICON.inline} />
                   Install
                 </Button>
               {/if}
               {#if component.page}
                 <Button onClick={() => component?.page && onOpenPage(component.page)}>
-                  <ExternalLink size={14} />
+                  <ExternalLink size={ICON.inline} />
                   Page
                 </Button>
               {/if}
@@ -164,7 +165,7 @@
              from the settings above rather than sitting in a row of them. -->
         <div class="remove">
           <Button variant="caution" disabled={busy} onClick={onRemove}>
-            <Trash2 size={14} />
+            <Trash2 size={ICON.inline} />
             Remove from {profileName}
           </Button>
         </div>

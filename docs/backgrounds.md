@@ -5,57 +5,51 @@ the desktop launcher and a prepared looping texture sequence behind the in-game
 main menu. Source recordings remain outside the repository; only runtime
 derivatives are checked in.
 
-## Launcher video pipeline
+## The library
 
-Run the preparation script from the repository root:
+The user chooses the background. `assets/backgrounds/manifest.json` is the one
+catalogue: id, display name, asset path, type (video or image), native
+resolution, thumbnail, fallback still, and whether the launcher and the game
+offer it. From it:
 
-```powershell
-pwsh tools/prepare-background-video.ps1
-```
+- `tools/generate-backgrounds.mjs` writes `desktop/src/lib/backgrounds.generated.ts`
+  (the launcher's picker and player) and `BackgroundCatalog.java` (the game).
+  `npm run check` fails if either is stale.
+- `crates/launcher-desktop/src/lib.rs` keeps its own literal allowlist -- the id
+  ends up in a URL -- and a test fails if it and the manifest disagree.
+- `tools/prepare-background-library.mjs` builds every derived file: each video's
+  full-resolution fallback still (frame 0 of the clip), every 384×216 thumbnail,
+  the game's copy of every still, and Rainforest Storm's launcher video.
 
-By default it reads supported `bg_*.mp4` files from the user's Downloads folder
-and writes derivatives to `desktop/public/backgrounds`. Build selected clips by
-name or by a legacy number:
+The default is Rainforest Storm: after the audit it is the only background with
+an unblurred, full-HD moving source in the repository.
 
-```powershell
-pwsh tools/prepare-background-video.ps1 -Only bg_5rain,bg_6clear
-pwsh tools/prepare-background-video.ps1 -Only 1,2
-```
+## Launcher playback
 
-The `$Clips` table in the script is the source of truth for each asset's name,
-segment start, grade, scene label, and loop length. Add a row there when a new
-recording arrives.
+`desktop/src/lib/Background.svelte` paints the background's still at once and
+never removes it, then plays the `.webm` over it with `autoplay muted loop
+playsinline`, `object-fit: cover`, at its native resolution. The video stays
+transparent until it reports `playing`, so the hand-over from still (frame 0)
+to video is invisible; on a decode or load error the still simply stays.
+Playback pauses only while the document is hidden -- never on a loss of focus,
+which is what made a launcher sitting beside the game look frozen.
 
-Each launcher background produces:
+The only treatment on top is the light scrim (`--backdrop-scrim`) and the
+Graphite vignette and grain. Nothing is re-graded per background and nothing
+is blurred at runtime.
 
-```text
-desktop/public/backgrounds/<name>.webm  1600×900, 30 fps, silent VP9
-desktop/public/backgrounds/<name>.jpg   640×360 startup poster
-```
+### Why it used to look frozen and soft
 
-VP9/WebM is intentional. WebView2 cannot reliably demux H.264 in the launcher,
-whereas Chromium runtimes include VP9 support. Blur and per-clip grading are
-baked during preparation so the launcher does not run a full-screen blur every
-frame. CSS applies only a lightweight contrast/saturation treatment and the
-dark readability scrim.
+It was a still: the last Graphite pass replaced the video player with one
+`<img>` of the Rainforest Storm poster. And the videos it had played were
+1600×900 with a Gaussian blur baked in (sigma 3.5, CRF 30), with 640×360
+posters stretched to full screen. Rainforest Storm is now re-encoded from the
+game's unblurred 1920×1080 frame sequence at CRF 23. The other recordings'
+sources live outside the repository; `tools/prepare-background-video.ps1` now
+builds them unblurred at 1920×1080, CRF 23, whenever it is run.
 
-The script builds a seamless loop by dissolving the final 24 frames into the
-opening 24. Most clips use a ten-second 300-frame loop. Short recordings can
-override `LoopFrames`; `bg_6midnight`, for example, uses 180 frames.
-
-## Playback and selection
-
-`desktop/src/lib/Background.svelte` keeps two video slots. It waits for the
-incoming clip to have a decodable frame before crossfading, then pauses and
-releases the outgoing decoder. The static Midnight surface always exists below
-both slots, so changing backgrounds never reveals an empty black frame.
-
-The user-facing choices are declared in `desktop/src/App.svelte`. Add the
-generated asset's `id` to `BACKGROUNDS` to expose it in the picker. The ID must
-match the `.webm` and `.jpg` basename.
-
-Playback pauses while Minecraft is running or the document is hidden, avoiding
-competition with the game for GPU/video-decoder resources.
+VP9/WebM is intentional: WebView2 cannot reliably demux H.264, and every
+Chromium runtime decodes VP9 (in hardware where the GPU supports it).
 
 ## In-game main-menu video
 
@@ -97,6 +91,16 @@ UI scale, input polling, animation clock, or UI frame limit.
 
 `main-menu-bg.png` is retained only as the first-frame and decode-failure
 fallback. Regenerate that fallback with `tools/prepare-main-menu-poster.ps1`.
+
+## In-game backgrounds
+
+The title screen, the Hub and Fathom's menu backdrops draw the background chosen
+in the launcher (`FathomMenuScreen.drawBackdrop`). The game reads it from the
+launcher's `appearance.json` in its data root (`BackgroundChoice`, re-checked
+at most once a second). Rainforest Storm plays its frame sequence; every other
+background shows its full-resolution still from `textures/menu/scenes/`, the
+same picture the launcher shows. A game started without the launcher shows the
+default. The HUD is gameplay and never draws a menu background.
 
 ## Screenshot pulls
 

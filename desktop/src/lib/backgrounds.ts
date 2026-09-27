@@ -1,59 +1,42 @@
 /*
- * The approved backgrounds.
+ * The background library.
  *
- * Fathom's backgrounds are curated, not collected: every entry here is a
- * recording the glass system is tuned against. Right now there is exactly
- * one. The list stays a list so that a small curated set can be added
- * later without touching the player or the shell -- the picker reappears on its
- * own once there is more than one entry (`PICKER_AVAILABLE`).
+ * The background is the user's to choose. It supplies the atmosphere; the
+ * control system (`metrics` in the theme) supplies the quality, and it is the
+ * same over every one of these. Nothing here is tuned per background.
  *
- * Three things have to agree about this list: the picker, the player, and
- * `crates/launcher-desktop/src/lib.rs`, whose allowlist decides which ids the
- * WebView may ask for at all. A test over there reads this file and fails if
- * the two stop matching.
+ * The catalogue itself is `assets/backgrounds/manifest.json`, generated into
+ * `backgrounds.generated.ts` (and into the game's `BackgroundCatalog`). Three
+ * things have to agree about it: the picker, the player, and the Rust
+ * allowlist in `crates/launcher-desktop/src/lib.rs`, whose test reads the same
+ * manifest.
  *
- * Every entry has a full-resolution PNG at
- * `desktop/public/backgrounds/<id>.png`. The still keeps the approved scene
- * sharp and avoids background decoder work in the launcher.
+ * Every entry has a full-resolution still. A video background plays its
+ * `.webm` over that still: the still is what shows while the first frame
+ * decodes, and what stays if the video cannot play at all -- the same picture,
+ * never a stretched thumbnail.
  */
+import { BACKGROUNDS, DEFAULT_BACKGROUND, type BackgroundOption } from './backgrounds.generated';
 
-export interface BackgroundOption {
-  id: string;
-  label: string;
-  /** Plain-text credit shown in Settings; the full record is ATTRIBUTION.md. */
-  credit: string;
-}
-
-export const BACKGROUNDS: BackgroundOption[] = [
-  {
-    id: 'bg_5rain',
-    label: 'Rainforest Storm',
-    credit: 'Community-made Minecraft world recording; see ATTRIBUTION.md',
-  },
-];
-
-/**
- * What a first run shows, and what any retired or unknown id becomes. Rust owns
- * the stored preference and has the same default (`DEFAULT_BACKGROUND` in
- * `crates/launcher-desktop/src/lib.rs`); this one is only what the window paints
- * before that answer arrives.
- */
-export const DEFAULT_BACKGROUND = 'bg_5rain';
+export { BACKGROUNDS, DEFAULT_BACKGROUND, type BackgroundOption };
 
 /** A picker with one entry is a control that does nothing, so there is none. */
 export const PICKER_AVAILABLE = BACKGROUNDS.length > 1;
 
-/** Whether an id is one of the approved backgrounds. */
+/** Whether an id is one of the library's backgrounds. */
 export function isApproved(id: string): boolean {
   return BACKGROUNDS.some((option) => option.id === id);
 }
 
-/** The approved id to show for a stored preference: itself, or the default. */
-export function approvedOrDefault(id: string): string {
-  return isApproved(id) ? id : DEFAULT_BACKGROUND;
+/** The background for a stored preference: itself, or the default. */
+export function optionFor(id: string): BackgroundOption {
+  return (
+    BACKGROUNDS.find((option) => option.id === id) ??
+    (BACKGROUNDS.find((option) => option.id === DEFAULT_BACKGROUND) as BackgroundOption)
+  );
 }
 
-/** The image behind a background, which is also its picker thumbnail. */
-export function imageFor(id: string): string {
-  return `/backgrounds/${id}.png`;
+/** The library id to show for a stored preference: itself, or the default. */
+export function approvedOrDefault(id: string): string {
+  return optionFor(id).id;
 }

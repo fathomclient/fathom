@@ -27,6 +27,7 @@
   so adding a preference files itself without anybody editing this component.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import {
@@ -168,6 +169,7 @@
 
   $: cacheAction = recovery?.actions.find((action) => action.id === 'clear-cache');
   $: activeLabel = CATEGORIES.find((c) => c.id === category)?.label ?? 'Settings';
+  $: current = BACKGROUNDS.find((option) => option.id === choice);
 </script>
 
 <Page title="Settings">
@@ -211,7 +213,7 @@
                 aria-current={category === item.id ? 'page' : undefined}
                 on:click={() => (category = item.id)}
               >
-                <svelte:component this={item.icon} size={16} />
+                <svelte:component this={item.icon} size={ICON.inline} />
                 <span>{item.label}</span>
               </button>
             {/each}
@@ -232,6 +234,24 @@
 
             <!-- APPEARANCE -->
             {#if category === 'appearance'}
+              <!-- The background library, first: it is the one thing on this
+                   page that changes how everything looks. The same component
+                   the bottom bar uses, at a larger size. A click applies and
+                   saves; the window behind is the preview. The game's menus
+                   follow the same choice. -->
+              {#if PICKER_AVAILABLE}
+                <Section label="Background" material>
+                  <div class="picker-pad">
+                    <BackgroundPicker
+                      options={backgrounds}
+                      value={choice}
+                      size="large"
+                      onChoose={onBackground}
+                    />
+                  </div>
+                </Section>
+              {/if}
+
               <!-- Accessibility for the glass itself. Windows' own "Transparency
                    effects" switch also reduces transparency, whatever these say. -->
               <Section label="Glass" material>
@@ -270,33 +290,21 @@
                 </Row>
               </Section>
 
-              <!-- Only when there is a choice to make: with one approved
-                   background a picker would be a control that does nothing. The
-                   same component the bottom bar uses, at a larger size. -->
-              {#if PICKER_AVAILABLE}
-                <Section label="Background">
-                  <BackgroundPicker
-                    options={backgrounds}
-                    value={choice}
-                    size="large"
-                    onChoose={onBackground}
-                  />
-                </Section>
-              {/if}
-
               <!-- The world and the creator are the links, rather than a pair
                    of buttons off to the right saying "World" and "Creator": the
                    name is the thing you would click. -->
               <Section label="Credits" material>
-                <!-- The launcher's photograph. Plain text: the WebView can only
+                <!-- The background in use. Plain text: the WebView can only
                      open the pages `pages.rs` allows, and this credit does not
-                     need a new outbound host to be complete. -->
-                {#each BACKGROUNDS as option}
+                     need a new outbound host to be complete. Every background's
+                     record is in ATTRIBUTION.md; the two worlds below are the
+                     community creators the library draws on. -->
+                {#if current}
                   <div class="credit">
-                    <p class="credit-title">{option.label}</p>
-                    <p class="credit-by">{option.credit}</p>
+                    <p class="credit-title">{current.label}</p>
+                    <p class="credit-by">{current.credit}</p>
                   </div>
-                {/each}
+                {/if}
                 {#each WORLD_CREDITS as credit}
                   <div class="credit">
                     <button class="credit-title link" on:click={() => void openPage(credit.worldPage)}>
@@ -511,14 +519,14 @@
 
   /* -- the categories ------------------------------------------------------ */
   .nav {
-    --surface-radius: var(--radius-lg);
+    --surface-radius: var(--metric-radius-panel);
     position: sticky;
     top: 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-2);
-    border-radius: var(--radius-lg);
+    border-radius: var(--metric-radius-panel);
     /* This pane sits over the sun, the brightest part of the photograph, and
        at plain standard density its type measured about 4.2:1. A local
        deepening through the material's own veil layer, rather than a denser
@@ -526,15 +534,10 @@
     --mat-veil: var(--control-deepen);
   }
 
-  /* Concentric with the pane around it. */
-  .search {
-    --search-radius: max(var(--radius-inner-min), calc(var(--radius-lg) - var(--space-2)));
-  }
-
   .list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   /* Rest: secondary type on the pane. Hover: a thin fill. Chosen: a denser
@@ -543,9 +546,11 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    min-height: var(--control-height-lg);
-    padding: var(--space-2) var(--space-3);
-    border-radius: max(var(--radius-inner-min), calc(var(--radius-lg) - var(--space-2)));
+    /* A nav item inside a pane: the popover item's geometry, 36 tall with the
+       small radius, so every list of choices in the launcher is one shape. */
+    min-height: var(--metric-control);
+    padding: 0 var(--space-3);
+    border-radius: var(--metric-radius-small);
     font-size: var(--type-body-size);
     font-weight: var(--type-button-weight);
     color: var(--color-text-secondary);
@@ -618,7 +623,7 @@
     line-height: var(--type-heading-leading);
     color: var(--color-text);
     /* Level with the first category in the pane beside it. */
-    min-height: var(--control-height-md);
+    min-height: var(--metric-control);
     display: flex;
     align-items: center;
     margin-top: var(--space-2);
@@ -657,7 +662,11 @@
   .link:focus-visible {
     outline: var(--focus-ring-width) solid var(--color-focus);
     outline-offset: 2px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--metric-radius-small);
+  }
+
+  .picker-pad {
+    padding: var(--space-4);
   }
 
   /* -- credits: Row's geometry, because their content is a sentence with links

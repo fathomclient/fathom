@@ -58,7 +58,7 @@ final class QuickSection implements Section {
 
     private final Scroller scroller = new Scroller();
 
-    private static final float ROW = 44f;
+    private static final float ROW = Skin.ROW_HEIGHT;
     private static final float SLIDER_ROW = 58f;
     private static final float CONTROL = 220f;
 

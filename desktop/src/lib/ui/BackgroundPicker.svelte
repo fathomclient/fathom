@@ -2,21 +2,22 @@
   Choosing a background.
 
   ONE component, two sizes. The bottom bar shows it inside a popover at
-  `compact`; Settings → Appearance shows the same thing at `large`. They were
-  previously two separate implementations that drifted, which is the specific
-  problem this milestone exists to remove.
+  `compact`; Settings -> Appearance shows the same thing at `large`.
 
-  Thumbnails are the approved images themselves, so what you see here is the
-  background you are choosing, not an illustration of it.
+  A simple grid, not a gallery: each tile is the background's own thumbnail,
+  its name, and -- for a moving one -- a small video mark. Clicking applies it
+  at once (the window behind is the preview) and the choice is saved; there is
+  no separate confirm step to forget.
 
-  Not shown while there is only one approved background (`PICKER_AVAILABLE`);
-  it is kept so a small curated set can be offered again without new work.
+  Selection follows the control system's rule: a brighter rim and a check,
+  never a thicker outline.
 -->
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import { Check } from '@lucide/svelte';
+  import { Check, Film } from '@lucide/svelte';
   import { FAST, EASE } from '../motion';
-  import { imageFor, type BackgroundOption } from '../backgrounds';
+  import { ICON } from '../metrics.generated';
+  import type { BackgroundOption } from '../backgrounds';
 
   export let options: BackgroundOption[] = [];
   export let value: string;
@@ -24,28 +25,28 @@
   export let onChoose: (id: string) => void;
 
   /* Shown here rather than only in Settings, because this is where someone
-     else's photograph is actually chosen. */
+     else's recording is actually chosen. */
   $: credit = options.find((option) => option.id === value)?.credit ?? '';
 </script>
 
-<div class="grid" class:large={size === 'large'}>
-  {#each options as option}
+<div class="grid" class:large={size === 'large'} role="radiogroup" aria-label="Background">
+  {#each options as option (option.id)}
     <button
       class="item"
       class:selected={option.id === value}
-      aria-pressed={option.id === value}
+      role="radio"
+      aria-checked={option.id === value}
       on:click={() => onChoose(option.id)}
     >
-      <!-- The image sits over the warm fallback, so a thumbnail whose file is
-           missing shows the same substrate the background itself would, rather
-           than an empty tile. -->
-      <span
-        class="thumb"
-        style={`background-image:url(${imageFor(option.id)}), var(--backdrop-fallback)`}
-      >
+      <!-- The thumbnail sits over the fallback field, so a missing file shows
+           the same substrate the background itself would. -->
+      <span class="thumb" style={`background-image:url(${option.thumbnail}), var(--backdrop-fallback)`}>
+        {#if option.type === 'video'}
+          <span class="kind" title="Moving background"><Film size={ICON.caption} /></span>
+        {/if}
         {#if option.id === value}
           <span class="tick" transition:fade={{ duration: FAST, easing: EASE }}>
-            <Check size={size === 'large' ? 13 : 11} />
+            <Check size={ICON.caption} />
           </span>
         {/if}
       </span>
@@ -64,18 +65,19 @@
   .grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: var(--s-2);
+    gap: var(--space-2);
   }
 
   .grid.large {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: var(--s-3);
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--space-3);
   }
 
   .item {
     display: flex;
     flex-direction: column;
-    gap: var(--s-1);
+    gap: var(--space-2);
+    min-width: 0;
     text-align: left;
   }
 
@@ -83,7 +85,7 @@
     position: relative;
     display: block;
     aspect-ratio: 16 / 9;
-    border-radius: var(--radius-sm);
+    border-radius: var(--metric-radius-small);
     background: var(--backdrop-fallback);
     background-size: cover;
     background-position: center;
@@ -91,20 +93,10 @@
     transition: box-shadow var(--motion-hover) var(--ease-standard);
   }
 
-  .large .thumb {
-    border-radius: var(--radius-md);
-  }
-
-  /* Hover brightens the rim; nothing scales. Selected is the strong rim and a
-     check -- neutral, never the old accent. */
-  .item:hover .thumb {
-    box-shadow: var(--control-rim-strong);
-  }
-
+  /* Hover and selection brighten the one rim; neither changes its width. */
+  .item:hover .thumb,
   .item.selected .thumb {
-    box-shadow:
-      var(--control-rim-strong),
-      0 0 0 2px var(--color-text);
+    box-shadow: var(--control-rim-strong);
   }
 
   .item:focus-visible {
@@ -113,52 +105,57 @@
 
   .item:focus-visible .thumb {
     outline: var(--focus-ring-width) solid var(--color-focus);
-    outline-offset: 3px;
+    outline-offset: 2px;
   }
 
+  .kind,
   .tick {
     position: absolute;
     top: var(--space-1);
-    right: var(--space-1);
     display: grid;
     place-items: center;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border-radius: var(--radius-pill);
+  }
+
+  .kind {
+    left: var(--space-1);
+    background: var(--mat-dense-fill);
+    color: var(--color-text-secondary);
+  }
+
+  .tick {
+    right: var(--space-1);
     background: var(--control-prominent);
     color: var(--color-prominent-text);
   }
 
-  .large .tick {
-    width: 20px;
-    height: 20px;
-  }
-
   .label {
-    font-size: var(--t-meta);
-    color: var(--text-muted);
+    font-size: var(--type-caption-size);
+    font-weight: var(--type-label-weight);
+    color: var(--color-text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .large .label {
-    font-size: var(--t-caption);
+    font-size: var(--type-secondary-size);
   }
 
   .item.selected .label {
-    color: var(--text);
+    color: var(--color-text);
   }
 
   .credit {
-    margin: var(--s-2) 0 0;
-    font-size: var(--t-meta);
-    color: var(--text-faint);
-    line-height: 1.4;
+    margin: var(--space-2) 0 0;
+    font-size: var(--type-caption-size);
+    color: var(--color-text-tertiary);
+    line-height: var(--type-caption-leading);
   }
 
   .credit.large {
-    margin-top: var(--s-3);
-    font-size: var(--t-caption);
+    margin-top: var(--space-3);
   }
 </style>

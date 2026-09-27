@@ -13,6 +13,7 @@
   the header and an optional `footer` slot stay put.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { fade, fly } from 'svelte/transition';
   import { X } from '@lucide/svelte';
   import { EASE, EASE_EXIT, MOTION_EXIT, MOTION_SURFACE } from '../motion';
@@ -54,7 +55,7 @@
   <header>
     <h2 id={titleId}>{title}</h2>
     <button class="ui-icon-button small" aria-label="Close" use:tooltip={'Close'} on:click={onClose}>
-      <X size={16} />
+      <X size={ICON.inline} />
     </button>
   </header>
 

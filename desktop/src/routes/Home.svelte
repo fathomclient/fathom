@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { fade, fly } from 'svelte/transition';
   import { CircleAlert } from '@lucide/svelte';
   import { NO_LAUNCH, type HomeView, type LaunchProgress } from '../lib/api';
@@ -95,7 +96,7 @@
 
     {#if settled && launch.detail}
       <div class="result" class:failed in:fade={{ duration: MOTION_HOVER }} out:fade={{ duration: MOTION_EXIT }}>
-        {#if failed}<span class="mark"><CircleAlert size={14} /></span>{/if}
+        {#if failed}<span class="mark"><CircleAlert size={ICON.inline} /></span>{/if}
         <span class="text">{launch.detail}</span>
         <button class="ui-capsule small ghost" on:click={onDismiss}>Dismiss</button>
       </div>
@@ -128,7 +129,7 @@
     border-radius: var(--g-r-panel);
     background: var(--g-mat-standard);
     box-shadow:
-      inset 0 0 0 1px var(--g-mat-standard-rim),
+      inset 0 0 0 var(--metric-rim) var(--g-mat-standard-rim),
       var(--g-elevation);
     -webkit-backdrop-filter: blur(var(--g-mat-standard-blur)) saturate(1.12);
     backdrop-filter: blur(var(--g-mat-standard-blur)) saturate(1.12);
@@ -179,12 +180,12 @@
 
   .primary {
     width: 168px;
-    height: 44px;
-    border-radius: 22px;
+    height: var(--metric-control-primary);
+    border-radius: var(--metric-radius-control);
     background: var(--g-mat-standard);
     color: var(--g-text-disabled);
     font: var(--g-type-primary-weight) var(--g-type-primary-size) / var(--g-type-primary-line) var(--g-type-primary-family);
-    box-shadow: inset 0 0 0 1px var(--g-mat-standard-rim);
+    box-shadow: inset 0 0 0 var(--metric-rim) var(--g-mat-standard-rim);
     transition:
       color var(--g-motion-fast) var(--g-ease),
       background-color var(--g-motion-fast) var(--g-ease),
@@ -215,12 +216,12 @@
 
   .primary.pending:hover {
     background: var(--g-mat-dense);
-    box-shadow: inset 0 0 0 1px var(--g-rim-selected);
+    box-shadow: inset 0 0 0 var(--metric-rim) var(--g-rim-selected);
   }
 
   .primary.pending:active {
     background: var(--g-mat-dense);
-    box-shadow: inset 0 0 0 1px var(--g-rim-hover);
+    box-shadow: inset 0 0 0 var(--metric-rim) var(--g-rim-hover);
   }
 
   .primary.busy {

@@ -1,0 +1,264 @@
+{
+  "_about": "The one background catalogue. `tools/generate-backgrounds.mjs` turns it into the launcher's `backgrounds.generated.ts` and the game's `BackgroundCatalog.java`; `crates/launcher-desktop/src/lib.rs` tests its allowlist against it; `tools/prepare-background-library.mjs` builds every still, thumbnail and scene from it. Launcher paths are under desktop/public/, Minecraft paths under textures/menu/. `width`/`height` are the asset's native pixels. `minecraft.video` names a frame sequence the game can play; otherwise the game shows `minecraft.still`.",
+  "default": "bg_5rain",
+  "backgrounds": [
+    {
+      "id": "bg_1",
+      "label": "Cherry Grove",
+      "type": "video",
+      "asset": "backgrounds/bg_1.webm",
+      "still": "backgrounds/bg_1.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_1.jpg",
+      "width": 1600,
+      "height": 900,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_1.jpg",
+        "video": null
+      },
+      "credit": "Recorded in vanilla Minecraft by the Fathom project owner"
+    },
+    {
+      "id": "bg_6pull_city-overlook",
+      "label": "City Overlook",
+      "type": "image",
+      "asset": "backgrounds/bg_6pull_city-overlook.jpg",
+      "still": "backgrounds/bg_6pull_city-overlook.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6pull_city-overlook.jpg",
+      "width": 1728,
+      "height": 972,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6pull_city-overlook.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "golden-hour",
+      "label": "Golden Hour",
+      "type": "image",
+      "asset": "backgrounds/golden-hour.jpg",
+      "still": "backgrounds/golden-hour.jpg",
+      "thumbnail": "backgrounds/thumbs/golden-hour.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/golden-hour.jpg",
+        "video": null
+      },
+      "credit": "\"Palm Tree Sunset Water\", credited to showtime at Wallpapers.com; see ATTRIBUTION.md",
+      "note": "Licence not yet confirmed (ATTRIBUTION.md). Confirm or replace before a public release."
+    },
+    {
+      "id": "graphite",
+      "label": "Graphite",
+      "type": "image",
+      "asset": "backgrounds/graphite.jpg",
+      "still": "backgrounds/graphite.jpg",
+      "thumbnail": "backgrounds/thumbs/graphite.jpg",
+      "width": 2560,
+      "height": 1440,
+      "launcher": true,
+      "minecraft": {
+        "still": "graphite/backdrop-default.png",
+        "video": null
+      },
+      "credit": "Fathom's Graphite backdrop; see ATTRIBUTION.md",
+      "note": "Processed by GraphiteAssets from a 1672x941 capture; the source is not yet recorded in ATTRIBUTION.md."
+    },
+    {
+      "id": "bg_6clear",
+      "label": "Metropolis",
+      "type": "video",
+      "asset": "backgrounds/bg_6clear.webm",
+      "still": "backgrounds/bg_6clear.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6clear.jpg",
+      "width": 1600,
+      "height": 900,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6clear.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "bg_3",
+      "label": "Midnight Coast",
+      "type": "video",
+      "asset": "backgrounds/bg_3.webm",
+      "still": "backgrounds/bg_3.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_3.jpg",
+      "width": 1600,
+      "height": 900,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_3.jpg",
+        "video": null
+      },
+      "credit": "Recorded in vanilla Minecraft by the Fathom project owner"
+    },
+    {
+      "id": "bg_6midnight",
+      "label": "Midnight Metropolis",
+      "type": "video",
+      "asset": "backgrounds/bg_6midnight.webm",
+      "still": "backgrounds/bg_6midnight.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6midnight.jpg",
+      "width": 1600,
+      "height": 900,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6midnight.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "bg_6pull_moon-tower",
+      "label": "Moon Tower",
+      "type": "image",
+      "asset": "backgrounds/bg_6pull_moon-tower.jpg",
+      "still": "backgrounds/bg_6pull_moon-tower.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6pull_moon-tower.jpg",
+      "width": 1728,
+      "height": 972,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6pull_moon-tower.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "bg_6pull_neon-grid",
+      "label": "Neon Grid",
+      "type": "image",
+      "asset": "backgrounds/bg_6pull_neon-grid.jpg",
+      "still": "backgrounds/bg_6pull_neon-grid.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6pull_neon-grid.jpg",
+      "width": 1728,
+      "height": 972,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6pull_neon-grid.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "bg_5noraintickunfrozen",
+      "label": "Rainforest Drift",
+      "type": "video",
+      "asset": "backgrounds/bg_5noraintickunfrozen.webm",
+      "still": "backgrounds/bg_5noraintickunfrozen.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_5noraintickunfrozen.jpg",
+      "width": 1600,
+      "height": 900,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_5noraintickunfrozen.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "bg_5rain",
+      "label": "Rainforest Storm",
+      "type": "video",
+      "asset": "backgrounds/bg_5rain.webm",
+      "still": "backgrounds/bg_5rain.png",
+      "thumbnail": "backgrounds/thumbs/bg_5rain.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "main-menu-bg.png",
+        "video": "bg_5rain"
+      },
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "bg_5noraintickfrozen",
+      "label": "Rainforest Twilight",
+      "type": "video",
+      "asset": "backgrounds/bg_5noraintickfrozen.webm",
+      "still": "backgrounds/bg_5noraintickfrozen.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_5noraintickfrozen.jpg",
+      "width": 1600,
+      "height": 900,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_5noraintickfrozen.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "bg_6pull_red-tower",
+      "label": "Red Tower",
+      "type": "image",
+      "asset": "backgrounds/bg_6pull_red-tower.jpg",
+      "still": "backgrounds/bg_6pull_red-tower.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6pull_red-tower.jpg",
+      "width": 1728,
+      "height": 972,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6pull_red-tower.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+    },
+    {
+      "id": "bg_4",
+      "label": "Savanna",
+      "type": "video",
+      "asset": "backgrounds/bg_4.webm",
+      "still": "backgrounds/bg_4.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_4.jpg",
+      "width": 1600,
+      "height": 900,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_4.jpg",
+        "video": null
+      },
+      "credit": "Recorded in vanilla Minecraft by the Fathom project owner"
+    },
+    {
+      "id": "bg_2",
+      "label": "Snowfall",
+      "type": "video",
+      "asset": "backgrounds/bg_2.webm",
+      "still": "backgrounds/bg_2.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_2.jpg",
+      "width": 1600,
+      "height": 900,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_2.jpg",
+        "video": null
+      },
+      "credit": "Recorded in vanilla Minecraft by the Fathom project owner"
+    },
+    {
+      "id": "bg_6pull_storm-panorama",
+      "label": "Storm Panorama",
+      "type": "image",
+      "asset": "backgrounds/bg_6pull_storm-panorama.jpg",
+      "still": "backgrounds/bg_6pull_storm-panorama.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6pull_storm-panorama.jpg",
+      "width": 1728,
+      "height": 972,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6pull_storm-panorama.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+    }
+  ]
+}

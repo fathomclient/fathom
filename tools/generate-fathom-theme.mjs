@@ -6,6 +6,64 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = path.join(root, 'assets', 'theme', 'fathom-theme.json');
 const theme = JSON.parse(fs.readFileSync(source, 'utf8'));
 
+/*
+ * ONE CONTROL METRIC SYSTEM.
+ *
+ * `metrics` is the only place a radius, a control or row height, a switch, an
+ * icon size or a spacing step is written as a number. Every other table names
+ * one as "$<metric>", resolved here before anything is emitted, so the three
+ * generations of tokens below (the legacy `dimensions`, `system` and
+ * `graphite`) cannot drift apart again: they are aliases, not values.
+ *
+ * `METRIC_TABLES` is the enforcement. A literal number in one of those tables
+ * is a screen inventing its own control size, and the build refuses it.
+ */
+const METRIC_TABLES = [
+  ['dimensions', /^(r-|h-|s-\d$|rail-row$|page-gap$)/],
+  ['system.radius', /./],
+  ['system.space', /^[1-8]$/],
+  ['system.control', /^height-/],
+  ['system.layout', /^(section-gap|page-gap)$/],
+  ['graphite.radius', /./],
+  ['graphite.size', /^(control|primary$|switch-|icon-|mod-icon)/],
+  ['graphite.space', /^[1-8]$/],
+];
+
+function resolveMetrics(node, where) {
+  if (typeof node === 'string' && node.startsWith('$')) {
+    const value = theme.metrics?.[node.slice(1)];
+    if (typeof value !== 'number') throw new Error(`${where} names unknown metric ${node}`);
+    return value;
+  }
+  if (node && typeof node === 'object' && !Array.isArray(node)) {
+    for (const [key, value] of Object.entries(node)) {
+      if (where === '' && key === 'metrics') continue;
+      node[key] = resolveMetrics(value, where ? `${where}.${key}` : key);
+    }
+  }
+  return node;
+}
+
+function tableAt(dotted, from) {
+  return dotted.split('.').reduce((node, key) => node?.[key], from);
+}
+
+{
+  const raw = JSON.parse(fs.readFileSync(source, 'utf8'));
+  for (const [dotted, pattern] of METRIC_TABLES) {
+    for (const [key, value] of Object.entries(tableAt(dotted, raw) ?? {})) {
+      if (pattern.test(key) && typeof value === 'number') {
+        throw new Error(
+          `${dotted}.${key} is the literal ${value}. Control geometry comes from \`metrics\`: write "$<metric>".`);
+      }
+    }
+  }
+  resolveMetrics(theme, '');
+}
+
+/** The metrics that are counted in device pixels, not dp. */
+const DEVICE_METRICS = new Set(['rim-device-px', 'divider-device-px', 'focus-device-px']);
+
 // `--check` writes nothing and exits non-zero if any output differs from what
 // the manifest produces: for `npm run check`, and anything else that should
 // fail rather than repair. Without it an output is rewritten only when its
@@ -39,6 +97,15 @@ for (const [name, value] of Object.entries(theme.motion)) css.push(`  --m-${name
 for (const [name, value] of Object.entries(theme.css)) css.push(`  --${name}: ${value};`);
 // Temporary aliases retained for the one legacy route that predates the 4px token names.
 for (const name of ['1', '2', '3', '4', '5']) css.push(`  --s${name}: var(--s-${name});`);
+// The canonical control metrics. Device-pixel metrics are multiples of
+// `--hairline`, which `main.ts` sets to one device pixel in CSS pixels, so a rim
+// is one physical pixel at 100%, 125%, 150% and 200% alike.
+for (const [name, value] of Object.entries(theme.metrics)) {
+  if (name.startsWith('_')) continue;
+  css.push(DEVICE_METRICS.has(name)
+    ? `  --metric-${name.replace(/-device-px$/, '')}: calc(var(--hairline) * ${value});`
+    : `  --metric-${name}: ${value}px;`);
+}
 css.push('}');
 css.push('');
 css.push(...systemCss(theme.system));
@@ -167,6 +234,28 @@ const motionTs = [
 ];
 emit(path.join(root, 'desktop', 'src', 'lib', 'motion.generated.ts'), motionTs.join('\n'));
 
+// The control metrics for script: icon sizes above all, which Lucide takes as a
+// prop rather than a CSS length. A component writes `size={ICON.inline}`, never
+// a number, so two icons in the same kind of control cannot differ.
+{
+  const camel = (name) => name.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+  const entries = Object.entries(theme.metrics).filter(([name]) => !name.startsWith('_'));
+  const icons = entries.filter(([name]) => name.startsWith('icon-'));
+  emit(path.join(root, 'desktop', 'src', 'lib', 'metrics.generated.ts'), [
+    '/* Generated from assets/theme/fathom-theme.json (`metrics`). Do not edit. */',
+    '',
+    'export const METRIC = {',
+    ...entries.map(([name, value]) => `  ${camel(name)}: ${value},`),
+    '} as const;',
+    '',
+    '/** Icon sizes by role: `nav` rail, `inline` in a control or row, `tile` in a mark, `caption` in 12px text. */',
+    'export const ICON = {',
+    ...icons.map(([name, value]) => `  ${camel(name.slice(5))}: ${value},`),
+    '} as const;',
+    '',
+  ].join('\n'));
+}
+
 // The brand's construction numbers and colours, for the geometry module that
 // both the launcher and `assets/brand/build-brand.mjs` draw from. Colours are
 // resolved to hex so the icon rasteriser can use them directly.
@@ -213,11 +302,18 @@ function rim(system, level) {
   // even edge all round, and a darker lip underneath only where the level asks
   // for one. Inset shadows follow the corner radius, so the highlight curves
   // into the corners and fades there instead of stopping square.
-  return [
-    `inset 0 1px 0 0 ${rgba(light, level.rim.top)}`,
-    `inset 0 0 0 1px ${rgba(light, level.rim.edge)}`,
-    `inset 0 -1px 0 0 ${rgba(shade, level.rim.shade)}`,
-  ].join(', ');
+  //
+  // Every line is ONE DEVICE PIXEL (`--hairline`), not one CSS pixel: at 125%
+  // or 150% display scaling a `1px` inset is 1.25 or 1.5 device pixels, which
+  // the compositor smears across two rows and which reads as a heavier border
+  // on some controls than others. All three lines sit on the same outermost
+  // row of pixels, so a level changes the rim's brightness, never its width.
+  const lines = [
+    `inset 0 var(--hairline) 0 0 ${rgba(light, level.rim.top)}`,
+    `inset 0 0 0 var(--hairline) ${rgba(light, level.rim.edge)}`,
+  ];
+  if (level.rim.shade > 0) lines.push(`inset 0 calc(-1 * var(--hairline)) 0 0 ${rgba(shade, level.rim.shade)}`);
+  return lines.join(', ');
 }
 
 /**
@@ -459,6 +555,21 @@ for (const [name, value] of Object.entries(theme.motion)) {
   java.push(`    public static final float MOTION_${javaName(name)} = ${(Number(value) / 1000).toFixed(3)}f;`);
 }
 java.push(...systemJava(theme.system));
+java.push('');
+java.push('    /**');
+java.push('     * The one control metric system (`metrics` in the manifest): the same');
+java.push('     * numbers the launcher reads as `--metric-*`. Values ending in');
+java.push('     * {@code _DEVICE_PX} are device pixels, not logical units; draw them with');
+java.push('     * {@code Renderer.rim}/{@code Renderer.pixel}, never as a dp thickness.');
+java.push('     */');
+java.push('    public static final class Metrics {');
+java.push('        private Metrics() {}');
+java.push('');
+for (const [name, value] of Object.entries(theme.metrics)) {
+  if (name.startsWith('_')) continue;
+  java.push(`        public static final float ${javaName(name)} = ${Number(value).toFixed(1)}f;`);
+}
+java.push('    }');
 java.push('}');
 java.push('');
 emit(path.join(root, 'minecraft', 'fathom-optimizations', 'src', 'main', 'java',

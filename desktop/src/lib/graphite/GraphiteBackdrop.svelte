@@ -2,6 +2,10 @@
   import { onMount } from 'svelte';
   import Background from '../Background.svelte';
   import grain from './grain.png';
+  import { DEFAULT_BACKGROUND } from '../backgrounds';
+
+  /** The user's background. This used to be hard-coded to Rainforest Storm. */
+  export let choice: string = DEFAULT_BACKGROUND;
 
   let grainCssPixels = 256;
 
@@ -16,11 +20,12 @@
 </script>
 
 <!--
-  The full-resolution Rainforest Storm still is shared by every launcher page.
-  This layer adds only a restrained vignette and static grain.
+  The user's chosen background is shared by every launcher page. This layer
+  adds only a restrained vignette and static grain -- the same over every
+  background, so none of them is individually re-graded.
 -->
 <div class="graphite-backdrop" aria-hidden="true">
-  <Background choice="bg_5rain" />
+  <Background {choice} />
   <div class="vignette"></div>
   <div
     class="grain"

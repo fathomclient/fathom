@@ -12,6 +12,7 @@
 <script lang="ts">
   import type { Component } from 'svelte';
   import type { IconProps } from '@lucide/svelte';
+  import { ICON } from '../metrics.generated';
 
   /** A Lucide icon component. Drawn at 20px (16px compact). */
   export let icon: Component<IconProps> | null = null;
@@ -23,7 +24,7 @@
 <div class="empty" class:compact role="status">
   {#if icon}
     <span class="glyph" aria-hidden="true">
-      <svelte:component this={icon} size={compact ? 16 : 20} />
+      <svelte:component this={icon} size={compact ? ICON.inline : ICON.tile} />
     </span>
   {/if}
   <span class="title">{title}</span>

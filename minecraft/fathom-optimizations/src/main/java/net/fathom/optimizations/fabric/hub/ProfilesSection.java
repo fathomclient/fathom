@@ -43,7 +43,7 @@ import net.fathom.optimizations.fabric.ui.Skin;
  */
 final class ProfilesSection implements Section {
 
-    private static final float ROW = 52f;
+    private static final float ROW = Skin.ROW_HEIGHT;
     /** The list group's inner padding. */
     private static final float LIST_PAD = 6f;
     private static final float LIST_MAX = 360f;

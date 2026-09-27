@@ -57,6 +57,43 @@ public interface Renderer {
     void outline(float left, float top, float right, float bottom, float radius, float thickness, int argb);
 
     /**
+     * One device pixel, in logical units, under the current transform.
+     *
+     * <p>What a hairline is. A thickness written in logical units scales with
+     * the interface: "1" is 1.5 device pixels at 1080p and 3 at 4K, which one
+     * backend rounds up to 2 and another smears across three rows -- so the
+     * same nominal rim looked heavier on some controls than others. Anything
+     * meant to be one physical pixel is a multiple of this instead.
+     */
+    default float pixel() {
+        float scale = scale();
+        return scale > 0f ? 1f / scale : 1f;
+    }
+
+    /**
+     * THE rim: one device pixel, inside the shape's edge, on the pixel grid.
+     *
+     * <p>Every bordered control, panel, row and swatch draws its border
+     * through this, at every state. Selection and hover change the colour,
+     * never the width -- there is deliberately no thickness parameter.
+     */
+    default void rim(float left, float top, float right, float bottom, float radius, int argb) {
+        outline(left, top, right, bottom, radius, pixel(), argb);
+        if (GeometryDebug.ENABLED) {
+            GeometryDebug.rim(this, left, top, right, bottom, radius, pixel());
+        }
+    }
+
+    /**
+     * The keyboard focus ring: two device pixels, {@code gap} logical units
+     * outside the shape, following its corner. The launcher's
+     * {@code --metric-focus}.
+     */
+    default void focusRing(float left, float top, float right, float bottom, float radius, float gap, int argb) {
+        outline(left - gap, top - gap, right + gap, bottom + gap, radius + gap, 2f * pixel(), argb);
+    }
+
+    /**
      * A soft shadow under a panel.
      *
      * <p>Not a blur of what is behind it — nothing here reads the framebuffer.

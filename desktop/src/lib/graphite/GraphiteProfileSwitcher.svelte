@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { EASE, EASE_EXIT, MOTION_EXIT, MOTION_SURFACE } from '../motion';
@@ -52,7 +53,7 @@
     aria-expanded={open}
     on:click|stopPropagation={() => void toggle()}
   >
-    <ChevronsUpDown size={16} />
+    <ChevronsUpDown size={ICON.inline} />
   </button>
 
   {#if open}
@@ -77,7 +78,7 @@
             <span class="name">{row.name}</span>
             <span class="version">{row.version} · {row.loader}</span>
           </span>
-          <span class="check">{#if row.selected}<Check size={16} />{/if}</span>
+          <span class="check">{#if row.selected}<Check size={ICON.inline} />{/if}</span>
         </button>
       {/each}
       {#if rows.length === 0}
@@ -95,12 +96,14 @@
   .trigger {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
+    /* The primary action's height and the control radius: it sits in the same
+       row as Play, so it is the same family, not a circle beside a rectangle. */
+    width: var(--metric-control-primary);
+    height: var(--metric-control-primary);
+    border-radius: var(--metric-radius-control);
     color: var(--g-text-primary);
     background: var(--g-mat-light);
-    box-shadow: inset 0 0 0 1px var(--g-mat-light-rim);
+    box-shadow: inset 0 0 0 var(--metric-rim) var(--g-mat-light-rim);
     -webkit-backdrop-filter: blur(var(--g-mat-light-blur)) saturate(1.12);
     backdrop-filter: blur(var(--g-mat-light-blur)) saturate(1.12);
     transition:
@@ -110,12 +113,12 @@
 
   .trigger:hover {
     background: var(--g-mat-standard);
-    box-shadow: inset 0 0 0 1px var(--g-rim-hover);
+    box-shadow: inset 0 0 0 var(--metric-rim) var(--g-rim-hover);
   }
 
   .trigger.active {
     background: var(--g-mat-standard);
-    box-shadow: inset 0 0 0 1px var(--g-rim-selected);
+    box-shadow: inset 0 0 0 var(--metric-rim) var(--g-rim-selected);
   }
 
   .trigger:focus-visible,
@@ -132,11 +135,11 @@
     width: 280px;
     max-height: 216px;
     overflow-y: auto;
-    padding: 8px;
-    border-radius: var(--g-r-panel);
+    padding: var(--space-2);
+    border-radius: var(--metric-radius-panel);
     background: var(--g-mat-dense);
     box-shadow:
-      inset 0 0 0 1px var(--g-mat-dense-rim),
+      inset 0 0 0 var(--metric-rim) var(--g-mat-dense-rim),
       var(--g-elevation);
     -webkit-backdrop-filter: blur(var(--g-mat-dense-blur)) saturate(1.1);
     backdrop-filter: blur(var(--g-mat-dense-blur)) saturate(1.1);
@@ -146,10 +149,10 @@
     display: flex;
     align-items: center;
     width: 100%;
-    min-height: 36px;
-    padding: 4px 8px;
-    /* Concentric with the menu: its 20 less its 8 of padding. */
-    border-radius: calc(var(--g-r-panel) - 8px);
+    min-height: var(--metric-control);
+    padding: var(--space-1) var(--space-2);
+    /* An item inside a panel: the small radius (the panel's 18 less its 8). */
+    border-radius: var(--metric-radius-small);
     text-align: left;
     color: var(--g-text-primary);
   }
@@ -160,7 +163,7 @@
 
   .row.selected {
     background: var(--g-state-selected);
-    box-shadow: inset 0 0 0 1px var(--g-rim-selected);
+    box-shadow: inset 0 0 0 var(--metric-rim) var(--g-rim-selected);
   }
 
   .copy {

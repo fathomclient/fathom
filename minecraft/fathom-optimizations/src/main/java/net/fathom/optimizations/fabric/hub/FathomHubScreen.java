@@ -37,8 +37,8 @@ import net.fathom.optimizations.generated.GraphiteTokens;
  * <h2>What this is</h2>
  *
  * <p>The launcher, in the game: its composition over its background. There is
- * no application window. The approved bg_5rain recording is the page under a
- * light scrim, and the Hub's
+ * no application window. The background chosen in the launcher is the page
+ * under a light scrim, and the Hub's
  * parts float over it the way the launcher's rail, selectors and Play control
  * float over the recording:
  *
@@ -90,8 +90,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
 
     /**
-     * The approved bg_5rain recording. The shared player pauses decoding and
-     * holds its last frame whenever the game window loses focus.
+     * The background chosen in the launcher (see {@code FathomMenuScreen.drawBackdrop}).
+     * A moving one pauses decoding and holds its last frame whenever the game
+     * window loses focus.
      */
     private final Runnable backdropPass = new Runnable() {
         @Override
@@ -395,9 +396,10 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         // The launcher's window controls: a round 32dp target, secondary ink
         // that comes up to full strength under the pointer, a denser veil
         // while pressed, and its name after the tooltip delay.
-        Rect close = new Rect(panel.right() - 32f, panel.y + 2f, 32f, 32f);
+        float compact = Graphite.CONTROL_COMPACT;
+        Rect close = new Rect(panel.right() - compact, panel.y + 2f, compact, compact);
         Controls.State closeState = controls.state("hub.close", close, true);
-        Graphite.overlay(ui, close, close.height / 2f, Math.max(closeState.hover, closeState.press * 1.6f), 0f);
+        Graphite.overlay(ui, close, Graphite.R_CONTROL, Math.max(closeState.hover, closeState.press * 1.6f), 0f);
         ui.icon(Icon.CLOSE, close.centreX() - Graphite.ICON_INLINE / 2f,
                 close.centreY() - Graphite.ICON_INLINE / 2f, Graphite.ICON_INLINE,
                 Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, closeState.hover));
@@ -411,16 +413,16 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         Type label = Graphite.floor(ui, Graphite.UI);
         String edit = "Edit HUD";
         float editIcon = Graphite.ICON_INLINE;
-        float editWidth = ui.measure(edit, label) + editIcon + Graphite.S2 + 14f * 2f;
-        Rect editHud = new Rect(close.x - Graphite.S2 - editWidth, close.y, editWidth, 32f);
+        float editWidth = ui.measure(edit, label) + editIcon + Graphite.S2 + Graphite.S3 * 2f;
+        Rect editHud = new Rect(close.x - Graphite.S2 - editWidth, close.y, editWidth, compact);
         Controls.State editState = controls.state("hub.hud-editor", editHud, true);
-        Graphite.surface(ui, editHud, editHud.height / 2f, Graphite.Material.LIGHT,
+        Graphite.surface(ui, editHud, Graphite.R_CONTROL, Graphite.Material.LIGHT,
                 editState.hover, editState.press, 0f, false);
-        ui.icon(Icon.MOVE, editHud.x + 14f, editHud.centreY() - editIcon / 2f, editIcon,
+        ui.icon(Icon.MOVE, editHud.x + Graphite.S3, editHud.centreY() - editIcon / 2f, editIcon,
                 Graphite.TEXT_SECONDARY);
-        ui.text(edit, editHud.x + 14f + editIcon + Graphite.S2, Graphite.baseline(ui, editHud, label),
+        ui.text(edit, editHud.x + Graphite.S3 + editIcon + Graphite.S2, Graphite.baseline(ui, editHud, label),
                 label, Graphite.TEXT);
-        controls.focusRing(ui, editState, editHud, editHud.height / 2f);
+        controls.focusRing(ui, editState, editHud, Graphite.R_CONTROL);
         if (editState.clicked) {
             context.editHud();
         }
@@ -459,12 +461,17 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             boolean selected = index == current;
             Controls.State state = controls.state("rail." + index, item, true);
             float on = controls.towards("rail." + index + "#selected", selected, GraphiteTokens.MOTION_FAST);
-            // Concentric with the rail: its radius less its 8dp padding.
-            Graphite.overlay(ui, item, Graphite.R_PANEL - Graphite.S2, state.hover * (1f - on), on);
+            // Concentric with the rail: its 18 radius less its 8dp padding is
+            // the small radius (10), which is what an item inside a panel is.
+            Graphite.overlay(ui, item, Graphite.R_SEGMENT, state.hover * (1f - on), on);
             int ink = Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, Math.max(on, state.hover));
-            ui.icon(section.icon(), item.x + 12f, item.centreY() - Graphite.ICON_INLINE / 2f,
-                    Graphite.ICON_INLINE, ink);
-            ui.text(section.title(), item.x + 36f, Graphite.baseline(ui, item, label), label, ink);
+            // The navigation glyph size, centred in the item's leading square,
+            // exactly as the launcher's rail draws its icons.
+            float glyph = Graphite.ICON_NAV;
+            float lead = (RAIL_ITEM - glyph) / 2f;
+            ui.icon(section.icon(), item.x + lead, Skin.snap(ui, item.centreY() - glyph / 2f), glyph, ink);
+            ui.text(section.title(), item.x + lead + glyph + Graphite.S3,
+                    Graphite.baseline(ui, item, label), label, ink);
             if (state.clicked && !selected) {
                 previous = current;
                 current = index;

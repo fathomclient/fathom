@@ -11,6 +11,7 @@
   when pressed.
 -->
 <script lang="ts">
+  import { ICON } from '../lib/metrics.generated';
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import {
@@ -88,7 +89,7 @@
             compact
           >
             <svelte:fragment slot="icon">
-              <svelte:component this={ICONS[action.id] ?? FileSearch} size={16} />
+              <svelte:component this={ICONS[action.id] ?? FileSearch} size={ICON.inline} />
             </svelte:fragment>
 
             <svelte:fragment slot="control">

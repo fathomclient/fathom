@@ -10,6 +10,7 @@
   the one search a page is about).
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { Search, X } from '@lucide/svelte';
   import { tooltip } from '../tooltip';
 
@@ -34,7 +35,7 @@
 </script>
 
 <div class="search {size}">
-  <span class="glyph" aria-hidden="true"><Search size={16} /></span>
+  <span class="glyph" aria-hidden="true"><Search size={ICON.inline} /></span>
   <input
     bind:this={input}
     class="ui-field"
@@ -54,7 +55,7 @@
   />
   {#if value}
     <button class="clear" aria-label="Clear search" use:tooltip={'Clear'} on:click={clear}>
-      <X size={14} />
+      <X size={ICON.inline} />
     </button>
   {/if}
 </div>
@@ -88,15 +89,16 @@
 
   /* `--search-radius` lets a field inside a rounded pane stay concentric
      with it. */
+  /* One search height everywhere; `size` now only changes the type. */
   .md input {
-    min-height: var(--control-height-md);
-    border-radius: var(--search-radius, var(--radius-md));
+    min-height: var(--metric-search);
+    border-radius: var(--search-radius, var(--metric-radius-control));
     font-size: var(--type-secondary-size);
   }
 
   .lg input {
-    min-height: var(--control-height-lg);
-    border-radius: var(--search-radius, var(--radius-md));
+    min-height: var(--metric-search);
+    border-radius: var(--search-radius, var(--metric-radius-control));
   }
 
   .clear {
@@ -106,7 +108,7 @@
     place-items: center;
     width: 24px;
     height: 24px;
-    border-radius: var(--radius-pill);
+    border-radius: var(--metric-radius-small);
     color: var(--color-text-tertiary);
     transition:
       color var(--motion-hover) var(--ease-standard),

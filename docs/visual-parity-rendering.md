@@ -81,11 +81,20 @@ glance. It is also the fallback when the typeface cannot be loaded.
 
 ## Rounded geometry and quality setting
 
-`Skin` exposes semantic radii rather than component-local numbers: `R_SMALL`
-(6), `R_CONTROL` (9), `R_MEDIUM` (12), `R_CARD` (16), and `R_PANEL` (20)
+`Skin` exposes semantic radii rather than component-local numbers, all from the
+shared control metrics (`FathomTheme.Metrics`, see `docs/design-system.md` §4):
+`R_SMALL` (10), `R_CONTROL` (12), and `R_MEDIUM`, `R_CARD` and `R_PANEL` (18)
 logical units. True pills and circular controls use `Skin.pill(area)`, which is
 always half the shorter side. `RoundedGeometry` clamps every supplied radius to
 that same physical limit before either renderer receives it.
+
+Every border is `Renderer.rim()`: one DEVICE pixel (`Renderer.pixel()`), never a
+logical-unit thickness. A thickness in logical units scaled with the
+interface -- "1" was 1.5 device pixels at 1080p, which the GL backend rounded to
+2 and NanoVG spread over three rows -- so the same nominal rim looked heavier on
+some controls than others. NanoVG also puts a whole-pixel stroke's edges on the
+device grid before stroking (not while a zoom animates), so a one-pixel rim
+covers exactly one row.
 
 Borders keep the requested outer bounds. Because NanoVG centres a stroke on its
 path, the backend insets the stroked rectangle by half the stroke width and

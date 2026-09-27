@@ -1,5 +1,7 @@
 package net.fathom.optimizations.fabric.hub;
 
+import net.fathom.optimizations.generated.FathomTheme;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -65,7 +67,8 @@ final class ModsSection implements Section {
     /** Visual-QA only: exercise a full list of lit rows without changing saved module state. */
     private static final boolean FORCE_ENABLED_QA = Boolean.getBoolean("fathom.qaAllModules");
 
-    private static final float MODULE_ROW = 64f;
+    /** The launcher's list row ({@code Metrics.ROW}): a 32 tile and two lines. */
+    private static final float MODULE_ROW = FathomTheme.Metrics.ROW;
     /**
      * Rows share one group and are divided by a hairline, as the launcher's
      * list items are -- no gap, and no card of their own.
@@ -75,7 +78,10 @@ final class ModsSection implements Section {
     private static final float LIST_PAD = Skin.S2;
     private static final float DETAIL_HEADER = 88f;
     private static final float CONFLICT_ROW = 18f;
-    private static final float TOOLBAR_HEIGHT = 36f;
+    /** Search and the state filter: {@code Metrics.SEARCH} / {@code SEGMENTED}, both 36. */
+    private static final float TOOLBAR_HEIGHT = FathomTheme.Metrics.SEARCH;
+    /** Every row in the detail panel -- enabled, setting, keybind: one height. */
+    private static final float DETAIL_ROW = FathomTheme.Metrics.ROW;
     private static final float TOOLBAR_GAP = 12f;
     private static final float DETAIL_WIDTH = 360f;
 
@@ -275,8 +281,7 @@ final class ModsSection implements Section {
             }
         }
         if (context.controls().focused("hub.search")) {
-            ui.outline(area.x - 2f, area.y - 2f, area.right() + 2f, area.bottom() + 2f,
-                    Graphite.R_CONTROL + 2f, 1.5f, Skin.FOCUS);
+            ui.focusRing(area.x, area.y, area.right(), area.bottom(), Graphite.R_CONTROL, 2f, Skin.FOCUS);
         }
     }
 
@@ -295,7 +300,7 @@ final class ModsSection implements Section {
                 "On " + enabled,
                 "Off " + (modules.size() - enabled)
         };
-        float inset = 3f;
+        float inset = FathomTheme.Metrics.SEGMENT_INSET;
         float cellWidth = (area.width - inset * 2f) / labels.length;
         Type uiType = Graphite.floor(ui, Graphite.UI);
         for (int index = 0; index < labels.length; index++) {
@@ -304,7 +309,7 @@ final class ModsSection implements Section {
             Controls.State state = context.controls().state("mods.state." + index, cell, true);
             float selected = context.controls().towards("mods.state." + index + "#on",
                     stateFilter == index, GraphiteTokens.MOTION_FAST);
-            Graphite.overlay(ui, cell, Graphite.R_SEGMENT, state.hover * (1f - selected), selected);
+            Graphite.segment(ui, cell, state.hover * (1f - selected), selected);
             int ink = net.fathom.optimizations.core.ui.Colour.mix(
                     Graphite.TEXT_SECONDARY, Graphite.TEXT, Math.max(state.hover, selected));
             ui.textCentred(labels[index], cell.centreX(), Graphite.baseline(ui, cell, uiType), uiType, ink);
@@ -352,10 +357,11 @@ final class ModsSection implements Section {
         float textRoom = Math.max(0f, toggle.x - Graphite.S3 - textX);
         Type title = Graphite.floor(ui, Graphite.UI);
         Type description = Graphite.floor(ui, Graphite.SMALL);
+        float stack = Controls.stackTop(ui, area, title, description);
         ui.text(Text.fit(ui, feature.name(), title, textRoom), textX,
-                area.y + 13f + ui.ascent(title), title, Graphite.TEXT);
+                Controls.stackTitle(ui, stack, title), title, Graphite.TEXT);
         ui.text(Text.fit(ui, feature.description(), description, textRoom), textX,
-                area.y + 34f + ui.ascent(description), description, Graphite.TEXT_SECONDARY);
+                Controls.stackDetail(ui, stack, title, description), description, Graphite.TEXT_SECONDARY);
 
         if (feature.switchable()) {
             float on = controls.towards("mod.toggle." + feature.id() + "#on",
@@ -457,10 +463,11 @@ final class ModsSection implements Section {
                     Skin.scaleAlpha(Skin.FILL_HOVER, surface.hover));
         } else if (!first) {
             ui.fill(area.x + Skin.CARD_PADDING, area.y, area.right() - Skin.CARD_PADDING,
-                    area.y + Skin.HAIRLINE, Skin.EDGE_RECESSED);
+                    area.y + ui.pixel(), Skin.EDGE_RECESSED);
         }
 
-        Rect iconBox = new Rect(area.x + Skin.CARD_PADDING, area.centreY() - 20f, 40f, 40f);
+        float tile = FathomTheme.Metrics.TILE;
+        Rect iconBox = new Rect(area.x + Skin.CARD_PADDING, Skin.snap(ui, area.centreY() - tile / 2f), tile, tile);
         Graphite.modMark(ui, iconBox, Icon.of(feature.icon()), enabled, surface.hover);
 
         boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
@@ -477,23 +484,24 @@ final class ModsSection implements Section {
         float metaRight = configurable ? options.x : toggle.x;
         float titleX = iconBox.right() + Skin.S3;
         float titleRoom = Math.max(0f, metaRight - titleX - Skin.S5);
+        float stack = Controls.stackTop(ui, area, Type.ROW_TITLE, Type.SMALL);
+        float titleBaseline = Controls.stackTitle(ui, stack, Type.ROW_TITLE);
         ui.text(Text.fit(ui, feature.name(), Type.ROW_TITLE, titleRoom), titleX,
-                area.y + 14f + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE,
+                titleBaseline, Type.ROW_TITLE,
                 Skin.mix(Skin.TEXT_MUTED, Skin.TEXT,
                         Math.max(enabled, surface.hover * 0.85f)));
         if (Text.overflows(ui, feature.name(), Type.ROW_TITLE, titleRoom)) {
             controls.tooltip(surface, area, feature.name());
         }
 
-        Rect description = new Rect(titleX, area.y + 37f, titleRoom, 18f);
         ui.text(Text.fit(ui, feature.description(), Type.SMALL, titleRoom),
-                titleX, Controls.baseline(ui, description, Type.SMALL), Type.SMALL,
+                titleX, Controls.stackDetail(ui, stack, Type.ROW_TITLE, Type.SMALL), Type.SMALL,
                 Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, surface.hover * 0.42f));
 
         String metadata = metadata(feature);
         ui.textRight(Text.fit(ui, metadata, Type.CAPTION,
                         Math.max(0f, metaRight - titleX - Skin.S3)),
-                metaRight - Skin.S3, area.y + 14f + ui.ascent(Type.CAPTION),
+                metaRight - Skin.S3, titleBaseline,
                 Type.CAPTION, visuallyEnabled ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
         if (configurable) {
             if (controls.recessedAction(ui, "mod.options." + feature.id(), options, "Configure", true)) {
@@ -611,13 +619,16 @@ final class ModsSection implements Section {
         Graphite.surface(ui, panel, Graphite.R_PANEL, Graphite.Material.DENSE, true);
 
         Rect inner = panel.inset(Graphite.PAD);
-        Rect icon = new Rect(inner.x, inner.y, 40f, 40f);
+        float tile = FathomTheme.Metrics.TILE;
+        Rect icon = new Rect(inner.x, inner.y, tile, tile);
         Graphite.modMark(ui, icon, Icon.of(open.icon()), open.enabled() ? 1f : 0f, 0f);
 
-        Rect close = new Rect(inner.right() - 32f, inner.y, 32f, 32f);
+        float compact = FathomTheme.Metrics.CONTROL_COMPACT;
+        Rect close = new Rect(inner.right() - compact, inner.y, compact, compact);
         Controls.State closeState = controls.state("detail.close", close, true);
-        Graphite.overlay(ui, close, close.height / 2f, Math.max(closeState.hover, closeState.press * 1.6f), 0f);
-        ui.icon(Icon.CLOSE, close.centreX() - 8f, close.centreY() - 8f, 16f,
+        Graphite.overlay(ui, close, Graphite.R_SEGMENT, Math.max(closeState.hover, closeState.press * 1.6f), 0f);
+        float glyph = FathomTheme.Metrics.ICON_INLINE;
+        ui.icon(Icon.CLOSE, close.centreX() - glyph / 2f, close.centreY() - glyph / 2f, glyph,
                 net.fathom.optimizations.core.ui.Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, closeState.hover));
         controls.tooltip(closeState, close, "Close");
         if (closeState.clicked) {
@@ -627,13 +638,15 @@ final class ModsSection implements Section {
         float titleX = icon.right() + Graphite.S3;
         Type heading = Graphite.floor(ui, Graphite.HEADING);
         Type data = Graphite.floor(ui, Graphite.DATA_S);
+        // Title and metadata centred as one block against the tile beside them.
+        float stack = Controls.stackTop(ui, icon, heading, data);
         ui.text(Text.fit(ui, open.name(), heading, close.x - titleX - Graphite.S2),
-                titleX, inner.y + ui.ascent(heading), heading, Graphite.TEXT);
+                titleX, Controls.stackTitle(ui, stack, heading), heading, Graphite.TEXT);
         String meta = open.category().label() + " · " + open.owner();
         ui.text(Text.fit(ui, meta, data, close.x - titleX - Graphite.S2),
-                titleX, inner.y + 24f + ui.ascent(data), data, Graphite.TEXT_SECONDARY);
+                titleX, Controls.stackDetail(ui, stack, heading, data), data, Graphite.TEXT_SECONDARY);
 
-        float top = inner.y + 56f;
+        float top = icon.bottom() + Graphite.S3;
         Graphite.hairline(ui, inner.x, inner.right(), top);
         top += Graphite.S2;
         Rect viewport = Rect.of(inner.x, top, inner.right(), inner.bottom());
@@ -643,12 +656,12 @@ final class ModsSection implements Section {
         float y = viewport.y - offset;
         ui.clip(viewport.x, viewport.y, viewport.right(), viewport.bottom());
 
-        Rect enabledRow = new Rect(viewport.x, y, viewport.width, 40f);
+        Rect enabledRow = new Rect(viewport.x, y, viewport.width, DETAIL_ROW);
         graphiteEnabledRow(context, enabledRow);
         y += enabledRow.height;
 
         for (Setting setting : openSettings) {
-            float height = setting.description().isEmpty() ? 40f : 56f;
+            float height = DETAIL_ROW;
             Rect row = new Rect(viewport.x, y, viewport.width, height);
             if (row.bottom() >= viewport.y && row.y <= viewport.bottom()) {
                 graphiteSettingRow(context, setting, row);
@@ -656,7 +669,7 @@ final class ModsSection implements Section {
             y += height;
         }
         for (Keybind keybind : open.keybinds()) {
-            Rect row = new Rect(viewport.x, y, viewport.width, 40f);
+            Rect row = new Rect(viewport.x, y, viewport.width, DETAIL_ROW);
             if (row.bottom() >= viewport.y && row.y <= viewport.bottom()) {
                 graphiteKeybindRow(context, keybind, row);
             }
@@ -667,12 +680,7 @@ final class ModsSection implements Section {
     }
 
     private float graphiteDetailHeight() {
-        float height = 40f;
-        for (Setting setting : openSettings) {
-            height += setting.description().isEmpty() ? 40f : 56f;
-        }
-        height += open.keybinds().size() * 40f;
-        return height;
+        return DETAIL_ROW * (1 + openSettings.size() + open.keybinds().size());
     }
 
     private void graphiteEnabledRow(HubContext context, Rect row) {
@@ -705,18 +713,20 @@ final class ModsSection implements Section {
 
         Type label = Graphite.floor(ui, Graphite.UI);
         Type small = Graphite.floor(ui, Graphite.SMALL);
-        float controlWidth = setting.kind() == Setting.Kind.TOGGLE ? Graphite.SWITCH_W : 120f;
+        boolean toggle = setting.kind() == Setting.Kind.TOGGLE;
+        float controlWidth = toggle ? Graphite.SWITCH_W : 120f;
+        float controlHeight = toggle ? Graphite.SWITCH_H : FathomTheme.Metrics.CONTROL_COMPACT;
         Rect control = new Rect(row.right() - controlWidth,
-                row.centreY() - (setting.kind() == Setting.Kind.TOGGLE ? Graphite.SWITCH_H : 32f) / 2f,
-                controlWidth, setting.kind() == Setting.Kind.TOGGLE ? Graphite.SWITCH_H : 32f);
+                Skin.snap(ui, row.centreY() - controlHeight / 2f), controlWidth, controlHeight);
         float room = Math.max(0f, control.x - row.x - Graphite.S4);
+        float stack = Controls.stackTop(ui, row, label, small);
         float labelY = setting.description().isEmpty()
                 ? Graphite.baseline(ui, row, label)
-                : row.y + 10f + ui.ascent(label);
+                : Controls.stackTitle(ui, stack, label);
         ui.text(Text.fit(ui, setting.label(), label, room), row.x, labelY, label, Graphite.TEXT);
         if (!setting.description().isEmpty()) {
             ui.text(Text.fit(ui, setting.description(), small, room), row.x,
-                    row.y + 31f + ui.ascent(small), small, Graphite.TEXT_SECONDARY);
+                    Controls.stackDetail(ui, stack, label, small), small, Graphite.TEXT_SECONDARY);
         }
         graphiteSettingControl(context, setting, control);
         Graphite.hairline(ui, row.x, row.right(), row.bottom());
@@ -814,7 +824,8 @@ final class ModsSection implements Section {
         Renderer ui = context.ui();
         Type label = Graphite.floor(ui, Graphite.UI);
         ui.text(keybind.label(), row.x, Graphite.baseline(ui, row, label), label, Graphite.TEXT);
-        Rect control = new Rect(row.right() - 120f, row.y + 4f, 120f, 32f);
+        float compact = FathomTheme.Metrics.CONTROL_COMPACT;
+        Rect control = new Rect(row.right() - 120f, Skin.snap(ui, row.centreY() - compact / 2f), 120f, compact);
         Controls.State state = context.controls().state("detail.key." + keybind.id(), control, true);
         if (state.clicked) {
             context.keybindCapture().toggle(keybind);

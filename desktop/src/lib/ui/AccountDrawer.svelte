@@ -21,6 +21,7 @@
   everyone else.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { slide } from 'svelte/transition';
   import { X, ChevronDown, ShieldCheck, TriangleAlert, Plus, Check, LogIn } from '@lucide/svelte';
   import Button from './Button.svelte';
@@ -70,10 +71,10 @@
         <span class="name">{account.name}</span>
         <span class="kind" class:dev={account.development}>
           {#if account.development}
-            <TriangleAlert size={12} />
+            <TriangleAlert size={ICON.caption} />
             Development identity
           {:else}
-            <ShieldCheck size={12} />
+            <ShieldCheck size={ICON.caption} />
             Minecraft: Java Edition
           {/if}
         </span>
@@ -86,7 +87,7 @@
 
     <div class="actions">
       <Button block disabled={working} onClick={onSignIn}>
-        <Plus size={14} />
+        <Plus size={ICON.inline} />
         Add another Microsoft account
       </Button>
     </div>
@@ -192,9 +193,9 @@
             </span>
             <span class="saved-name">{saved.name}</span>
             {#if saved.signedIn}
-              <Check size={14} />
+              <Check size={ICON.inline} />
             {:else}
-              <LogIn size={14} />
+              <LogIn size={ICON.inline} />
             {/if}
           </button>
           <button
@@ -203,7 +204,7 @@
             aria-label={`Forget ${saved.name}`}
             disabled={!saved.uuid}
             on:click={() => saved.uuid && onForget(saved.uuid)}
-          ><X size={14} /></button>
+          ><X size={ICON.inline} /></button>
         </div>
       {/each}
     </section>
@@ -214,7 +215,7 @@
   <button class="disclose" aria-expanded={detailsOpen} on:click={() => (detailsOpen = !detailsOpen)}>
     <span>Authentication details</span>
     <span class="chevron" class:open={detailsOpen}>
-      <ChevronDown size={14} />
+      <ChevronDown size={ICON.inline} />
     </span>
   </button>
 
@@ -311,7 +312,7 @@
   .face {
     width: 100%;
     height: 100%;
-    image-rendering: pixelated;
+    image-rendering: auto;
     object-fit: cover;
   }
 

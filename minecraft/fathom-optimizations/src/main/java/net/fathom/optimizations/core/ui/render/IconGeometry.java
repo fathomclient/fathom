@@ -35,8 +35,18 @@ public final class IconGeometry {
 
     /** The grid every path is written on. */
     public static final float GRID = 24f;
-    /** Lucide's stroke, in grid units. */
+    /** Lucide's stroke, in grid units: the SOURCE geometry's pen, not the drawn one. */
     public static final float STROKE = 2f;
+
+    /**
+     * The drawn pen, in logical units, at EVERY icon size and in both renderers.
+     *
+     * <p>The launcher's {@code svg.lucide} rule: one 1.5 line whether the icon
+     * is 12, 16 or 20. Scaling Lucide's 2/24 with the box gave a 14 icon a 1.17
+     * line and a 20 icon a 1.67 one, and the GL and NanoVG backends disagreed
+     * about which of the two rules applied -- so one glyph had three weights.
+     */
+    public static final float STROKE_DP = 1.5f;
 
     public static final int MOVE = 0;
     public static final int LINE = 1;

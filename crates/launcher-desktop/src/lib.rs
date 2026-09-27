@@ -165,17 +165,32 @@ fn background(state: tauri::State<'_, State>) -> Result<String, String> {
 /// value ends up inside a URL, and "the WebView asked for it" is not a reason
 /// to trust a string.
 ///
-/// Fathom's backgrounds are curated, and right now there is one approved
-/// recording. Any other stored preference is migrated to it when read.
-///
-/// Every id here must appear in `desktop/src/lib/backgrounds.ts`, which is the
-/// catalogue the interface offers. The test at the bottom of this file reads
-/// that catalogue and fails if the two disagree.
-const BACKGROUNDS: [&str; 1] = ["bg_5rain"];
+/// The user chooses among the whole library in
+/// `assets/backgrounds/manifest.json`, which is the one catalogue: the
+/// launcher's picker and the game's menus are generated from it, and the test
+/// at the bottom of this file fails if this list and it disagree. Any other
+/// stored preference is migrated to the default when read.
+const BACKGROUNDS: [&str; 16] = [
+    "bg_1",
+    "bg_6pull_city-overlook",
+    "golden-hour",
+    "graphite",
+    "bg_6clear",
+    "bg_3",
+    "bg_6midnight",
+    "bg_6pull_moon-tower",
+    "bg_6pull_neon-grid",
+    "bg_5noraintickunfrozen",
+    "bg_5rain",
+    "bg_5noraintickfrozen",
+    "bg_6pull_red-tower",
+    "bg_4",
+    "bg_2",
+    "bg_6pull_storm-panorama",
+];
 
 /// What a first run shows, and what any retired, unknown or unreadable
-/// preference becomes. `desktop/src/lib/backgrounds.ts` carries the same
-/// default for the moment before this answer arrives.
+/// preference becomes: the manifest's `default`, which the test below checks.
 const DEFAULT_BACKGROUND: &str = "bg_5rain";
 
 /// The approved id a stored or requested value names, if it names one.
@@ -571,26 +586,26 @@ mod tests {
     ///
     /// They drifted once, and the failure was silent in both directions: the
     /// interface offered five recordings this file refused, so the click did
-    /// nothing and the only evidence was a line in the log. Reading the
-    /// interface's own list is the cheapest way to make that a build failure
-    /// instead.
+    /// nothing and the only evidence was a line in the log. The picker is
+    /// generated from the manifest, so reading the manifest is reading what the
+    /// picker offers -- a build failure instead of a silent click.
     #[test]
     fn the_picker_offers_exactly_what_this_file_allows() {
-        let shell = include_str!("../../../desktop/src/lib/backgrounds.ts");
-        let list = shell
-            .split_once("export const BACKGROUNDS: BackgroundOption[] = [")
-            .expect("the interface must declare a background list")
-            .1
-            .split_once("];")
-            .expect("the list must end")
-            .0;
-        let offered: Vec<&str> = list
-            .match_indices("id: '")
-            .map(|(at, marker)| {
-                let rest = &list[at + marker.len()..];
-                rest.split_once("'").expect("an id is quoted").0
-            })
+        let manifest: serde_json::Value =
+            serde_json::from_str(include_str!("../../../assets/backgrounds/manifest.json"))
+                .expect("the background manifest is JSON");
+        let offered: Vec<&str> = manifest["backgrounds"]
+            .as_array()
+            .expect("the manifest lists backgrounds")
+            .iter()
+            .filter(|entry| entry["launcher"] == serde_json::Value::Bool(true))
+            .map(|entry| entry["id"].as_str().expect("an id is a string"))
             .collect();
+        assert_eq!(
+            manifest["default"].as_str(),
+            Some(DEFAULT_BACKGROUND),
+            "the manifest and this file disagree about the default"
+        );
 
         for id in &offered {
             assert!(
@@ -612,20 +627,11 @@ mod tests {
         assert_eq!(normalise(DEFAULT_BACKGROUND), Some(DEFAULT_BACKGROUND));
     }
 
-    /// Every retired background, the old gradient, and the pre-underscore
-    /// spellings of the first recordings migrate to the approved default.
+    /// The old gradient, the pre-underscore spellings of the first recordings
+    /// and anything unrecognised migrate to the default.
     #[test]
-    fn retired_backgrounds_migrate_to_bg_5rain() {
-        for retired in [
-            "bg_1",
-            "bg1",
-            "golden-hour",
-            "bg_6midnight",
-            "bg_6pull_neon-grid",
-            "bg_6pull_red-tower",
-            "static",
-            "../../secret",
-        ] {
+    fn retired_backgrounds_migrate_to_the_default() {
+        for retired in ["bg1", "bg_5", "static", "bg_6pull", "../../secret"] {
             let mut stored = serde_json::Map::new();
             stored.insert("background".to_owned(), serde_json::Value::from(retired));
             assert!(migrate_appearance(&mut stored), "{retired} should migrate");
@@ -661,11 +667,13 @@ mod tests {
     }
 
     /// A preference already on policy is left alone, so it is not rewritten on
-    /// every start.
+    /// every start -- including a library background that is not the default.
     #[test]
     fn an_approved_preference_is_not_rewritten() {
         let mut stored = parse_appearance(r#"{"background":"bg_5rain","reduce_blur":true}"#);
         assert!(!migrate_appearance(&mut stored));
+        let mut chosen = parse_appearance(r#"{"background":"bg_6midnight"}"#);
+        assert!(!migrate_appearance(&mut chosen));
     }
 
     /// A preference with no background at all, or a mistyped one, still gets one.
@@ -772,7 +780,6 @@ mod tests {
             "",
             "bg_1/../..",
             "http://elsewhere",
-            "golden-hour",
             "static",
         ] {
             assert_eq!(normalise(hostile), None, "{hostile} should be refused");

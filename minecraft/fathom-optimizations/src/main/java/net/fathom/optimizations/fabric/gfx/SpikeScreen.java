@@ -137,7 +137,7 @@ public final class SpikeScreen extends Screen implements FathomScreen {
 
         VisualEffects.panelShadow(ui, frame, Skin.R_CARD);
         ui.rounded(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_CARD, Skin.PANEL);
-        ui.outline(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_CARD, Skin.HAIRLINE, Skin.EDGE_STRONG);
+        ui.rim(frame.x, frame.y, frame.right(), frame.bottom(), Skin.R_CARD, Skin.EDGE_STRONG);
 
         Rect inner = frame.inset(Skin.S6, Skin.S6);
         ui.text("Renderer spike", inner.x, inner.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
@@ -179,7 +179,7 @@ public final class SpikeScreen extends Screen implements FathomScreen {
         for (int index = 0; index < cells.length; index++) {
             Rect box = new Rect(area.x + (cell + gap) * index, area.y, cell, area.height);
             ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_CONTROL, Skin.FILL);
-            ui.outline(box.x, box.y, box.right(), box.bottom(), Skin.R_CONTROL, Skin.HAIRLINE, Skin.EDGE);
+            ui.rim(box.x, box.y, box.right(), box.bottom(), Skin.R_CONTROL, Skin.EDGE);
             Controls.label(ui, cells[index][0], box.x + Skin.S3, box.y + Skin.S3);
             ui.text(cells[index][1], box.x + Skin.S3, box.y + 48f, Type.TITLE, Skin.TEXT);
             ui.text(Text.fit(ui, cells[index][2], Type.CAPTION, box.width - Skin.S3 * 2f), box.x + Skin.S3,
@@ -279,7 +279,7 @@ public final class SpikeScreen extends Screen implements FathomScreen {
         float shown = panel.value(Gfx.clock().seconds());
         float grown = Skin.H_MD + (box.height - Skin.H_MD) * shown;
         ui.rounded(box.x, box.y, box.right(), box.y + grown, Skin.R_MEDIUM, Skin.RAISED);
-        ui.outline(box.x, box.y, box.right(), box.y + grown, Skin.R_MEDIUM, Skin.HAIRLINE, Skin.EDGE);
+        ui.rim(box.x, box.y, box.right(), box.y + grown, Skin.R_MEDIUM, Skin.EDGE);
         ui.text(panelOpen ? "Click to close" : "Click to open", box.x + Skin.S3, box.y + Skin.H_MD / 2f + 4f,
                 Type.BODY, Skin.TEXT_MUTED);
         if (shown > 0.3f) {
@@ -295,7 +295,7 @@ public final class SpikeScreen extends Screen implements FathomScreen {
                 float top = box.y + Skin.H_MD + 56f;
                 float size = Math.min(44f, slot - Skin.S3);
                 ui.rounded(left, top, left + size, top + size, radii[index], Skin.FILL_ACTIVE);
-                ui.outline(left, top, left + size, top + size, radii[index], Skin.HAIRLINE, Skin.EDGE_STRONG);
+                ui.rim(left, top, left + size, top + size, radii[index], Skin.EDGE_STRONG);
                 ui.textCentred("r" + Math.round(radii[index]), left + size / 2f, top + size + 14f, Type.CAPTION,
                         Skin.TEXT_FAINT);
             }

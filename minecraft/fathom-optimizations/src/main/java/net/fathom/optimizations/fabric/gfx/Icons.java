@@ -33,12 +33,12 @@ import net.fathom.optimizations.generated.SharedIconPaths;
  *
  * <h2>Stroke weight</h2>
  *
- * <p>The launcher's weight, not Lucide's ratio: the stroke is fixed in
- * interface units by the icon's size tier -- 1.5 at 12-14, 1.6 at 16, 1.7 at
- * 18, 1.75 at 20 and up -- and multiplied by the display scale, so a 14-unit
- * status glyph and a 20-unit navigation glyph read as the same pen here and in
- * the launcher's {@code svg.lucide} rule. A plain 2/24 ratio drew small icons
- * hairline-thin and large ones heavy.
+ * <p>The launcher's weight, not Lucide's ratio: one 1.5-unit pen
+ * ({@code IconGeometry.STROKE_DP}) at every size, multiplied by the display
+ * scale, so a 12-unit caption glyph and a 20-unit navigation glyph read as the
+ * same pen here, in the NanoVG renderer and in the launcher's
+ * {@code svg.lucide} rule. A plain 2/24 ratio drew small icons hairline-thin
+ * and large ones heavy.
  */
 final class Icons {
 
@@ -48,18 +48,13 @@ final class Icons {
     /** Below this many device pixels a stroke stops reading as a line. */
     private static final float MIN_STROKE_PIXELS = 1.3f;
 
-    /** The stroke for an icon drawn {@code logical} interface units wide. */
+    /**
+     * The stroke for an icon drawn {@code logical} interface units wide: the
+     * same pen at every size ({@link IconGeometry#STROKE_DP}), as NanoVG and
+     * the launcher draw it.
+     */
     static float strokeUnits(float logical) {
-        if (logical <= 14.5f) {
-            return 1.5f;
-        }
-        if (logical <= 16.5f) {
-            return 1.6f;
-        }
-        if (logical <= 18.5f) {
-            return 1.7f;
-        }
-        return 1.75f;
+        return net.fathom.optimizations.core.ui.render.IconGeometry.STROKE_DP;
     }
 
     private static final int SHEET = 512;

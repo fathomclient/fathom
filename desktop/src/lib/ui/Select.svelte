@@ -11,6 +11,7 @@
   marked, and cannot be chosen.
 -->
 <script lang="ts">
+  import { ICON } from '../metrics.generated';
   import { tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { Check, ChevronDown } from '@lucide/svelte';
@@ -104,7 +105,7 @@
     on:keydown={onTriggerKey}
   >
     <span class="value">{current?.label ?? ''}</span>
-    <span class="chevron" class:open><ChevronDown size={16} /></span>
+    <span class="chevron" class:open><ChevronDown size={ICON.inline} /></span>
   </button>
 
   {#if open}
@@ -138,7 +139,7 @@
             {option.label}
             {#if option.note}<span class="note">{option.note}</span>{/if}
           </span>
-          {#if option.id === value}<Check size={16} />{/if}
+          {#if option.id === value}<Check size={ICON.inline} />{/if}
         </button>
       {/each}
     </div>

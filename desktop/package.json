@@ -4,12 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "tokens": "node ../tools/generate-fathom-theme.mjs",
+    "tokens": "node ../tools/generate-fathom-theme.mjs && node ../tools/generate-backgrounds.mjs",
     "brand": "node ../tools/generate-fathom-theme.mjs && node ../assets/brand/build-brand.mjs",
     "dev": "npm run tokens && vite",
     "build": "npm run tokens && svelte-check --tsconfig ./tsconfig.json && vite build",
     "preview": "vite preview",
-    "check": "node ../tools/generate-fathom-theme.mjs --check && svelte-check --tsconfig ./tsconfig.json"
+    "check": "node ../tools/generate-fathom-theme.mjs --check && node ../tools/generate-backgrounds.mjs --check && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
     "@lucide/svelte": "^0.544.0",
