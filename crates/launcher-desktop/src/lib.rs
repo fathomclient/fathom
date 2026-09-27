@@ -214,24 +214,29 @@ fn set_background(state: tauri::State<'_, State>, choice: String) -> Result<(), 
     Ok(())
 }
 
-/// The glass accessibility switches: see `desktop/src/lib/appearance.ts`.
+/// The glass accessibility switches and the letter case: see
+/// `desktop/src/lib/appearance.ts`.
 ///
 /// Purely visual. They are stored beside the background in `appearance.json`
 /// and nothing outside the interface reads them.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 struct AppearanceModes {
     reduce_transparency: bool,
     reduce_blur: bool,
+    /// Off by default, which draws the interface in lowercase.
+    standard_capitalization: bool,
 }
 
 impl AppearanceModes {
-    /// Missing or mistyped keys read as off: full glass is the default.
+    /// Missing or mistyped keys read as off: full glass, in lowercase, is the
+    /// default.
     fn from_stored(stored: &serde_json::Map<String, serde_json::Value>) -> Self {
         let flag = |key: &str| stored.get(key).and_then(serde_json::Value::as_bool) == Some(true);
         Self {
             reduce_transparency: flag("reduce_transparency"),
             reduce_blur: flag("reduce_blur"),
+            standard_capitalization: flag("standard_capitalization"),
         }
     }
 
@@ -243,6 +248,10 @@ impl AppearanceModes {
         stored.insert(
             "reduce_blur".to_owned(),
             serde_json::Value::Bool(self.reduce_blur),
+        );
+        stored.insert(
+            "standard_capitalization".to_owned(),
+            serde_json::Value::Bool(self.standard_capitalization),
         );
     }
 }
@@ -629,11 +638,11 @@ mod tests {
     }
 
     /// The migration touches the background and the retired animation flag, and
-    /// nothing else: the glass accessibility switches survive it.
+    /// nothing else: the appearance switches survive it.
     #[test]
     fn migration_keeps_the_accessibility_switches() {
         let mut stored = parse_appearance(
-            r#"{"background":"bg_5rain","animated_background":true,"reduce_transparency":true,"reduce_blur":true}"#,
+            r#"{"background":"bg_5rain","animated_background":true,"reduce_transparency":true,"reduce_blur":true,"standard_capitalization":true}"#,
         );
         assert!(migrate_appearance(&mut stored));
         assert_eq!(
@@ -645,7 +654,8 @@ mod tests {
             AppearanceModes::from_stored(&stored),
             AppearanceModes {
                 reduce_transparency: true,
-                reduce_blur: true
+                reduce_blur: true,
+                standard_capitalization: true
             }
         );
     }
@@ -683,6 +693,7 @@ mod tests {
         AppearanceModes {
             reduce_transparency: true,
             reduce_blur: false,
+            standard_capitalization: true,
         }
         .store_into(&mut stored);
         assert_eq!(
@@ -693,13 +704,14 @@ mod tests {
             AppearanceModes::from_stored(&stored),
             AppearanceModes {
                 reduce_transparency: true,
-                reduce_blur: false
+                reduce_blur: false,
+                standard_capitalization: true
             }
         );
     }
 
     /// A file written before the switches existed, or one that is not JSON at
-    /// all, reads as full glass rather than as an error.
+    /// all, reads as full glass in lowercase rather than as an error.
     #[test]
     fn missing_or_unreadable_modes_are_off() {
         let old = parse_appearance(r#"{"background":"bg_1","animated_background":true}"#);
@@ -719,15 +731,28 @@ mod tests {
     /// The frontend sends camelCase; the file stores snake_case.
     #[test]
     fn appearance_modes_cross_the_bridge_in_camel_case() {
-        let modes: AppearanceModes =
-            serde_json::from_str(r#"{"reduceTransparency":false,"reduceBlur":true}"#).unwrap();
+        let modes: AppearanceModes = serde_json::from_str(
+            r#"{"reduceTransparency":false,"reduceBlur":true,"standardCapitalization":true}"#,
+        )
+        .unwrap();
         assert_eq!(
             modes,
             AppearanceModes {
                 reduce_transparency: false,
-                reduce_blur: true
+                reduce_blur: true,
+                standard_capitalization: true
             }
         );
+    }
+
+    /// A frontend from before the case switch sends only the glass modes; the
+    /// missing one reads as off rather than refusing the whole write.
+    #[test]
+    fn a_missing_mode_crosses_the_bridge_as_off() {
+        let modes: AppearanceModes =
+            serde_json::from_str(r#"{"reduceTransparency":true,"reduceBlur":false}"#).unwrap();
+        assert!(modes.reduce_transparency);
+        assert!(!modes.standard_capitalization);
     }
 
     #[test]

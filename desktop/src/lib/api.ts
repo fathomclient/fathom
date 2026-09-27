@@ -837,18 +837,22 @@ export async function setBackground(choice: string): Promise<void> {
 }
 
 /**
- * The launcher's own accessibility switches for the glass. Stored beside the
- * background in `appearance.json`; Windows' "Transparency effects" setting
- * applies on top of these through the media query, whatever they say.
+ * The launcher's own appearance switches: the glass accessibility modes and the
+ * letter case. Stored beside the background in `appearance.json`; Windows'
+ * "Transparency effects" setting applies on top of the glass ones through the
+ * media query, whatever they say.
  */
 export interface AppearanceModes {
   reduceTransparency: boolean;
   reduceBlur: boolean;
+  /** Off (the default) sets the interface in lowercase; on shows the copy as written. */
+  standardCapitalization: boolean;
 }
 
 export const DEFAULT_APPEARANCE_MODES: AppearanceModes = {
   reduceTransparency: false,
   reduceBlur: false,
+  standardCapitalization: false,
 };
 
 export async function appearanceModes(): Promise<AppearanceModes> {
