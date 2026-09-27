@@ -10,7 +10,6 @@ import net.minecraft.client.util.ScreenshotUtils;
 
 import net.fathom.optimizations.core.input.KeybindCaptureState;
 import net.fathom.optimizations.core.ui.anim.Motion;
-import net.fathom.optimizations.core.ui.anim.Spring;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.layout.Rect;
@@ -28,27 +27,33 @@ import net.fathom.optimizations.fabric.ui.BrandMark;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
-import net.fathom.optimizations.fabric.ui.VisualEffects;
 
 /**
  * Fathom Hub — the screen Right Shift opens.
  *
  * <h2>What this is</h2>
  *
- * <p>The launcher, in the game: black chrome around a near-black panel, the
- * launcher's greys, its red, its 4px spacing, its radii, its three durations and
- * one curve, and its typeface at its sizes. Not a config screen with Fathom's
- * colours on it.
+ * <p>The launcher, in the game: one pane of the launcher's standard glass --
+ * warm umber, a lit top edge, a faint rim -- over the world under a warm scrim,
+ * the Surface wordmark in its header, the launcher's ivory and champagne type,
+ * its spacing, radii, durations and typeface. Not a config screen with
+ * Fathom's colours on it.
  *
  * <pre>
  *   +-------------------------------------------------------+
- *   | [F] Fathom   Session                 Search        x   |  black
+ *   | FATHOM   Profile  Session           Search  HUD   x   |  header region
  *   +-------------+-----------------------------------------+
- *   | [ ] Mods    |  Heading                                |
- *   | [ ] HUD     |  subtitle                               |
- *   | [ ] Profile |  content                                |
+ *   |  Mods       |  Heading                                |
+ *   |  HUD        |  subtitle                               |
+ *   |  Profile    |  content                                |
  *   +-------------+-----------------------------------------+
  * </pre>
+ *
+ * <p>The header and the rail are regions of the one pane, divided by
+ * hairlines -- not further panes laid on top of it. The current section is the
+ * denser capsule in the rail with the brighter rim, and no marker bar. Cards
+ * inside the content are flat fills; only what floats over everything (menus,
+ * drawers) is dense glass. There is no blur anywhere: see {@code Skin}.
  *
  * <h2>It takes the screen</h2>
  *
@@ -59,11 +64,11 @@ import net.fathom.optimizations.fabric.ui.VisualEffects;
  * reason for a client menu to be small: while it is open it is the only thing
  * the user is looking at.
  *
- * <h2>No themes, and a very dark world</h2>
+ * <h2>No themes, and the world as context</h2>
  *
- * <p>The world behind is darkened hard and left there as context. The blurred
- * photographs and the theme picker are gone: a menu inside a game is already
- * sitting on the most decorated background it will ever have.
+ * <p>The world behind is deepened with a warm scrim and left there as context.
+ * There is no photograph and no theme picker in here: a menu inside a game is
+ * already sitting on the most decorated background it will ever have.
  *
  * <h2>Input does not come from Minecraft</h2>
  *
@@ -77,6 +82,13 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     private static final String SEARCH_ID = "hub.search";
 
+    /**
+     * The header wordmark's cap height. At GUI scale 2 and above this is the
+     * brand's reduced tier -- the one-pixel refraction -- which is what a
+     * wordmark this size should carry.
+     */
+    private static final float BRAND_CAP = 13f;
+
     private final FathomHud hud;
     private final Controls controls = new Controls();
     private final Pointer pointer = new Pointer();
@@ -85,8 +97,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private HubContext context;
     /** Shared entry/exit lifecycle; entry and exit remain independent. */
     private Transition transition;
-    /** Which rail row the marker is on, so it slides rather than jumps. */
-    private Spring railMark;
     /** How far through a page change we are, for the content's slide. */
     private Motion pageSwap;
     private int current;
@@ -122,7 +132,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             transition = new Transition(Timing.HUB_ENTER, Timing.HUB_EXIT);
             transition.open(now);
             openedAtNs = System.nanoTime();
-            railMark = Spring.accent(0f);
             pageSwap = new Motion(1f, Timing.NAVIGATION);
             sections.get(0).opened(context);
             selectCaptureSection();
@@ -244,7 +253,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             if (sections.get(index).title().equalsIgnoreCase(target)) {
                 current = index;
                 previous = index;
-                railMark.set(index);
                 sections.get(index).opened(context);
                 return;
             }
@@ -317,7 +325,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         float exit = transition.exit(now);
         float shown = transition.visibility(now);
 
-        // The world, darkened hard and left as context.
+        // The world, deepened with the warm scrim and left as context.
         ui.fill(0f, 0f, ui.width(), ui.height(), Skin.scaleAlpha(Skin.SCRIM, shown));
 
         ui.pushAlpha(shown);
@@ -337,7 +345,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         Rect content = body.rightOf(sidebarWidth);
 
         chrome(ui, header, rail);
-        VisualEffects.pageDepth(ui, content, Skin.R_PANEL);
         header(ui, header);
 
         rail(ui, rail);
@@ -352,7 +359,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         ui.popAlpha();
     }
 
-    /** The black frame: a header bar and a rail, with the panel's own corners. */
+    /** The header and rail regions: hairlines only, on the window's own glass. */
     private void chrome(Renderer ui, Rect header, Rect rail) {
         FathomComponents.topBar(ui, header);
         FathomComponents.sidebar(ui, rail);
@@ -362,15 +369,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         Rect inner = header.inset(Skin.S5, 0f);
         float cursor = inner.x;
 
-        // Exact Aperture geometry from /assets/brand, drawn directly at the
-        // active framebuffer scale rather than through a fixed-size texture.
-        float mark = 28f;
-        Rect markBox = inner.vcentre(0f, mark, mark);
-        BrandMark.draw(ui, markBox.x, markBox.y, mark, Skin.TEXT, Skin.ACCENT);
-        cursor += mark + Skin.S3;
-
-        cursor += ui.text("FATHOM", cursor, Controls.baseline(ui, header, Type.TITLE), Type.TITLE, Skin.TEXT);
-        cursor += Skin.S5;
+        // The Surface wordmark, at the header's size. Rasterised once for the
+        // current scale and drawn as one quad; placed by its cap, centred.
+        float cap = BRAND_CAP;
+        float wordmarkTop = Skin.snap(ui, header.centreY() - cap / 2f);
+        cursor += BrandMark.wordmark(ui, Skin.snap(ui, cursor), wordmarkTop, cap);
+        cursor += Skin.S6;
 
         // Header actions are laid out from the right. HUD Editor stays visible
         // at every supported width; session detail yields first on small UIs.
@@ -473,13 +477,13 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         boolean focused = controls.focused(SEARCH_ID);
         float focus = controls.towards(SEARCH_ID + "#focus", focused, Timing.STANDARD);
         float response = Math.max(s.hover, focus);
-        // Focus is a red border; no glow.
+        // Focus is a brighter rim; no glow.
         float radius = Skin.pill(searchBox);
         ui.rounded(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), radius,
                 Skin.mix(Skin.RECESSED, Skin.SURFACE_HOVER, Math.max(s.hover * 0.6f, focus)));
         ui.outline(searchBox.x, searchBox.y, searchBox.right(), searchBox.bottom(), radius,
                 Skin.BORDER_STANDARD + focus * (Skin.BORDER_ENERGIZED - Skin.BORDER_STANDARD),
-                Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover), Skin.ACTIVE_RED, focus));
+                Skin.mix(Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover), Skin.ENERGY_EDGE, focus));
 
         float icon = 13f;
         ui.icon(Icon.SEARCH, searchBox.x + Skin.S3, searchBox.centreY() - icon / 2f, icon,
@@ -512,20 +516,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private void rail(Renderer ui, Rect rail) {
         float now = Gfx.clock().seconds();
         Rect inner = rail.inset(Skin.S3, Skin.S4);
-        ui.text("NAVIGATION", inner.x + Skin.S2, inner.y + ui.ascent(Type.LABEL),
-                Type.LABEL, Skin.TEXT_DISABLED);
-        float startY = inner.y + 28f;
+        // No heading and no marker: the rail is plainly navigation, and the
+        // current section is the denser capsule with the brighter rim.
+        float startY = inner.y;
         float groupGap = Skin.S4;
         float rowHeight = Math.min(46f,
-                (inner.height - 28f - groupGap) / sections.size());
-        // The selection marker slides between sections instead of being replaced.
-        float markerX = Skin.snap(ui, inner.x);
-        float markY = startY + railMark.update(current, context.delta()) * rowHeight
-                + (current >= 4 ? groupGap : 0f);
-        Rect marker = Rect.of(markerX, markY + rowHeight * 0.29f,
-                markerX + 3f, markY + rowHeight * 0.71f);
-        ui.rounded(marker.x, marker.y, marker.right(), marker.bottom(), Skin.pill(marker),
-                Skin.HOT_RED);
+                (inner.height - groupGap) / sections.size());
 
         float y = startY;
         for (int index = 0; index < sections.size(); index++) {

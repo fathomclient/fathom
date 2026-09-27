@@ -15,7 +15,6 @@ import net.minecraft.client.util.ScreenshotUtils;
 
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
-import net.fathom.optimizations.core.ui.anim.Spring;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.layout.Rect;
@@ -29,7 +28,6 @@ import net.fathom.optimizations.fabric.bridge.LauncherAccount;
 import net.fathom.optimizations.fabric.gfx.FathomScreen;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Gfx;
-import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.BrandMark;
@@ -42,19 +40,28 @@ import net.fathom.optimizations.fabric.hud.HudEditorScreen;
  *
  * <h2>What it is</h2>
  *
- * <p>The first screen of the game, in the launcher's own design language: a
- * preprocessed looping Minecraft video underneath it, floating glass clusters
- * instead of full-width bars, the Fathom mark-and-wordmark lockup, two primary
- * destinations and a compact secondary-action dock.
+ * <p>The first screen of the game, in the launcher's own design language: the
+ * launcher's golden-hour photograph under the launcher's warm scrim, the
+ * Surface wordmark in the sky, the two destinations on the water below the
+ * horizon, and a small pane of secondary actions at the foot.
  *
  * <pre>
- *             [Aperture]
- *               FATHOM
+ *                FATHOM                      (the sky)
+ *     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     (the horizon, left clear)
  *         [ Singleplayer ]
- *         [ Multiplayer  ]
+ *         [ Multiplayer  ]                   (the water)
  *
- *       [F] [O] [L] [P] [Q]
+ *        [F] [O] [L] [P] [C] [Q]
  * </pre>
+ *
+ * <h2>Glass, without blur</h2>
+ *
+ * <p>The destinations are standard glass -- they carry a label over a moving
+ * photograph and need the density -- and the dock is one pane of light glass
+ * with flat controls inside it, as a launcher pane holds its controls. Hover
+ * and focus are a step denser and a brighter rim. Nothing glows, nothing is
+ * red, nothing lifts. The wordmark's surface line is kept well above the
+ * picture's horizon; the brand's surface is not the sea's.
  *
  * <h2>Why it is not vanilla's screen with new colours</h2>
  *
@@ -108,9 +115,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             if (worldArt()) {
                 MenuScenes.draw(client, scene(), Runtime.menuBackgroundQuality());
             } else {
-                MinecraftGuiSize viewport = MinecraftGuiSize.get(client);
-                net.minecraft.client.gui.DrawableHelper.fill(
-                        0, 0, viewport.width(), viewport.height(), 0xFF05060A);
+                MenuScenes.draw(client, null, Runtime.menuBackgroundQuality());
             }
         }
     };
@@ -123,24 +128,20 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     };
 
     /**
-     * The centre lockup.
-     *
-     * <p>The mark is drawn at 64, its native grid, so each bar is exactly ten
-     * units and the ink is 48 across. The wordmark is brand artwork rather than a
-     * step on the type scale: Geist 600 at 20, treatment A's tracking, with its
-     * cap line 14 units under the mark's ink.
+     * The wordmark, by its cap height in logical units. At GUI scale 2 this is
+     * well past the brand's full tier, so it carries the whole refraction and
+     * the bronze edge; at scale 1 it carries the one-pixel form.
      */
-    private static final float MARK_SIZE = 78f;
-    private static final float MARK_INK = MARK_SIZE * BrandMark.INK_FRACTION;
-    private static final Type WORDMARK = new Type(25f, Type.Weight.SEMIBOLD);
-    private static final float WORDMARK_GAP = 16f;
+    private static final float WORDMARK_CAP = 34f;
+    /**
+     * Where the wordmark's top sits, as a fraction of the window's height: in
+     * open sky, clear of the palms' crowns (which reach up to about a quarter)
+     * and far from the horizon.
+     */
+    private static final float WORDMARK_AT = 0.15f;
+    /** Where the destinations start: on the water, below the horizon at ~48%. */
+    private static final float ACTIONS_AT = 0.56f;
     private static final float LOCKUP_TO_ACTIONS = 40f;
-
-    /** The launcher top bar's brand treatment: 24 mark, body semibold, 0.16em. */
-    private static final float CHROME_MARK = 24f;
-    private static final Type CHROME_WORDMARK = Type.BODY.weighing(Type.Weight.SEMIBOLD);
-    private static final float CHROME_TRACKING = 0.16f;
-    private static final Type CRUMB = Type.SMALL.weighing(Type.Weight.MEDIUM);
 
 
     /**
@@ -163,25 +164,18 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private static final float DOCK_DELAY_SECONDS = Timing.STAGGER * 3f;
 
     /**
-     * Dense title-screen glass built from the same depth ladder as the hub.
-     * It stays translucent enough for every resource-pack scene to remain
-     * visible, while its higher opacity supplies the contrast that a live
-     * background cannot provide with a low-alpha grey wash.
+     * The destinations: standard glass at rest, dense under the pointer. They
+     * carry a label over the photograph and need the density to hold it.
      */
-    private static final int MENU_GLASS = Skin.fade(Skin.BACKGROUND, 0.90f);
-    private static final int MENU_GLASS_HOVER = Skin.fade(Skin.ELEVATED, 0.94f);
-    private static final int MENU_GLASS_PRESSED = Skin.fade(Skin.BACKGROUND, 0.96f);
+    private static final int MENU_GLASS = Skin.MATERIAL_STANDARD;
+    private static final int MENU_GLASS_HOVER = Skin.MATERIAL_DENSE;
+    private static final int MENU_GLASS_PRESSED = Skin.MATERIAL_DENSE_SOLID;
 
-    /**
-     * The dock's pills, thinner again.
-     *
-     * <p>Two rows, two weights. The destinations carry a label and have to hold
-     * it against whatever the video is doing; the dock carries a 13-unit icon
-     * and can afford to be barely there until the pointer arrives.
-     */
-    private static final int DOCK_GLASS = Skin.fade(Skin.RECESSED, 0.68f);
-    private static final int DOCK_GLASS_HOVER = Skin.fade(Skin.SURFACE, 0.86f);
-    private static final int DOCK_GLASS_PRESSED = Skin.fade(Skin.BACKGROUND, 0.92f);
+    /** The dock is one pane of light glass; its controls are flat inside it. */
+    private static final int DOCK_GLASS = Skin.MATERIAL_LIGHT;
+
+    /** The launcher's warm modal scrim: the menu stays visible behind a panel. */
+    private static final int MODAL_SCRIM = 0x57160E06;
 
     /**
      * How far the shadow under a primary button reaches.
@@ -197,22 +191,17 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     /**
      * What this screen owes, and to whom.
      *
-     * <p>The menu video was recorded in someone else's world, on terms that ask
-     * for credit. {@code ATTRIBUTION.md} is the repository's record of that,
-     * which is the right place for it and the wrong place for a player to have
-     * to look: the people owed the credit are credited where the footage is
-     * actually shown. Label, subject, and who it belongs to.
+     * <p>{@code ATTRIBUTION.md} is the repository's record, which is the wrong
+     * place for a player to have to look: the photograph is credited where it
+     * is shown, in the launcher's own words. Label, subject, and who.
      */
     private static final String[][] CREDITS = {
-        {"Menu background", "Tideworn - 8 sqkm Forgotten Flooded City",
-            "A world by milkshake_mp3, on CurseForge"},
-        {"Launcher backgrounds", "Tokyo Inspired City",
-            "A world by CoinCoffer, on CurseForge"},
+        {"Background", "Palm Tree Sunset Water", "By showtime, at Wallpapers.com"},
         {"Typeface", "Geist", "Vercel and basement.studio, SIL Open Font Licence 1.1"},
     };
 
     private static final String[] CREDITS_FOOTER = {
-        "Recorded in Minecraft by the Fathom project. Full credits in ATTRIBUTION.md.",
+        "Full credits in ATTRIBUTION.md.",
         "Not an official Minecraft product. Not approved by or associated with Mojang.",
     };
 
@@ -221,7 +210,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     /** How long an account notice stays up before it fades on its own. */
     private static final float NOTICE_SECONDS = 5f;
 
-    /** Five across, three down: the fifteen scenes the launcher offers. */
+    /** The picker's grid, for when the approved set holds more than one. */
     private static final int SCENE_COLUMNS = 5;
     private static final float SCENES_PANEL_WIDTH = 660f;
 
@@ -229,8 +218,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private final Pointer pointer = new Pointer();
     private Transition transition;
     private Motion dockOpening;
-    /** Shared dock marker; it glides between actions instead of blinking. */
-    private Spring dockMark;
     private Motion creditsFade;
     /** Whether the credits panel is up. While it is, nothing behind it answers. */
     private boolean creditsOpen;
@@ -248,7 +235,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
 
     /** Where the column sits, recomputed each frame from the window. */
     private Rect column = Rect.of(0f, 0f, 0f, 0f);
-    /** The top of the mark's ink. */
+    /** The top of the wordmark's ink. */
     private float lockupTop;
     /** What the account button last did, and when it said so. */
     private String notice;
@@ -290,7 +277,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             creditsFade = new Motion(0f, Timing.PANEL);
             scenesFade = new Motion(0f, Timing.PANEL);
             accountFade = new Motion(0f, Timing.PANEL);
-            dockMark = Spring.accent(0f);
         }
         transition.open(now);
         dockOpening.set(0f, now);
@@ -412,7 +398,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         captureFrames++;
         if (!Boolean.getBoolean("fathom.captureMenu") || captured
                 || captureFrames < Integer.getInteger("fathom.captureMenuFrame", 30)
-                || MenuVideo.uploadedFrames()
+                || scene().animated && MenuVideo.uploadedFrames()
                         < Integer.getInteger("fathom.captureMenuVideoFrames", 24)) {
             return;
         }
@@ -431,28 +417,29 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     }
 
     /**
-     * Where the lockup and the column go.
+     * Where the wordmark and the column go.
      *
-     * <p>They are placed as one group. Anchoring each to its own percentage of
-     * the window left a gap between them that grew with the window, and a large
-     * enough gap turns a lockup into a logo floating near some buttons. The group
-     * sits a little above the geometric centre, which is where the eye puts it.
+     * <p>The wordmark sits in the sky and the destinations on the water, with
+     * the horizon -- a little under half way down the picture -- left clear
+     * between them. On a short window the two close up towards each other
+     * before anything is allowed to reach the dock.
      */
     private void layout(Renderer ui) {
         float width = Math.min(BUTTON_WIDTH, ui.width() - Skin.S8 * 2f);
         float actions = MENU_BUTTON_HEIGHT * 2f + BUTTON_GAP;
-        float group = lockupHeight() + LOCKUP_TO_ACTIONS + actions;
-        float dockTop = ui.height() - FOOTER_HEIGHT - DOCK_BUTTON - Skin.S3;
-        float top = (ui.height() - group) / 2f - ui.height() * 0.03f;
-        top = Math.max(TOPBAR_HEIGHT + Skin.S4, Math.min(top, dockTop - Skin.S6 - group));
-        // Whole device pixels, so the mark's ten-unit bars stay one width.
+        float dockTop = ui.height() - FOOTER_HEIGHT - DOCK_BUTTON - Skin.S3 - Skin.S2;
+        float top = Math.max(TOPBAR_HEIGHT + Skin.S4, ui.height() * WORDMARK_AT);
+        float actionsTop = Math.max(top + WORDMARK_CAP + LOCKUP_TO_ACTIONS, ui.height() * ACTIONS_AT);
+        float overflow = actionsTop + actions - (dockTop - Skin.S6);
+        if (overflow > 0f) {
+            actionsTop -= overflow;
+            top = Math.max(TOPBAR_HEIGHT + Skin.S2,
+                    Math.min(top, actionsTop - LOCKUP_TO_ACTIONS - WORDMARK_CAP));
+        }
+        // Whole device pixels, so the wordmark's rows land where it was drawn.
         lockupTop = Skin.snap(ui, top);
         column = Skin.pixelAligned(ui, new Rect((ui.width() - width) / 2f,
-                lockupTop + lockupHeight() + LOCKUP_TO_ACTIONS, width, actions));
-    }
-
-    private static float lockupHeight() {
-        return MARK_INK + WORDMARK_GAP + WORDMARK.size() * BrandMark.CAP_HEIGHT;
+                actionsTop, width, actions));
     }
 
     private void draw(Renderer ui) {
@@ -507,32 +494,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     // Branding
     // -----------------------------------------------------------------------
 
-    /** Floating route and account clusters; the video remains edge-to-edge. */
+    /**
+     * The account control, top right. Nothing top left: the wordmark in the
+     * sky is the brand, and a second, smaller one in a corner was only
+     * repeating it.
+     */
     private void chrome(Renderer ui) {
-        // The launcher's top-bar brand, in a floating cluster: 24 mark, S2,
-        // wordmark, S3, hairline, S3, route.
-        float wordWidth = BrandMark.wordmarkWidth(ui, CHROME_WORDMARK, CHROME_TRACKING);
-        float crumbWidth = ui.measure("Home", CRUMB);
-        // S3 at both ends. It used to lead with S2 and trail with S4, so the
-        // cluster had twice as much air after "Home" as it had before the mark.
-        float leftWidth = Skin.S3 + CHROME_MARK + Skin.S2 + wordWidth
-                + Skin.S3 * 2f + Skin.HAIRLINE + crumbWidth + Skin.S3;
-        Rect left = Skin.pixelAligned(ui,
-                new Rect(Skin.S3, Skin.S3, leftWidth, TOPBAR_HEIGHT - Skin.S2));
-        glassCluster(ui, left);
-        float markX = left.x + Skin.S3;
-        float markY = Math.round(left.centreY() - CHROME_MARK / 2f);
-        BrandMark.drawSmall(ui, markX, markY, CHROME_MARK, Skin.TEXT, Skin.ACCENT);
-
-        float wordX = markX + CHROME_MARK + Skin.S2;
-        BrandMark.wordmark(ui, wordX, Controls.baseline(ui, left, CHROME_WORDMARK),
-                CHROME_WORDMARK, CHROME_TRACKING, Skin.TEXT);
-        float dividerX = wordX + wordWidth + Skin.S3;
-        ui.fill(dividerX, left.y + Skin.S3, dividerX + Skin.HAIRLINE,
-                left.bottom() - Skin.S3, Skin.CHROME_LINE_STRONG);
-        ui.text("Home", dividerX + Skin.S3, Controls.baseline(ui, left, CRUMB),
-                CRUMB, Skin.TEXT_FAINT);
-
         String username = client.getSession() == null ? "" : client.getSession().getUsername();
         String sessionUuid = client.getSession() == null ? "" : client.getSession().getUuid();
         LauncherAccount launcherAccount = account();
@@ -566,53 +533,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         int head = AccountHead.texture(launcherAccount.launcherRoot(), headUuid);
         float accountWidth = Math.max(70f,
                 ui.measure(account, Type.CAPTION) + 13f + Skin.S2 * 3f);
-        float versionWidth = ui.measure("1.8.9", Type.CAPTION) + Skin.S3 * 2f;
-        Rect right = Skin.pixelAligned(ui,
-                new Rect(ui.width() - Skin.S3 - accountWidth - versionWidth,
-                        Skin.S3, accountWidth + versionWidth, TOPBAR_HEIGHT - Skin.S2));
-        // The cluster wraps the account control alone. `1.8.9` is a fact, not a
-        // button, and it used to sit inside this same outlined rectangle -- so
-        // the version read as a control that ignored every click. `right` still
-        // measures both, because the version's right edge is positioned from
-        // the account's left edge and the pair must stay put.
-        // No `glassCluster` around this one. `chromeAction` already draws a
-        // filled, outlined, fully-round control; a cluster hugging it put a
-        // second border two pixels outside the first, which read as a box
-        // inside a box. One control, one container.
-        Rect accountArea = new Rect(right.right() - accountWidth, right.y,
-                accountWidth, right.height);
+        // The version used to sit beside this on the bare sky, where no grade of
+        // champagne type holds; it is in the footer now, on the scrim.
+        Rect accountArea = Skin.pixelAligned(ui, new Rect(ui.width() - Skin.S3 - accountWidth,
+                Skin.S3, accountWidth, TOPBAR_HEIGHT - Skin.S2));
         if (chromeAction(ui, accountArea, account, head)) {
             openAccount(realSession, launcherAccount);
         }
-        ui.textRight("1.8.9", accountArea.x - Skin.S2,
-                Controls.baseline(ui, right, Type.CAPTION),
-                Type.CAPTION, Skin.TEXT_FAINT);
-    }
-
-    /**
-     * The launcher's glass without its blur: the resting fill, the 10% edge and
-     * shared faint top light. Resting fill rather than the strong one,
-     * so the footage reads through the chrome instead of stopping at it.
-     */
-    private void glassCluster(Renderer ui, Rect area) {
-        // Fully round. These are bar-height strips floating on the footage, and
-        // the launcher draws everything of that shape -- its rail items, its
-        // switches, its icon controls -- at `--r-pill`. Half the height is the
-        // whole way round.
-        // `Skin.pill`, not `R_MEDIUM`. The paragraph above has always said these
-        // are drawn fully round like the launcher's own bar-height strips; the
-        // code said otherwise, which is why these clusters were a little
-        // squarer than everything around them.
-        float round = Skin.pill(area);
-        // A shadow or stroked ring this close to a shallow pill reads as a
-        // doubled, uneven outline at the rounded ends. The translucent fill is
-        // enough separation for top chrome; do not draw another edge around it.
-        // `fade` replaces alpha rather than scaling it, so this number is the
-        // whole story for the menu chrome -- it does not inherit the alpha on
-        // `BACKGROUND`. 0.82 was near-solid against the panorama; 0.62 matches
-        // the glass the Hub's panels now use, so the two screens read as the
-        // same material.
-        ui.rounded(area.x, area.y, area.right(), area.bottom(), round, Skin.fade(Skin.BACKGROUND, 0.62f));
     }
 
     private boolean chromeAction(Renderer ui, Rect area, String label, int headTexture) {
@@ -635,17 +562,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // glass it is just enough to say "this is a button" to somebody who has
         // not put a pointer on it yet. Without it the only thing here was a
         // label, and a label is not a control.
-        int face = Skin.mix(Skin.mix(Skin.FILL, Skin.FILL_HOVER, state.hover),
-                Skin.FILL_PRESSED, press);
-        // The glass the cluster used to provide, now carried by the control
-        // itself: `--fill` alone is white at 4.5% and disappears against bright
-        // footage, which is exactly the readability the cluster was there for.
-        // Keep the account control on the same fill-only treatment as the route
-        // cluster. Shadows and explicit strokes both turn into an outer ring at
-        // this height.
-        ui.rounded(pill.x, pill.y + sink, pill.right(), pill.bottom() + sink, round,
-                Skin.fade(Skin.BACKGROUND, 0.62f));
-        ui.rounded(pill.x, pill.y + sink, pill.right(), pill.bottom() + sink, round, face);
+        // Light glass on the sky, a step denser under the pointer: the
+        // launcher's account capsule, without its blur.
+        int face = Skin.mix(Skin.mix(Skin.MATERIAL_LIGHT, Skin.MATERIAL_STANDARD, state.hover),
+                Skin.MATERIAL_DENSE, press);
+        VisualEffects.glass(ui, Rect.of(pill.x, pill.y + sink, pill.right(), pill.bottom() + sink),
+                round, face, Skin.RIM_TOP_LIGHT, Skin.RIM_EDGE_LIGHT);
         float focus = controls.towards(id + "#menu-focus", state.focused, Timing.HOVER_IN);
         float light = Math.max(state.hover, focus);
         float iconSize = 14f;
@@ -655,14 +577,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             // The player's face where the generic user glyph would be: same
             // square, same place, a hair of rounding so it sits in the pill.
             ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).image(headTexture, iconX, iconY,
-                    iconX + iconSize, iconY + iconSize, 2f, 1f, Skin.fade(Skin.BACKGROUND, 0.82f));
+                    iconX + iconSize, iconY + iconSize, 0f, 1f, 0);
         } else {
             ui.icon(Icon.USER, iconX, iconY, iconSize,
                     VisualEffects.hoverBrighten(Skin.TEXT_FAINT, light));
         }
         ui.text(label, area.x + Skin.S2 * 2f + iconSize,
-                Controls.baseline(ui, area, Type.CAPTION) + sink, Type.CAPTION,
-                VisualEffects.hoverBrighten(Skin.TEXT_MUTED, light));
+                Controls.baseline(ui, area, Type.CAPTION) + sink, Type.CAPTION, Skin.TEXT);
         controls.focusRing(ui, state, pill, round);
         return activated(id, state);
     }
@@ -706,7 +627,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             return;
         }
         ui.pushAlpha(shown);
-        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.fade(0x000000, 0.62f));
+        ui.fill(0f, 0f, ui.width(), ui.height(), MODAL_SCRIM);
 
         LauncherAccount state = account();
         net.fathom.optimizations.fabric.bridge.LauncherBridge.SavedAccount[] saved =
@@ -720,10 +641,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 + visibleAccounts * (row + Skin.S2) + Skin.S4 + Skin.H_MD + Skin.S5;
         Rect panel = new Rect(Math.round((ui.width() - width) / 2f),
                 Math.round((ui.height() - height) / 2f), width, height);
-        VisualEffects.modalShadow(ui, panel, Skin.R_MEDIUM);
-        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM,
-                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.BASE_RED, 0.45f));
+        // No drop shadow: over the photograph the renderer's box falloff reads as
+        // dark bands above and below the pane. The dense glass and the scrim
+        // already put it in front.
+        VisualEffects.glass(ui, panel, Skin.R_CARD, Skin.FLOATING,
+                Skin.RIM_TOP_DENSE, Skin.RIM_EDGE_DENSE);
 
         float x = panel.x + Skin.S5;
         float y = panel.y + Skin.S5;
@@ -733,7 +655,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         String summary = state.phase() == LauncherAccount.Phase.SIGNED_IN
                 ? "Signed in as " + state.name() + ". Changes apply to the next launch."
                 : state.working() ? "Waiting for Microsoft…" : "Choose an account or add one.";
-        ui.text(Text.fit(ui, summary, Type.CAPTION, inner), x,
+        float summaryX = x;
+        if (state.working()) {
+            // The launcher's loading glyph, where it waits for Microsoft.
+            float glyph = ui.lineHeight(Type.CAPTION) - 2f;
+            summaryX += BrandMark.soundingLine(ui, x, y + 1f, glyph, Skin.TEXT_MUTED) + Skin.S2;
+        }
+        ui.text(Text.fit(ui, summary, Type.CAPTION, inner - (summaryX - x)), summaryX,
                 y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_MUTED);
         y += ui.lineHeight(Type.CAPTION) + Skin.S3;
 
@@ -750,11 +678,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             Rect area = new Rect(x, y, inner, row);
             Controls.State choice = controls.state("menu.account.saved." + index, area,
                     !state.working() && !savedAccount.active);
+            // The active account is the denser row with the brighter rim.
             ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
-                    savedAccount.active ? Skin.FILL_PRESSED
+                    savedAccount.active ? Skin.FILL_ACTIVE
                             : Skin.mix(Skin.FILL, Skin.FILL_HOVER, choice.hover));
             ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.R_CONTROL,
-                    Skin.HAIRLINE, savedAccount.active ? Skin.ACCENT : Skin.GLASS_EDGE);
+                    Skin.HAIRLINE, savedAccount.active ? Skin.EDGE_ELEVATED : Skin.EDGE_SURFACE);
             int head = AccountHead.texture(state.launcherRoot(), savedAccount.uuid);
             float avatar = 26f;
             if (head > 0 && ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
@@ -770,7 +699,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                     Controls.baseline(ui, area, Type.BODY_STRONG), Type.BODY_STRONG, Skin.TEXT);
             ui.textRight(savedAccount.active ? "Active" : "Switch",
                     area.right() - Skin.S3, Controls.baseline(ui, area, Type.CAPTION),
-                    Type.CAPTION, savedAccount.active ? Skin.ACCENT_STRONG : Skin.TEXT_FAINT);
+                    Type.CAPTION, savedAccount.active ? Skin.TEXT : Skin.TEXT_MUTED);
             if (choice.clicked) {
                 state.switchTo(savedAccount.uuid);
             }
@@ -839,36 +768,20 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     }
 
     /**
-     * Mark over wordmark, both centred on the column.
+     * The Surface wordmark, centred, in the sky.
      *
-     * <p>The mark is positioned by its ink, not its 64-unit box, and the wordmark
-     * by its cap line, not its ascent: the box carries 8 units of safe area and
-     * the ascent carries accent room, and measuring the gap from either makes the
-     * lockup look loose by exactly that much.
+     * <p>Positioned by its ink: the top of the cap is {@code lockupTop}. It
+     * arrives by fading and rising a few units -- no scale, so the raster is
+     * drawn pixel for pixel from its first visible frame.
      */
     private void branding(Renderer ui) {
-        float centre = Math.round(column.centreX());
-        float inset = (MARK_SIZE - MARK_INK) / 2f;
+        float centre = column.centreX();
         float now = Gfx.clock().seconds();
-        float markShown = Ease.sample(now, openedAt, 0f, 0.22f, Ease.Curve.STANDARD);
-        float wordShown = Ease.sample(now, openedAt, Timing.STAGGER, 0.20f, Ease.Curve.STANDARD);
-        // The mark stands on its own: no halo, no rings.
-
-        ui.pushAlpha(markShown);
-        ui.pushTransform(0f, (1f - markShown) * 5f,
-                0.955f + markShown * 0.045f, centre, lockupTop + MARK_INK / 2f);
-        BrandMark.draw(ui, centre - MARK_SIZE / 2f, lockupTop - inset, MARK_SIZE,
-                Skin.TEXT, Skin.HOT_RED);
-        ui.popTransform();
-        ui.popAlpha();
-
-        float baseline = lockupTop + MARK_INK + WORDMARK_GAP
-                + WORDMARK.size() * BrandMark.CAP_HEIGHT;
-        float width = BrandMark.wordmarkWidth(ui, WORDMARK, BrandMark.WORDMARK_TRACKING);
-        ui.pushAlpha(wordShown);
-        ui.pushTransform(0f, (1f - wordShown) * 4f);
-        BrandMark.wordmark(ui, centre - width / 2f, baseline, WORDMARK,
-                BrandMark.WORDMARK_TRACKING, Skin.TEXT);
+        float shown = Ease.sample(now, openedAt, 0f, 0.22f, Ease.Curve.STANDARD);
+        float width = BrandMark.wordmarkWidth(ui, WORDMARK_CAP);
+        ui.pushAlpha(shown);
+        ui.pushTransform(0f, Math.round((1f - shown) * 4f));
+        BrandMark.wordmark(ui, Skin.snap(ui, centre - width / 2f), lockupTop, WORDMARK_CAP);
         ui.popTransform();
         ui.popAlpha();
     }
@@ -920,32 +833,19 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      * importance.
      */
     private void dock(Renderer ui) {
-        float dockWidth = DOCK_BUTTON * 7f + DOCK_GAP * 6f;
+        boolean pickable = MenuScenes.pickable();
+        int count = pickable ? 7 : 6;
+        float dockWidth = DOCK_BUTTON * count + DOCK_GAP * (count - 1);
         float y = Skin.snap(ui, ui.height() - FOOTER_HEIGHT - DOCK_BUTTON - Skin.S3);
         float x = Skin.snap(ui, column.centreX() - dockWidth / 2f);
-        Rect deck = new Rect(x - Skin.S3, y - Skin.S2,
-                dockWidth + Skin.S6, DOCK_BUTTON + Skin.S4);
-        VisualEffects.overlayShadow(ui, deck, Skin.R_CARD);
-        ui.rounded(deck.x, deck.y, deck.right(), deck.bottom(), Skin.R_CARD, DOCK_GLASS);
-        ui.outline(deck.x, deck.y, deck.right(), deck.bottom(), Skin.R_CARD,
-                Skin.BORDER_STANDARD, Skin.EDGE_SURFACE);
-
-        int activeIndex = scenesFade.value(Gfx.clock().seconds()) > 0.01f ? 4
-                : creditsFade.value(Gfx.clock().seconds()) > 0.01f ? 5 : 0;
-        int targetIndex = activeIndex;
-        for (int index = 0; index < 7; index++) {
-            Rect hit = new Rect(x + index * (DOCK_BUTTON + DOCK_GAP), y,
-                    DOCK_BUTTON, DOCK_BUTTON);
-            if (hit.contains(pointer.x(), pointer.y())) {
-                targetIndex = index;
-                break;
-            }
-        }
-        float markerIndex = dockMark.update(targetIndex, controls.delta());
-        float markerX = x + markerIndex * (DOCK_BUTTON + DOCK_GAP) + DOCK_BUTTON / 2f;
-        Rect deckMarker = new Rect(markerX - 8f, deck.bottom() - 3f, 16f, 2f);
-        ui.rounded(deckMarker.x, deckMarker.y, deckMarker.right(), deckMarker.bottom(),
-                Skin.pill(deckMarker), Skin.ACTIVE_RED);
+        // One pane, fully round, holding the controls flat inside it. No
+        // marker sliding under them: the control under the pointer is the
+        // denser one, which says the same thing without a bar.
+        Rect deck = Skin.pixelAligned(ui, new Rect(x - Skin.S2, y - Skin.S2,
+                dockWidth + Skin.S4, DOCK_BUTTON + Skin.S4));
+        VisualEffects.overlayShadow(ui, deck, Skin.pill(deck));
+        VisualEffects.glass(ui, deck, Skin.pill(deck), DOCK_GLASS,
+                Skin.RIM_TOP_LIGHT, Skin.RIM_EDGE_LIGHT);
 
         if (dockAction(ui, "menu.fathom", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.GRID, "Fathom")) {
             openHub();
@@ -963,11 +863,14 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 "Resource Packs")) {
             navigate(new ResourcePackScreen(this));
         }
-        x += DOCK_BUTTON + DOCK_GAP;
-        if (dockAction(ui, "menu.scenes", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.LAYERS,
-                "Background")) {
-            scenesOpen = true;
-            scenesFade.to(1f, Gfx.clock().seconds());
+        if (pickable) {
+            // Only when there is a choice to make, as in the launcher.
+            x += DOCK_BUTTON + DOCK_GAP;
+            if (dockAction(ui, "menu.scenes", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.LAYERS,
+                    "Background")) {
+                scenesOpen = true;
+                scenesFade.to(1f, Gfx.clock().seconds());
+            }
         }
         x += DOCK_BUTTON + DOCK_GAP;
         if (dockAction(ui, "menu.credits", new Rect(x, y, DOCK_BUTTON, DOCK_BUTTON), Icon.STAR,
@@ -1038,9 +941,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         float focus = controls.towards(id + "#menu-focus", state.focused, Timing.HOVER_IN);
         float emphasis = Math.max(state.hover, focus);
         float press = tactilePress(state);
-        int face = Skin.mix(Skin.mix(MENU_GLASS, MENU_GLASS_HOVER, state.hover),
+        int face = Skin.mix(Skin.mix(MENU_GLASS, MENU_GLASS_HOVER, emphasis),
                 MENU_GLASS_PRESSED, press);
-        int edge = Skin.mix(Skin.EDGE_SURFACE, Skin.scaleAlpha(Skin.ACTIVE_RED, 0.85f), emphasis);
+        int edge = Skin.mix(Skin.RIM_EDGE, Skin.EDGE_ELEVATED, emphasis);
         // Hover is colour and border only. This used to lift the entire visual
         // by 1.5 units, including its label, as the pointer arrived.
         float lift = press * 1.2f;
@@ -1049,18 +952,16 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 area.right() - inset, area.bottom() + lift - inset * 0.18f));
         float radius = Skin.pill(visual);
         ui.shadow(visual.x, visual.y, visual.right(), visual.bottom(), radius,
-                8f * (1f - press * 0.5f), Skin.scaleAlpha(Skin.SHADOW, 0.70f * (1f - press * 0.7f)));
-        ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), radius, face);
-        ui.outline(visual.x, visual.y, visual.right(), visual.bottom(), radius,
-                Skin.BORDER_STANDARD, edge);
+                8f * (1f - press * 0.5f), Skin.scaleAlpha(Skin.SHADOW, 0.55f * (1f - press * 0.7f)));
+        VisualEffects.glass(ui, visual, radius, face, Skin.RIM_TOP, edge);
         float chevron = 12f;
         ui.icon(Icon.CHEVRON_RIGHT,
                 visual.right() - Skin.S4 - chevron,
                 visual.centreY() - chevron / 2f, chevron,
-                Skin.scaleAlpha(Skin.HOT_RED, emphasis));
+                Skin.scaleAlpha(Skin.TEXT_MUTED, emphasis));
         ui.textCentred(label, visual.centreX(),
                 Controls.baseline(ui, visual, Type.ROW_TITLE),
-                Type.ROW_TITLE, Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, emphasis));
+                Type.ROW_TITLE, Skin.TEXT);
         controls.focusRing(ui, state, area, radius);
         return activated(id, state);
     }
@@ -1075,11 +976,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 || "menu.credits".equals(id) && creditsFade.value(Gfx.clock().seconds()) > 0.01f;
         float selected = Math.max(active ? 1f : 0f, focus);
         float press = tactilePress(state);
-        // The launcher's small pill: --glass-fill, the plain edge, the plain
-        // sheen. Lighter than the two destinations above it, which is the
-        // difference between a place to go and a thing to change.
-        int face = Skin.mix(Skin.mix(DOCK_GLASS, DOCK_GLASS_HOVER, state.hover),
-                DOCK_GLASS_PRESSED, press);
+        // Flat inside the dock's pane, as a launcher pane's controls are:
+        // nothing at rest, the control fill under the pointer, the selected
+        // fill while its panel is open.
+        int face = Skin.mix(Skin.mix(Skin.fade(Skin.FILL_HOVER, 0f), Skin.SURFACE_HOVER,
+                Math.max(state.hover, focus)), Skin.ELEVATED, Math.max(press, active && !fathom ? 1f : 0f));
         // An icon with no label is a circle here, as it is in the launcher,
         // where every icon-only control is drawn at `--r-pill`. These are
         // square, so half the height is the whole way round.
@@ -1092,17 +993,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // under the pointer either -- only its one big destination does -- and
         // five small things lifting in a row reads as the dock twitching.
         ui.rounded(visual.x, visual.y, visual.right(), visual.bottom(), round, face);
-        int hoverEdge = fathom ? Skin.fade(Skin.ACTIVE_RED, 0.78f) : Skin.EDGE_ELEVATED;
-        int edge = Skin.mix(Skin.GLASS_EDGE, hoverEdge, state.hover);
-        edge = Skin.mix(edge, Skin.fade(Skin.HOT_RED, 0.86f), Math.max(focus, selected * 0.72f));
-        ui.outline(visual.x, visual.y, visual.right(), visual.bottom(), round,
-                Skin.BORDER_STANDARD + selected * (Skin.BORDER_ENERGIZED - Skin.BORDER_STANDARD), edge);
         float iconSize = DOCK_ICON;
-        // Muted rather than faint: faint is a hub value, tuned against a panel
-        // two shades from black, and it disappears into a snowfield.
         float iconX = Skin.snap(ui, visual.centreX() - iconSize / 2f);
         float iconY = Skin.snap(ui, visual.centreY() - iconSize / 2f);
-        int iconTint = Skin.mix(Skin.TEXT_MUTED, Skin.HOT_RED, selected * 0.82f);
+        // Fathom's own entrance is the one at full strength; the rest are
+        // champagne until touched.
+        int iconTint = Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, selected);
         ui.icon(icon, iconX, iconY, iconSize,
                 VisualEffects.hoverBrighten(iconTint, Math.max(state.hover, focus)));
         controls.focusRing(ui, state, area, Skin.pill(area));
@@ -1134,9 +1030,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         }
         ui.pushAlpha(shown);
 
-        // Darker than the chrome but lighter than the hub's scrim: the video is
-        // the subject of half these credits, so it stays legible behind them.
-        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.fade(0x000000, 0.62f));
+        // The launcher's modal scrim: the photograph credited here stays in view.
+        ui.fill(0f, 0f, ui.width(), ui.height(), MODAL_SCRIM);
 
         float pad = Skin.S5;
         float labelLine = ui.lineHeight(Type.LABEL);
@@ -1161,10 +1056,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         Rect panel = new Rect(Math.round((ui.width() - width) / 2f),
                 Math.round((ui.height() - height) / 2f), width, height);
 
-        VisualEffects.modalShadow(ui, panel, Skin.R_MEDIUM);
-        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM,
-                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.BASE_RED, 0.45f));
+        VisualEffects.glass(ui, panel, Skin.R_CARD, Skin.FLOATING,
+                Skin.RIM_TOP_DENSE, Skin.RIM_EDGE_DENSE);
 
         float x = panel.x + pad;
         float y = panel.y + pad;
@@ -1172,7 +1065,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         y += ui.lineHeight(Type.TITLE) + Skin.S4;
 
         for (String[] entry : CREDITS) {
-            ui.text(entry[0], x, y + ui.ascent(Type.LABEL), Type.LABEL, Skin.TEXT_FAINT);
+            ui.text(entry[0], x, y + ui.ascent(Type.LABEL), Type.LABEL, Skin.TEXT_MUTED);
             y += labelLine;
             ui.text(entry[1], x, y + ui.ascent(Type.BODY_STRONG), Type.BODY_STRONG, Skin.TEXT);
             y += titleLine;
@@ -1181,12 +1074,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         }
 
         for (String line : CREDITS_FOOTER) {
-            ui.text(line, x, y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_DISABLED);
+            ui.text(line, x, y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_FAINT);
             y += captionLine;
         }
 
-        // The launcher's own control, unthinned: it is on Fathom's near-black
-        // here, which is the surface that material was drawn for.
+        // The launcher's own control, on the dense glass it was drawn for.
         Rect close = new Rect(panel.right() - pad - CREDITS_CLOSE_WIDTH,
                 panel.bottom() - pad - Skin.H_MD, CREDITS_CLOSE_WIDTH, Skin.H_MD);
         if (controls.secondary(ui, "menu.credits.close", close, "Close", true)) {
@@ -1248,10 +1140,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     /**
      * The launcher's background picker, in the game.
      *
-     * <p>The same fifteen scenes under the same names, the same tick on the one
-     * in use, and the same credit underneath -- the launcher puts the world and
-     * its creator under the grid because that is where the footage is chosen,
-     * and this is the other place it is chosen.
+     * <p>The approved set under the launcher's names, the same tick on the one
+     * in use, and the credit underneath. Offered only when the set holds more
+     * than one picture ({@link MenuScenes#pickable()}).
      *
      * <p>Choosing is immediate. There is no confirm step and no preview pane:
      * the menu behind this panel <em>is</em> the preview.
@@ -1262,7 +1153,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             return;
         }
         ui.pushAlpha(shown);
-        ui.fill(0f, 0f, ui.width(), ui.height(), Skin.fade(0x000000, 0.62f));
+        ui.fill(0f, 0f, ui.width(), ui.height(), MODAL_SCRIM);
 
         MenuScenes.Scene[] all = MenuScenes.all();
         float pad = Skin.S5;
@@ -1282,10 +1173,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         Rect panel = new Rect(Math.round((ui.width() - width) / 2f),
                 Math.round((ui.height() - height) / 2f), width, height);
 
-        VisualEffects.modalShadow(ui, panel, Skin.R_CARD);
-        VisualEffects.layeredSurface(ui, panel, Skin.R_CARD, Skin.FLOATING, 0f);
-        ui.outline(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_CARD,
-                Skin.BORDER_STANDARD, Skin.mix(Skin.EDGE_ELEVATED, Skin.BASE_RED, 0.45f));
+        VisualEffects.glass(ui, panel, Skin.R_CARD, Skin.FLOATING,
+                Skin.RIM_TOP_DENSE, Skin.RIM_EDGE_DENSE);
 
         float x = panel.x + pad;
         float y = panel.y + pad;
@@ -1305,7 +1194,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             if (scene.gradient) {
                 // No picture for the flat field, so the tile is the field.
                 ui.gradient(tile.x, tile.y, tile.right(), tile.bottom(), Skin.R_CONTROL,
-                        0xFF0D1119, 0xFF030408);
+                        0xFF857750, 0xFF2A1C0E);
             } else {
                 if (!MenuScenes.thumbnail(ui, scene, tile, Skin.R_CONTROL, Skin.PANEL)) {
                     ui.rounded(tile.x, tile.y, tile.right(), tile.bottom(), Skin.R_CONTROL,
@@ -1314,7 +1203,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             }
 
             int edge = selected
-                    ? Skin.ACCENT
+                    ? Skin.TEXT
                     : Skin.mix(Skin.EDGE, Skin.EDGE_STRONG, state.hover);
             ui.outline(tile.x, tile.y, tile.right(), tile.bottom(), Skin.R_CONTROL,
                     selected ? Skin.HAIRLINE * 2f : Skin.HAIRLINE, edge);
@@ -1323,8 +1212,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 // The launcher's tick, in the same corner.
                 float mark = 15f;
                 Rect tick = new Rect(tile.right() - mark - Skin.S1, tile.y + Skin.S1, mark, mark);
-                ui.rounded(tick.x, tick.y, tick.right(), tick.bottom(), Skin.pill(tick), Skin.ACCENT);
-                ui.icon(Icon.CHECK, tick.x + 3f, tick.y + 3f, mark - 6f, 0xFFFFFFFF);
+                ui.rounded(tick.x, tick.y, tick.right(), tick.bottom(), Skin.pill(tick), Skin.TEXT);
+                ui.icon(Icon.CHECK, tick.x + 3f, tick.y + 3f, mark - 6f, Skin.TEXT_INVERSE);
             }
 
             ui.text(Text.fit(ui, scene.label, Type.CAPTION, tileWidth), tile.x,
@@ -1337,12 +1226,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         }
         y += rows * rowHeight;
 
-        // The credit belongs where the footage is chosen, which is here.
-        String credit = current.credited()
-                ? "Recorded in " + current.world + ", a world by " + current.creator
-                : "Recorded in Minecraft by the Fathom project.";
+        // The credit belongs where the picture is chosen, which is here.
+        String credit = current.credited() ? current.credit : "";
         ui.text(Text.fit(ui, credit, Type.CAPTION, width - pad * 2f), x,
-                y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_DISABLED);
+                y + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_FAINT);
 
         Rect close = new Rect(panel.right() - pad - CREDITS_CLOSE_WIDTH,
                 panel.bottom() - pad - Skin.H_MD, CREDITS_CLOSE_WIDTH, Skin.H_MD);
@@ -1368,17 +1255,16 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      *
      * <p>"Development" appears only in a development environment; a released
      * build says "Connected" when the launcher is on the other end of the bridge
-     * and nothing when it is not. The game version is already in the top-right
-     * cluster, so it is not repeated down here.
+     * and nothing when it is not. The game version is here too: this row sits
+     * on the scrim's deepest band, where champagne type holds.
      */
     private void footer(Renderer ui) {
         float top = ui.height() - FOOTER_HEIGHT;
         String component = Runtime.hud() == null
                 ? ""
                 : Runtime.hud().launcherSession().component();
-        String line = component.isEmpty()
-                ? "Fathom"
-                : "Fathom " + component;
+        String line = (component.isEmpty() ? "Fathom" : "Fathom " + component)
+                + "  ·  Minecraft 1.8.9";
         boolean development = FabricLoader.getInstance().isDevelopmentEnvironment();
         String status = development
                 ? "Development"
@@ -1393,30 +1279,26 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         Rect bar = Skin.pixelAligned(ui, new Rect(Skin.S3, top + Skin.S1,
                 Skin.S3 + dot + Skin.S2 + lineWidth + statusWidth + Skin.S3,
                 FOOTER_HEIGHT - Skin.S2));
-        // Deliberately no `glassCluster` here. Nothing in this cluster can be
-        // clicked -- it is a build number and a connection state -- and an
-        // outlined, shadowed, filled rounded rectangle is the shape this
-        // interface uses for things that *can* be. Drawing one around static
-        // text invites a click that does nothing, which is a worse outcome than
-        // the text being slightly harder to read against the footage. The
-        // geometry below is unchanged, so nothing moves; only the container is
-        // gone.
+        // Deliberately no glass here. Nothing in this row can be clicked --
+        // it is a build, a version and a connection state -- and a pane is the
+        // shape this interface uses for things that can be. It sits on the
+        // scrim's deepest band instead, which is what makes the type hold.
         float baseline = Controls.baseline(ui, bar, Type.CAPTION);
         float dotX = bar.x + Skin.S3;
         Rect statusDot = Rect.of(dotX, bar.centreY() - dot / 2f,
                 dotX + dot, bar.centreY() + dot / 2f);
-        // A still dot: no breathing glow.
+        // A still dot, in a status tone only when there is a status.
+        boolean connected = "Connected".equals(status);
         ui.rounded(statusDot.x, statusDot.y, statusDot.right(), statusDot.bottom(), Skin.pill(statusDot),
-                development ? Skin.ACTIVE_RED : Skin.BASE_RED);
+                connected ? Skin.GOOD : Skin.TEXT_FAINT);
         float textX = dotX + dot + Skin.S2;
         ui.text(line, textX, baseline, Type.CAPTION, Skin.TEXT_MUTED);
         if (!status.isEmpty()) {
-            ui.text(status, textX + lineWidth + Skin.S2, baseline, Type.CAPTION,
-                    development ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
+            ui.text(status, textX + lineWidth + Skin.S2, baseline, Type.CAPTION, Skin.TEXT_MUTED);
         }
     }
 
-    /** Whether to draw the animated scene rather than the plain low-cost field. */
+    /** Whether to draw the picture rather than the warm low-cost field. */
     private static boolean worldArt() {
         if (Runtime.features() == null) {
             return true;

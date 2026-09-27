@@ -12,15 +12,25 @@
   "Use" sets the profile the next game opens. A game that is already running
   switches in game, where it is immediate, and this page says so rather than
   pretending otherwise.
+
+  THE ONE IN USE
+
+  It is said by placement, not by decoration: it has a pane of its own at the
+  top, a larger mark and name, and a slightly denser fill. The rest are a plain
+  list under it, each with a Use button. No coloured edge, no "ACTIVE" pill --
+  the page's structure already answers "which one?".
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Plus, Copy, Pencil, Trash2, Check, Download, Upload } from '@lucide/svelte';
+  import { Plus, Copy, Pencil, Trash2, Download, Upload } from '@lucide/svelte';
 
   import Page from '../lib/ui/Page.svelte';
+  import Section from '../lib/ui/Section.svelte';
   import Button from '../lib/ui/Button.svelte';
-  import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
+  import Notice from '../lib/ui/Notice.svelte';
+  import { tooltip } from '../lib/tooltip';
+  import { EASE, MOTION_HOVER, MOTION_PAGE, MOTION_STAGGER } from '../lib/motion';
   import {
     createFathomProfile,
     deleteFathomProfile,
@@ -35,6 +45,7 @@
   } from '../lib/api';
 
   let view: FathomProfilesView = { profiles: [], live: '', problems: [] };
+  let loaded = false;
   let busy = false;
   let error = '';
   let note = '';
@@ -45,7 +56,7 @@
   let importText = '';
 
   onMount(() => {
-    void run(fathomProfilesView);
+    void run(fathomProfilesView).then(() => (loaded = true));
   });
 
   /** Every command returns the whole view, so the page never shows what the store refused. */
@@ -112,15 +123,25 @@
       importText = '';
     }
   }
+
+  function initial(name: string): string {
+    return name.trim()[0]?.toUpperCase() ?? '?';
+  }
+
+  $: current = view.profiles.find((profile) => profile.live) ?? null;
+  $: others = view.profiles.filter((profile) => !profile.live);
+  $: lastOne = view.profiles.length <= 1;
 </script>
 
 <Page
   title="Profiles"
   summary="{view.profiles.length} {view.profiles.length === 1 ? 'profile' : 'profiles'}"
-  wide
 >
   <svelte:fragment slot="actions">
-    <Button variant="normal" disabled={busy} onClick={() => (importing = !importing)}>
+    <Button
+      disabled={busy}
+      onClick={() => (importing = !importing)}
+    >
       <Upload size={14} strokeWidth={2.2} />
       Import
     </Button>
@@ -130,49 +151,57 @@
     </Button>
   </svelte:fragment>
 
-  <p class="lede">Used by the next game. A running game switches in game.</p>
-
   {#if error}
-    <p class="error" transition:fade={{ duration: FAST }}>{error}</p>
+    <div transition:fade={{ duration: MOTION_HOVER }}>
+      <Notice tone="danger" onDismiss={() => (error = '')}>{error}</Notice>
+    </div>
   {:else if note}
-    <p class="note" transition:fade={{ duration: FAST }}>{note}</p>
-  {/if}
-
-  {#each view.problems as problem}
-    <p class="problem">{problem}</p>
-  {/each}
-
-  {#if importing}
-    <div class="import glass" transition:fly={{ y: -6, duration: NORMAL, easing: EASE }}>
-      <textarea bind:value={importText} rows="5" placeholder="Paste a profile" spellcheck="false"></textarea>
-      <div class="import-actions">
-        <Button variant="normal" onClick={() => (importing = false)}>Cancel</Button>
-        <Button variant="primary" disabled={busy || !importText.trim()} onClick={() => void commitImport()}>
-          Import
-        </Button>
-      </div>
+    <div transition:fade={{ duration: MOTION_HOVER }}>
+      <Notice onDismiss={() => (note = '')}>{note}</Notice>
     </div>
   {/if}
 
-  <ul class="list">
-    {#each view.profiles as profile, index (profile.id)}
-      <li
-        class="row"
-        class:live={profile.live}
-        in:fly={{ y: 10, duration: NORMAL, delay: index * STAGGER, easing: EASE }}
-      >
-        <span class="tick">
-          {#if profile.live}<Check size={14} strokeWidth={2.8} />{/if}
-        </span>
+  {#each view.problems as problem}
+    <Notice tone="warning">{problem}</Notice>
+  {/each}
 
-        <span class="text">
+  {#if importing}
+    <div transition:fly={{ y: -6, duration: MOTION_PAGE, easing: EASE }}>
+      <Section label="Import a profile" material>
+        <div class="import">
+          <textarea
+            class="ui-field"
+            bind:value={importText}
+            rows="5"
+            placeholder="Paste a profile copied from Fathom"
+            spellcheck="false"
+            aria-label="Profile text"
+          ></textarea>
+          <div class="import-actions">
+            <Button onClick={() => (importing = false)}>Cancel</Button>
+            <Button variant="primary" disabled={busy || !importText.trim()} onClick={() => void commitImport()}>
+              Import
+            </Button>
+          </div>
+        </div>
+      </Section>
+    </div>
+  {/if}
+
+  {#if current}
+    <Section label="In use" summary="Opens with the next game" material>
+      {@const profile = current}
+      <div class="ui-item current lead-item">
+        <span class="ui-mark big" aria-hidden="true">{initial(profile.name)}</span>
+        <div class="text">
           {#if renaming === profile.id}
             <!-- svelte-ignore a11y-autofocus -->
             <input
-              class="rename"
+              class="ui-field rename"
               bind:value={renameText}
               maxlength="64"
               autofocus
+              aria-label="Profile name"
               on:keydown={(event) => {
                 if (event.key === 'Enter') void commitRename();
                 if (event.key === 'Escape') renaming = null;
@@ -180,47 +209,15 @@
               on:blur={() => void commitRename()}
             />
           {:else}
-            <span class="name">{profile.name}</span>
+            <span class="ui-item-title big">{profile.name}</span>
           {/if}
-          <span class="facts">{describe(profile)}</span>
-        </span>
-
-        {#if profile.live}
-          <span class="badge">Next game</span>
-        {:else}
-          <button
-            class="use"
-            disabled={busy}
-            on:click={() => void run(() => switchFathomProfile(profile.id), `${profile.name} will open next.`)}
-          >
-            Use
-          </button>
-        {/if}
-
-        <span class="tools">
-          <button title="Rename" on:click={() => startRename(profile)}>
-            <Pencil size={13} strokeWidth={2} />
-          </button>
-          <button title="Duplicate" on:click={() => void run(() => duplicateFathomProfile(profile.id))}>
-            <Copy size={13} strokeWidth={2} />
-          </button>
-          <button title="Copy as text" on:click={() => void copyExport(profile)}>
-            <Download size={13} strokeWidth={2} />
-          </button>
-          <button
-            class="danger"
-            title={view.profiles.length > 1 ? 'Delete' : 'The last profile stays'}
-            disabled={view.profiles.length <= 1}
-            on:click={() => (confirmingDelete = profile.id)}
-          >
-            <Trash2 size={13} strokeWidth={2} />
-          </button>
-        </span>
-
+          <span class="ui-item-meta">{describe(profile)}</span>
+          <span class="hint">A game that is already running switches in game.</span>
+        </div>
         {#if confirmingDelete === profile.id}
-          <span class="confirm" transition:fade={{ duration: FAST }}>
+          <div class="ui-item-controls confirm" transition:fade={{ duration: MOTION_HOVER }}>
             <span>Delete {profile.name}?</span>
-            <Button variant="normal" onClick={() => (confirmingDelete = null)}>Keep</Button>
+            <Button onClick={() => (confirmingDelete = null)}>Keep</Button>
             <Button
               variant="caution"
               onClick={() => {
@@ -230,215 +227,225 @@
             >
               Delete
             </Button>
-          </span>
+          </div>
+        {:else}
+          <div class="ui-item-controls">
+            <button class="ui-icon-button small" aria-label="Rename {profile.name}" use:tooltip={'Rename'} on:click={() => startRename(profile)}>
+              <Pencil size={14} strokeWidth={2} />
+            </button>
+            <button class="ui-icon-button small" aria-label="Duplicate {profile.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => void run(() => duplicateFathomProfile(profile.id))}>
+              <Copy size={14} strokeWidth={2} />
+            </button>
+            <button class="ui-icon-button small" aria-label="Copy {profile.name} as text" use:tooltip={'Copy as text'} on:click={() => void copyExport(profile)}>
+              <Download size={14} strokeWidth={2} />
+            </button>
+            <button
+              class="ui-icon-button small danger"
+              aria-label="Delete {profile.name}"
+              use:tooltip={lastOne ? 'The last profile stays' : 'Delete'}
+              disabled={lastOne}
+              on:click={() => (confirmingDelete = profile.id)}
+            >
+              <Trash2 size={14} strokeWidth={2} />
+            </button>
+          </div>
         {/if}
-      </li>
-    {/each}
-  </ul>
+      </div>
+    </Section>
+  {/if}
+
+  {#if others.length}
+    <Section label={current ? 'Other profiles' : 'Profiles'} material>
+      {#each others as profile, index (profile.id)}
+        <div class="ui-item" in:fly={{ y: 8, duration: MOTION_PAGE, delay: index * MOTION_STAGGER, easing: EASE }}>
+          <span class="ui-mark quiet" aria-hidden="true">{initial(profile.name)}</span>
+          <div class="text">
+            {#if renaming === profile.id}
+              <!-- svelte-ignore a11y-autofocus -->
+              <input
+                class="ui-field rename"
+                bind:value={renameText}
+                maxlength="64"
+                autofocus
+                aria-label="Profile name"
+                on:keydown={(event) => {
+                  if (event.key === 'Enter') void commitRename();
+                  if (event.key === 'Escape') renaming = null;
+                }}
+                on:blur={() => void commitRename()}
+              />
+            {:else}
+              <span class="ui-item-title">{profile.name}</span>
+            {/if}
+            <span class="ui-item-meta">{describe(profile)}</span>
+          </div>
+
+          {#if confirmingDelete === profile.id}
+            <div class="ui-item-controls confirm" transition:fade={{ duration: MOTION_HOVER }}>
+              <span>Delete {profile.name}?</span>
+              <Button onClick={() => (confirmingDelete = null)}>Keep</Button>
+              <Button
+                variant="caution"
+                onClick={() => {
+                  confirmingDelete = null;
+                  void run(() => deleteFathomProfile(profile.id), `${profile.name} deleted.`);
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          {:else}
+            <div class="ui-item-controls">
+              <button class="ui-icon-button small" aria-label="Rename {profile.name}" use:tooltip={'Rename'} on:click={() => startRename(profile)}>
+                <Pencil size={14} strokeWidth={2} />
+              </button>
+              <button class="ui-icon-button small" aria-label="Duplicate {profile.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => void run(() => duplicateFathomProfile(profile.id))}>
+                <Copy size={14} strokeWidth={2} />
+              </button>
+              <button class="ui-icon-button small" aria-label="Copy {profile.name} as text" use:tooltip={'Copy as text'} on:click={() => void copyExport(profile)}>
+                <Download size={14} strokeWidth={2} />
+              </button>
+              <button
+                class="ui-icon-button small danger"
+                aria-label="Delete {profile.name}"
+                use:tooltip={lastOne ? 'The last profile stays' : 'Delete'}
+                disabled={lastOne}
+                on:click={() => (confirmingDelete = profile.id)}
+              >
+                <Trash2 size={14} strokeWidth={2} />
+              </button>
+              <span class="use">
+                <Button
+                  disabled={busy}
+                  onClick={() => void run(() => switchFathomProfile(profile.id), `${profile.name} will open next.`)}
+                >
+                  Use
+                </Button>
+              </span>
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </Section>
+  {:else if current}
+    <p class="empty on-footage">
+      One profile so far. Duplicate it to try a different set of modules without losing this one.
+    </p>
+  {/if}
+
+  {#if loaded && !view.profiles.length}
+    <div class="blank">
+      <p class="blank-title on-footage">No profiles yet</p>
+      <p class="empty on-footage">
+        A profile is a set of modules, their settings, the HUD and your keys. The game makes one the
+        first time it opens, or you can start one here.
+      </p>
+    </div>
+  {/if}
 </Page>
 
 <style>
-  .lede {
-    margin: 0 0 var(--s-4);
-    font-size: var(--t-caption);
-    color: var(--text-faint);
-  }
-
-  .error,
-  .note,
-  .problem {
-    margin: 0 0 var(--s-3);
-    font-size: var(--t-caption);
-  }
-
-  .error {
-    color: var(--bad);
-  }
-
-  .note {
-    color: var(--good);
-  }
-
-  .problem {
-    color: var(--warn);
-  }
-
   .import {
     display: flex;
     flex-direction: column;
-    gap: var(--s-2);
-    padding: var(--s-3);
-    margin-bottom: var(--s-4);
-    border-radius: var(--r-md);
+    gap: var(--space-3);
+    padding: var(--space-3);
   }
 
   .import textarea {
-    width: 100%;
-    resize: vertical;
-    padding: var(--s-2);
-    border-radius: var(--r-sm);
-    border: 1px solid var(--edge);
-    background: var(--fill-sunken);
-    color: var(--text);
-    font: inherit;
-    font-size: var(--t-caption);
+    font-size: var(--type-secondary-size);
   }
 
   .import-actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--s-2);
-  }
-
-  .list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-2);
-    max-width: 720px;
-  }
-
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--s-3);
-    min-height: 56px;
-    padding: 0 var(--s-3);
-    border-radius: var(--r-md);
-    border: 1px solid var(--edge);
-    background: var(--fill);
-    transition:
-      background var(--m-fast) var(--ease),
-      border-color var(--m-fast) var(--ease);
-  }
-
-  .row:hover {
-    background: var(--fill-hover);
-  }
-
-  .row.live {
-    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  }
-
-  .tick {
-    display: grid;
-    place-items: center;
-    width: 18px;
-    color: var(--accent-strong);
+    gap: var(--space-2);
   }
 
   .text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
     min-width: 0;
-    flex: 1;
   }
 
-  .name {
-    font-size: var(--t-body);
-    font-weight: var(--w-medium);
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  /* The one in use: a larger mark and name. Its pane crosses the brightest
+     part of the photograph, and its meta line is set at full strength both for
+     emphasis and to keep it clear of 4.5:1 there. */
+  .lead-item {
+    padding-block: var(--space-4);
   }
 
-  .facts {
-    font-size: var(--t-caption);
-    color: var(--text-faint);
+  .lead-item .ui-item-meta {
+    color: var(--color-text);
   }
 
-  .rename {
-    height: var(--h-sm);
-    padding: 0 var(--s-2);
-    border-radius: var(--r-sm);
-    border: 1px solid var(--accent);
-    background: var(--fill-sunken);
-    color: var(--text);
-    font: inherit;
-    font-size: var(--t-body);
+  .ui-mark.big {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-lg);
+    font-size: var(--type-title-size);
+    box-shadow: var(--control-rim-strong);
   }
 
-  .badge {
-    padding: 2px var(--s-2);
-    border-radius: var(--r-pill);
-    font-size: var(--t-meta);
-    font-weight: var(--w-medium);
-    color: var(--good);
-    background: color-mix(in srgb, var(--good) 14%, transparent);
+  .ui-item-title.big {
+    font-size: var(--type-heading-size);
+  }
+
+  /* The others recede slightly until they are chosen. */
+  .ui-mark.quiet {
+    background-color: var(--control-fill);
+    color: var(--color-text-secondary);
+  }
+
+  .hint {
+    display: block;
+    margin-top: var(--space-1);
+    font-size: var(--type-caption-size);
+    line-height: var(--type-caption-leading);
+    color: var(--color-text-secondary);
   }
 
   .use {
-    height: var(--h-sm);
-    padding: 0 var(--s-3);
-    border-radius: var(--r-sm);
-    font-size: var(--t-caption);
-    font-weight: var(--w-medium);
-    color: var(--text-muted);
-    border: 1px solid var(--edge);
-    transition:
-      color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease);
+    display: contents;
   }
 
-  .use:hover:not(:disabled) {
-    color: var(--text);
-    background: var(--fill-hover);
+  .use :global(button) {
+    margin-left: var(--space-2);
   }
 
-  .tools {
-    display: flex;
-    gap: 2px;
-    opacity: 0;
-    transition: opacity var(--m-fast) var(--ease);
-  }
-
-  .row:hover .tools,
-  .row:focus-within .tools {
-    opacity: 1;
-  }
-
-  .tools button {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--r-sm);
-    color: var(--text-faint);
-  }
-
-  .tools button:hover:not(:disabled) {
-    color: var(--text);
-    background: var(--fill-hover);
-  }
-
-  .tools button.danger:hover:not(:disabled) {
-    color: var(--bad);
-  }
-
-  .tools button:disabled {
-    opacity: 0.35;
+  .rename {
+    min-height: var(--control-height-md);
+    max-width: 360px;
   }
 
   .confirm {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--s-2);
-    padding: 0 var(--s-3);
-    border-radius: var(--r-md);
-    background: var(--overlay);
-    font-size: var(--t-caption);
-    color: var(--text-muted);
+    gap: var(--space-2);
   }
 
   .confirm span {
-    margin-right: auto;
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
+    margin-right: var(--space-1);
+  }
+
+  .empty {
+    margin: 0;
+    padding: 0 var(--space-1);
+    max-width: 60ch;
+    font-size: var(--type-secondary-size);
+    line-height: var(--type-secondary-leading);
+    color: var(--color-text-secondary);
+  }
+
+  .blank {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-8) var(--space-1);
+  }
+
+  .blank-title {
+    margin: 0;
+    font-size: var(--type-heading-size);
+    font-weight: var(--type-heading-weight);
+    color: var(--color-text);
   }
 </style>

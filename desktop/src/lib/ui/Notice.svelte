@@ -6,10 +6,10 @@
   in the flow of the page or sheet it concerns, and stays until the state it
   describes changes or it is dismissed.
 
-  Tones are the only place a hue carries meaning: `neutral` is plain light
-  glass, and `success`, `warning` and `danger` are a wash and a rim in their
-  status colour. `floating` lifts it onto the photograph as its own pane, for
-  status that has no page to sit in.
+  Every notice is standard glass. Tones are the only place a hue carries
+  meaning: `neutral` is the glass alone, and `success`, `warning` and `danger`
+  lay a wash and a rim in their status colour over it. `floating` adds the
+  pane's shadow, for status that has no page to sit in.
 -->
 <script lang="ts">
   import { X } from '@lucide/svelte';
@@ -38,6 +38,10 @@
 </div>
 
 <style>
+  /* Always on standard glass, with the status wash laid over it: a notice can
+     sit straight on the photograph, and a bare tint over bright sky would leave
+     its text unreadable. The tone classes supply only the wash, rim and text
+     colour, through their custom properties. */
   .notice {
     --surface-radius: var(--radius-md);
     display: flex;
@@ -45,14 +49,39 @@
     gap: var(--space-2);
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-md);
+    background:
+      linear-gradient(var(--tone-tint, transparent), var(--tone-tint, transparent)),
+      var(--mat-standard-fill);
+    -webkit-backdrop-filter: var(--mat-standard-filter);
+    backdrop-filter: var(--mat-standard-filter);
+    box-shadow:
+      inset 0 0 0 1px var(--tone-rim, transparent),
+      var(--mat-standard-rim);
+    color: var(--tone-text, var(--color-text-secondary));
     font-size: var(--type-secondary-size);
     line-height: var(--type-secondary-leading);
   }
 
-  .notice.neutral:not(.material-standard) {
-    background-color: var(--control-fill);
-    box-shadow: var(--control-rim);
-    color: var(--color-text-secondary);
+  .notice.material-standard {
+    box-shadow:
+      inset 0 0 0 1px var(--tone-rim, transparent),
+      var(--mat-standard-rim),
+      var(--mat-standard-shadow);
+  }
+
+  /* Inside a pane that is already glass -- a sheet, a popover, a section -- a
+     second blur would sample the first one's blur for nothing. The notice goes
+     flat there: the pane's own fill under a control fill, with the same wash,
+     rim and text colour. */
+  :global(:is(.material-light, .material-standard, .material-dense, .ui-popover)) .notice {
+    background:
+      linear-gradient(var(--tone-tint, transparent), var(--tone-tint, transparent)),
+      var(--control-fill);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow:
+      inset 0 0 0 1px var(--tone-rim, transparent),
+      var(--control-rim);
   }
 
   .content {

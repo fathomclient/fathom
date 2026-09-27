@@ -268,10 +268,10 @@ final class ModsSection implements Section {
         FathomComponents.card(ui, card, surface.hover, Math.max(enabled * 0.82f, selected));
 
         Rect iconBox = new Rect(card.x + Skin.CARD_PADDING, card.y + Skin.CARD_PADDING, 40f, 40f);
-        int iconFace = Skin.mix(Skin.RECESSED, Skin.BASE_RED, enabled * 0.18f);
+        int iconFace = Skin.mix(Skin.RECESSED, Skin.ENERGY, enabled * 0.18f);
         ui.rounded(iconBox.x, iconBox.y, iconBox.right(), iconBox.bottom(),
                 Skin.R_MEDIUM, iconFace);
-        int icon = Skin.mix(Skin.TEXT_FAINT, Skin.HOT_RED, enabled);
+        int icon = Skin.mix(Skin.TEXT_FAINT, Skin.ENERGY_MARK, enabled);
         ui.icon(Icon.of(feature.icon()), iconBox.centreX() - ICON / 2f,
                 iconBox.centreY() - ICON / 2f, ICON,
                 VisualEffects.hoverBrighten(icon, surface.hover));
@@ -299,7 +299,7 @@ final class ModsSection implements Section {
                 ? footer.vcentreRight(0f, Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT)
                 : new Rect(footer.right(), footer.y, 0f, footer.height);
         Rect options = configurable
-                ? new Rect(toggle.x - Skin.S2 - 76f, footer.y, 76f, footer.height)
+                ? new Rect(toggle.x - Skin.S2 - 84f, footer.y, 84f, footer.height)
                 : new Rect(toggle.x, footer.y, 0f, footer.height);
         float metadataRight = configurable ? options.x - Skin.S2 : toggle.x - Skin.S2;
         String badge = compactBadge(feature);
@@ -309,7 +309,7 @@ final class ModsSection implements Section {
         float dot = 5f;
         ui.rounded(footer.x, footer.centreY() - dot / 2f,
                 footer.x + dot, footer.centreY() + dot / 2f, dot / 2f,
-                visuallyEnabled ? Skin.HOT_RED : Skin.TEXT_DISABLED);
+                visuallyEnabled ? Skin.ENERGY_MARK : Skin.TEXT_DISABLED);
         ui.text(Text.fit(ui, metadata, Type.CAPTION,
                         Math.max(0f, metadataRight - footer.x - dot - Skin.S2)),
                 footer.x + dot + Skin.S2, Controls.baseline(ui, footer, Type.CAPTION),
@@ -420,12 +420,12 @@ final class ModsSection implements Section {
         Rect moduleIcon = new Rect(head.x, head.y, 36f, 36f);
         // The only light in the drawer: the selected module's header icon.
         VisualEffects.layeredSurface(ui, moduleIcon, Skin.R_MEDIUM,
-                Skin.mix(Skin.RECESSED, Skin.BASE_RED, 0.22f), 0f);
+                Skin.mix(Skin.RECESSED, Skin.ENERGY, 0.22f), 0f);
         ui.outline(moduleIcon.x, moduleIcon.y, moduleIcon.right(), moduleIcon.bottom(),
                 Skin.R_MEDIUM, Skin.BORDER_STANDARD,
-                Skin.scaleAlpha(Skin.ACTIVE_RED, shown));
+                Skin.scaleAlpha(Skin.ENERGY_EDGE, shown));
         ui.icon(Icon.of(open.icon()), moduleIcon.centreX() - 11f,
-                moduleIcon.centreY() - 11f, 22f, Skin.HOT_RED);
+                moduleIcon.centreY() - 11f, 22f, Skin.ENERGY_MARK);
         ui.text(Text.fit(ui, open.name(), Type.SECTION, titleRight - head.x - 46f), head.x + 46f,
                 head.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
         ui.text(Text.fit(ui, "by " + open.owner(), Type.CAPTION, titleRight - head.x - 46f), head.x + 46f,
@@ -458,13 +458,11 @@ final class ModsSection implements Section {
                 + conflictLines(context) * CONFLICT_ROW;
         float offset = drawerScroll.offset(context.delta(), contentHeight, viewport.height);
 
-        // The settings sit in a recessed well: floating drawer, sunken content,
-        // raised controls -- three planes instead of rows painted on a slab.
+        // The settings sit in a sunken well inside the drawer's dense glass:
+        // one flat, warm deepening, not a second pane.
         Rect well = Rect.of(viewport.x - Skin.S2, viewport.y - Skin.S2,
                 viewport.right() + Skin.S2, viewport.bottom() + Skin.S2);
-        VisualEffects.layeredSurface(ui, well, Skin.R_MEDIUM, Skin.fade(Skin.RECESSED, 0.78f), 0f);
-        ui.gradient(well.x, well.y, well.right(), well.y + 14f, Skin.R_MEDIUM,
-                0x66000000, 0x00000000);
+        ui.rounded(well.x, well.y, well.right(), well.bottom(), Skin.R_MEDIUM, Skin.RECESSED);
         ui.outline(well.x, well.y, well.right(), well.bottom(), Skin.R_MEDIUM,
                 Skin.BORDER_STANDARD, Skin.EDGE_RECESSED);
 

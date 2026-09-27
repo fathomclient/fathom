@@ -31,7 +31,8 @@
   import Segmented from './Segmented.svelte';
   import Switch from './Switch.svelte';
   import Sheet from './Sheet.svelte';
-  import { EASE, FAST, NORMAL } from '../motion';
+  import Notice from './Notice.svelte';
+  import { EASE, MOTION_HOVER, MOTION_STATE } from '../motion';
   import {
     createProfileFromSetup,
     openPage,
@@ -192,7 +193,7 @@
         </div>
 
         {#if draft.kind === 'custom'}
-          <div class="sub" transition:slide={{ duration: NORMAL, easing: EASE }}>
+          <div class="sub" transition:slide={{ duration: MOTION_STATE, easing: EASE }}>
             <span class="label">Loader</span>
             <Segmented
               options={options.loaders.map((loader) => ({
@@ -208,7 +209,7 @@
 
       <!-- 3. COMPONENTS -->
       {#if addOnsShown}
-        <section transition:slide={{ duration: NORMAL, easing: EASE }}>
+        <section transition:slide={{ duration: MOTION_STATE, easing: EASE }}>
           <span class="step">{step('addons')} · Add-ons</span>
           {#each components as component}
             <div class="component">
@@ -262,48 +263,50 @@
 
         <div class="row">
           <span class="label">Memory</span>
-          <div class="right">
-            <span class="value tnum">
-              {memoryAutomatic ? `${options.recommendedMemoryMb} MB` : `${draft.memoryMb} MB`}
-            </span>
-            <Switch
-              checked={memoryAutomatic}
-              label="Automatic memory"
-              onChange={(on) =>
-                void choose('memoryMb', on ? null : (options?.recommendedMemoryMb ?? 2048))}
-            />
-            <span class="quiet">Automatic</span>
-          </div>
+          <span class="value tnum">
+            {memoryAutomatic ? `${options.recommendedMemoryMb} MB` : `${draft.memoryMb} MB`}
+          </span>
+        </div>
+        <div class="row">
+          <span class="quiet grow">
+            {memoryAutomatic ? 'Chosen for this computer' : 'Set by hand'}
+          </span>
+          <span class="quiet">Automatic</span>
+          <Switch
+            checked={memoryAutomatic}
+            label="Automatic memory"
+            onChange={(on) =>
+              void choose('memoryMb', on ? null : (options?.recommendedMemoryMb ?? 2048))}
+          />
         </div>
 
         {#if !memoryAutomatic}
-          <div class="slider" transition:slide={{ duration: FAST, easing: EASE }}>
+          <div class="slider" transition:slide={{ duration: MOTION_HOVER, easing: EASE }}>
             <input
               type="range"
               min={options.minMemoryMb}
               max={8192}
               step={512}
               value={draft.memoryMb ?? options.recommendedMemoryMb}
+              aria-label="Memory"
               on:input={(event) => void choose('memoryMb', Number(event.currentTarget.value))}
             />
           </div>
         {/if}
 
-        <div class="row">
+        <div class="sub">
           <span class="label">Java</span>
-          <div class="right">
-            <Segmented
-              options={options.java
-                .filter((option) => option.id !== 'custom')
-                .map((option) => ({ id: option.id, label: option.label }))}
-              value={draft.java}
-              onChange={(id) => void choose('java', id)}
-            />
-          </div>
+          <Segmented
+            options={options.java
+              .filter((option) => option.id !== 'custom')
+              .map((option) => ({ id: option.id, label: option.label }))}
+            value={draft.java}
+            onChange={(id) => void choose('java', id)}
+          />
+          <p class="quiet indent">
+            {options.java.find((option) => option.id === draft?.java)?.detail ?? ''}
+          </p>
         </div>
-        <p class="quiet indent">
-          {options.java.find((option) => option.id === draft?.java)?.detail ?? ''}
-        </p>
       </section>
 
       <!-- 5. NAME -->
@@ -323,7 +326,7 @@
   <svelte:fragment slot="footer">
     {#if options && draft}
       {#if error}
-        <p class="problem">{error}</p>
+        <Notice tone="danger">{error}</Notice>
       {:else if problems.length > 0}
         <p class="problem">{problems[0]}</p>
       {/if}
@@ -365,7 +368,7 @@
   .kind {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-1);
     padding: var(--space-3) var(--space-4);
     text-align: left;
     border-radius: var(--radius-md);
@@ -430,11 +433,13 @@
     color: var(--color-text-secondary);
   }
 
+  /* Secondary rather than tertiary: on the chosen card's denser fill, tertiary
+     measured 3.5:1. */
   .kind-includes {
     margin: 2px 0 0;
     padding-left: var(--space-4);
     font-size: var(--type-caption-size);
-    color: var(--color-text-tertiary);
+    color: var(--color-text-secondary);
   }
 
   .kind-includes li {
@@ -473,7 +478,9 @@
   }
 
   .quiet {
+    margin: 0;
     font-size: var(--type-caption-size);
+    line-height: var(--type-caption-leading);
     color: var(--color-text-tertiary);
   }
 
@@ -508,7 +515,12 @@
     margin-left: auto;
   }
 
+  .grow {
+    flex: 1;
+  }
+
   .value {
+    margin-left: auto;
     font-size: var(--type-body-size);
     font-weight: var(--type-button-weight);
   }

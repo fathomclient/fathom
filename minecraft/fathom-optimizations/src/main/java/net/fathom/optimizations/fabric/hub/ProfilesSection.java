@@ -200,8 +200,10 @@ final class ProfilesSection implements Section {
             ui.text(Text.fit(ui, describe(profile), Type.CAPTION, room), row.x + Skin.S3,
                     top + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.CAPTION), Type.CAPTION, Skin.TEXT_FAINT);
             if (live) {
+                // Neutral, not green: the live profile is already the denser
+                // card with the brighter rim, and "live" is a fact, not a success.
                 controls.badge(ui, "profiles.live." + profile.id(), "Live",
-                        row.vcentreRight(Skin.S3, Controls.badgeWidth(ui, "Live"), 20f), Skin.GOOD);
+                        row.vcentreRight(Skin.S3, Controls.badgeWidth(ui, "Live"), 20f), Skin.TEXT);
             }
 
             if (state.clicked && !chosen) {

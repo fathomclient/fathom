@@ -5,32 +5,38 @@
   called Profiles, which is the word the game uses for loadouts; they are a
   different thing and now a different page (docs/fathom-profiles.md).
 
-  A visual selector, not a card grid. Each tile leads with imagery: the user's
-  own artwork where they have supplied it (`docs/profile-art.md`), and otherwise
-  a deterministic gradient derived from the profile's name.
+  A list, not a card grid: most people have one to four of these, and a grid of
+  four tiles is mostly empty space with rectangles in it. Each row leads with
+  imagery: the user's own artwork where they have supplied it
+  (`docs/profile-art.md`), and otherwise a field of colour derived from the
+  name. Artwork is shown as it is -- rounded, unframed, nothing printed on it.
 
-  The gradient is decoration, not data. It never claims to be a screenshot — it
-  is a coloured field so that six profiles are six distinguishable objects
-  rather than six identical grey rectangles. Deriving it from the name means the
-  same profile is the same colour every time, which is what makes it useful for
-  recognition at all.
+  The colour field is decoration, not data. It never claims to be a screenshot;
+  it is there so that four installations are four distinguishable objects.
+  Deriving it from the name means the same installation is the same colour
+  every time, and taking it from the palette keeps it inside the photograph's
+  light.
 
-  What the tile does NOT show: the profile id, the game directory, or any path.
-  Those are filenames. Putting them on the card is most of why the previous
-  version read as a form over a database.
+  What a row does NOT show: the profile id, the game directory, or any path.
+  Those are filenames.
 
-  Editing opens a drawer. Dumping the whole form into the page was the other
-  half of that problem.
+  The installation in use sits in its own pane at the top, larger. Editing
+  opens the shared sheet.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
-  import { Plus, Copy, Pencil, Trash2, Check, GitBranch } from '@lucide/svelte';
+  import { Plus, Copy, Pencil, Trash2, GitBranch } from '@lucide/svelte';
 
   import Page from '../lib/ui/Page.svelte';
+  import Section from '../lib/ui/Section.svelte';
   import Button from '../lib/ui/Button.svelte';
+  import Notice from '../lib/ui/Notice.svelte';
+  import Sheet from '../lib/ui/Sheet.svelte';
+  import Switch from '../lib/ui/Switch.svelte';
   import ProfileSetup from '../lib/ui/ProfileSetup.svelte';
-  import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
+  import { tooltip } from '../lib/tooltip';
+  import { EASE, MOTION_HOVER, MOTION_PAGE, MOTION_STAGGER } from '../lib/motion';
   import {
     deleteProfile,
     deriveProfile,
@@ -49,6 +55,7 @@
   export let onAddOptiFine: () => void = () => {};
 
   let rows: ProfileRow[] = [];
+  let loaded = false;
   let art: Record<string, string | null> = {};
   let busy = false;
   let editing: ProfileDetail | null = null;
@@ -58,6 +65,7 @@
 
   async function refresh() {
     rows = await profilesView();
+    loaded = true;
     // Artwork is optional and per-profile, so it is fetched alongside rather
     // than folded into the row: a profile with no art must not delay the ones
     // that have it, and a failure here must not take the page down.
@@ -110,23 +118,48 @@
     });
   }
 
+  /* Pairs from the palette, so a generated field is always a colour the
+     photograph could contain. */
+  const FIELDS = [
+    ['--palette-bronze-500', '--palette-umber-800'],
+    ['--palette-olive-500', '--palette-umber-900'],
+    ['--palette-terracotta-500', '--palette-umber-800'],
+    ['--palette-sage-500', '--palette-olive-700'],
+    ['--palette-amber-500', '--palette-bronze-600'],
+    ['--palette-sand-500', '--palette-umber-700'],
+  ];
+
   /**
-   * A stable hue for a profile with no artwork.
+   * A stable colour field for a profile with no artwork.
    *
    * A cheap string hash, not a cryptographic one: the requirement is only that
-   * the same name always yields the same colour and that similar names do not
+   * the same name always yields the same field and that similar names do not
    * collide too obviously.
    */
-  function hue(name: string): number {
+  function field(name: string): string {
     let h = 0;
     for (let i = 0; i < name.length; i += 1) {
-      h = (h * 31 + name.charCodeAt(i)) % 360;
+      h = (h * 31 + name.charCodeAt(i)) % 3600;
     }
-    return h;
+    const [from, to] = FIELDS[h % FIELDS.length];
+    const angle = 120 + (Math.floor(h / FIELDS.length) % 90);
+    return `background-image:linear-gradient(${angle}deg, var(${from}), var(${to}))`;
   }
+
+  function cover(row: ProfileRow): string {
+    return art[row.id] ? `background-image:url(${art[row.id]})` : field(row.name);
+  }
+
+  /** "Last played Never" reads as a malfunction; say it the way a person would. */
+  function played(when: string): string {
+    return when === 'Never' ? 'Not played yet' : `Last played ${when}`;
+  }
+
+  $: current = rows.find((row) => row.selected) ?? null;
+  $: others = rows.filter((row) => !row.selected);
 </script>
 
-<Page title="Installations" summary="{rows.length} {rows.length === 1 ? 'installation' : 'installations'}" wide>
+<Page title="Installations" summary="{rows.length} {rows.length === 1 ? 'installation' : 'installations'}">
   <svelte:fragment slot="actions">
     <Button variant="primary" disabled={busy} onClick={() => (settingUp = true)}>
       <Plus size={14} strokeWidth={2.4} />
@@ -135,92 +168,93 @@
   </svelte:fragment>
 
   {#if error}
-    <p class="error" transition:fade={{ duration: FAST }}>{error}</p>
+    <div transition:fade={{ duration: MOTION_HOVER }}>
+      <Notice tone="danger" onDismiss={() => (error = '')}>{error}</Notice>
+    </div>
   {/if}
 
-  <div class="grid">
-    {#each rows as row, index (row.id)}
-      <div
-        class="tile"
-        class:selected={row.selected}
-        in:fly={{ y: 12, duration: NORMAL, delay: index * STAGGER, easing: EASE }}
-      >
-        <button class="face" on:click={() => run(() => selectProfile(row.id))}>
-          <span
-            class="art"
-            style={art[row.id]
-              ? `background-image:url(${art[row.id]})`
-              : `background-image:linear-gradient(150deg,
-                   hsl(${hue(row.name)} 42% 26%),
-                   hsl(${(hue(row.name) + 40) % 360} 38% 12%))`}
-          >
-            {#if row.selected}
-              <span class="tick" transition:fade={{ duration: FAST }}>
-                <Check size={13} strokeWidth={3} />
-              </span>
-            {/if}
-            <span class="version tnum">{row.version}</span>
+  {#if current}
+    {@const row = current}
+    <!-- The one Play launches. -->
+    <Section label="In use" summary="Play launches this" material>
+      <div class="ui-item current lead-item">
+        <span class="cover big" class:art={Boolean(art[row.id])} style={cover(row)} aria-hidden="true"></span>
+        <div class="text">
+          <span class="ui-item-title big">{row.name}</span>
+          <span class="ui-item-meta">
+            {row.kindLabel} · <span class:attention={!row.loaderAvailable}>{row.loader}</span> ·
+            {row.modCount} {row.modCount === 1 ? 'mod' : 'mods'}
           </span>
-
-          <span class="body">
-            <span class="name">{row.name}</span>
-            <span class="facts">
-              <!-- The type first: what a profile *is* answers more questions
-                   than which loader it happens to carry. -->
-              <span class="kind {row.kind}">{row.kindLabel}</span>
-              <span class:attention={!row.loaderAvailable}>{row.loader}</span>
-              <span class="dot">·</span>
-              <span>{row.modCount} {row.modCount === 1 ? 'mod' : 'mods'}</span>
-            </span>
-            {#if row.parent}
-              <span class="derived">
-                <GitBranch size={11} strokeWidth={2} />
-                Based on {row.parent}
-              </span>
-            {/if}
-            <span class="foot">
-              <span class="preset">{row.preset}</span>
-              <span class="played tnum">{row.lastPlayed}</span>
-            </span>
+          <span class="facts tnum">
+            Minecraft {row.version} · {row.preset} · {played(row.lastPlayed)}
           </span>
-        </button>
-
-        <!-- Controls appear on hover. Three icon buttons on every tile at rest
-             would turn a wall of six into eighteen affordances. -->
-        <div class="tools">
-          <button title="Edit" on:click|stopPropagation={() => openEditor(row.id)}>
-            <Pencil size={13} strokeWidth={2} />
-          </button>
-          <!-- A variant, not a copy. It shares the parent's client and
-               overrides only its own look and extra mods, so it stays current
-               when the parent's loader moves. -->
-          <button
-            title="Make a variant"
-            on:click|stopPropagation={() => run(() => deriveProfile(row.id, `${row.name} variant`))}
-          >
-            <GitBranch size={13} strokeWidth={2} />
-          </button>
-          <button
-            title="Duplicate"
-            on:click|stopPropagation={() => run(() => duplicateProfile(row.id))}
-          >
-            <Copy size={13} strokeWidth={2} />
-          </button>
-          <button
-            class="danger"
-            title="Delete"
-            on:click|stopPropagation={() => (confirmingDelete = row.id)}
-          >
-            <Trash2 size={13} strokeWidth={2} />
-          </button>
+          {#if row.parent}
+            <span class="facts derived"><GitBranch size={12} strokeWidth={2} /> Based on {row.parent}</span>
+          {/if}
         </div>
-
         {#if confirmingDelete === row.id}
-          <!-- Confirmed in place, on the thing being deleted, rather than in a
-               modal that covers it up. -->
-          <div class="confirm" transition:fade={{ duration: FAST, easing: EASE }}>
+          <div class="ui-item-controls confirm" transition:fade={{ duration: MOTION_HOVER }}>
             <span>Delete this installation?</span>
-            <div class="confirm-actions">
+            <Button onClick={() => (confirmingDelete = null)}>Keep</Button>
+            <Button
+              variant="caution"
+              onClick={() => {
+                confirmingDelete = null;
+                void run(() => deleteProfile(row.id));
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        {:else}
+          <div class="ui-item-controls">
+            <button class="ui-icon-button small" aria-label="Edit {row.name}" use:tooltip={'Edit'} on:click={() => openEditor(row.id)}>
+              <Pencil size={14} strokeWidth={2} />
+            </button>
+            <!-- A variant, not a copy. It shares the parent's client and
+                 overrides only its own look and extra mods, so it stays
+                 current when the parent's loader moves. -->
+            <button
+              class="ui-icon-button small"
+              aria-label="Make a variant of {row.name}"
+              use:tooltip={'Make a variant'}
+              disabled={busy}
+              on:click={() => run(() => deriveProfile(row.id, `${row.name} variant`))}
+            >
+              <GitBranch size={14} strokeWidth={2} />
+            </button>
+            <button class="ui-icon-button small" aria-label="Duplicate {row.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => run(() => duplicateProfile(row.id))}>
+              <Copy size={14} strokeWidth={2} />
+            </button>
+            <button class="ui-icon-button small danger" aria-label="Delete {row.name}" use:tooltip={'Delete'} on:click={() => (confirmingDelete = row.id)}>
+              <Trash2 size={14} strokeWidth={2} />
+            </button>
+          </div>
+        {/if}
+      </div>
+    </Section>
+  {/if}
+
+  {#if others.length}
+    <Section label={current ? 'Other installations' : 'Installations'} material>
+      {#each others as row, index (row.id)}
+        <div class="ui-item" in:fly={{ y: 8, duration: MOTION_PAGE, delay: index * MOTION_STAGGER, easing: EASE }}>
+          <span class="cover" class:art={Boolean(art[row.id])} style={cover(row)} aria-hidden="true"></span>
+          <div class="text">
+            <span class="ui-item-title">{row.name}</span>
+            <span class="ui-item-meta">
+              {row.kindLabel} · <span class:attention={!row.loaderAvailable}>{row.loader}</span> ·
+              {row.modCount} {row.modCount === 1 ? 'mod' : 'mods'}
+            </span>
+            <span class="facts tnum">Minecraft {row.version} · {played(row.lastPlayed)}</span>
+            {#if row.parent}
+              <span class="facts derived"><GitBranch size={12} strokeWidth={2} /> Based on {row.parent}</span>
+            {/if}
+          </div>
+
+          {#if confirmingDelete === row.id}
+            <div class="ui-item-controls confirm" transition:fade={{ duration: MOTION_HOVER }}>
+              <span>Delete this installation?</span>
               <Button onClick={() => (confirmingDelete = null)}>Keep</Button>
               <Button
                 variant="caution"
@@ -232,11 +266,46 @@
                 Delete
               </Button>
             </div>
-          </div>
-        {/if}
-      </div>
-    {/each}
-  </div>
+          {:else}
+            <div class="ui-item-controls">
+              <button class="ui-icon-button small" aria-label="Edit {row.name}" use:tooltip={'Edit'} on:click={() => openEditor(row.id)}>
+                <Pencil size={14} strokeWidth={2} />
+              </button>
+              <button
+                class="ui-icon-button small"
+                aria-label="Make a variant of {row.name}"
+                use:tooltip={'Make a variant'}
+                disabled={busy}
+                on:click={() => run(() => deriveProfile(row.id, `${row.name} variant`))}
+              >
+                <GitBranch size={14} strokeWidth={2} />
+              </button>
+              <button class="ui-icon-button small" aria-label="Duplicate {row.name}" use:tooltip={'Duplicate'} disabled={busy} on:click={() => run(() => duplicateProfile(row.id))}>
+                <Copy size={14} strokeWidth={2} />
+              </button>
+              <button class="ui-icon-button small danger" aria-label="Delete {row.name}" use:tooltip={'Delete'} on:click={() => (confirmingDelete = row.id)}>
+                <Trash2 size={14} strokeWidth={2} />
+              </button>
+              <span class="use">
+                <Button disabled={busy} onClick={() => run(() => selectProfile(row.id))}>Use</Button>
+              </span>
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </Section>
+  {/if}
+
+  {#if loaded && !rows.length}
+    <div class="blank">
+      <p class="blank-title on-footage">No installations</p>
+      <p class="empty on-footage">
+        An installation is how Minecraft starts: its version, loader, Java and memory. Make one to
+        play.
+      </p>
+      <div><Button variant="primary" onClick={() => (settingUp = true)}>New installation</Button></div>
+    </div>
+  {/if}
 </Page>
 
 {#if settingUp}
@@ -252,41 +321,29 @@
 
 <!-- EDITOR -->
 {#if editing}
-  <div
-    class="scrim"
-    role="button"
-    tabindex="-1"
-    aria-label="Close"
-    on:click={() => (editing = null)}
-    on:keydown={(event) => event.key === 'Escape' && (editing = null)}
-    transition:fade={{ duration: FAST }}
-  ></div>
-  <aside class="drawer glass-strong" transition:fly={{ x: 340, duration: NORMAL, easing: EASE }}>
-    <h2>Edit installation</h2>
-
-    <div class="what">
-      <span class="kind {editing.kind}">{editing.kindLabel}</span>
-      <span class="what-facts">Minecraft {editing.version} · {editing.preset}</span>
-    </div>
+  <Sheet title="Edit installation" width={420} onClose={() => (editing = null)}>
+    <p class="what">
+      {editing.kindLabel} · Minecraft {editing.version} · {editing.preset}
+    </p>
 
     {#if editing.parent}
       <!-- A derived profile's technical half comes from its parent, so the
            fields that would be overwritten at launch are removed rather than
            shown greyed. -->
-      <p class="inherited">
+      <p class="fine">
         Based on {editing.parent}. Version, loader, memory and Java come from it.
       </p>
     {/if}
 
-    <label>
-      <span>Name</span>
-      <input bind:value={editing.name} spellcheck="false" />
+    <label class="field">
+      <span class="field-label">Name</span>
+      <input class="ui-field" bind:value={editing.name} spellcheck="false" />
     </label>
 
     {#if !editing.parent}
-      <label>
-        <span>Loader</span>
-        <select bind:value={editing.loader} disabled={editing.kind === 'fathom'}>
+      <label class="field">
+        <span class="field-label">Loader</span>
+        <select class="ui-field" bind:value={editing.loader} disabled={editing.kind === 'fathom'}>
           {#each editing.loaders as loader}
             <!-- Unavailable loaders are shown and marked, not hidden. Hiding
                  them makes the product look smaller than it is and gives
@@ -296,14 +353,14 @@
             </option>
           {/each}
         </select>
+        {#if editing.kind === 'fathom'}
+          <span class="fine">A Fathom installation's loader comes with the type.</span>
+        {/if}
       </label>
-      {#if editing.kind === 'fathom'}
-        <p class="hint">A Fathom installation's loader comes with the type.</p>
-      {/if}
 
-      <label>
-        <span>Java runtime</span>
-        <select bind:value={editing.java}>
+      <label class="field">
+        <span class="field-label">Java runtime</span>
+        <select class="ui-field" bind:value={editing.java}>
           <option value="automatic">Automatic</option>
           <option value="managed">Fathom managed</option>
           <option value="system">System</option>
@@ -312,475 +369,296 @@
           {/if}
         </select>
       </label>
-    {/if}
 
-    {#if !editing.parent}
-      <label>
-        <span>Memory</span>
-        <div class="memory">
-          <input type="range" min="512" max="8192" step="256" bind:value={editing.memoryMb} />
+      <label class="field">
+        <span class="field-line">
+          <span class="field-label">Memory</span>
           <span class="value tnum">{(editing.memoryMb / 1024).toFixed(1)} GB</span>
-        </div>
+        </span>
+        <input type="range" min="512" max="8192" step="256" bind:value={editing.memoryMb} />
       </label>
 
-      <label>
-        <span>Extra Java arguments</span>
-        <input bind:value={editing.extraArgs} spellcheck="false" placeholder="None" />
+      <label class="field">
+        <span class="field-label">Extra Java arguments</span>
+        <input class="ui-field" bind:value={editing.extraArgs} spellcheck="false" placeholder="None" />
       </label>
     {/if}
+
+    <div class="toggle">
+      <span class="toggle-text">Keep Fathom open while playing</span>
+      <Switch
+        checked={editing.keepLauncherOpen}
+        label="Keep Fathom open while playing"
+        onChange={(value) => editing && (editing.keepLauncherOpen = value)}
+      />
+    </div>
 
     {#if editing.components.length}
-      <div class="block">
-        <span class="block-label">Components</span>
-        {#each editing.components as component}
-          <div class="component">
-            <span class="component-name">{component.name}</span>
-            <span class="component-state {component.state}">{component.detail}</span>
-          </div>
-        {/each}
-      </div>
+      <section class="facts-list">
+        <h3>Components</h3>
+        <dl>
+          {#each editing.components as component}
+            <div>
+              <dt>{component.name}</dt>
+              <dd class:quiet={component.state === 'unavailable'} class:flag={component.state === 'missing'}>
+                {component.detail}
+              </dd>
+            </div>
+          {/each}
+        </dl>
+      </section>
     {/if}
 
     <!-- Everything a profile can carry, whether or not this one does. Rows that
          are unset say so, rather than being omitted: the point is to show what
          a profile *is*, not only what has been filled in. -->
-    <div class="block">
-      <span class="block-label">Look</span>
-      {#each editing.identity as row}
-        <div class="component">
-          <span class="component-name">{row.label}</span>
-          <span class="component-state" class:unset={row.unset}>{row.value}</span>
-        </div>
-      {/each}
-    </div>
-
-    {#if editing.servers.length}
-      <div class="block">
-        <span class="block-label">Servers</span>
-        {#each editing.servers as server}
-          <div class="component">
-            <span class="component-name">{server.name}</span>
-            <span class="component-state">{server.address}</span>
+    {#if editing.identity.length}
+    <section class="facts-list">
+      <h3>Look</h3>
+      <dl>
+        {#each editing.identity as row}
+          <div>
+            <dt>{row.label}</dt>
+            <dd class:quiet={row.unset}>{row.value}</dd>
           </div>
         {/each}
-      </div>
+      </dl>
+    </section>
     {/if}
 
-    <label class="inline">
-      <input type="checkbox" bind:checked={editing.keepLauncherOpen} />
-      <span>Keep Fathom open while playing</span>
-    </label>
+    {#if editing.servers.length}
+      <section class="facts-list">
+        <h3>Servers</h3>
+        <dl>
+          {#each editing.servers as server}
+            <div>
+              <dt>{server.name}</dt>
+              <dd>{server.address}</dd>
+            </div>
+          {/each}
+        </dl>
+      </section>
+    {/if}
 
-    <div class="drawer-actions">
-      <Button onClick={() => (editing = null)}>Cancel</Button>
-      <Button variant="primary" disabled={busy} onClick={save}>Save</Button>
-    </div>
-  </aside>
+    <svelte:fragment slot="footer">
+      <div class="sheet-actions">
+        <Button onClick={() => (editing = null)}>Cancel</Button>
+        <Button variant="primary" disabled={busy} onClick={save}>Save</Button>
+      </div>
+    </svelte:fragment>
+  </Sheet>
 {/if}
 
 <style>
-
-  .what {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    margin-bottom: var(--s-1);
-  }
-
-  .what-facts {
-    font-size: var(--t-caption);
-    color: var(--text-faint);
-  }
-
-  .inherited,
-  .hint {
-    margin: 0;
-    font-size: var(--t-caption);
-    color: var(--text-faint);
-    line-height: 1.5;
-  }
-
-  .block {
+  .text {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding-top: var(--s-2);
-    border-top: 1px solid var(--chrome-line);
+    min-width: 0;
   }
 
-  .block-label {
-    font-size: var(--t-meta);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--text-label);
-    margin-bottom: 2px;
-  }
-
-  .component {
-    display: flex;
-    align-items: baseline;
-    gap: var(--s-3);
-    font-size: var(--t-caption);
-  }
-
-  .component-name {
-    color: var(--text-muted);
-  }
-
-  .component-state {
-    margin-left: auto;
-    color: var(--text-faint);
-    text-align: right;
-  }
-
-  .component-state.installed {
-    color: var(--good);
-  }
-
-  .component-state.unavailable,
-  .component-state.unset {
-    color: var(--text-disabled);
-  }
-
-  .component-state.missing {
-    color: var(--warn);
-  }
-
-  /* The profile type, said before the loader: what a profile *is* answers more
-     questions than which loader it happens to carry. */
-  .kind {
-    padding: 1px 6px;
-    border-radius: var(--r-pill);
-    font-size: var(--t-meta);
-    font-weight: var(--w-medium);
-    color: var(--text-muted);
-    background: var(--fill-hover);
-  }
-
-  .kind.fathom {
-    color: #ffb9bf;
-    background: rgba(224, 80, 92, 0.18);
-  }
-
-  .derived {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 3px;
-    font-size: var(--t-meta);
-    color: var(--text-faint);
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
-    gap: var(--s-4);
-  }
-
-  .tile {
-    position: relative;
-    border-radius: var(--r-lg);
-    overflow: hidden;
-    background: var(--glass-fill);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
-    border: 1px solid var(--glass-edge);
-    box-shadow:
-      var(--glass-sheen),
-      var(--glass-shadow);
-    transition:
-      border-color var(--m-normal) var(--ease),
-      transform var(--m-fast) var(--ease),
-      box-shadow var(--m-normal) var(--ease);
-  }
-
-  .tile:hover {
-    transform: translateY(-2px);
-    border-color: var(--glass-edge-strong);
-    box-shadow:
-      var(--glass-sheen-strong),
-      var(--glass-shadow-strong);
-  }
-
-  /* A restrained accent edge and a soft glow. Not a filled red card: the
-     selected profile should be identifiable, not shouting. */
-  .tile.selected {
-    border-color: rgba(224, 80, 92, 0.65);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      0 0 0 1px rgba(224, 80, 92, 0.2),
-      0 16px 40px rgba(0, 0, 0, 0.45),
-      0 0 34px var(--accent-glow);
-  }
-
-  .face {
+  /* -- the artwork ------------------------------------------------------------
+     16:9, rounded, unframed. A generated field gets the control rim so it reads
+     as a surface; real artwork gets nothing on top of it. */
+  .cover {
     display: block;
-    width: 100%;
-    text-align: left;
-  }
-
-  .art {
-    position: relative;
-    display: block;
-    height: 96px;
+    width: 88px;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--radius-md);
     background-size: cover;
     background-position: center;
-    border-bottom: 1px solid var(--chrome-line);
+    box-shadow: var(--control-rim);
   }
 
-  .tick {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    display: grid;
-    place-items: center;
-    width: 21px;
-    height: 21px;
-    border-radius: var(--r-pill);
-    background: var(--accent);
-    color: #fff;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.3),
-      0 2px 8px rgba(0, 0, 0, 0.5);
+  .cover.art {
+    box-shadow: none;
   }
 
-  .version {
-    position: absolute;
-    left: 8px;
-    bottom: 8px;
-    padding: 2px 7px;
-    border-radius: var(--r-pill);
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(8px);
-    font-size: var(--t-meta);
-    font-weight: var(--w-semibold);
-    color: #fff;
+  .cover.big {
+    width: 144px;
+    border-radius: var(--radius-lg);
   }
 
-  .body {
-    display: block;
-    padding: 11px 13px 12px;
+  /* The one in use: its pane crosses the brightest part of the photograph, and
+     its meta line is set at full strength both for emphasis and to keep it
+     clear of 4.5:1 there. */
+  .lead-item {
+    padding-block: var(--space-4);
   }
 
-  .name {
-    display: block;
-    font-size: var(--t-row);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .lead-item .ui-item-meta {
+    color: var(--color-text);
+  }
+
+  .ui-item-title.big {
+    font-size: var(--type-heading-size);
   }
 
   .facts {
     display: flex;
     align-items: center;
-    gap: var(--s-2);
-    margin-top: var(--s-1);
-    font-size: var(--t-caption);
-    color: var(--text-muted);
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-top: 2px;
+    font-size: var(--type-caption-size);
+    line-height: var(--type-caption-leading);
+    color: var(--color-text-secondary);
   }
 
-  .facts .attention {
-    color: var(--warn);
+  .attention {
+    color: var(--color-warning-text);
   }
 
-  .dot {
-    color: var(--text-disabled);
+  .use {
+    display: contents;
   }
 
-  .foot {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    margin-top: var(--s-3);
-  }
-
-  .preset {
-    padding: 2px 8px;
-    border-radius: var(--r-pill);
-    background: var(--fill);
-    font-size: var(--t-meta);
-    color: var(--text-muted);
-  }
-
-  .played {
-    margin-left: auto;
-    font-size: var(--t-meta);
-    color: var(--text-faint);
-  }
-
-  .tools {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    display: flex;
-    gap: var(--s-1);
-    opacity: 0;
-    transform: translateY(-4px);
-    transition:
-      opacity var(--m-fast) var(--ease),
-      transform var(--m-fast) var(--ease);
-  }
-
-  .tile:hover .tools {
-    opacity: 1;
-    transform: none;
-  }
-
-  .tools button {
-    display: grid;
-    place-items: center;
-    width: 25px;
-    height: 25px;
-    border-radius: var(--r-xs);
-    color: rgba(255, 255, 255, 0.75);
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(8px);
-    transition:
-      color var(--m-fast) var(--ease),
-      background var(--m-fast) var(--ease);
-  }
-
-  .tools button:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  .tools button.danger:hover {
-    color: #fff;
-    background: rgba(232, 114, 114, 0.7);
+  .use :global(button) {
+    margin-left: var(--space-2);
   }
 
   .confirm {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--s-3);
-    background: rgba(6, 7, 10, 0.93);
-    backdrop-filter: blur(10px);
-    font-size: var(--t-body);
+    gap: var(--space-2);
   }
 
-  .confirm-actions {
-    display: flex;
-    gap: var(--s-2);
+  .confirm span {
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
+    margin-right: var(--space-1);
   }
 
-  .error {
+  .empty {
     margin: 0;
-    padding: 10px 13px;
-    border-radius: var(--r-md);
-    background: rgba(232, 114, 114, 0.12);
-    border: 1px solid rgba(232, 114, 114, 0.3);
-    color: var(--bad);
-    font-size: var(--t-body);
+    max-width: 60ch;
+    font-size: var(--type-secondary-size);
+    line-height: var(--type-secondary-leading);
+    color: var(--color-text-secondary);
   }
 
-  /* -- editor ------------------------------------------------------------ */
-  .scrim {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 30;
-  }
-
-  .drawer {
-    position: fixed;
-    top: var(--topbar-height);
-    right: 0;
-    bottom: var(--bottombar-height);
-    width: 350px;
+  .blank {
     display: flex;
     flex-direction: column;
-    gap: var(--s-4);
-    padding: 22px;
-    border-radius: 0;
-    border-right: none;
-    border-top: none;
-    border-bottom: none;
-    overflow-y: auto;
-    z-index: 31;
+    gap: var(--space-3);
+    padding: var(--space-8) var(--space-1);
   }
 
-  h2 {
+  .blank-title {
     margin: 0;
-    font-size: var(--t-section);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
+    font-size: var(--type-heading-size);
+    font-weight: var(--type-heading-weight);
+    color: var(--color-text);
   }
 
-  label {
+  /* -- the editor ------------------------------------------------------------ */
+  .what {
+    margin: calc(-1 * var(--space-2)) 0 0;
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
+  }
+
+  .fine {
+    margin: 0;
+    font-size: var(--type-caption-size);
+    line-height: var(--type-caption-leading);
+    color: var(--color-text-tertiary);
+  }
+
+  .field {
     display: flex;
     flex-direction: column;
-    gap: var(--s-2);
+    gap: var(--space-2);
   }
 
-  label > span {
-    font-size: var(--t-meta);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--text-faint);
-  }
-
-  label.inline {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--s-2);
-  }
-
-  label.inline span {
-    font-size: var(--t-body);
-    text-transform: none;
-    letter-spacing: 0;
-    font-weight: var(--w-normal);
-    color: var(--text-muted);
-  }
-
-  input:not([type]),
-  select {
-    height: 32px;
-    padding: 0 10px;
-    border-radius: var(--r-sm);
-    background: var(--fill-sunken);
-    border: 1px solid var(--chrome-line-strong);
-    font-size: var(--t-body);
-    transition: border-color var(--m-fast) var(--ease);
-  }
-
-  input:not([type]):focus,
-  select:focus {
-    border-color: var(--accent);
-  }
-
-  .memory {
+  .field-line {
     display: flex;
-    align-items: center;
-    gap: var(--s-3);
+    align-items: baseline;
+    justify-content: space-between;
   }
 
-  input[type='range'] {
-    flex: 1;
-    accent-color: var(--accent);
+  .field-label {
+    font-size: var(--type-label-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-label-tracking);
+    color: var(--color-text-secondary);
   }
 
   .value {
-    width: 54px;
-    text-align: right;
-    font-size: var(--t-body);
-    color: var(--text-muted);
+    font-size: var(--type-secondary-size);
+    font-weight: var(--type-button-weight);
+    color: var(--color-text);
   }
 
-  .drawer-actions {
+  .field input[type='range'] {
+    width: 100%;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    box-shadow: 0 -1px 0 var(--control-hairline);
+  }
+
+  .toggle-text {
+    flex: 1;
+    font-size: var(--type-body-size);
+    color: var(--color-text);
+  }
+
+  .facts-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-4);
+    box-shadow: 0 -1px 0 var(--control-hairline);
+  }
+
+  h3 {
+    margin: 0;
+    font-size: var(--type-label-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-label-tracking);
+    color: var(--color-text-secondary);
+  }
+
+  dl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+  }
+
+  dl div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-3);
+    align-items: baseline;
+    font-size: var(--type-secondary-size);
+  }
+
+  dt {
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+  }
+
+  dd {
+    margin: 0;
+    text-align: right;
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+  }
+
+  dd.quiet {
+    color: var(--color-text-disabled);
+  }
+
+  dd.flag {
+    color: var(--color-warning-text);
+  }
+
+  .sheet-actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--s-2);
-    margin-top: auto;
-    padding-top: var(--s-3);
+    gap: var(--space-2);
   }
 </style>

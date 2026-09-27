@@ -34,6 +34,10 @@
   <div class="veil" aria-hidden="true"></div>
   <div class="scroll">
     <div class="column" class:wide class:full>
+      <!-- Optional: a way back, for a page opened from another one. -->
+      {#if $$slots.lead}
+        <div class="lead"><slot name="lead" /></div>
+      {/if}
       <header in:fly={{ y: 6, duration: NORMAL, easing: EASE }}>
         <h1 class="on-footage">{title}</h1>
         {#if summary}
@@ -97,6 +101,11 @@
 
   .column.full {
     max-width: none;
+  }
+
+  .lead {
+    display: flex;
+    margin-bottom: var(--space-3);
   }
 
   /* Title, state and actions on ONE line, wrapping when the window is narrow

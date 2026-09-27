@@ -171,14 +171,20 @@ work.
 | `.ui-popover`, `-item`, `-note` | `controls.css` | Menus and dropdown lists: dense glass |
 | `.ui-field` | `controls.css` | Text inputs, selects, text areas: sunken, rim brightens on focus |
 | `input[type=range]` | `controls.css` | Every slider: sunken channel, ivory knob |
+| `.ui-item`, `.ui-mark`, `.ui-item-title`, `-meta`, `-controls` | `controls.css` | One object in a manager list (profiles, installations): hairline-separated inside a `Section material`; `.current` is a faint fill, never a coloured edge |
 | `use:tooltip` | `tooltip.ts` | Replaces `title` on icon-only controls |
 | `Button` | `lib/ui` | `normal`, `primary` (denser, never coloured), `caution` |
 | `Switch`, `Segmented` | `lib/ui` | Selection is champagne luminance or a denser pill |
-| `Section`, `Row` | `lib/ui` | Standard-glass panel; rows wrap instead of truncating |
+| `Section`, `Row` | `lib/ui` | Standard-glass panel; rows wrap instead of truncating, and the control drops under the text when the row is narrow |
 | `Page` | `lib/ui` | Document frame with an edgeless readability veil |
 | `Sheet` | `lib/ui` | The one modal: inset dense glass, scrim, Escape closes |
-| `Notice` | `lib/ui` | The notification surface (inline; no toasts by design) |
-| `Progress`, `Spinner` | `lib/ui` | Loading states; still under reduced motion |
+| `Notice` | `lib/ui` | The notification surface (inline; no toasts by design). Standard glass on the photograph; flat inside a pane that is already glass, so blur never stacks |
+| `Progress`, `SoundingLine` | `lib/ui`, `lib/brand` | Loading states; still under reduced motion |
+
+**Deepening one pane.** Where a pane crosses the brightest part of the
+photograph and its type falls short of 4.5:1, deepen that pane locally with
+`--mat-veil: var(--control-deepen)` rather than moving it to a denser material
+or darkening the page. Settings' category pane is the example.
 
 **Legacy aliases.** In the launcher the previous dark system's CSS variables
 (`--text*`, `--accent*`, `--fill*`, `--glass-*`, `--chrome*`, `--r-*`) and the
@@ -225,6 +231,26 @@ display lists. `FathomTheme.Tokens` therefore gives the game each level as its
 **no-blur** fill plus the three rim colours as separate ARGB values, which a
 plate can draw as spans. Full-screen menus may later add one blurred world
 snapshot, taken once when the screen opens. HUD modules never get a live blur.
+
+**In game today** (the main menu and the Hub):
+
+| Launcher | Game |
+| --- | --- |
+| `.material-*` with blur | `Skin.MATERIAL_*`: the no-blur fill, `VisualEffects.glass` draws fill + rim ring + a hairline highlight across the top's straight run |
+| `--control-*` fills | `Tokens.CONTROL_*` (generated), read through `Skin.SURFACE`, `ELEVATED`, `RECESSED`, `FILL_*` |
+| `--color-text*` | `Skin.TEXT`, `TEXT_MUTED` (champagne), `TEXT_FAINT`, `TEXT_DISABLED` |
+| Primary button | `Skin.PROMINENT`: the dark dense fill, ivory type, never coloured |
+| Selection / on | a denser fill and `Skin.EDGE_ELEVATED`; switches and sliders in champagne with an ivory knob |
+| The old red | `Skin.ENERGY*`: ivory luminance only. There is no hue but the status tones |
+| `Wordmark.svelte` | `BrandMark.wordmark`: the outlines are `generated/BrandGeometry.java`, emitted from `surface.ts` by the theme generator; `GlRenderer` rasterises them once per size into their own sheet with the same pixel snapping and tiers, plus the mark shadow |
+| `SoundingLine.svelte` | `BrandMark.soundingLine`: the small mark and the loading glyph |
+| `Background.svelte` | `MenuScenes` + `MenuPoster`: the approved set (Golden Hour), the launcher's warm scrim, the warm field as fallback |
+
+The Hub is one pane of standard glass over a warm scrim; its header and rail
+are regions of it, not panes on top of it. Only transient surfaces (popovers,
+drawers, the menu's account, credits and picker panels) are dense glass. The
+offset ring is not drawn in game: at in-game sizes it is too coarse, and the
+Sounding Line is the small form of the brand.
 
 ## 10. What a component may not do
 

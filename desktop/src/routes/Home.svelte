@@ -38,7 +38,7 @@
   import Notice from '../lib/ui/Notice.svelte';
   import { tooltip } from '../lib/tooltip';
   import FathomProfilePicker from '../lib/ui/FathomProfilePicker.svelte';
-  import { EASE, FAST, NORMAL } from '../lib/motion';
+  import { EASE, MOTION_HOVER, MOTION_PAGE } from '../lib/motion';
 
   export let view: HomeView;
   export let onAction: (command: string) => void;
@@ -87,7 +87,7 @@
     <div class="composition">
       <!-- The eyebrow already said "Selected profile", so making it the
            control costs no space and removes a trip to another screen. -->
-      <div class="switcher" in:fly={{ y: 10, duration: NORMAL, easing: EASE }}>
+      <div class="switcher" in:fly={{ y: 10, duration: MOTION_PAGE, easing: EASE }}>
         <ProfileSwitcher size="hero" align="down" {epoch} onChanged={onProfileChanged} />
         <!-- The loadout inside that installation. A separate control because it is
              a separate thing: the installation is how Minecraft starts, the
@@ -95,18 +95,18 @@
         <FathomProfilePicker align="down" />
       </div>
 
-      <h1 class="hero on-footage" in:fly={{ y: 14, duration: NORMAL, delay: 40, easing: EASE }}>
+      <h1 class="hero on-footage" in:fly={{ y: 14, duration: MOTION_PAGE, delay: 40, easing: EASE }}>
         {profile.nameIsRedundant ? `Minecraft ${profile.version}` : profile.name}
       </h1>
 
-      <div class="facts on-footage" in:fly={{ y: 12, duration: NORMAL, delay: 80, easing: EASE }}>
+      <div class="facts on-footage" in:fly={{ y: 12, duration: MOTION_PAGE, delay: 80, easing: EASE }}>
         {#each facts as fact, index}
           {#if index > 0}<span class="dot">·</span>{/if}
           <span>{fact}</span>
         {/each}
       </div>
 
-      <div class="launch-wrap" in:fly={{ y: 16, duration: NORMAL, delay: 120, easing: EASE }}>
+      <div class="launch-wrap" in:fly={{ y: 16, duration: MOTION_PAGE, delay: 120, easing: EASE }}>
         <button
           class="launch material-interactive"
           class:material-dense={(action.ready && !busy) || busy}
@@ -134,7 +134,7 @@
       <div
         class="status on-footage"
         class:warn={bad}
-        in:fly={{ y: 10, duration: NORMAL, delay: 160, easing: EASE }}
+        in:fly={{ y: 10, duration: MOTION_PAGE, delay: 160, easing: EASE }}
       >
         <span>{line}</span>
 
@@ -161,7 +161,7 @@
       </div>
 
       {#if noteOpen && action.developerNote}
-        <div class="note" transition:fade={{ duration: FAST }}>
+        <div class="note" transition:fade={{ duration: MOTION_HOVER }}>
           <Notice floating>{action.developerNote}</Notice>
         </div>
       {/if}
@@ -170,40 +170,35 @@
 </div>
 
 <style>
+  /* The composition sits in the lower part of the frame, over the darker
+     water, and leaves the sky and the horizon to the photograph. Placement is
+     part of the hierarchy: the eye reads the scene first and lands on Play. */
   .stage {
     position: relative;
     display: grid;
-    place-items: center;
+    place-items: end center;
     height: 100%;
     width: 100%;
-    /* Nudged above true centre. Optical centring: a composition placed at exact
-       centre reads as slightly low, and the bottom bar adds weight below. */
-    padding-bottom: 4vh;
+    padding: var(--space-6) var(--layout-page-pad-x) clamp(var(--space-8), 11vh, var(--space-20));
+    overflow-y: auto;
   }
 
   .composition {
     display: flex;
     flex-direction: column;
     align-items: center;
+    max-width: 100%;
     text-align: center;
   }
 
-
-  .switcher {
-    display: flex;
-    justify-content: center;
-    margin-bottom: var(--s-2);
-  }
-
+  /* What will launch, at title scale rather than display scale: the name is
+     context for the Play control, not a poster competing with it. */
   .hero {
-    margin: var(--space-3) 0 0;
-    /* Scales with the window. A composition fixed in pixels is sized for one
-       monitor: at 1366 it fills the canvas and at 1920 it strands the launch
-       control in an empty field. */
-    font-size: var(--type-display-size);
-    font-weight: var(--type-display-weight);
-    letter-spacing: var(--type-display-tracking);
-    line-height: var(--type-display-leading);
+    margin: var(--space-4) 0 0;
+    font-size: var(--type-title-size);
+    font-weight: var(--type-title-weight);
+    letter-spacing: var(--type-title-tracking);
+    line-height: var(--type-title-leading);
     color: var(--color-text);
     overflow-wrap: anywhere;
   }
@@ -214,7 +209,7 @@
     justify-content: center;
     align-items: center;
     gap: var(--space-2);
-    margin-top: var(--space-3);
+    margin-top: var(--space-2);
     font-size: var(--type-body-size);
     font-weight: var(--type-button-weight);
     color: var(--color-text-secondary);
@@ -226,7 +221,7 @@
 
   /* -- the launch control ------------------------------------------------- */
   .launch-wrap {
-    margin-top: clamp(28px, 3.6vh, 52px);
+    margin-top: clamp(var(--space-6), 3.6vh, var(--space-10));
   }
 
   .launch {
@@ -237,10 +232,10 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-3);
-    min-width: clamp(280px, 22vw, 360px);
+    min-width: clamp(300px, 24vw, 400px);
     max-width: min(560px, 80vw);
-    min-height: clamp(58px, 4.6vw, 68px);
-    padding: 0 clamp(36px, 3vw, 52px);
+    min-height: clamp(60px, 4.8vw, 72px);
+    padding: 0 clamp(var(--space-10), 3vw, var(--space-12));
     font-size: clamp(17px, 1.3vw, 21px);
     font-weight: var(--type-title-weight);
     letter-spacing: 0.04em;
@@ -286,7 +281,7 @@
     align-items: center;
     gap: var(--space-2);
     max-width: min(640px, 90vw);
-    margin-top: clamp(14px, 1.8vh, 24px);
+    margin-top: clamp(var(--space-3), 1.8vh, var(--space-6));
     font-size: var(--type-body-size);
     color: var(--color-text-secondary);
   }

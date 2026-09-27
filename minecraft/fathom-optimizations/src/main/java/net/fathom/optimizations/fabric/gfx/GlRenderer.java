@@ -72,6 +72,7 @@ public final class GlRenderer implements Renderer {
     private final Shapes shapes = new Shapes(sheet);
     private final FontBook fonts = new FontBook(flusher);
     private final Icons icons = new Icons(flusher);
+    private final BrandArt brand = new BrandArt(flusher);
 
     private UiScale ui = new UiScale(854, 480, 1f);
     private boolean created;
@@ -175,6 +176,7 @@ public final class GlRenderer implements Renderer {
                 shapes.build();
                 fonts.create();
                 icons.create();
+                brand.create();
                 created = true;
                 stats.fallbackFont = fonts.usingFallback();
             }
@@ -190,6 +192,7 @@ public final class GlRenderer implements Renderer {
                 // already a frame nobody is measuring.
                 fonts.reset();
                 icons.reset();
+                brand.reset();
             }
             if (dimensionsChanged || UiScale.differs(nextScale, ui.scale())) {
                 ui = new UiScale(framebufferWidth, framebufferHeight, preference);
@@ -302,6 +305,7 @@ public final class GlRenderer implements Renderer {
         batch.flush();
         fonts.delete();
         icons.delete();
+        brand.delete();
         sheet.delete();
         created = false;
     }
@@ -752,6 +756,64 @@ public final class GlRenderer implements Renderer {
         float top = Math.round(deviceY(y));
         quad(left, top, left + entry.pixels, top + entry.pixels,
                 entry.u0, entry.v0, entry.u1, entry.v1, colour);
+    }
+
+    // -----------------------------------------------------------------------
+    // The brand
+    // -----------------------------------------------------------------------
+
+    /*
+     * Rasterised at the UI scale alone, not the transform's zoom: a screen that
+     * scales 0.992 -> 1 as it arrives would otherwise ask for a new raster on
+     * every frame of its entrance. During that entrance the quad is scaled
+     * instead, which nobody can see; at rest it is pixel for pixel.
+     */
+
+    /** The Surface wordmark's width in logical units at a cap height in logical units. */
+    public float wordmarkWidth(float capHeight) {
+        int cap = Math.max(1, Math.round(capHeight * ui.scale()));
+        return BrandArt.wordmarkWidth(cap) / ui.scale();
+    }
+
+    /**
+     * The Surface wordmark with its top-left at {@code x, y}, at a cap height in
+     * logical units. Its inks are the brand's own, so it is drawn untinted
+     * except for the current opacity.
+     *
+     * @return the width drawn, in logical units
+     */
+    public float wordmark(float x, float y, float capHeight) {
+        int cap = Math.max(1, Math.round(capHeight * ui.scale()));
+        BrandArt.Entry entry = brand.wordmark(cap);
+        int colour = tint(0xFFFFFFFF);
+        if (entry.width > 0 && !Colour.invisible(colour)) {
+            batch.bind(brand.atlas().texture());
+            float left = Math.round(deviceX(x));
+            float top = Math.round(deviceY(y));
+            quad(left, top, left + entry.width * zoom, top + entry.height * zoom,
+                    entry.u0, entry.v0, entry.u1, entry.v1, colour);
+        }
+        return entry.width / ui.scale();
+    }
+
+    /**
+     * The Sounding Line, top-left at {@code x, y}, a height in logical units,
+     * in one ink. Fathom's small mark and its loading glyph.
+     *
+     * @return the width drawn, in logical units
+     */
+    public float soundingLine(float x, float y, float height, int argb) {
+        int pixels = Math.max(8, Math.round(height * ui.scale()));
+        BrandArt.Entry entry = brand.sounding(pixels);
+        int colour = tint(argb);
+        if (entry.width > 0 && !Colour.invisible(colour)) {
+            batch.bind(brand.atlas().texture());
+            float left = Math.round(deviceX(x));
+            float top = Math.round(deviceY(y));
+            quad(left, top, left + entry.width * zoom, top + entry.height * zoom,
+                    entry.u0, entry.v0, entry.u1, entry.v1, colour);
+        }
+        return entry.width / ui.scale();
     }
 
     // -----------------------------------------------------------------------

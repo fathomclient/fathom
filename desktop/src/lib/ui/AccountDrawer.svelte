@@ -91,6 +91,27 @@
       </Button>
     </div>
 
+  {:else if account.remembered && !working}
+    <!-- A remembered account whose session is coming back on its own. Saying
+         "Sign in" here would read as though Fathom forgot who this is. -->
+    <div class="identity restoring">
+      <div class="avatar" class:has-face={!!account.avatar}>
+        {#if account.avatar}
+          <img class="face" src={account.avatar} alt="" draggable="false" />
+        {:else}
+          {account.name?.[0]?.toUpperCase() ?? '?'}
+        {/if}
+      </div>
+      <div class="who">
+        <span class="name">{account.name}</span>
+        <span class="kind">
+          <SoundingLine height={12} value={null} label="Restoring" />
+          Restoring your session
+        </span>
+      </div>
+    </div>
+    <p class="fine">This takes a few seconds. Nothing to do.</p>
+
   {:else if working}
     <!-- The device-code flow, mid-flight. The code is the whole screen while
          it is on offer: somebody is reading it off one device and typing it on
@@ -296,12 +317,18 @@
     overflow-wrap: anywhere;
   }
 
+  /* What the identity is, in the secondary colour: a signed-in account is the
+     normal state and is not celebrated in green. */
   .kind {
     display: flex;
     align-items: center;
     gap: var(--space-1);
     font-size: var(--type-caption-size);
-    color: var(--color-success-text);
+    color: var(--color-text-secondary);
+  }
+
+  .identity.restoring .avatar {
+    opacity: 0.7;
   }
 
   .kind.dev {

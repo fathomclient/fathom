@@ -98,10 +98,13 @@
     opacity: 0.5;
   }
 
+  /* The control drops under the text when the row is too narrow for both,
+     rather than squeezing the description into a column of single words. */
   .line {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2) var(--space-3);
   }
 
   .icon {
@@ -117,7 +120,7 @@
   }
 
   .text {
-    flex: 1;
+    flex: 1 1 220px;
     min-width: 0;
   }
 
@@ -154,6 +157,11 @@
     align-items: center;
     gap: var(--space-2);
     flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .control:empty {
+    display: none;
   }
 
   .badge {

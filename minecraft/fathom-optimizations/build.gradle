@@ -276,7 +276,10 @@ def repoRoot = rootProject.projectDir.parentFile.parentFile
 def generateThemeTokens = tasks.register('generateThemeTokens', Exec) {
     inputs.file(new File(repoRoot, 'assets/theme/fathom-theme.json'))
     inputs.file(new File(repoRoot, 'tools/generate-fathom-theme.mjs'))
+    // The wordmark outlines come from the launcher's brand geometry.
+    inputs.file(new File(repoRoot, 'desktop/src/lib/brand/surface.ts'))
     outputs.file('src/main/java/net/fathom/optimizations/generated/FathomTheme.java')
+    outputs.file('src/main/java/net/fathom/optimizations/generated/BrandGeometry.java')
     workingDir repoRoot
     commandLine 'node', 'tools/generate-fathom-theme.mjs'
 }

@@ -309,3 +309,83 @@ input[type='range']:focus-visible {
   opacity: 1;
   transform: none;
 }
+
+/* -- list item: one thing in a list pane --------------------------------------
+   The row a manager page lists its objects with -- a profile, an installation,
+   an account. Row geometry inside a `Section material` pane: separated from
+   its neighbours by a hairline, never boxed. A mark, the text, then the
+   controls. `.current` is the one in use: a denser fill and full-strength
+   type, not a coloured edge or a badge. */
+.ui-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: max(var(--radius-inner-min), calc(var(--surface-radius, var(--radius-lg)) - 2px));
+  box-shadow: 0 -1px 0 var(--control-hairline);
+  transition: background-color var(--motion-hover) var(--ease-standard);
+}
+
+.ui-item:first-child {
+  box-shadow: none;
+}
+
+.ui-item:hover {
+  background-color: var(--control-fill-faint);
+}
+
+/* Faint on purpose: a fuller fill lifts the pane enough to cost its caption
+   text measurable contrast where the pane crosses the bright sky. */
+.ui-item.current {
+  background-color: var(--control-fill-faint);
+}
+
+.ui-item.current:hover {
+  background-color: var(--control-fill);
+}
+
+/* The item's mark: an initial, or artwork when the object has some. */
+.ui-mark {
+  display: grid;
+  place-items: center;
+  width: var(--control-height-lg);
+  height: var(--control-height-lg);
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background-color: var(--control-fill-selected);
+  background-size: cover;
+  background-position: center;
+  box-shadow: var(--control-rim);
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  color: var(--color-text);
+}
+
+.ui-item-title {
+  display: block;
+  font-size: var(--type-body-size);
+  font-weight: var(--type-heading-weight);
+  letter-spacing: var(--type-heading-tracking);
+  line-height: 1.35;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.ui-item-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--type-secondary-size);
+  line-height: var(--type-secondary-leading);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.ui-item-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-1);
+}

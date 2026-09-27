@@ -5,234 +5,223 @@ import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.RoundedGeometry;
 import net.fathom.optimizations.generated.FathomTheme;
+import net.fathom.optimizations.generated.FathomTheme.Tokens;
 
 /**
- * Fathom's visual system, in the game.
+ * Fathom's visual system, in the game: the golden-hour glass.
  *
  * <h2>One source, two implementations</h2>
  *
- * <p>These are generated from the same manifest that produces the launcher's
- * CSS: the same greys, the same red, the same 4px spacing scale, the
- * same radii, the same three durations and one curve, and — since the renderer
- * rewrite — the same typeface at the same sizes. The point of the in-game
- * client is that it should feel like the launcher walked into Minecraft, and a
- * slightly different red or a slightly different corner radius reads,
- * immediately, as a different program.
+ * <p>Every value here comes from the manifest that produces the launcher's
+ * CSS -- {@code FathomTheme.Tokens}, the `system` half of it. The in-game client
+ * should feel like the launcher walked into Minecraft, and a slightly different
+ * ivory or corner reads, immediately, as a different program.
  *
- * <h2>Black, and no themes</h2>
+ * <h2>Glass without blur</h2>
  *
- * <p>The hub used to draw a blurred photograph behind its content, themed by a
- * picker. That is gone. A menu inside a game is already sitting on the most
- * decorated background it will ever have — the game — and a second decorative
- * layer competes with the type for no benefit. So: the world is darkened hard,
- * the panel is near-black, and the only colour in the interface is the accent,
- * which is what makes the accent mean something.
+ * <p>The launcher's panes blur what is behind them. The game's do not: a blur
+ * is a framebuffer read and a pass per surface, and the game has better things
+ * to spend a frame on. So the materials here are the manifest's
+ * {@code tint-noblur} fills -- the same warm umber at the density the launcher
+ * itself falls back to with blur turned off -- plus the rims and the type. The
+ * hierarchy is the launcher's: clear for type on a controlled background,
+ * light for low-priority groups, standard for persistent panels, dense for
+ * what floats over everything.
  *
- * <h2>Control states are tokens too</h2>
+ * <h2>Density, not colour</h2>
  *
- * <p>Idle, hover, pressed, disabled, focused. Five states, one set of values,
- * used by every control — see {@link Controls}. A control that invents its own
- * hover colour is how an interface starts feeling assembled rather than
- * designed.
+ * <p>There is no accent hue. Selection, hover and "on" are a denser fill, a
+ * brighter rim and full-strength ivory type -- the launcher's rule. The status
+ * tones (sage, amber, terracotta) are the only hues, and only where a state
+ * needs one.
+ *
+ * <h2>Names kept from the previous system</h2>
+ *
+ * <p>Most constants below keep their names so the pages that read them did not
+ * all have to change at once; what each one is now is written beside it.
  */
 public final class Skin {
 
     private Skin() {}
 
     // -----------------------------------------------------------------------
-    // Surfaces
+    // Materials
     // -----------------------------------------------------------------------
 
-    /** Pure black. The header and the rail. */
-    public static final int CHROME = FathomTheme.COLOR_CHROME;
+    /** Clear glass: a control on the photograph that should be barely there. */
+    public static final int MATERIAL_CLEAR = Tokens.MATERIAL_CLEAR_FILL;
+    /** Light glass: low-priority groups. */
+    public static final int MATERIAL_LIGHT = Tokens.MATERIAL_LIGHT_FILL;
+    /** Standard glass: persistent panels -- the hub window, the menu's panes. */
+    public static final int MATERIAL_STANDARD = Tokens.MATERIAL_STANDARD_FILL;
+    /** Dense glass: what floats over everything -- popovers, sheets, menus. */
+    public static final int MATERIAL_DENSE = Tokens.MATERIAL_DENSE_FILL;
+    /** Dense glass that must be readable over anything, including itself. */
+    public static final int MATERIAL_DENSE_SOLID = Tokens.MATERIAL_DENSE_FILL_SOLID;
 
-    /** The panel. Near-black, with just enough transparency to sit on a scene. */
-    public static final int PANEL = FathomTheme.COLOR_PANEL;
+    /** The lit top edge of a pane, and its faint all-round rim, per material. */
+    public static final int RIM_TOP = Tokens.MATERIAL_STANDARD_RIM_TOP;
+    public static final int RIM_EDGE = Tokens.MATERIAL_STANDARD_RIM_EDGE;
+    public static final int RIM_TOP_DENSE = Tokens.MATERIAL_DENSE_RIM_TOP;
+    public static final int RIM_EDGE_DENSE = Tokens.MATERIAL_DENSE_RIM_EDGE;
+    public static final int RIM_TOP_LIGHT = Tokens.MATERIAL_LIGHT_RIM_TOP;
+    public static final int RIM_EDGE_LIGHT = Tokens.MATERIAL_LIGHT_RIM_EDGE;
+    public static final int RIM_TOP_CLEAR = Tokens.MATERIAL_CLEAR_RIM_TOP;
+    public static final int RIM_EDGE_CLEAR = Tokens.MATERIAL_CLEAR_RIM_EDGE;
 
-    /** Inside the panel: a card, a drawer, a popover. */
-    public static final int RAISED = FathomTheme.COLOR_RAISED;
+    /** The dark, dense fill of a primary action. Never coloured. */
+    public static final int PROMINENT = Tokens.CONTROL_PROMINENT;
+    public static final int PROMINENT_HOVER = Tokens.CONTROL_PROMINENT_HOVER;
 
-    /** The same surface with the pointer on it. */
-    public static final int RAISED_HOVER = FathomTheme.COLOR_RAISED_HOVER;
+    // -----------------------------------------------------------------------
+    // Surfaces (previous names)
+    // -----------------------------------------------------------------------
 
-    /** A popover that must be readable over anything, including itself. */
-    public static final int OVERLAY = FathomTheme.COLOR_OVERLAY;
+    /** Was pure black. Now dense glass. */
+    public static final int CHROME = MATERIAL_DENSE;
 
-    /**
-     * Control material for a control sitting on a photograph.
-     *
-     * <p>{@link #FILL} and its relatives are white at low alpha. That is the
-     * right material inside the hub, where they sit on Fathom's own near-black
-     * glass and lift off it — and the wrong one on the main menu, where a 5%
-     * white fill over a snowfield is a slightly brighter snowfield with a grey
-     * label on it. A control on top of an image has to bring its own darkness.
-     *
-     * <p>These are the launcher's own tokens for the same situation, so the
-     * title screen and the launcher's home page are made of the same material
-     * rather than two hand-matched approximations of it.
-     */
-    public static final int GLASS = FathomTheme.COLOR_GLASS_FILL;
-    public static final int GLASS_HOVER = FathomTheme.COLOR_GLASS_FILL_STRONG;
-    public static final int GLASS_PRESSED = FathomTheme.COLOR_GLASS_FILL_SOLID;
-    public static final int GLASS_EDGE = FathomTheme.COLOR_GLASS_EDGE;
-    public static final int GLASS_EDGE_STRONG = FathomTheme.COLOR_GLASS_EDGE_STRONG;
+    /** The panel: standard glass. */
+    public static final int PANEL = MATERIAL_STANDARD;
 
-    public static final int CHROME_LINE = FathomTheme.COLOR_CHROME_LINE;
-    public static final int CHROME_LINE_STRONG = FathomTheme.COLOR_CHROME_LINE_STRONG;
+    /** Inside a panel: a flat control fill, never a second glass. */
+    public static final int RAISED = Tokens.CONTROL_FILL;
+    public static final int RAISED_HOVER = Tokens.CONTROL_FILL_HOVER;
+
+    /** A popover that must be readable over anything. */
+    public static final int OVERLAY = MATERIAL_DENSE_SOLID;
+
+    /** A control sitting on the photograph brings its own glass. */
+    public static final int GLASS = MATERIAL_LIGHT;
+    public static final int GLASS_HOVER = MATERIAL_STANDARD;
+    public static final int GLASS_PRESSED = MATERIAL_DENSE;
+    public static final int GLASS_EDGE = Tokens.MATERIAL_LIGHT_RIM_EDGE;
+    public static final int GLASS_EDGE_STRONG = Tokens.MATERIAL_LIGHT_RIM_TOP;
+
+    public static final int CHROME_LINE = Tokens.CONTROL_HAIRLINE;
+    public static final int CHROME_LINE_STRONG = Tokens.CONTROL_HAIRLINE_STRONG;
 
     /** The thin bright edge. Low contrast: higher and it becomes a stroke. */
-    public static final int EDGE = FathomTheme.COLOR_EDGE;
-    public static final int EDGE_STRONG = FathomTheme.COLOR_EDGE_STRONG;
-    /** The internal highlight along the top. The detail that makes it look lit. */
-    public static final int SHEEN = FathomTheme.COLOR_SHEEN;
+    public static final int EDGE = RIM_EDGE;
+    public static final int EDGE_STRONG = Tokens.CONTROL_HAIRLINE_STRONG;
+    /** The lit top line. The detail that makes a pane read as glass. */
+    public static final int SHEEN = RIM_TOP;
 
     /**
-     * How hard the world behind the hub is darkened.
+     * The warm deepening over the world behind the hub.
      *
-     * <p>Hard. The requirement is that the game is visible as context and never
-     * as content: at 0.82 a bright desert reads as a dark texture behind the
-     * panel, which is the point, and a nether portal cannot shine through the
-     * type.
+     * <p>Umber, not black, and lighter than the old one: the world is context,
+     * and the window above it is already standard glass, so between the two
+     * body text sits on a darkened, warmed version of whatever the player was
+     * looking at rather than on a black hole.
      */
-    /**
-     * The dimming behind a Fathom screen. **Deliberately lighter in game than
-     * the shared theme's.**
-     *
-     * <p>`fathom-theme.json` specifies `scrim` at 82% black, and that is right
-     * for the launcher, where the thing behind a modal is the launcher's own
-     * chrome and there is nothing to preserve. In game the thing behind is the
-     * world, and how much of it survives is the entire point of the glass. At
-     * 82% the panels could be as translucent as you like and still show almost
-     * nothing, because there was almost nothing left to show.
-     *
-     * <p>So this is 62%, and the surfaces above are in the high seventies —
-     * roughly 9% of the world reaches the eye through a panel, which is
-     * visible without competing with body text. The shared token is
-     * deliberately not edited: the launcher's scrim is correct for the
-     * launcher.
-     */
-    public static final int SCRIM = 0x9E000000;
+    public static final int SCRIM = 0x8C1A1006;
 
-    /** Under a floating panel. Not a blur — a falloff. */
-    public static final int SHADOW = FathomTheme.COLOR_SHADOW;
+    /** Under a floating panel. Warm and soft; not a blur. */
+    public static final int SHADOW = Colour.fade(Tokens.COLOR_SHADOW, 0.55f);
 
     // -----------------------------------------------------------------------
-    // Fathom depth system
+    // Depth, as the pages ask for it
     // -----------------------------------------------------------------------
 
-    /** The five material levels used by the in-game renderer, darkest first. */
-    // ALPHA IS PART OF THESE TOKENS, AND USED TO BE MISSING.
-    //
-    // Every one of these was `0xFF......`. The Hub paints a scrim over the world
-    // and then fills its panel with `BACKGROUND`, its rail and trays with
-    // `RECESSED` and its cards with `SURFACE` -- so wherever the interface was,
-    // the world was gone. That is why the in-game UI read as opaque black boxes
-    // while the launcher, whose chrome is `rgba(12,14,19,0.55)`, reads as glass.
-    // It was never a blending bug: the colours simply had no transparency in
-    // them.
-    //
-    // The values are deliberately conservative. These panels carry body text
-    // over a moving world, and the failure mode on the other side -- a
-    // fashionably translucent panel nobody can read -- is worse than the one
-    // being fixed. If you want more of the world coming through, there are
-    // exactly two knobs: these alphas, and `COLOR_SCRIM` in `FathomTheme`,
-    // which decides how much world is behind them in the first place.
-    //
-    // `Colour.mix` interpolates alpha, and `Colour.fade` replaces it outright,
-    // so `fade(BACKGROUND, 0.82f)` in the main menu's chrome still means exactly
-    // 0.82 and is unaffected by the alpha carried here.
-    public static final int BACKGROUND = 0xC4050607;
-    public static final int RECESSED = 0xB808090B;
-    public static final int SURFACE = 0xC40A0B0D;
-    public static final int ELEVATED = 0xCC101216;
-    public static final int FLOATING = 0xFA0E1013;
+    /** The window: standard glass. */
+    public static final int BACKGROUND = MATERIAL_STANDARD;
+    /** Wells: fields, tracks, the search box. Sunken, never a panel of its own. */
+    public static final int RECESSED = Tokens.CONTROL_FILL_SUNKEN;
+    /** A card or secondary control inside the window: a flat fill. */
+    public static final int SURFACE = Tokens.CONTROL_FILL;
+    /** Selected or current: the denser fill. */
+    public static final int ELEVATED = Tokens.CONTROL_FILL_SELECTED;
+    /** Transient: popovers, drawers, anything over everything. */
+    public static final int FLOATING = MATERIAL_DENSE_SOLID;
 
     /** One step up from a surface: what hover does, and nothing more. */
-    public static final int SURFACE_HOVER = 0xD413161A;
-    /** Muted charcoal borders. */
-    public static final int EDGE_RECESSED = 0x10FFFFFF;
-    public static final int EDGE_SURFACE = 0x1AFFFFFF;
-    public static final int EDGE_ELEVATED = 0x2CFFFFFF;
-    public static final int INNER_HIGHLIGHT = 0x0CFFFFFF;
+    public static final int SURFACE_HOVER = Tokens.CONTROL_FILL_HOVER;
+    public static final int EDGE_RECESSED = Tokens.CONTROL_HAIRLINE;
+    public static final int EDGE_SURFACE = RIM_EDGE;
+    public static final int EDGE_ELEVATED = Tokens.CONTROL_HAIRLINE_STRONG;
+    public static final int INNER_HIGHLIGHT = Tokens.CONTROL_FILL_FAINT;
 
     // -----------------------------------------------------------------------
     // Control states
     // -----------------------------------------------------------------------
 
-    public static final int FILL = FathomTheme.COLOR_FILL;
-    public static final int FILL_HOVER = FathomTheme.COLOR_FILL_HOVER;
-    public static final int FILL_PRESSED = FathomTheme.COLOR_FILL_PRESSED;
-    public static final int FILL_ACTIVE = FathomTheme.COLOR_FILL_ACTIVE;
-    public static final int FILL_SUNKEN = FathomTheme.COLOR_FILL_SUNKEN;
-    public static final int FILL_DISABLED = FathomTheme.COLOR_FILL_DISABLED;
+    public static final int FILL = Tokens.CONTROL_FILL_FAINT;
+    public static final int FILL_HOVER = Tokens.CONTROL_FILL;
+    public static final int FILL_PRESSED = Tokens.CONTROL_FILL_HOVER;
+    public static final int FILL_ACTIVE = Tokens.CONTROL_FILL_SELECTED;
+    public static final int FILL_SUNKEN = Tokens.CONTROL_FILL_SUNKEN;
+    public static final int FILL_DISABLED = Tokens.CONTROL_FILL_FAINT;
 
-    /** The ring a keyboard-focused control wears. */
-    public static final int FOCUS = FathomTheme.COLOR_FOCUS;
+    /** The ivory ring a keyboard-focused control wears. */
+    public static final int FOCUS = Tokens.COLOR_FOCUS;
 
     // -----------------------------------------------------------------------
     // Text
     // -----------------------------------------------------------------------
 
-    /** Four text levels and no more. A fifth grey is how a palette stops meaning anything. */
-    public static final int TEXT = FathomTheme.COLOR_TEXT;
-    public static final int TEXT_MUTED = FathomTheme.COLOR_TEXT_MUTED;
-    public static final int TEXT_FAINT = FathomTheme.COLOR_TEXT_FAINT;
-    public static final int TEXT_DISABLED = FathomTheme.COLOR_TEXT_DISABLED;
-    public static final int TEXT_LABEL = FathomTheme.COLOR_TEXT_LABEL;
+    /** Ivory, champagne, and champagne at two lower densities. */
+    public static final int TEXT = Tokens.COLOR_TEXT;
+    public static final int TEXT_MUTED = Tokens.COLOR_TEXT_SECONDARY;
+    public static final int TEXT_FAINT = Tokens.COLOR_TEXT_TERTIARY;
+    public static final int TEXT_DISABLED = Tokens.COLOR_TEXT_DISABLED;
+    public static final int TEXT_LABEL = Tokens.COLOR_TEXT_SECONDARY;
+    /** Type on an ivory surface, where there is one. */
+    public static final int TEXT_INVERSE = Tokens.COLOR_TEXT_INVERSE;
 
     // -----------------------------------------------------------------------
-    // Accent and status
+    // Selection and status
     // -----------------------------------------------------------------------
 
-    /** The only hue in the product, which is what makes it mean something. */
-    public static final int ACCENT = FathomTheme.COLOR_ACCENT;
-    /** Kept to the dark brand red; the generated strong accent drifts pink. */
-    public static final int ACCENT_STRONG = 0xFFBE2F3A;
-    public static final int ACCENT_DEEP = FathomTheme.COLOR_ACCENT_DEEP;
-    public static final int ACCENT_WASH = FathomTheme.COLOR_ACCENT_WASH;
+    /** Champagne: an "on" track, a slider's fill, a chosen swatch. */
+    public static final int ACCENT = Tokens.PALETTE_CHAMPAGNE_300;
+    public static final int ACCENT_STRONG = Tokens.PALETTE_IVORY_100;
+    public static final int ACCENT_DEEP = Tokens.PALETTE_BRONZE_600;
+    public static final int ACCENT_WASH = Tokens.CONTROL_FILL_SELECTED;
 
     /**
-     * Red is energy, and stays dark: every member derives from #841C24 and
-     * brightens only as state intensity rises. No pink, no orange.
+     * Energy: what the old red did, now as ivory luminance.
+     *
+     * <p>{@code ENERGY} is a wash (scaled down before use it is a selected
+     * fill), {@code ENERGY_EDGE} a brightened rim, {@code ENERGY_MARK} a caret,
+     * a check, a thumb -- full ivory. None of them is a hue.
      */
-    public static final int BASE_RED = 0xFF841C24;
-    public static final int ACTIVE_RED = 0xFFA0232D;
-    public static final int HOT_RED = 0xFFBE2F3A;
-    public static final int RED_GLOW = 0xFF841C24;
+    public static final int ENERGY = 0x99FFF4DE;
+    public static final int ENERGY_EDGE = 0x4DFFF4DE;
+    public static final int ENERGY_MARK = Tokens.COLOR_TEXT;
 
-    public static final int GOOD = FathomTheme.COLOR_GOOD;
-    public static final int WARN = FathomTheme.COLOR_WARN;
-    /** A different red from the accent: selection and failure must not look alike. */
-    public static final int BAD = FathomTheme.COLOR_BAD;
-    public static final int BAD_WASH = FathomTheme.COLOR_BAD_WASH;
+    public static final int GOOD = Tokens.COLOR_SUCCESS_TEXT;
+    public static final int WARN = Tokens.COLOR_WARNING_TEXT;
+    /** Danger is terracotta, and only for what destroys or fails. */
+    public static final int BAD = Tokens.COLOR_DANGER_TEXT;
+    public static final int BAD_WASH = Tokens.COLOR_DANGER_TINT;
 
     // -----------------------------------------------------------------------
     // Spacing, on the launcher's 4px scale
     // -----------------------------------------------------------------------
 
-    public static final float S1 = FathomTheme.DIM_S_1;
-    public static final float S2 = FathomTheme.DIM_S_2;
-    public static final float S3 = FathomTheme.DIM_S_3;
-    public static final float S4 = FathomTheme.DIM_S_4;
-    public static final float S5 = FathomTheme.DIM_S_5;
-    public static final float S6 = FathomTheme.DIM_S_6;
-    public static final float S8 = FathomTheme.DIM_S_8;
-    public static final float S10 = FathomTheme.DIM_S_10;
+    public static final float S1 = Tokens.SPACE_1;
+    public static final float S2 = Tokens.SPACE_2;
+    public static final float S3 = Tokens.SPACE_3;
+    public static final float S4 = Tokens.SPACE_4;
+    public static final float S5 = Tokens.SPACE_5;
+    public static final float S6 = Tokens.SPACE_6;
+    public static final float S8 = Tokens.SPACE_8;
+    public static final float S10 = Tokens.SPACE_10;
 
     // -----------------------------------------------------------------------
     // Geometry
     // -----------------------------------------------------------------------
 
     /** Small inset shapes: swatches, tags and compact tooltips. */
-    public static final float R_SMALL = 8f;
-    /** Ordinary buttons, fields and navigation rows. */
-    public static final float R_CONTROL = 11f;
-    /** Search, top controls, icon containers, segmented controls and popovers. */
-    public static final float R_MEDIUM = 14f;
+    public static final float R_SMALL = Tokens.RADIUS_SM;
+    /** Buttons that are not pills, fields and list rows. */
+    public static final float R_CONTROL = Tokens.RADIUS_MD;
+    /** Search, segmented controls, icon containers and popovers. */
+    public static final float R_MEDIUM = Tokens.RADIUS_MD;
     /** Cards, drawers and substantial overlays. */
-    public static final float R_CARD = 16f;
+    public static final float R_CARD = Tokens.RADIUS_LG;
     /** The outer application panel. */
-    public static final float R_PANEL = 22f;
+    public static final float R_PANEL = Tokens.RADIUS_XL;
 
     /** A hovered card rises this far before press compression wins. */
     public static final float HOVER_ELEVATION = 1.25f;

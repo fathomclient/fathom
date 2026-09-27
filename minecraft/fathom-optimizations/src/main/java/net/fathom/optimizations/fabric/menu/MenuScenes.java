@@ -26,22 +26,30 @@ import net.fathom.optimizations.fabric.gfx.GlRenderer;
 /**
  * What the menu can sit on, and the picture behind whichever is chosen.
  *
- * <h2>The same list as the launcher</h2>
+ * <h2>The same approved set as the launcher</h2>
  *
- * <p>Fifteen scenes, in the launcher's own order and under the launcher's own
- * names -- {@code desktop/src/lib/backgrounds.ts} is the other copy of this
- * list. Somebody who picked Neon Grid in the launcher should find Neon Grid
- * here, spelled the same way and looking the same.
+ * <p>{@code desktop/src/lib/backgrounds.ts} is the other copy of this list,
+ * and today both hold one photograph: Golden Hour. The fifteen Minecraft
+ * recordings that used to be here -- the rain, the storm, the neon city, the
+ * snowfield -- are retired in both places. With one picture there is no
+ * {@code scene} setting on the main-menu module at all (a choice of one is not
+ * a choice), so a profile that stored a retired name simply gets Golden Hour,
+ * and nothing else in it is touched.
  *
- * <h2>One of them moves</h2>
+ * <p>The structure is kept for a curated set later: with one scene the picker
+ * is not offered ({@link #pickable()}), exactly as the launcher hides its own,
+ * and the setting returns with the second picture.
  *
- * <p>Rainforest Storm is a preprocessed frame sequence, because 1.8.9 has no
- * video decoder; see {@link MenuVideo}. It is 31 MB in two quality tiers, and
- * fifteen of those would be most of a gigabyte of jar for something playing
- * behind a menu. So the rest are stills, about 40 KB each, baked from the same
- * recordings by {@code tools/prepare-menu-scenes.ps1} with each clip's own
- * grade. Midnight is not a picture at all: it is the flat field the menu falls
- * back to, and it is in the list because the launcher offers it too.
+ * <h2>The fallback is not a scene</h2>
+ *
+ * <p>When the picture cannot be loaded, or the player has turned the
+ * background off, the menu sits on the launcher's warm static field
+ * ({@link MenuPoster#drawFlat}). It is never offered as a choice.
+ *
+ * <h2>Video</h2>
+ *
+ * <p>{@link MenuVideo} still exists for a frame sequence, because 1.8.9 has no
+ * video decoder. No approved scene is animated.
  *
  * <h2>Textures</h2>
  *
@@ -59,55 +67,38 @@ public final class MenuScenes {
         public final boolean animated;
         /** True for the flat field, which has no picture behind it. */
         public final boolean gradient;
-        /** The world it was recorded in, or null when it is vanilla. */
-        public final String world;
-        public final String creator;
+        /** Who made it, as the credits panel says it, or null. */
+        public final String credit;
         /** Interned once; asking NanoVG for a thumbnail allocates nothing. */
         private final ImageRef image;
 
-        Scene(String id, String label, boolean animated, boolean gradient,
-                String world, String creator) {
+        Scene(String id, String label, boolean animated, boolean gradient, String credit) {
             this.id = id;
             this.label = label;
             this.animated = animated;
             this.gradient = gradient;
-            this.world = world;
-            this.creator = creator;
+            this.credit = credit;
             this.image = gradient ? null : ImageRef.resource(ROOT + id + ".jpg");
         }
 
         public boolean credited() {
-            return world != null;
+            return credit != null;
         }
     }
 
-    private static final String TIDEWORN = "Tideworn - 8 sqkm Forgotten Flooded City";
-    private static final String TIDEWORN_BY = "milkshake_mp3";
-    private static final String TOKYO = "Tokyo Inspired City";
-    private static final String TOKYO_BY = "CoinCoffer";
     private static final String ROOT = "/assets/fathom-optimizations/textures/menu/scenes/";
     private static final float SOURCE_ASPECT = 16f / 9f;
 
+    /** The launcher's credit for the photograph, word for word. */
+    public static final String GOLDEN_HOUR_CREDIT =
+            "Palm Tree Sunset Water by showtime at Wallpapers.com";
+
     private static final Scene[] SCENES = {
-        new Scene("bg_1", "Cherry Grove", false, false, null, null),
-        new Scene("bg_6pull_city-overlook", "City Overlook", false, false, TOKYO, TOKYO_BY),
-        new Scene("bg_6clear", "Metropolis", false, false, TOKYO, TOKYO_BY),
-        new Scene("static", "Midnight", false, true, null, null),
-        new Scene("bg_3", "Midnight Coast", false, false, null, null),
-        new Scene("bg_6midnight", "Midnight Metropolis", false, false, TOKYO, TOKYO_BY),
-        new Scene("bg_6pull_moon-tower", "Moon Tower", false, false, TOKYO, TOKYO_BY),
-        new Scene("bg_6pull_neon-grid", "Neon Grid", false, false, TOKYO, TOKYO_BY),
-        new Scene("bg_5noraintickunfrozen", "Rainforest Drift", false, false, TIDEWORN, TIDEWORN_BY),
-        new Scene("bg_5rain", "Rainforest Storm", true, false, TIDEWORN, TIDEWORN_BY),
-        new Scene("bg_5noraintickfrozen", "Rainforest Twilight", false, false, TIDEWORN, TIDEWORN_BY),
-        new Scene("bg_6pull_red-tower", "Red Tower", false, false, TOKYO, TOKYO_BY),
-        new Scene("bg_4", "Savanna", false, false, null, null),
-        new Scene("bg_2", "Snowfall", false, false, null, null),
-        new Scene("bg_6pull_storm-panorama", "Storm Panorama", false, false, TOKYO, TOKYO_BY),
+        new Scene("golden-hour", "Golden Hour", false, false, GOLDEN_HOUR_CREDIT),
     };
 
     /** The scene a profile with no choice recorded gets. */
-    public static final String DEFAULT_LABEL = "Rainforest Storm";
+    public static final String DEFAULT_LABEL = "Golden Hour";
 
     /** Scene id to texture name. Zero means tried and failed; absent means untried. */
     private static final Map<String, Integer> TEXTURES = new HashMap<String, Integer>();
@@ -127,6 +118,11 @@ public final class MenuScenes {
 
     public static Scene[] all() {
         return SCENES;
+    }
+
+    /** Whether there is a choice to offer. With one scene there is not. */
+    public static boolean pickable() {
+        return SCENES.length > 1;
     }
 
     public static String[] labels() {
@@ -261,10 +257,10 @@ public final class MenuScenes {
     /**
      * Draw the chosen scene behind the menu.
      *
-     * <p>The animated one goes through {@link MenuVideo}, which owns its decode
-     * thread and its own poster fallback. A still goes through the poster's
-     * drawing path, so both get the same cover crop, contrast wash and bottom
-     * scrim -- the grade the menu's type was tuned against.
+     * <p>An animated scene would go through {@link MenuVideo}. A still goes
+     * through the poster's drawing path, so every picture gets the same cover
+     * crop and the launcher's warm scrim. A picture that cannot load gives the
+     * warm field instead, never black.
      */
     public static void draw(MinecraftClient client, Scene scene, String videoQuality) {
         if (scene == null || scene.gradient) {
@@ -277,7 +273,7 @@ public final class MenuScenes {
         }
         int texture = texture(scene);
         if (texture <= 0) {
-            MenuPoster.draw(client);
+            MenuPoster.drawFlat(client);
             return;
         }
         MenuPoster.drawTexture(client, texture);

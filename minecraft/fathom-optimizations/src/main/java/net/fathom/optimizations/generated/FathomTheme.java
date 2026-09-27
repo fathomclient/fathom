@@ -104,7 +104,7 @@ public final class FathomTheme {
     public static final float MOTION_SLOW = 0.200f;
     public static final float MOTION_STAGGER = 0.022f;
 
-    /** The golden-hour system (`system` in the manifest). Not yet consumed in game. */
+    /** The golden-hour system (`system` in the manifest), which the game `Skin` reads. */
     public static final class Tokens {
         private Tokens() {}
 
@@ -178,6 +178,22 @@ public final class FathomTheme {
         public static final int MATERIAL_DENSE_RIM_TOP = 0x3DFFF4DE;
         public static final int MATERIAL_DENSE_RIM_EDGE = 0x1AFFF4DE;
         public static final int MATERIAL_DENSE_RIM_SHADE = 0x241A1006;
+
+        public static final int CONTROL_FILL_FAINT = 0x0BFFF4DE;
+        public static final int CONTROL_FILL = 0x17FFF4DE;
+        public static final int CONTROL_FILL_HOVER = 0x24FFF4DE;
+        public static final int CONTROL_FILL_PRESSED = 0x0FFFF4DE;
+        public static final int CONTROL_FILL_SELECTED = 0x30FFF4DE;
+        public static final int CONTROL_FILL_SUNKEN = 0x421A1006;
+        public static final int CONTROL_FILL_SUNKEN_HOVER = 0x521A1006;
+        public static final int CONTROL_PROMINENT = 0x9921160A;
+        public static final int CONTROL_PROMINENT_HOVER = 0xB321160A;
+        public static final int CONTROL_HAIRLINE = 0x17FFF4DE;
+        public static final int CONTROL_HAIRLINE_STRONG = 0x26FFF4DE;
+        public static final int CONTROL_DEEPEN = 0x291A1006;
+        public static final float CONTROL_HEIGHT_SM = 28.0f;
+        public static final float CONTROL_HEIGHT_MD = 34.0f;
+        public static final float CONTROL_HEIGHT_LG = 40.0f;
 
         public static final float RADIUS_XS = 6.0f;
         public static final float RADIUS_SM = 10.0f;

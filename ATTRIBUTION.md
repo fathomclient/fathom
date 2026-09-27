@@ -12,7 +12,7 @@ it.
 
 ---
 
-## Launcher background
+## Background (launcher and game)
 
 ### golden-hour
 
@@ -26,12 +26,15 @@ it.
 - `desktop/public/backgrounds/golden-hour.jpg` — the launcher's default and
   currently only background. Credited in the launcher under Settings →
   Appearance.
+- `minecraft/fathom-optimizations/src/main/resources/assets/fathom-optimizations/textures/menu/scenes/golden-hour.jpg`
+  — the same file, behind the in-game main menu. Credited in the menu's
+  Credits panel.
 
 ## Background footage
 
 The launcher no longer offers these recordings as backgrounds; the files are
-retired in place and not loaded. The in-game main menu still uses the bg_5 and
-bg_6 material listed below.
+retired in place and not loaded. The in-game main menu no longer uses them
+either; its copies were removed from the module.
 
 All background footage was recorded in Minecraft by the Fathom project owner.
 Some recordings were made in vanilla worlds. Others were made in community-made
@@ -60,10 +63,6 @@ Assets derived from these recordings:
 - `desktop/public/backgrounds/bg_5rain` (`.webm`, `.jpg`)
 - `desktop/public/backgrounds/bg_5noraintickfrozen` (`.webm`, `.jpg`)
 - `desktop/public/backgrounds/bg_5noraintickunfrozen` (`.webm`, `.jpg`)
-- `minecraft/fathom-optimizations/src/main/resources/assets/fathom-optimizations/textures/menu/bg_5rain/`
-  — the in-game main-menu video
-- `minecraft/fathom-optimizations/src/main/resources/assets/fathom-optimizations/textures/menu/main-menu-bg.png`
-  — the in-game main-menu fallback still
 
 ### bg_6 — Tokyo Inspired City
 

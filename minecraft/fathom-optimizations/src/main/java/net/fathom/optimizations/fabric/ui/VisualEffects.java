@@ -2,18 +2,20 @@ package net.fathom.optimizations.fabric.ui;
 
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.render.FathomRenderer;
-import net.fathom.optimizations.core.ui.render.Paint;
+import net.fathom.optimizations.core.ui.Colour;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Shadow;
+import net.fathom.optimizations.generated.FathomTheme.Tokens;
 
 /**
- * Fathom's depth and restrained accent vocabulary.
+ * Fathom's depth vocabulary: glass without blur.
  *
- * <p>Dark, flat materials; red appears in fills and borders for active state.
- * Hover brightens a surface a step and strengthens its existing border. There
- * are deliberately no glow or bloom effects. Shadows use the shared
- * {@link Shadow} presets; no helper reads the framebuffer, allocates an image,
- * or creates a texture per frame.
+ * <p>Warm translucent fills with a lit top edge and a faint rim; hover and
+ * selection are density and luminance, never a hue. There are deliberately no
+ * glow or bloom effects. Shadows use the shared {@link Shadow} presets; no
+ * helper reads the framebuffer, allocates an image, creates a texture or
+ * changes GL state -- a pane is a fill, a fading overlay and an outline, all
+ * from the renderer's one sheet.
  */
 public final class VisualEffects {
 
@@ -43,15 +45,12 @@ public final class VisualEffects {
     public static final float MODAL_SHADOW_STRENGTH = 1.00f;
     /** Shared intensity of the keyboard-focus ring. */
     public static final float FOCUS_INTENSITY = 0.78f;
-    /** Surface relief from top edge to lower face: darkening only, never a sheen. */
+    /** Surface relief from top edge to lower face: a warm deepening, never a sheen. */
     public static final float SURFACE_DEPTH = 0.16f;
 
     private static final Shadow PANEL_SHADOW = Shadow.PANEL.withStrength(SHADOW_STRENGTH);
     private static final Shadow OVERLAY_SHADOW = Shadow.DROPDOWN.withStrength(OVERLAY_SHADOW_STRENGTH);
     private static final Shadow MODAL_SHADOW = Shadow.MODAL.withStrength(MODAL_SHADOW_STRENGTH);
-    // Mutable paints are intentionally shared: the UI renders on one thread and
-    // each is consumed before the next helper mutates it. This avoids a hot-path allocation.
-    private static final Paint PAGE_PAINT = new Paint();
 
     /** A one-shot hairline ring for a meaningful enable/disable event; no bloom. */
     public static void activationPulse(Renderer ui, Rect area, float radius,
@@ -62,7 +61,7 @@ public final class VisualEffects {
         }
         float remaining = 1f - phase;
         float expansion = (1f - remaining * remaining) * 3f;
-        int colour = activating ? Skin.ACTIVE_RED : Skin.BASE_RED;
+        int colour = activating ? Skin.ENERGY_EDGE : Skin.ENERGY;
         ui.outline(area.x - expansion, area.y - expansion,
                 area.right() + expansion, area.bottom() + expansion,
                 radius + expansion, 1f,
@@ -76,7 +75,7 @@ public final class VisualEffects {
             return;
         }
         ui.outline(area.x, area.y, area.right(), area.bottom(), Skin.radius(radius, area),
-                INNER_ENERGY_WIDTH, Skin.scaleAlpha(Skin.BASE_RED, shown * 0.14f));
+                INNER_ENERGY_WIDTH, Skin.scaleAlpha(Skin.ENERGY, shown * 0.14f));
     }
 
 
@@ -84,46 +83,58 @@ public final class VisualEffects {
     public static void scrollEdgeFade(Renderer ui, Rect viewport, boolean top, boolean bottom) {
         float depth = Math.min(18f, viewport.height * 0.12f);
         int shade = Skin.scaleAlpha(Skin.BACKGROUND, 0.72f);
+        int clear = Skin.fade(Skin.BACKGROUND, 0f);
         if (top) {
             ui.gradient(viewport.x, viewport.y, viewport.right(), viewport.y + depth,
-                    0f, shade, 0x00050607);
+                    0f, shade, clear);
         }
         if (bottom) {
             ui.gradient(viewport.x, viewport.bottom() - depth, viewport.right(), viewport.bottom(),
-                    0f, 0x00050607, shade);
+                    0f, clear, shade);
         }
     }
 
-    /** Flat dark material with a slight darkening toward the lower face; hover brightens one step. */
+    /**
+     * A material face, a touch deeper toward its lower edge; hover lifts it a step.
+     *
+     * <p>Both shifts move the colour and keep its alpha. They used to mix toward
+     * opaque white and opaque black, which on a translucent fill also raised
+     * its opacity -- every button grew a dark, nearly solid lower half.
+     */
     public static void layeredSurface(Renderer ui, Rect area, float radius, int face, float hover) {
-        int top = Skin.mix(face, 0xFFFFFFFF, clamp(hover) * 0.025f);
-        int bottom = Skin.mix(top, 0xFF000000, SURFACE_DEPTH);
+        int top = tone(face, Tokens.PALETTE_IVORY_50, clamp(hover) * 0.06f);
+        int bottom = tone(top, Tokens.PALETTE_UMBER_900, SURFACE_DEPTH);
         ui.gradient(area.x, area.y, area.right(), area.bottom(), radius, top, bottom);
     }
 
-    /** The content plane: near-black charcoal, no coloured light. */
-    public static void pageDepth(Renderer ui, Rect area, float outerRadius) {
-        float corner = Skin.radius(outerRadius, area);
-        if (ui instanceof FathomRenderer) {
-            // This plane owns only the hub's bottom-right corner. A square fill
-            // here used to paint back over the rounded parent and leave a tiny
-            // dark protrusion at the outer corner.
-            ((FathomRenderer) ui).rounded(area.x, area.y, area.right(), area.bottom(),
-                    0f, 0f, corner, 0f,
-                    PAGE_PAINT.vertical(area.y, area.bottom(), Skin.RECESSED, Skin.BACKGROUND));
-        } else {
-            ui.gradient(area.x, area.y, area.right(), area.bottom(), corner,
-                    Skin.RECESSED, Skin.BACKGROUND);
-            // Restore the two inner seam corners without disturbing the outer
-            // rounded corner in the compatibility backend.
-            ui.gradient(area.x, area.y, area.x + corner, area.bottom(), 0f,
-                    Skin.RECESSED, Skin.BACKGROUND);
+    /**
+     * A pane of glass: its fill, its rim, and the lit line along its top.
+     *
+     * <p>The launcher's rim is an inset one-pixel highlight along the top edge
+     * over a faint all-round ring. Here the ring is an outline and the
+     * highlight is one hairline across the top's straight run -- between the
+     * corners, so it never pokes outside a curve and needs no clip.
+     * {@code rimTop} and {@code rimEdge} are the material's own
+     * ({@code Skin.RIM_*}).
+     */
+    public static void glass(Renderer ui, Rect area, float radius, int fill, int rimTop, int rimEdge) {
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, fill);
+        ui.outline(area.x, area.y, area.right(), area.bottom(), radius, Skin.HAIRLINE, rimEdge);
+        float corner = Math.min(radius, Math.min(area.width, area.height) / 2f);
+        if (area.width > corner * 2f + 2f) {
+            ui.fill(area.x + corner, area.y, area.right() - corner, area.y + Skin.HAIRLINE, rimTop);
         }
     }
 
-    /** Brighten text, an icon or a border by the shared hover amount. */
+    /** Move a colour's RGB toward another's, keeping its alpha. */
+    public static int tone(int colour, int towards, float amount) {
+        return Skin.fade(Skin.mix(colour | 0xFF000000, towards | 0xFF000000, clamp(amount)),
+                Colour.alpha(colour));
+    }
+
+    /** Brighten text, an icon or a border by the shared hover amount, toward ivory. */
     public static int hoverBrighten(int colour, float hover) {
-        return Skin.mix(colour, 0xFFFFFFFF, clamp(hover) * HOVER_BRIGHTNESS);
+        return Skin.mix(colour, Tokens.PALETTE_IVORY_50, clamp(hover) * HOVER_BRIGHTNESS);
     }
 
     public static void panelShadow(Renderer ui, Rect area, float radius) {

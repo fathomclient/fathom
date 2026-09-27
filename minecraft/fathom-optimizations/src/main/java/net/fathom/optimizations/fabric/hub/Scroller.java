@@ -154,7 +154,7 @@ public final class Scroller {
         ui.rounded(x, handleY, x + width, handleY + handle,
                 net.fathom.optimizations.core.ui.render.RoundedGeometry.pill(width, handle),
                 Skin.mix(Skin.argb(0.16f + alpha * 0.18f, 0xFFFFFF),
-                        Skin.HOT_RED, bright * (dragging ? 0.74f : 0.28f)));
+                        Skin.ENERGY_MARK, bright * (dragging ? 0.74f : 0.28f)));
     }
 
     /** Whether there is anything to scroll, for a caller that lays out around it. */

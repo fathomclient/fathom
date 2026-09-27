@@ -1,7 +1,16 @@
 <!--
   Settings.
 
-  Two panes: categories left, rows right.
+  A page like every other: the same frame, the same veil, the same title line.
+  Inside it, the categories on the left in one small pane, and the chosen
+  category's rows on the right in sections. Both are standard glass: light
+  glass was tried for the categories and measured about 2.3:1 for their text
+  where the pane crosses the bright sky, which is not readable.
+
+  The category list used to be a darkened, blurred column pinned to the window
+  edge -- a settings utility embedded in the launcher. Now it is a small pane
+  that sits in the page's column and scrolls with it until it reaches the top,
+  and the photograph carries on around it.
 
   WHAT IS NOT HERE, AND WHY
 
@@ -28,21 +37,17 @@
     Wifi,
     HardDrive,
     Wrench,
-    Coffee,
-    TriangleAlert,
-    ScrollText,
-    Terminal,
-    Layers,
-    Droplets,
   } from '@lucide/svelte';
 
+  import Page from '../lib/ui/Page.svelte';
   import Section from '../lib/ui/Section.svelte';
   import Row from '../lib/ui/Row.svelte';
   import Switch from '../lib/ui/Switch.svelte';
   import Segmented from '../lib/ui/Segmented.svelte';
   import Button from '../lib/ui/Button.svelte';
+  import Notice from '../lib/ui/Notice.svelte';
   import BackgroundPicker from '../lib/ui/BackgroundPicker.svelte';
-  import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
+  import { EASE, MOTION_HOVER, MOTION_PAGE } from '../lib/motion';
   import { WORLD_CREDITS } from '../lib/credits';
   import {
     BACKGROUNDS,
@@ -164,256 +169,172 @@
   $: activeLabel = CATEGORIES.find((c) => c.id === category)?.label ?? 'Settings';
 </script>
 
-{#if view}
-  <div class="settings">
-    <nav class="sidebar">
-      <div class="search">
-        <Search size={13} strokeWidth={2} />
-        <input bind:value={query} placeholder="Search" spellcheck="false" />
-      </div>
+<Page title="Settings">
+  {#if view}
+    <div class="settings">
+      <!-- THE CATEGORIES. One pane of standard glass; everything else on the page
+           is either the photograph or a section of rows. -->
+      <nav class="nav material-standard" aria-label="Settings categories">
+        <label class="search">
+          <Search size={14} strokeWidth={2} />
+          <input
+            class="ui-field"
+            bind:value={query}
+            placeholder="Search"
+            spellcheck="false"
+            aria-label="Search settings"
+          />
+        </label>
 
-      {#if query.trim()}
-        <div class="results" transition:fade={{ duration: FAST }}>
-          {#if matches.length}
-            {#each matches as match}
+        {#if query.trim()}
+          <div class="list" transition:fade={{ duration: MOTION_HOVER }}>
+            {#if matches.length}
+              {#each matches as match}
+                <button
+                  class="item result"
+                  on:click={() => {
+                    category = match.section;
+                    query = '';
+                  }}
+                >
+                  <span class="result-label">{match.label}</span>
+                  <span class="result-cat">
+                    {CATEGORIES.find((c) => c.id === match.section)?.label ?? match.section}
+                  </span>
+                </button>
+              {/each}
+            {:else}
+              <p class="no-results">No setting matches “{query.trim()}”.</p>
+            {/if}
+          </div>
+        {:else}
+          <div class="list">
+            {#each CATEGORIES as item}
               <button
-                class="result"
-                on:click={() => {
-                  category = match.section;
-                  query = '';
-                }}
+                class="item"
+                class:active={category === item.id}
+                aria-current={category === item.id ? 'page' : undefined}
+                on:click={() => (category = item.id)}
               >
-                <span class="result-label">{match.label}</span>
-                <span class="result-cat">
-                  {CATEGORIES.find((c) => c.id === match.section)?.label ?? match.section}
-                </span>
+                <svelte:component this={item.icon} size={16} strokeWidth={1.9} />
+                <span>{item.label}</span>
               </button>
             {/each}
-          {:else}
-            <p class="no-results">No match.</p>
-          {/if}
-        </div>
-      {:else}
-        <div class="categories">
-          {#each CATEGORIES as item}
-            <button
-              class="category"
-              class:active={category === item.id}
-              on:click={() => (category = item.id)}
-            >
-              <svelte:component this={item.icon} size={15} strokeWidth={1.9} />
-              <span>{item.label}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </nav>
+          </div>
+        {/if}
+      </nav>
 
-    <div class="pane">
-      {#key category}
-        <div class="pane-inner" in:fly={{ y: 8, duration: NORMAL, easing: EASE }}>
-          <h1>{activeLabel}</h1>
+      <div class="pane">
+        {#key category}
+          <div class="pane-inner" in:fly={{ y: 8, duration: MOTION_PAGE, easing: EASE }}>
+            <h2 class="on-footage">{activeLabel}</h2>
 
-          {#if error}
-            <div class="notice" transition:fade={{ duration: FAST }}>
-              <TriangleAlert size={15} strokeWidth={2} />
-              <span>{error}</span>
-            </div>
-          {/if}
+            {#if error}
+              <div transition:fade={{ duration: MOTION_HOVER }}>
+                <Notice tone="danger" onDismiss={() => (error = '')}>{error}</Notice>
+              </div>
+            {/if}
 
-          <!-- APPEARANCE -->
-          {#if category === 'appearance'}
-            <!-- Accessibility for the glass itself. Windows' own "Transparency
-                 effects" switch also reduces transparency, whatever these say. -->
-            <Section label="Glass" material>
-              <Row title="Reduce transparency" detail="Nearly opaque panels. Windows' own setting also applies.">
-                <span slot="icon"><Layers size={15} strokeWidth={1.9} /></span>
-                <svelte:fragment slot="control">
-                  <Switch
-                    checked={modes.reduceTransparency}
-                    label="Reduce transparency"
-                    onChange={(value) => void changeModes({ ...modes, reduceTransparency: value })}
+            <!-- APPEARANCE -->
+            {#if category === 'appearance'}
+              <!-- Accessibility for the glass itself. Windows' own "Transparency
+                   effects" switch also reduces transparency, whatever these say. -->
+              <Section label="Glass" material>
+                <Row title="Reduce transparency" detail="Panels become nearly opaque. Windows' own transparency setting also applies.">
+                  <svelte:fragment slot="control">
+                    <Switch
+                      checked={modes.reduceTransparency}
+                      label="Reduce transparency"
+                      onChange={(value) => void changeModes({ ...modes, reduceTransparency: value })}
+                    />
+                  </svelte:fragment>
+                </Row>
+                <Row title="Reduce blur" detail="Nothing is blurred behind panels; they get denser to stay readable.">
+                  <svelte:fragment slot="control">
+                    <Switch
+                      checked={modes.reduceBlur}
+                      label="Reduce blur"
+                      onChange={(value) => void changeModes({ ...modes, reduceBlur: value })}
+                    />
+                  </svelte:fragment>
+                </Row>
+              </Section>
+
+              <!-- Only when there is a choice to make: with one approved
+                   background a picker would be a control that does nothing. The
+                   same component the bottom bar uses, at a larger size. -->
+              {#if PICKER_AVAILABLE}
+                <Section label="Background">
+                  <BackgroundPicker
+                    options={backgrounds}
+                    value={choice}
+                    size="large"
+                    onChoose={onBackground}
                   />
-                </svelte:fragment>
-              </Row>
-              <Row title="Reduce blur" detail="No blur behind panels; they get denser to stay readable.">
-                <span slot="icon"><Droplets size={15} strokeWidth={1.9} /></span>
-                <svelte:fragment slot="control">
-                  <Switch
-                    checked={modes.reduceBlur}
-                    label="Reduce blur"
-                    onChange={(value) => void changeModes({ ...modes, reduceBlur: value })}
-                  />
-                </svelte:fragment>
-              </Row>
-            </Section>
+                </Section>
+              {/if}
 
-            <!-- Only when there is a choice to make: with one approved
-                 background a picker would be a control that does nothing. The
-                 same component the bottom bar uses, at a larger size. -->
-            {#if PICKER_AVAILABLE}
-              <Section label="Background">
-                <BackgroundPicker
-                  options={backgrounds}
-                  value={choice}
-                  size="large"
-                  onChoose={onBackground}
-                />
+              <!-- The world and the creator are the links, rather than a pair
+                   of buttons off to the right saying "World" and "Creator": the
+                   name is the thing you would click. -->
+              <Section label="Credits" material>
+                <!-- The launcher's photograph. Plain text: the WebView can only
+                     open the pages `pages.rs` allows, and this credit does not
+                     need a new outbound host to be complete. -->
+                {#each BACKGROUNDS as option}
+                  <div class="credit">
+                    <p class="credit-title">{option.label}</p>
+                    <p class="credit-by">{option.credit}</p>
+                  </div>
+                {/each}
+                {#each WORLD_CREDITS as credit}
+                  <div class="credit">
+                    <button class="credit-title link" on:click={() => void openPage(credit.worldPage)}>
+                      {credit.world}
+                    </button>
+                    <p class="credit-by">
+                      A world by <button
+                        class="link"
+                        on:click={() => void openPage(credit.creatorPage)}>{credit.creator}</button
+                      > on CurseForge
+                    </p>
+                  </div>
+                {/each}
               </Section>
             {/if}
 
-            <!-- Their creators allow the footage to be used with credit.
-                 The world and the creator are the links, rather than a pair of
-                 buttons off to the right saying "World" and "Creator": the name
-                 is the thing you would click, and a credit whose subject is not
-                 the link makes you read a label to find out where it goes. -->
-            <Section label="Background credits" material>
-              <!-- The launcher's photograph. Plain text: the WebView can only
-                   open the pages `pages.rs` allows, and this credit does not
-                   need a new outbound host to be complete. -->
-              {#each BACKGROUNDS as option}
-                <div class="credit-row">
-                  <p class="credit-title">{option.label}</p>
-                  <p class="credit-by">{option.credit}</p>
-                </div>
-              {/each}
-              {#each WORLD_CREDITS as credit}
-                <div class="credit-row">
-                  <button class="credit-world" on:click={() => void openPage(credit.worldPage)}>
-                    {credit.world}
-                  </button>
-                  <p class="credit-by">
-                    A world by <button
-                      class="credit-creator"
-                      on:click={() => void openPage(credit.creatorPage)}>{credit.creator}</button
-                    > on CurseForge
-                  </p>
-                </div>
-              {/each}
-            </Section>
-          {/if}
-
-          <!-- GAME -->
-          {#if category === 'game'}
-            <Section material>
-              <Row title={view.java.headline} detail={view.java.detail}>
-                <span slot="icon" class="java" class:found={view.java.found}>
-                  {#if view.java.found}
-                    <Coffee size={15} strokeWidth={1.9} />
-                  {:else}
-                    <TriangleAlert size={15} strokeWidth={1.9} />
-                  {/if}
-                </span>
-                <svelte:fragment slot="control">
-                  <Button onClick={() => onNavigate('recovery')}>Find Java</Button>
-                </svelte:fragment>
-              </Row>
-
-              {#each choicesFor(view, 'game') as row}
+            <!-- GAME -->
+            {#if category === 'game'}
+              <Section material>
                 <Row
-                  title={row.label}
-                  detail={row.options.find((option) => option.id === row.value)?.detail ??
-                    row.detail}
-                >
-                  <span slot="icon"><Coffee size={15} strokeWidth={1.9} /></span>
-                  <svelte:fragment slot="control">
-                    <Segmented
-                      options={row.options}
-                      value={row.value}
-                      disabled={busy}
-                      onChange={(id) => choose(row.id, id)}
-                    />
-                  </svelte:fragment>
-                </Row>
-              {/each}
-
-              {#each togglesFor(view, 'game') as row}
-                <Row
-                  title={row.label}
-                  detail={row.detail}
-                  badge={row.overriddenBy ?? ''}
-                  dimmed={Boolean(row.overriddenBy)}
+                  title={view.java.headline}
+                  detail={view.java.detail}
+                  badge={view.java.found ? '' : 'Needed to play'}
+                  tone="warn"
                 >
                   <svelte:fragment slot="control">
-                    <Switch
-                      checked={row.value}
-                      disabled={busy || Boolean(row.overriddenBy)}
-                      label={row.label}
-                      onChange={(value) => toggle(row.id, value)}
-                    />
+                    <Button onClick={() => onNavigate('recovery')}>Find Java</Button>
                   </svelte:fragment>
                 </Row>
-              {/each}
-            </Section>
-            <p class="aside">Memory, Java arguments and loader belong to a profile.</p>
-          {/if}
 
-          <!-- STORAGE -->
-          {#if category === 'storage'}
-            <Section material>
-              <Row title="Cache" detail={cacheAction?.detail ?? 'Downloaded metadata.'}>
-                <span slot="icon"><HardDrive size={15} strokeWidth={1.9} /></span>
-                <svelte:fragment slot="control">
-                  <Button
-                    disabled={Boolean(cacheAction?.unavailable)}
-                    title={cacheAction?.unavailable ?? ''}
-                    onClick={() => onNavigate('recovery')}
+                {#each choicesFor(view, 'game') as row}
+                  <Row
+                    title={row.label}
+                    detail={row.options.find((option) => option.id === row.value)?.detail ??
+                      row.detail}
                   >
-                    Manage
-                  </Button>
-                </svelte:fragment>
-              </Row>
-            </Section>
-          {/if}
+                    <svelte:fragment slot="control">
+                      <Segmented
+                        options={row.options}
+                        value={row.value}
+                        disabled={busy}
+                        onChange={(id) => choose(row.id, id)}
+                      />
+                    </svelte:fragment>
+                  </Row>
+                {/each}
 
-          <!-- ADVANCED -->
-          {#if category === 'advanced'}
-            <Section material>
-              <Row title="Logs" detail="Launcher and game output.">
-                <span slot="icon"><ScrollText size={15} strokeWidth={1.9} /></span>
-                <svelte:fragment slot="control">
-                  <Button onClick={() => onNavigate('logs')}>Open</Button>
-                </svelte:fragment>
-              </Row>
-
-              {#each choicesFor(view, 'advanced') as row}
-                <Row
-                  title={row.label}
-                  detail={row.options.find((option) => option.id === row.value)?.detail ??
-                    row.detail}
-                >
-                  <span slot="icon"><Terminal size={15} strokeWidth={1.9} /></span>
-                  <svelte:fragment slot="control">
-                    <Segmented
-                      options={row.options}
-                      value={row.value}
-                      disabled={busy}
-                      onChange={(id) => choose(row.id, id)}
-                    />
-                  </svelte:fragment>
-                </Row>
-              {/each}
-
-              {#each togglesFor(view, 'advanced') as row}
-                <Row title={row.label} detail={row.detail}>
-                  <svelte:fragment slot="control">
-                    <Switch
-                      checked={row.value}
-                      disabled={busy}
-                      label={row.label}
-                      onChange={(value) => toggle(row.id, value)}
-                    />
-                  </svelte:fragment>
-                </Row>
-              {/each}
-            </Section>
-          {/if}
-
-          <!-- GENERAL and NETWORK are switch lists. -->
-          {#if category === 'general' || category === 'network'}
-            <Section material>
-              {#each togglesFor(view, category) as row, index}
-                <div in:fly={{ y: 6, duration: NORMAL, delay: index * STAGGER, easing: EASE }}>
+                {#each togglesFor(view, 'game') as row}
                   <Row
                     title={row.label}
                     detail={row.detail}
@@ -429,260 +350,337 @@
                       />
                     </svelte:fragment>
                   </Row>
-                </div>
-              {/each}
-            </Section>
-          {/if}
+                {/each}
+              </Section>
+              <p class="aside on-footage">
+                Memory, Java arguments and the loader are set per installation.
+                <button class="link" on:click={() => onNavigate('installations')}>Installations</button>
+              </p>
+            {/if}
 
-          {#if category === 'general'}
-            <Section label="About" material>
-              {#each view.about as row}
-                <Row title={row.label} compact>
-                  <span slot="control" class="value tnum">{row.value}</span>
+            <!-- STORAGE -->
+            {#if category === 'storage'}
+              <Section material>
+                <Row title="Cache" detail={cacheAction?.detail ?? 'Downloaded metadata.'}>
+                  <svelte:fragment slot="control">
+                    <Button
+                      disabled={Boolean(cacheAction?.unavailable)}
+                      title={cacheAction?.unavailable ?? ''}
+                      onClick={() => onNavigate('recovery')}
+                    >
+                      Manage
+                    </Button>
+                  </svelte:fragment>
                 </Row>
-              {/each}
-            </Section>
-          {/if}
-        </div>
-      {/key}
+              </Section>
+            {/if}
+
+            <!-- ADVANCED -->
+            {#if category === 'advanced'}
+              <Section material>
+                <Row title="Logs" detail="Launcher and game output.">
+                  <svelte:fragment slot="control">
+                    <Button onClick={() => onNavigate('logs')}>Open</Button>
+                  </svelte:fragment>
+                </Row>
+
+                {#each choicesFor(view, 'advanced') as row}
+                  <Row
+                    title={row.label}
+                    detail={row.options.find((option) => option.id === row.value)?.detail ??
+                      row.detail}
+                  >
+                    <svelte:fragment slot="control">
+                      <Segmented
+                        options={row.options}
+                        value={row.value}
+                        disabled={busy}
+                        onChange={(id) => choose(row.id, id)}
+                      />
+                    </svelte:fragment>
+                  </Row>
+                {/each}
+
+                {#each togglesFor(view, 'advanced') as row}
+                  <Row title={row.label} detail={row.detail}>
+                    <svelte:fragment slot="control">
+                      <Switch
+                        checked={row.value}
+                        disabled={busy}
+                        label={row.label}
+                        onChange={(value) => toggle(row.id, value)}
+                      />
+                    </svelte:fragment>
+                  </Row>
+                {/each}
+              </Section>
+            {/if}
+
+            <!-- GENERAL and NETWORK are switch lists. -->
+            {#if category === 'general' || category === 'network'}
+              {@const rows = togglesFor(view, category)}
+              {#if rows.length}
+                <Section material>
+                  {#each rows as row}
+                    <Row
+                      title={row.label}
+                      detail={row.detail}
+                      badge={row.overriddenBy ?? ''}
+                      dimmed={Boolean(row.overriddenBy)}
+                    >
+                      <svelte:fragment slot="control">
+                        <Switch
+                          checked={row.value}
+                          disabled={busy || Boolean(row.overriddenBy)}
+                          label={row.label}
+                          onChange={(value) => toggle(row.id, value)}
+                        />
+                      </svelte:fragment>
+                    </Row>
+                  {/each}
+                </Section>
+              {:else if category === 'network'}
+                <p class="aside on-footage">Nothing to set here yet.</p>
+              {/if}
+            {/if}
+
+            {#if category === 'general' && view.about.length}
+              <Section label="About" material>
+                {#each view.about as row}
+                  <Row title={row.label} compact>
+                    <span slot="control" class="value tnum">{row.value}</span>
+                  </Row>
+                {/each}
+              </Section>
+            {/if}
+          </div>
+        {/key}
+      </div>
     </div>
-  </div>
-{/if}
+  {/if}
+</Page>
 
 <style>
-  /* Row's geometry, by hand: these are rows in the same glass as every other
-     list, but their content is a sentence with links in it rather than a title,
-     a detail and a control. */
-  .credit-row {
-    padding: 12px 14px;
-    border-radius: var(--r-md);
-    box-shadow: 0 -1px 0 var(--chrome-line);
-    transition: background var(--m-fast) var(--ease);
-  }
-
-  .credit-row:first-child {
-    box-shadow: none;
-  }
-
-  .credit-row:hover {
-    background: var(--fill);
-  }
-
-  .credit-title {
-    margin: 0;
-    font-size: var(--t-row);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
-    color: var(--text);
-  }
-
-  .credit-world {
-    display: block;
-    padding: 0;
-    font-size: var(--t-row);
-    font-weight: var(--w-semibold);
-    letter-spacing: var(--track-snug);
-    color: var(--text);
-    text-align: left;
-    text-decoration: underline;
-    text-decoration-color: rgba(255, 255, 255, 0.26);
-    text-underline-offset: 3px;
-    transition:
-      color var(--m-fast) var(--ease),
-      text-decoration-color var(--m-fast) var(--ease);
-  }
-
-  .credit-by {
-    margin: 2px 0 0;
-    font-size: var(--t-body);
-    color: var(--text-muted);
-  }
-
-  .credit-creator {
-    display: inline;
-    padding: 0;
-    font: inherit;
-    color: var(--text-muted);
-    text-decoration: underline;
-    text-decoration-color: rgba(255, 255, 255, 0.26);
-    text-underline-offset: 3px;
-    transition:
-      color var(--m-fast) var(--ease),
-      text-decoration-color var(--m-fast) var(--ease);
-  }
-
-  .credit-world:hover,
-  .credit-creator:hover {
-    color: var(--text);
-    text-decoration-color: var(--accent);
-  }
-
+  /* Categories beside the rows while there is room for both; above them, as a
+     wrapping row, when there is not. */
   .settings {
+    container-type: inline-size;
     display: grid;
-    grid-template-columns: 200px 1fr;
-    height: 100%;
+    grid-template-columns: minmax(168px, 200px) minmax(0, 1fr);
+    gap: var(--space-6);
+    align-items: start;
   }
 
-  .sidebar {
+  @container (max-width: 620px) {
+    .settings {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .nav {
+      position: static;
+    }
+
+    .nav .list {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+  }
+
+  /* -- the categories ------------------------------------------------------ */
+  .nav {
+    --surface-radius: var(--radius-lg);
+    position: sticky;
+    top: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--s-3);
-    padding: var(--page-pad-y) var(--s-3);
-    border-right: 1px solid var(--chrome-line);
-    /* Darkened rather than glass: this pane sits against the chrome and reads
-       as part of the frame, not as something floating on the footage. */
-    background: rgba(0, 0, 0, 0.42);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    overflow-y: auto;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
+    /* This pane sits over the sun, the brightest part of the photograph, and
+       at plain standard density its type measured about 4.2:1. A local
+       deepening through the material's own veil layer, rather than a denser
+       material or a darker colour for the whole page. */
+    --mat-veil: var(--control-deepen);
   }
 
   .search {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: var(--s-2);
-    height: var(--h-md);
-    padding: 0 var(--s-3);
-    border-radius: var(--r-sm);
-    background: var(--fill-sunken);
-    border: 1px solid var(--chrome-line-strong);
-    color: var(--text-faint);
-    flex-shrink: 0;
-    transition: border-color var(--m-fast) var(--ease);
+    color: var(--color-text-tertiary);
   }
 
-  .search:focus-within {
-    border-color: var(--accent);
+  .search :global(svg) {
+    position: absolute;
+    left: var(--space-3);
+    pointer-events: none;
   }
 
   .search input {
-    width: 100%;
-    min-width: 0;
-    background: none;
-    border: none;
-    font-size: var(--t-body);
-    color: var(--text);
+    min-height: var(--control-height-md);
+    padding-left: var(--space-8);
+    border-radius: max(var(--radius-inner-min), calc(var(--radius-lg) - var(--space-2)));
   }
 
-  .search input::placeholder {
-    color: var(--text-disabled);
+  .search:focus-within {
+    color: var(--color-text-secondary);
   }
 
-  .categories,
-  .results {
+  .list {
     display: flex;
     flex-direction: column;
-    gap: var(--s-1);
+    gap: 2px;
   }
 
-  .category {
+  /* Rest: secondary type on the pane. Hover: a thin fill. Chosen: a denser
+     fill, a brighter rim and full-strength type -- no marker, no hue. */
+  .item {
     display: flex;
     align-items: center;
-    gap: var(--s-3);
-    padding: var(--s-2) var(--s-3);
-    border-radius: var(--r-sm);
-    font-size: var(--t-body-lg);
-    font-weight: var(--w-medium);
-    color: var(--text-muted);
+    gap: var(--space-3);
+    min-height: var(--control-height-lg);
+    padding: var(--space-2) var(--space-3);
+    border-radius: max(var(--radius-inner-min), calc(var(--radius-lg) - var(--space-2)));
+    font-size: var(--type-body-size);
+    font-weight: var(--type-button-weight);
+    color: var(--color-text-secondary);
     text-align: left;
     transition:
-      background var(--m-fast) var(--ease),
-      color var(--m-fast) var(--ease);
+      background-color var(--motion-hover) var(--ease-standard),
+      color var(--motion-hover) var(--ease-standard);
   }
 
-  .category:hover {
-    background: var(--fill-hover);
-    color: var(--text);
+  .item:hover {
+    background-color: var(--control-fill);
+    color: var(--color-text);
   }
 
-  .category.active {
-    background: var(--fill-active);
-    color: var(--text);
-    font-weight: var(--w-semibold);
+  .item:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  .item.active {
+    background-color: var(--control-fill-selected);
+    box-shadow: var(--control-rim-strong);
+    color: var(--color-text);
+    font-weight: var(--type-heading-weight);
   }
 
   .result {
-    display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: 1px;
-    padding: var(--s-2) var(--s-3);
-    border-radius: var(--r-sm);
-    text-align: left;
-    transition: background var(--m-fast) var(--ease);
-  }
-
-  .result:hover {
-    background: var(--fill-hover);
   }
 
   .result-label {
-    font-size: var(--t-body);
-    color: var(--text);
+    color: var(--color-text);
+    overflow-wrap: anywhere;
   }
 
   .result-cat {
-    font-size: var(--t-meta);
-    color: var(--text-faint);
+    font-size: var(--type-caption-size);
+    font-weight: var(--type-body-weight);
+    color: var(--color-text-secondary);
   }
 
   .no-results {
     margin: 0;
-    padding: var(--s-2) var(--s-3);
-    font-size: var(--t-body);
-    color: var(--text-faint);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--type-secondary-size);
+    line-height: var(--type-secondary-leading);
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
   }
 
+  /* -- the rows ------------------------------------------------------------ */
   .pane {
-    overflow-y: auto;
-    padding: var(--page-pad-y) var(--page-pad-x) var(--s-10);
-    /* The same readability substrate `Page` uses, because this pane is its own
-       scroller and does not go through that component. */
-    background: var(--backdrop-document);
+    min-width: 0;
   }
 
   .pane-inner {
-    max-width: 640px;
     display: flex;
     flex-direction: column;
-    gap: var(--page-gap);
+    gap: var(--layout-section-gap);
   }
 
-  h1 {
+  h2 {
     margin: 0;
-    font-size: var(--t-page);
-    font-weight: var(--w-bold);
-    letter-spacing: var(--track-tight);
-    line-height: 1.15;
-    text-shadow: 0 1px 14px rgba(0, 0, 0, 0.9);
-  }
-
-  .java {
-    color: var(--warn);
-  }
-  .java.found {
-    color: var(--good);
+    padding: 0 var(--space-1);
+    font-size: var(--type-heading-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
+    line-height: var(--type-heading-leading);
+    color: var(--color-text);
+    /* Level with the first category in the pane beside it. */
+    min-height: var(--control-height-md);
+    display: flex;
+    align-items: center;
+    margin-top: var(--space-2);
   }
 
   .value {
-    font-size: var(--t-body);
-    color: var(--text-muted);
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
   }
 
   .aside {
     margin: 0;
-    font-size: var(--t-body);
-    color: var(--text-faint);
+    padding: 0 var(--space-1);
+    font-size: var(--type-secondary-size);
+    line-height: var(--type-secondary-leading);
+    color: var(--color-text-secondary);
   }
 
-  .notice {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    padding: var(--s-2) var(--s-3);
-    border-radius: var(--r-md);
-    font-size: var(--t-body);
-    background: rgba(232, 114, 114, 0.11);
-    border: 1px solid rgba(232, 114, 114, 0.3);
-    color: var(--bad);
+  /* A link inside running text: the text colour, underlined with a hairline
+     that firms up on hover. */
+  .link {
+    display: inline;
+    padding: 0;
+    font: inherit;
+    color: var(--color-text);
+    text-decoration: underline;
+    text-decoration-color: var(--control-hairline-strong);
+    text-underline-offset: 3px;
+    transition: text-decoration-color var(--motion-hover) var(--ease-standard);
+  }
+
+  .link:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .link:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  /* -- credits: Row's geometry, because their content is a sentence with links
+     in it rather than a title, a detail and a control. */
+  .credit {
+    padding: var(--space-3) var(--space-4);
+    box-shadow: 0 -1px 0 var(--control-hairline);
+  }
+
+  .credit:first-child {
+    box-shadow: none;
+  }
+
+  .credit-title {
+    display: block;
+    margin: 0;
+    font-size: var(--type-body-size);
+    font-weight: var(--type-heading-weight);
+    letter-spacing: var(--type-heading-tracking);
+    color: var(--color-text);
+    text-align: left;
+  }
+
+  .credit-by {
+    margin: 3px 0 0;
+    font-size: var(--type-secondary-size);
+    line-height: var(--type-secondary-leading);
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
   }
 </style>
