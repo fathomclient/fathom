@@ -108,7 +108,7 @@
       {/if}
     {:else}
       {#each lines as line}
-        <div class="line {line.level}">{line.text}</div>
+        <div class="line keep-case {line.level}">{line.text}</div>
       {/each}
     {/if}
   </div>

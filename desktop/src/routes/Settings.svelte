@@ -255,6 +255,21 @@
                 </Row>
               </Section>
 
+              <!-- The letter case of the whole interface, both windows. Off is
+                   the default lowercase; the copy itself is written correctly
+                   capitalized, so this only lifts one rule in `theme.css`. -->
+              <Section label="Text" material>
+                <Row title="Standard capitalization" detail="Show text with its usual capitals instead of all lowercase.">
+                  <svelte:fragment slot="control">
+                    <Switch
+                      checked={modes.standardCapitalization}
+                      label="Standard capitalization"
+                      onChange={(value) => void changeModes({ ...modes, standardCapitalization: value })}
+                    />
+                  </svelte:fragment>
+                </Row>
+              </Section>
+
               <!-- Only when there is a choice to make: with one approved
                    background a picker would be a control that does nothing. The
                    same component the bottom bar uses, at a larger size. -->

@@ -218,6 +218,45 @@ textarea {
   color: inherit;
 }
 
+/* -- letter case -------------------------------------------------------------
+   Every word the launcher draws is set in lowercase by default. The copy in the
+   source keeps its correct capitalization, so the Appearance switch
+   ("Standard capitalization", see `appearance.ts`) only has to lift this one
+   rule: `data-case="standard"` on `<html>` and the text is as written.
+
+   Done here, once, rather than by rewriting every string: a string rewritten to
+   lowercase has lost its capitals for good, and the switch would have nothing
+   to restore.
+
+   Chromium's own stylesheet gives buttons and selects `text-transform: none`,
+   so they are told to follow the page. What is typed, and what is data rather
+   than words -- the `.mono` values, log lines, hosts, paths, hashes -- keeps its
+   case: lowercasing a path or a Java argument would show something that is not
+   true. `.keep-case` marks any other such span. */
+:root:not([data-case='standard']) body {
+  text-transform: lowercase;
+}
+
+:root:not([data-case='standard']) :is(input, textarea)::placeholder {
+  text-transform: lowercase;
+}
+
+button,
+select {
+  text-transform: inherit;
+}
+
+input,
+textarea,
+code,
+pre,
+kbd,
+samp,
+.mono,
+.keep-case {
+  text-transform: none;
+}
+
 /* -- the legacy glass classes ------------------------------------------------
    `.glass` and `.glass-strong` are the standard and dense materials under their
    old names, so every surface that predates the system is the same substance
