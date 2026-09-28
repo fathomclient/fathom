@@ -42,6 +42,7 @@
   import AccountDrawer from './lib/ui/AccountDrawer.svelte';
   import ProfileSwitcher from './lib/ui/ProfileSwitcher.svelte';
   import BackgroundPicker from './lib/ui/BackgroundPicker.svelte';
+  import LoadingScreen from './lib/ui/LoadingScreen.svelte';
   import FathomIcon from './lib/ui/FathomIcon.svelte';
   import WindowControls from './lib/ui/WindowControls.svelte';
   import GraphiteWordmark from './lib/graphite/GraphiteWordmark.svelte';
@@ -162,34 +163,65 @@
     return () => stop?.();
   });
 
+  /* -- start-up -------------------------------------------------------------
+     The window is already showing the loading screen (`main.ts` shows it as
+     soon as the static splash has painted). Everything Home needs is asked
+     for AT ONCE: these used to be four calls, then settings, then the sign-in,
+     then the launch, one round trip after another, with the window hidden
+     until the last answered. `pending` names what is still outstanding, most
+     important first, for the loading screen's line. */
+  let loading = true;
+  let pending: string[] = [];
+
+  function tracked<T>(label: string, request: Promise<T>): Promise<T> {
+    pending = [...pending, label];
+    const settle = () => (pending = pending.filter((item) => item !== label));
+    request.then(settle, settle);
+    return request;
+  }
+
   onMount(() => {
     void (async () => {
       try {
-        [home, status, choice, accounts] = await Promise.all([
-          homeView(), shellStatus(), loadBackground(), accountsView(),
+        const [
+          homeResult, statusResult, choiceResult, accountsResult, settings, authResult, launchResult,
+        ] = await Promise.all([
+          tracked('Checking Java and your installation', homeView()),
+          tracked('Reading the launcher', shellStatus()),
+          tracked('Loading your background', loadBackground()),
+          tracked('Loading accounts', accountsView()),
+          tracked('Loading settings', settingsView()),
+          signInProgress(),
+          launchProgress(),
         ]);
-        const settings = await settingsView();
+        home = homeResult;
+        status = statusResult;
+        choice = choiceResult;
+        accounts = accountsResult;
         canSignIn = settings.account.canSignIn;
         developmentAvailable = settings.account.developmentAvailable;
         credentialStore = settings.account.credentialStore;
 
-        /* The stored token is tried on a Rust thread as the app starts, so by the
-           time this runs it may already be under way. Adopting it here is what
-           stops the drawer saying "not signed in" over a restore in progress. */
-        auth = await signInProgress();
+        /* The stored token is tried on a Rust thread as the app starts, so it
+           may already be under way. Adopting it here is what stops the drawer
+           saying "not signed in" over a restore in progress. The restore does
+           not hold up the loading screen: the shell draws the account as
+           restoring, and Rust gives up on it after 20 seconds. */
+        auth = authResult;
         if (auth.active) watchAuth();
 
         /* A launch outlives the window's script: it runs on a Rust thread, and a
            reload during development — or a second window opening — must find it
            rather than show an idle Play button over a running download. */
-        launch = await launchProgress();
+        launch = launchResult;
         if (launch.active) watch();
       } finally {
-        /* The native window starts hidden. Showing it only after the real shell
-           state arrives prevents the half-populated fallback composition from
-           flashing before Home is ready. `finally` keeps an unexpected data
-           error from leaving an invisible process behind. */
-        await windowShow();
+        /* `finally`: an unexpected data error must not leave the launcher
+           behind a loading screen forever. */
+        loading = false;
+        pending = [];
+        /* Harmless if `main.ts` already did it; covers a window it could not. */
+        void windowShow();
       }
     })();
     return () => {
@@ -383,6 +415,8 @@
      approved recording or replaces it with a page-specific image. -->
 <GraphiteBackdrop {choice} />
 
+<LoadingScreen visible={loading} {pending} />
+
 <!-- One photographic environment. Nothing below paints a bar: the header row,
      the navigation and the status line are pieces of glass and type laid onto
      the photograph, which continues behind all of them. -->
@@ -442,8 +476,10 @@
         {/if}
       </span>
       <!-- Never cut: a Minecraft name is at most sixteen characters. -->
+      <!-- A session that did not come back says so here too, not only in the
+           drawer: the name alone would read as signed in. -->
       <span class="account-name" class:restoring-name={home?.account.remembered}>
-        {home?.account.name ?? 'Sign in'}
+        {home?.account.needsSignIn ? 'Sign in again' : (home?.account.name ?? 'Sign in')}
       </span>
       <ChevronDown size={ICON.inline} />
     </button>

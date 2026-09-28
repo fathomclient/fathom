@@ -56,6 +56,8 @@ struct State {
     /// The launcher-lifetime bridge, so a game Fathom did not start can still
     /// reach the account drawer. `None` when it could not listen.
     launcher_bridge: Mutex<Option<launcher_core::bridge::Bridge>>,
+    /// The start-up Java scan, which screens wait on instead of re-running.
+    java_scan: JavaScan,
     /// The jar the user has just supplied, between accepting it and choosing a
     /// profile for it.
     ///
@@ -66,18 +68,96 @@ struct State {
     supplied: Mutex<Option<launcher_core::mods::supplied::AcceptedJar>>,
 }
 
+/// The one Java scan the launcher runs by itself, started as the app starts.
+///
+/// Scanning spawns `java -version` for every candidate, one after another --
+/// easily a second or more on Windows. It used to run inside `home_view` and
+/// `settings_view`, holding the launcher's lock, before the window could be
+/// shown; and because "none found" left the list empty, a machine with no Java
+/// paid for a fresh scan every time Home or Settings was opened.
+///
+/// Now it starts on a thread during setup, in parallel with the WebView
+/// loading, with the lock released while it probes. A screen that needs the
+/// answer waits for it (usually it is already there) rather than scanning
+/// again; the Recovery page's Search button is still the way to look again.
+#[derive(Default)]
+struct JavaScan {
+    done: Mutex<bool>,
+    ready: std::sync::Condvar,
+}
+
+impl JavaScan {
+    /// No screen waits longer than this for the first scan: a hung `java`
+    /// must not keep the launcher from opening.
+    const PATIENCE: std::time::Duration = std::time::Duration::from_secs(10);
+
+    fn start(&self, app: &tauri::AppHandle) {
+        use tauri::Manager as _;
+        let handle = app.clone();
+        let spawned = std::thread::Builder::new()
+            .name("fathom-java-scan".to_owned())
+            .spawn(move || {
+                let state = handle.state::<State>();
+                let paths = state.core.lock().map(|core| core.paths().clone());
+                if let Ok(paths) = paths {
+                    let found = Launcher::scan_java(&paths);
+                    tracing::info!(count = found.len(), "java scan finished");
+                    if let Ok(mut core) = state.core.lock() {
+                        core.set_java(found);
+                    }
+                }
+                state.java_scan.finish();
+            });
+        if spawned.is_err() {
+            // Nothing to wait for; screens fall back to what is known.
+            self.finish();
+        }
+    }
+
+    fn finish(&self) {
+        if let Ok(mut done) = self.done.lock() {
+            *done = true;
+        }
+        self.ready.notify_all();
+    }
+
+    /// Wait for the start-up scan, holding no other lock.
+    fn wait(&self) {
+        let Ok(done) = self.done.lock() else { return };
+        let _ = self
+            .ready
+            .wait_timeout_while(done, Self::PATIENCE, |finished| !*finished);
+    }
+}
+
 const EMBEDDED_CLIENT: &[u8] = include_bytes!(env!("FATHOM_CLIENT_JAR_PATH"));
 const EMBEDDED_CLIENT_NAME: &str = env!("FATHOM_CLIENT_JAR_NAME");
+/// A fingerprint of `EMBEDDED_CLIENT`, computed by `build.rs`.
+const EMBEDDED_CLIENT_ID: &str = env!("FATHOM_CLIENT_JAR_ID");
 
 /// Materialise the client module carried inside the executable.
 ///
 /// This is what makes `Fathom.exe` genuinely portable rather than a launcher
 /// that only works while a sibling `resources` directory happens to follow it.
+///
+/// It runs before the window exists, and the jar is tens of megabytes (it
+/// carries the menu's video frames). Comparing it byte for byte on every
+/// start meant reading all of it from disk, and paging all of it in from the
+/// executable, before anything could be drawn. So the staged copy is stamped
+/// with the build's fingerprint of the bytes it wrote, and a start whose stamp
+/// and length both match reads nothing else. The full comparison remains the
+/// fallback when there is no stamp -- an install from before stamps -- so
+/// staying authoritative costs one slow start, once.
 fn stage_embedded_client(paths: &DataPaths) -> Result<(), std::io::Error> {
     let directory = paths.resources_dir();
     std::fs::create_dir_all(&directory)?;
     let destination = directory.join(EMBEDDED_CLIENT_NAME);
+    let stamp = directory.join(format!(".{EMBEDDED_CLIENT_NAME}.id"));
+    if stamp_matches(&stamp, &destination) {
+        return Ok(());
+    }
     if file_matches(&destination, EMBEDDED_CLIENT)? {
+        let _ = std::fs::write(&stamp, EMBEDDED_CLIENT_ID);
         return Ok(());
     }
     let temporary = directory.join(format!(".{EMBEDDED_CLIENT_NAME}.new"));
@@ -85,7 +165,23 @@ fn stage_embedded_client(paths: &DataPaths) -> Result<(), std::io::Error> {
     if destination.exists() {
         std::fs::remove_file(&destination)?;
     }
-    std::fs::rename(temporary, destination)
+    std::fs::rename(temporary, destination)?;
+    // Written after the jar is in place, so a stamp never vouches for a
+    // half-written file.
+    let _ = std::fs::write(&stamp, EMBEDDED_CLIENT_ID);
+    Ok(())
+}
+
+/// Whether the staged jar is the one this build carries, from its stamp and
+/// length alone. Anything unexpected -- no stamp, another build's stamp, a
+/// jar of a different size -- answers no, and the full check runs.
+fn stamp_matches(stamp: &std::path::Path, destination: &std::path::Path) -> bool {
+    let Ok(recorded) = std::fs::read_to_string(stamp) else {
+        return false;
+    };
+    recorded.trim() == EMBEDDED_CLIENT_ID
+        && std::fs::metadata(destination)
+            .is_ok_and(|meta| meta.is_file() && meta.len() == EMBEDDED_CLIENT.len() as u64)
 }
 
 /// A rebuilt jar can have exactly the same byte length as the jar it replaces.
@@ -119,17 +215,32 @@ fn file_matches(path: &std::path::Path, expected: &[u8]) -> Result<bool, std::io
 
 #[tauri::command]
 fn home_view(state: tauri::State<'_, State>) -> Result<api::HomeView, String> {
-    let mut core = state
+    // Home's launch button is derived from `readiness`, which raises a
+    // "no Java" blocker from the scanned list. Without a scan it told the user
+    // to install a Java they already had -- so wait for the start-up scan
+    // (see `JavaScan`) before reading it, without holding the lock.
+    state.java_scan.wait();
+    let core = state
         .core
         .lock()
         .map_err(|_| "launcher state is poisoned")?;
-    // Home's launch button is derived from `readiness`, which raises a
-    // "no Java" blocker from the scanned list. Without a scan it told the user
-    // to install a Java they already had.
-    if core.java_installations().is_empty() {
-        core.refresh_java();
-    }
-    Ok(api::home_view(&core))
+    let mut view = api::home_view(&core);
+    session_flags(&mut view.account, &state.auth.progress());
+    Ok(view)
+}
+
+/// Say what a remembered account's session is doing *now*.
+///
+/// `remembered` used to be simply "not signed in", which stayed true after a
+/// restore had failed or timed out -- so the top bar pulsed and the drawer
+/// said "Restoring your session... Nothing to do" forever. It is now true only
+/// while a restore is actually running, and `needs_sign_in` covers the rest:
+/// a known account whose session did not come back.
+fn session_flags(account: &mut api::AccountSummary, auth: &api::auth::AuthProgress) {
+    let known = account.name.is_some() && !account.signed_in;
+    let restoring = auth.phase == api::auth::AuthPhase::Restoring;
+    account.remembered = known && restoring;
+    account.needs_sign_in = known && !restoring;
 }
 
 #[tauri::command]
@@ -451,12 +562,15 @@ pub fn run() {
             launch: api::launch::Supervisor::default(),
             auth: api::auth::Supervisor::default(),
             launcher_bridge: Mutex::new(None),
+            java_scan: JavaScan::default(),
             supplied: Mutex::new(None),
         })
         // A stored refresh token is tried once, on a thread, so a signed-in
         // user is signed in again without the window waiting on Microsoft to
         // answer before it opens.
         .setup(|app| {
+            use tauri::Manager as _;
+            app.state::<State>().java_scan.start(app.handle());
             signin::restore(&app.handle().clone());
             match session::open_launcher_bridge(app.handle()) {
                 Ok(bridge) => {
@@ -786,23 +900,32 @@ mod tests {
         }
     }
 
-    /// The native window must not expose the frontend's null/fixture state.
-    /// App.svelte shows it after the real shell data has settled.
+    /// The native window starts hidden, so the OS never shows an empty frame
+    /// before the WebView has drawn -- and is shown as soon as the static
+    /// splash has, not after Home's data arrives. Waiting for the data kept a
+    /// launcher that was already running invisible for seconds.
     #[test]
-    fn the_main_window_starts_hidden_until_the_frontend_is_ready() {
+    fn the_main_window_opens_on_the_splash_not_after_the_data() {
         let config: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        assert_eq!(
-            config["app"]["windows"][0]["visible"],
-            serde_json::Value::Bool(false)
-        );
+        let window = &config["app"]["windows"][0];
+        assert_eq!(window["visible"], serde_json::Value::Bool(false));
+        // The native background is the splash's own colour, so there is no
+        // flash of anything else behind the first frame.
+        assert_eq!(window["backgroundColor"].as_str(), Some("#071015"));
+
+        let page = include_str!("../../../desktop/index.html");
+        assert!(page.contains("id=\"splash\""), "index.html paints a splash");
+
+        let entry = include_str!("../../../desktop/src/main.ts");
+        let show = entry.find("void windowShow()").unwrap();
+        let mount = entry.find("mount(").unwrap();
+        assert!(show < mount, "the window is shown before the interface mounts");
 
         let shell = include_str!("../../../desktop/src/App.svelte");
-        let load = shell.find("homeView(), shellStatus()").unwrap();
-        let show = shell.find("await windowShow()").unwrap();
         assert!(
-            show > load,
-            "the window may only be shown after shell data loads"
+            shell.contains("<LoadingScreen"),
+            "the shell covers itself with the loading screen until Home is ready"
         );
     }
 }

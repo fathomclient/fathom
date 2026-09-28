@@ -40,6 +40,15 @@ fn main() {
         "cargo:rustc-env=FATHOM_CLIENT_JAR_NAME={}",
         client.file_name().and_then(|name| name.to_str()).expect("client jar filename")
     );
+    // A fingerprint of the jar's bytes, so start-up can tell "the installed copy
+    // is this build's" from a stamp file instead of re-reading tens of
+    // megabytes every time the launcher opens.
+    let jar = std::fs::read(&client).expect("read the client jar");
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in &jar {
+        hash = (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
+    }
+    println!("cargo:rustc-env=FATHOM_CLIENT_JAR_ID={hash:016x}-{}", jar.len());
     tauri_build::build();
 }
 

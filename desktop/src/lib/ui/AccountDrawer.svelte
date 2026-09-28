@@ -92,6 +92,39 @@
       </Button>
     </div>
 
+  {:else if account.needsSignIn && !working}
+    <!-- A known account whose session did not come back: the restore failed,
+         or Rust gave up on it after 20 seconds. Who it is stays on screen, so
+         this reads as "sign this account in again", not "who are you?". -->
+    <div class="identity expired">
+      <div class="avatar" class:has-face={!!account.avatar}>
+        {#if account.avatar}
+          <img class="face" src={account.avatar} alt="" draggable="false" />
+        {:else}
+          {account.name?.[0]?.toUpperCase() ?? '?'}
+        {/if}
+      </div>
+      <div class="who">
+        <span class="name">{account.name}</span>
+        <span class="kind">Signed out</span>
+      </div>
+    </div>
+    <Notice tone="warning">
+      {auth.failure ?? 'Your saved session could not be restored. Sign in again to continue.'}
+    </Notice>
+    <div class="actions">
+      <Button
+        block
+        variant="primary"
+        disabled={!canSignIn}
+        title={canSignIn ? '' : 'This build cannot sign in yet'}
+        onClick={onSignIn}
+      >
+        Sign in again
+      </Button>
+    </div>
+    <p class="fine">Fathom never receives your Microsoft password.</p>
+
   {:else if account.remembered && !working}
     <!-- A remembered account whose session is coming back on its own. Saying
          "Sign in" here would read as though Fathom forgot who this is. -->
@@ -342,7 +375,8 @@
     color: var(--color-text-secondary);
   }
 
-  .identity.restoring .avatar {
+  .identity.restoring .avatar,
+  .identity.expired .avatar {
     opacity: 0.7;
   }
 

@@ -51,6 +51,11 @@ export interface AccountSummary {
    * is here.
    */
   remembered: boolean;
+  /**
+   * A known account whose session did not come back -- the restore failed or
+   * took longer than 20 seconds -- and needs signing in again.
+   */
+  needsSignIn: boolean;
 }
 
 export interface HomeView {
@@ -680,6 +685,7 @@ const FIXTURE_HOME: HomeView = {
     uuid: null,
     avatar: null,
     remembered: false,
+    needsSignIn: false,
   },
 };
 
@@ -708,8 +714,28 @@ const FIXTURE_HOME_PROOF: HomeView = {
     uuid: null,
     avatar: null,
     remembered: true,
+    needsSignIn: false,
   },
 };
+
+// Visual-QA only: `?proof=signin-again` -- a remembered account whose session
+// restore timed out, so the drawer and top bar can be photographed saying so.
+const FIXTURE_HOME_SIGNIN_AGAIN: HomeView = {
+  ...FIXTURE_HOME,
+  account: {
+    name: 'Player',
+    signedIn: false,
+    development: false,
+    uuid: null,
+    avatar: null,
+    remembered: false,
+    needsSignIn: true,
+  },
+};
+
+const PROOF = typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search).get('proof')
+  : null;
 
 const FIXTURE_STATUS: ShellStatus = {
   version: '0.1.0',
@@ -814,9 +840,15 @@ const FIXTURE_RECOVERY: RecoveryView = {
 
 export async function homeView(): Promise<HomeView> {
   if (!inTauri) {
-    const proof = typeof window !== 'undefined'
-      && new URLSearchParams(window.location.search).get('proof') === 'home';
-    return proof ? FIXTURE_HOME_PROOF : FIXTURE_HOME;
+    // Development only: `?slow=2000` holds Home's data back, so the loading
+    // screen can be seen and photographed outside the app shell.
+    if (import.meta.env.DEV && typeof window !== 'undefined') {
+      const slow = Number(new URLSearchParams(window.location.search).get('slow') ?? 0);
+      if (slow > 0) await new Promise((resolve) => setTimeout(resolve, slow));
+    }
+    if (PROOF === 'home') return FIXTURE_HOME_PROOF;
+    if (PROOF === 'signin-again') return FIXTURE_HOME_SIGNIN_AGAIN;
+    return FIXTURE_HOME;
   }
   return invoke<HomeView>('home_view');
 }
@@ -1164,6 +1196,10 @@ export const windowLabel: string = inTauri
 
 /* -- signing in ---------------------------------------------------------- */
 
+/** Rust's `AuthProgress::restore_timed_out` sentence, for the browser fixture. */
+const RESTORE_TIMED_OUT =
+  'Restoring your saved session is taking too long. Sign in again to continue.';
+
 export const NO_AUTH: AuthProgress = {
   phase: 'idle',
   headline: '',
@@ -1205,7 +1241,17 @@ export async function reopenSignInPage(): Promise<AuthProgress> {
 }
 
 export async function signInProgress(): Promise<AuthProgress> {
-  if (!inTauri) return NO_AUTH;
+  if (!inTauri) {
+    return PROOF === 'signin-again'
+      ? {
+          ...NO_AUTH,
+          phase: 'failed',
+          headline: 'Sign in again',
+          detail: RESTORE_TIMED_OUT,
+          failure: RESTORE_TIMED_OUT,
+        }
+      : NO_AUTH;
+  }
   return invoke<AuthProgress>('sign_in_progress');
 }
 

@@ -141,6 +141,56 @@ impl ModStore {
         self.path_for(sha1).is_ok_and(|p| p.is_file())
     }
 
+    /// [`Self::adopt`], without re-reading a file that has not changed.
+    ///
+    /// For the jars the launcher adopts on every start -- Fathom's own client
+    /// module, once per Fathom profile. That jar carries the menu's video
+    /// frames and is about 35 MB, so plain `adopt` read and SHA-1 hashed all of
+    /// it, per profile, on every launch of the launcher, before its window
+    /// could open.
+    ///
+    /// The answer is remembered under the file's path, length and modification
+    /// time. Any of those changing -- a new build staged over it, an update --
+    /// is a different key and hashes again. A remembered hash is trusted only
+    /// while the stored copy it names is still there at the same length.
+    pub fn adopt_remembered(&self, source: &Path) -> Result<StoredMod, ModError> {
+        let metadata = std::fs::metadata(source).map_err(|source_error| ModError::Io {
+            path: source.display().to_string(),
+            source: source_error,
+        })?;
+        let memo = remember_key(source, &metadata)
+            .map(|key| self.root().join(".adopted").join(format!("{key}.sha1")));
+
+        if let Some(memo) = &memo {
+            if let Ok(recorded) = std::fs::read_to_string(memo) {
+                let sha1 = recorded.trim();
+                if sha1.len() == 40 && sha1.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    if let Ok(target) = self.path_for(sha1) {
+                        let same_size = std::fs::metadata(&target)
+                            .is_ok_and(|stored| stored.is_file() && stored.len() == metadata.len());
+                        if same_size {
+                            return Ok(StoredMod {
+                                sha1: sha1.to_owned(),
+                                path: target,
+                                size: metadata.len(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        let stored = self.adopt(source)?;
+        if let Some(memo) = &memo {
+            // Best effort: a memo that cannot be written only costs a hash
+            // next time.
+            if let Err(error) = fs_safety::atomic_write(memo, stored.sha1.as_bytes()) {
+                tracing::debug!(%error, "could not remember an adopted jar's hash");
+            }
+        }
+        Ok(stored)
+    }
+
     /// Take a copy of a jar the user chose.
     ///
     /// Never moves or deletes the original: it is the user's file, sitting
@@ -512,6 +562,27 @@ fn looks_like_a_jar(path: &Path) -> bool {
     magic == [0x50, 0x4B, 0x03, 0x04] || magic == [0x50, 0x4B, 0x05, 0x06]
 }
 
+/// A file's identity for [`ModStore::adopt_remembered`]: path, length and
+/// modification time, folded into a name. `None` when the platform cannot say
+/// when the file was modified, in which case nothing is remembered.
+fn remember_key(path: &Path, metadata: &std::fs::Metadata) -> Option<String> {
+    let modified = metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            hash = (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    feed(path.to_string_lossy().as_bytes());
+    feed(&metadata.len().to_le_bytes());
+    feed(&modified.as_nanos().to_le_bytes());
+    Some(format!("{hash:016x}"))
+}
+
 #[cfg(test)]
 #[allow(
     clippy::indexing_slicing,
@@ -580,6 +651,38 @@ mod tests {
         let second = store.adopt(&b).unwrap();
         assert_eq!(first.sha1, second.sha1);
         assert_eq!(first.path, second.path);
+    }
+
+    /// An unchanged jar is answered from the memo -- the same hash and the same
+    /// stored file, without reading it -- and a changed one is hashed again.
+    #[test]
+    fn an_unchanged_jar_is_remembered_and_a_changed_one_is_not() {
+        let (tmp, store, _dirs) = fixture();
+        let source = jar(&tmp, "fathom-optimizations-1.jar", b"first");
+
+        let first = store.adopt_remembered(&source).expect("adopt");
+        let memo_dir = store.root().join(".adopted");
+        assert_eq!(
+            std::fs::read_dir(&memo_dir).unwrap().count(),
+            1,
+            "a memo is written"
+        );
+
+        let again = store.adopt_remembered(&source).expect("remembered");
+        assert_eq!(again.sha1, first.sha1);
+        assert_eq!(again.path, first.path);
+
+        // New bytes of a different length: a different key, hashed afresh.
+        std::fs::write(&source, [EMPTY_ZIP, b"second, longer"].concat()).unwrap();
+        let changed = store.adopt_remembered(&source).expect("rehash");
+        assert_ne!(changed.sha1, first.sha1);
+        assert!(store.verify(&changed.sha1).unwrap());
+
+        // A memo naming a stored file that has gone is not trusted.
+        std::fs::remove_file(&changed.path).unwrap();
+        let restored = store.adopt_remembered(&source).expect("readopt");
+        assert_eq!(restored.sha1, changed.sha1);
+        assert!(restored.path.is_file());
     }
 
     #[test]
