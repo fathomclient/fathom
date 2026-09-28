@@ -94,8 +94,15 @@ public final class GraphiteTokens {
     public static final float LAYOUT_CANVAS_HEIGHT = 720.000f;
     public static final float WORDMARK_CAP_LAUNCHER = 13.000f;
     public static final float WORDMARK_CAP_GAME = 12.000f;
-    public static final float WORDMARK_CAP_MIN_PX = 8.000f;
-    public static final float WORDMARK_TRACKING = 0.100f;
+    public static final float WORDMARK_CAP_MIN_PX = 10.000f;
+    public static final float WORDMARK_SMALL_MAX = 16.000f;
+    public static final float WORDMARK_TEXT_MAX = 32.000f;
+    public static final float WORDMARK_SMALL_WEIGHT = 600.000f;
+    public static final float WORDMARK_SMALL_TRACKING = 0.020f;
+    public static final float WORDMARK_TEXT_WEIGHT = 500.000f;
+    public static final float WORDMARK_TEXT_TRACKING = 0.000f;
+    public static final float WORDMARK_DISPLAY_WEIGHT = 500.000f;
+    public static final float WORDMARK_DISPLAY_TRACKING = -0.015f;
     public static final float BACKDROP_BLUR_SIGMA = 0.002f;
     public static final float BACKDROP_SATURATION = 0.720f;
     public static final float BACKDROP_SATURATION_MAX = 0.550f;
@@ -172,10 +179,10 @@ public final class GraphiteTokens {
     public static final boolean TYPE_PRIMARY_UPPER = false;
     public static final float TYPE_WORDMARK_SIZE = 13.0f;
     public static final float TYPE_WORDMARK_LINE = 13.0f;
-    public static final int TYPE_WORDMARK_WEIGHT = 500;
-    public static final float TYPE_WORDMARK_TRACKING = 0.100f;
+    public static final int TYPE_WORDMARK_WEIGHT = 600;
+    public static final float TYPE_WORDMARK_TRACKING = 0.020f;
     public static final boolean TYPE_WORDMARK_MONO = false;
-    public static final boolean TYPE_WORDMARK_UPPER = true;
+    public static final boolean TYPE_WORDMARK_UPPER = false;
 
     public static final float[] EASE = {0.20f, 0.00f, 0.00f, 1.00f};
     public static final float MOTION_FAST = 0.120f;
@@ -184,5 +191,5 @@ public final class GraphiteTokens {
     public static final float MOTION_TOOLTIP_DELAY = 0.400f;
     public static final float MOTION_SCROLLBAR_FADE = 0.600f;
     public static final float MOTION_TRAVEL = 8.0f;
-    public static final String WORDMARK_TEXT = "FATHOM";
+    public static final String WORDMARK_TEXT = "fathom";
 }

@@ -332,19 +332,24 @@ public final class Graphite {
     // The wordmark
     // -----------------------------------------------------------------------
 
-    /** Draw FATHOM with its cap's top at {@code y}; returns its width. */
+    /**
+     * Draw the wordmark, "fathom", with its ascender's top at {@code y}; returns
+     * its width. {@code capHeight} is the ascender, which in Geist is the cap
+     * height. A renderer without the brand sheet (the development showcase) gets
+     * the word set plainly rather than nothing.
+     */
     public static float wordmark(Renderer ui, float x, float y, float capHeight) {
         if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
-            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).graphiteWordmark(x, y, capHeight, TEXT);
+            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).wordmark(x, y, capHeight, TEXT);
         }
         ui.text(GraphiteTokens.WORDMARK_TEXT, x, y + capHeight, UI.at(capHeight * 1.4f), TEXT);
         return ui.measure(GraphiteTokens.WORDMARK_TEXT, UI.at(capHeight * 1.4f));
     }
 
-    /** The wordmark's width at a cap height, without drawing it. */
+    /** The wordmark's width at an ascender height, without drawing it. */
     public static float wordmarkWidth(Renderer ui, float capHeight) {
         if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
-            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).graphiteWordmarkWidth(capHeight);
+            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).wordmarkWidth(capHeight);
         }
         return ui.measure(GraphiteTokens.WORDMARK_TEXT, UI.at(capHeight * 1.4f));
     }

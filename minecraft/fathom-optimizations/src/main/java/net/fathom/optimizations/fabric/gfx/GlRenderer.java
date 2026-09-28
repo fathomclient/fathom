@@ -772,78 +772,32 @@ public final class GlRenderer implements Renderer {
      * instead, which nobody can see; at rest it is pixel for pixel.
      */
 
-    /** The Surface wordmark's width in logical units at a cap height in logical units. */
+    /** The wordmark's ink width in logical units at an ascender height in logical units. */
     public float wordmarkWidth(float capHeight) {
-        int cap = Math.max(1, Math.round(capHeight * ui.scale()));
+        int cap = Math.round(capHeight * ui.scale());
         return BrandArt.wordmarkWidth(cap) / ui.scale();
     }
 
     /**
-     * The Surface wordmark with its top-left at {@code x, y}, at a cap height in
-     * logical units. Its inks are the brand's own, so it is drawn untinted
-     * except for the current opacity.
-     *
-     * @return the width drawn, in logical units
-     */
-    public float wordmark(float x, float y, float capHeight) {
-        int cap = Math.max(1, Math.round(capHeight * ui.scale()));
-        BrandArt.Entry entry = brand.wordmark(cap);
-        int colour = tint(0xFFFFFFFF);
-        if (entry.width > 0 && !Colour.invisible(colour)) {
-            batch.bind(brand.atlas().texture());
-            float left = Math.round(deviceX(x));
-            float top = Math.round(deviceY(y));
-            quad(left, top, left + entry.width * zoom, top + entry.height * zoom,
-                    entry.u0, entry.v0, entry.u1, entry.v1, colour);
-        }
-        return entry.width / ui.scale();
-    }
-
-    /** The Graphite wordmark's width in logical units at a cap height in logical units. */
-    public float graphiteWordmarkWidth(float capHeight) {
-        int cap = Math.max(8, Math.round(capHeight * ui.scale()));
-        return BrandArt.graphiteWordmarkWidth(cap) / ui.scale();
-    }
-
-    /**
-     * The Graphite wordmark, FATHOM, with its cap's top-left ink at {@code x, y},
-     * in one ink. The cap is held at 8 device pixels or more.
+     * The wordmark, "fathom", with its ascender's top-left ink at {@code x, y},
+     * in one ink. The ascender (Geist's cap height) is held at the wordmark's
+     * minimum in device pixels or more.
      *
      * @return the ink width drawn, in logical units
      */
-    public float graphiteWordmark(float x, float y, float capHeight, int argb) {
-        int cap = Math.max(8, Math.round(capHeight * ui.scale()));
-        BrandArt.Entry entry = brand.graphiteWordmark(cap);
+    public float wordmark(float x, float y, float capHeight, int argb) {
+        int cap = Math.round(capHeight * ui.scale());
+        BrandArt.Entry entry = brand.wordmark(cap);
         int colour = tint(argb);
         if (entry.width > 0 && !Colour.invisible(colour)) {
             batch.bind(brand.atlas().texture());
-            float pad = BrandArt.graphitePad() * zoom;
+            float pad = entry.pad * zoom;
             float left = Math.round(deviceX(x)) - pad;
             float top = Math.round(deviceY(y)) - pad;
             quad(left, top, left + entry.width * zoom, top + entry.height * zoom,
                     entry.u0, entry.v0, entry.u1, entry.v1, colour);
         }
-        return BrandArt.graphiteWordmarkWidth(cap) / ui.scale();
-    }
-
-    /**
-     * The Sounding Line, top-left at {@code x, y}, a height in logical units,
-     * in one ink. Fathom's small mark and its loading glyph.
-     *
-     * @return the width drawn, in logical units
-     */
-    public float soundingLine(float x, float y, float height, int argb) {
-        int pixels = Math.max(8, Math.round(height * ui.scale()));
-        BrandArt.Entry entry = brand.sounding(pixels);
-        int colour = tint(argb);
-        if (entry.width > 0 && !Colour.invisible(colour)) {
-            batch.bind(brand.atlas().texture());
-            float left = Math.round(deviceX(x));
-            float top = Math.round(deviceY(y));
-            quad(left, top, left + entry.width * zoom, top + entry.height * zoom,
-                    entry.u0, entry.v0, entry.u1, entry.v1, colour);
-        }
-        return entry.width / ui.scale();
+        return BrandArt.wordmarkWidth(cap) / ui.scale();
     }
 
     // -----------------------------------------------------------------------

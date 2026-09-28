@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/lockup.svg">
+  <img alt="fathom" src="assets/brand/lockup-reversed.svg" height="40">
+</picture>
+
 # Fathom
 
 A free, open-source launcher for Minecraft: Java Edition 1.8.9, built for

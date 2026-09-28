@@ -27,7 +27,7 @@
   import Button from './Button.svelte';
   import Sheet from './Sheet.svelte';
   import Notice from './Notice.svelte';
-  import SoundingLine from '../brand/SoundingLine.svelte';
+  import ApertureMark from '../brand/ApertureMark.svelte';
   import { tooltip } from '../tooltip';
   import { EASE, NORMAL } from '../motion';
   import { NO_AUTH, type AccountSummary, type AuthProgress } from '../api';
@@ -106,7 +106,7 @@
       <div class="who">
         <span class="name">{account.name}</span>
         <span class="kind">
-          <SoundingLine height={12} value={null} label="Restoring" />
+          <ApertureMark height={12} value={null} label="Restoring" />
           Restoring your session
         </span>
       </div>
@@ -119,7 +119,7 @@
          another, and burying it under a paragraph is how it gets mistyped. -->
     <div class="signin">
       <span class="provider">Microsoft</span>
-      <h3 class="working"><SoundingLine height={16} value={null} label="Signing in" /> {auth.headline}</h3>
+      <h3 class="working"><ApertureMark height={16} value={null} label="Signing in" /> {auth.headline}</h3>
 
       {#if auth.userCode}
         {#if auth.browserOpened}

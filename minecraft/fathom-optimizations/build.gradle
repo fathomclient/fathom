@@ -291,10 +291,8 @@ def repoRoot = rootProject.projectDir.parentFile.parentFile
 def generateThemeTokens = tasks.register('generateThemeTokens', Exec) {
     inputs.file(new File(repoRoot, 'assets/theme/fathom-theme.json'))
     inputs.file(new File(repoRoot, 'tools/generate-fathom-theme.mjs'))
-    // The wordmark outlines come from the launcher's brand geometry.
-    inputs.file(new File(repoRoot, 'desktop/src/lib/brand/surface.ts'))
     outputs.file('src/main/java/net/fathom/optimizations/generated/FathomTheme.java')
-    outputs.file('src/main/java/net/fathom/optimizations/generated/BrandGeometry.java')
+    outputs.file('src/main/java/net/fathom/optimizations/generated/GraphiteTokens.java')
     workingDir repoRoot
     commandLine 'node', 'tools/generate-fathom-theme.mjs'
 }
@@ -429,11 +427,12 @@ def coreTest = tasks.register('coreTest') {
 tasks.named('check').configure { dependsOn coreTest }
 
 // Graphite + Instrument assets shared by the launcher and the game: the grain
-// tile, the wordmark path and -- with -PbackdropSource=<capture.png> -- the
-// processed backdrop. Offline; nothing here runs in a build.
+// tile and -- with -PbackdropSource=<capture.png> -- the processed backdrop.
+// Offline; nothing here runs in a build. The wordmark's outlines come from
+// tools/generate-wordmark.py.
 tasks.register('graphiteAssets', JavaExec) {
     group = 'fathom'
-    description = 'Regenerates the Graphite backdrop, grain and wordmark path.'
+    description = 'Regenerates the Graphite backdrop and grain.'
     dependsOn tasks.named('testClasses')
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.fathom.optimizations.tools.GraphiteAssets'

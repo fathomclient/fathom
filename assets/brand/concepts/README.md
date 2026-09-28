@@ -1,10 +1,12 @@
 # Symbol concepts — design study
 
-**Concept 06, "Aperture", was chosen.** It is now the product mark: see
-[`../README.md`](../README.md) for the built-out artwork and
-`assets/brand/build-icons.js` for how it is generated. This folder stays as the
-record of the decision — the five unchosen concepts are not artwork and are not
-referenced by anything.
+**Concept 06, "Aperture", was chosen**, replaced for a week by the Surface
+identity, and then chosen again and developed: re-cut on an exact six-unit
+grid, where the plane is the frame's own missing corner, and paired with a
+lowercase wordmark. The product mark is that developed version; see
+[`../README.md`](../README.md). This folder stays as the record of the original
+study. Its files are not artwork and nothing references them; `logo-06.svg` is
+the 64-unit original, not the shipped geometry.
 
 ## Contents
 
@@ -39,11 +41,12 @@ referenced by anything.
 
 ## What happened after 06 was picked
 
-1. Hand-tuned 16, 20, 24, 40 and 48 px grids — done, in
-   `assets/brand/build-icons.js`.
+1. Hand-tuned 16, 20, 24, 40 and 48 px grids — done, in the since-removed
+   `assets/brand/build-icons.js`. The developed mark needs no hand-tuning:
+   one rule, u = ⌊S ÷ 8⌋, solves every size in `desktop/src/lib/brand/aperture.ts`.
 2. Multi-size `.ico` (16 → 256) and the PNG set — done.
 3. `assets/brand/logo.svg` replaced with the real mark, and the CSS-drawn
    square in `desktop/src/App.svelte` swapped for the mark itself — done.
-4. Wordmark treatment A — uppercase, 600, +0.30em — chosen and outlined, in
-   `assets/brand/wordmark.svg`. Clear space and minimum sizes are still
-   unwritten.
+4. Wordmark treatment A — uppercase, 600, +0.30em — chosen and outlined.
+   Superseded: the developed identity sets "fathom" lowercase in Geist, with
+   clear space and minimum sizes written in `../README.md`.
