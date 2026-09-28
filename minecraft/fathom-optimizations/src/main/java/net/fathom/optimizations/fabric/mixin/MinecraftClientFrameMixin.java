@@ -86,6 +86,11 @@ public abstract class MinecraftClientFrameMixin {
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
                     net.fathom.optimizations.core.instrument.Probe.Section.EVENT_DISPATCH, dispatch);
         }
+        if (net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowCoreHooks()
+                && net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowOptifineOverlapHooks()) {
+            // A vanilla title screen that arrived before Fathom finished loading.
+            net.fathom.optimizations.fabric.menu.MenuTakeover.frame(client);
+        }
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
                 net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, callback);
     }

@@ -25,7 +25,8 @@ public final class Behaviour {
     public static final String CROSSHAIR = "crosshair";
 
     /**
-     * Stand in for vanilla's title screen. Implemented by the menu Mixin.
+     * Stand in for vanilla's title screen. Implemented by the menu Mixin, with
+     * {@code MenuTakeover} catching a title screen that arrived before Fathom loaded.
      *
      * <p>Switchable for a reason worth stating: this replaces the first screen
      * of the game, and anything that does that has to have an off switch that
