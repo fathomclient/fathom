@@ -20,6 +20,7 @@ import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.ui.Glow;
 import net.fathom.optimizations.fabric.ui.Graphite;
 import net.fathom.optimizations.fabric.hud.HudEditorScreen;
 import net.fathom.optimizations.generated.GraphiteTokens;
@@ -184,6 +185,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.pushAlpha(enter * (1f - exit));
         ui.pushTransform(0f, (1f - enter) * TRAVEL);
 
+        // The scene's light (Glow): pooling behind the menu, and faintly behind
+        // the wordmark, before either is drawn.
+        Glow.behind(ui, menuPanel);
+        ui.bloom(canvasX + WORDMARK_MARGIN + WORDMARK_CAP * 2.4f, canvasY + WORDMARK_MARGIN + WORDMARK_CAP / 2f,
+                WORDMARK_CAP * 7f, Glow.at(GraphiteTokens.GLOW_BLOOM_ECHO_ALPHA));
         Graphite.wordmark(ui, canvasX + WORDMARK_MARGIN, canvasY + WORDMARK_MARGIN, WORDMARK_CAP);
 
         // One floating glass group gives the controls presence without turning
@@ -206,6 +212,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // Hover and press are density only: a row never gets a rim, so the menu
         // never shows a border inside a border.
         Graphite.segment(ui, area, Math.max(state.hover, state.press), 0f);
+        // The row under the pointer is lit, softly, in the scene's accent.
+        Glow.current(ui, area, Graphite.R_SEGMENT, state.hover);
         ui.text(label, area.x + Graphite.PAD, Graphite.baseline(ui, area, Graphite.floor(ui, Graphite.UI)),
                 Graphite.floor(ui, Graphite.UI), Graphite.TEXT);
         if (keyboardFocus && controls.focused(id)) {

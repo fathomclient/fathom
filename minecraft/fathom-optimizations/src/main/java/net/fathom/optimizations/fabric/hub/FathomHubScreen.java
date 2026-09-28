@@ -26,6 +26,7 @@ import net.fathom.optimizations.fabric.hud.FathomHud;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.Glow;
 import net.fathom.optimizations.fabric.ui.Graphite;
 import net.fathom.optimizations.core.ui.Colour;
 import net.fathom.optimizations.core.ui.anim.Ease;
@@ -370,6 +371,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         ui.pushAlpha(shown);
         ui.pushTransform(0f, (1f - open) * GraphiteTokens.MOTION_TRAVEL);
 
+        // The scene's light pooling behind the Hub (Glow).
+        Glow.behind(ui, panel);
         header(ui);
         Rect rail = new Rect(panel.x, panel.y + RAIL_TOP, RAIL_WIDTH, railHeight());
         rail(ui, rail);
@@ -464,6 +467,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             // Concentric with the rail: its 18 radius less its 8dp padding is
             // the small radius (10), which is what an item inside a panel is.
             Graphite.overlay(ui, item, Graphite.R_SEGMENT, state.hover * (1f - on), on);
+            // The current section is the one lit place in the rail.
+            Glow.current(ui, item, Graphite.R_SEGMENT, on);
             int ink = Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, Math.max(on, state.hover));
             // The navigation glyph size, centred in the item's leading square,
             // exactly as the launcher's rail draws its icons.

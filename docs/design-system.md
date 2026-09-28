@@ -174,6 +174,29 @@ The library is [`assets/backgrounds/manifest.json`](../assets/backgrounds/manife
 an unknown stored id is shown as the default and migrated in `appearance.json`
 on start.
 
+## 7d. Light
+
+The interface is lit by the scene behind it. Each background carries an
+`accent` (in the manifest, measured from its own still by
+`tools/derive-background-accents.mjs`), and that one colour, at the strengths
+in the theme's `graphite.glow`, is every glow on both surfaces:
+
+| Glow | Launcher | Game | Strength |
+| --- | --- | --- | --- |
+| Bloom: a round pool behind what you came to do, and a fainter echo high on the far side | `GraphiteBackdrop` | `Glow.behind` (title menu, Hub) | `bloom-alpha` 20%, echo 8% |
+| Sheen: light falling on a pane from above | `.material-standard`, `.material-dense` | `Graphite.surface` on Standard and Dense panes | `sheen-alpha` 9% |
+| Halo: around the one primary action | `--glow-halo` (Play, `Button` primary) | `Glow.halo` (`Controls.primary`) | `halo-alpha` 28% |
+| Current place: the selected nav item, the hovered title-menu row | `--glow-selected` | `Glow.current` | `selected-alpha` 14% |
+| Spotlight: a circle following the pointer over a pane | `use:spotlight` | -- | `spotlight-alpha` 4.5% |
+
+Two rules. **Round**: every glow is a radial falloff or a halo that follows the
+rounded shape it belongs to; nothing is a band, and nothing is clipped so that
+light reaches a rounded shape's square corners. **Subtle**: a glow says "here"
+and is otherwise barely there; only the primary action and the current place
+get one. Strokes never change: light goes behind and around a shape, never into
+its one-pixel rim. The bloom drifts over most of a minute and stops under
+reduced motion; the accent crossfades when the background changes.
+
 ## 7a. The shell and the shared controls
 
 **The shell** ([`App.svelte`](../desktop/src/App.svelte)) paints no bars. The

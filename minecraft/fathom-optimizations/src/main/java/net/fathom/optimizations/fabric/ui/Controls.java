@@ -562,7 +562,8 @@ public final class Controls {
     /**
      * The one action a panel is for: the launcher's primary -- the bright
      * neutral fill with dark type. Hover brightens it a step; press settles it a
-     * step darker. Never coloured, never glowing.
+     * step darker. Never coloured; the one glow it has is the scene's light
+     * around it ({@link Glow#halo}), a little stronger under the pointer.
      */
     public boolean primary(Renderer ui, String id, Rect area, String label, boolean enabled) {
         State s = state(id, area, enabled);
@@ -574,6 +575,9 @@ public final class Controls {
         // Ivory type on the ivory fill was invisible: the fill changed to the
         // launcher's bright primary and the label kept the old dark-button colour.
         int text = !enabled ? Skin.TEXT_DISABLED : Tokens.COLOR_PROMINENT_TEXT;
+        if (enabled) {
+            Glow.halo(ui, area, Skin.pill(area), 1f + 0.5f * s.hover);
+        }
         button(ui, s, area, face, edge, text, label, true);
         return s.clicked;
     }

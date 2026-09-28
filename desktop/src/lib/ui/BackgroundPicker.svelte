@@ -36,6 +36,7 @@
       class:selected={option.id === value}
       role="radio"
       aria-checked={option.id === value}
+      style={`--own-glow: ${option.accent}`}
       on:click={() => onChoose(option.id)}
     >
       <!-- The thumbnail sits over the fallback field, so a missing file shows
@@ -93,10 +94,19 @@
     transition: box-shadow var(--motion-hover) var(--ease-standard);
   }
 
-  /* Hover and selection brighten the one rim; neither changes its width. */
-  .item:hover .thumb,
+  /* Hover and selection brighten the one rim; neither changes its width.
+     Each thumbnail glows in its own accent -- the light the interface will
+     take if you choose it: a hint on hover, a soft halo once chosen. */
+  .item:hover .thumb {
+    box-shadow:
+      var(--control-rim-strong),
+      0 6px 18px -8px color-mix(in srgb, var(--own-glow) calc(var(--g-glow-selected-alpha) * 150%), transparent);
+  }
+
   .item.selected .thumb {
-    box-shadow: var(--control-rim-strong);
+    box-shadow:
+      var(--control-rim-strong),
+      0 8px 22px -8px color-mix(in srgb, var(--own-glow) calc(var(--g-glow-halo-alpha) * 120%), transparent);
   }
 
   .item:focus-visible {

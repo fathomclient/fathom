@@ -107,4 +107,24 @@ public final class BackgroundCatalog {
         "Recorded in vanilla Minecraft by the Fathom project owner",
         "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
     };
+
+    /** The glow colour while each background shows, 0xRRGGBB. */
+    public static final int[] ACCENT = {
+        0xCF81A8,
+        0x8CA4C5,
+        0xE7A06A,
+        0x88A1C8,
+        0xC2938E,
+        0x97BAB3,
+        0xC58C90,
+        0x87A3C9,
+        0x86A6CA,
+        0x7F9AD2,
+        0x8DAFC4,
+        0x809AD0,
+        0xD57C82,
+        0xE7CE6A,
+        0x98B9AF,
+        0x8CA3C5,
+    };
 }

@@ -39,6 +39,9 @@ for (const bg of manifest.backgrounds) {
   if (ids.has(bg.id)) throw new Error(`background id ${bg.id} is listed twice`);
   ids.add(bg.id);
   if (!['video', 'image'].includes(bg.type)) throw new Error(`${bg.id}: type must be video or image`);
+  if (!/^#[0-9a-f]{6}$/.test(bg.accent ?? '')) {
+    throw new Error(`${bg.id}: accent must be #rrggbb (run tools/derive-background-accents.mjs)`);
+  }
   for (const key of ['asset', 'still', 'thumbnail']) {
     const file = path.join(root, 'desktop/public', bg[key]);
     if (!fs.existsSync(file)) throw new Error(`${bg.id}: ${key} ${bg[key]} does not exist (run tools/prepare-background-library.mjs)`);
@@ -72,6 +75,8 @@ const ts = [
   "  minecraft: 'video' | 'still' | null;",
   '  /** Plain-text credit shown in Settings; the full record is ATTRIBUTION.md. */',
   '  credit: string;',
+  "  /** The glow colour while this background shows (tools/derive-background-accents.mjs). */",
+  '  accent: string;',
   '}',
   '',
   'export const BACKGROUNDS: BackgroundOption[] = [',
@@ -87,6 +92,7 @@ const ts = [
     `    height: ${bg.height},`,
     `    minecraft: ${bg.minecraft ? q(bg.minecraft.video ? 'video' : 'still') : 'null'},`,
     `    credit: ${q(bg.credit)},`,
+    `    accent: ${q(bg.accent)},`,
     '  },',
   ].join('\n')),
   '];',
@@ -135,6 +141,11 @@ const java = [
   '',
   '    public static final String[] CREDITS = {',
   ...arr((bg) => bg.credit),
+  '    };',
+  '',
+  '    /** The glow colour while each background shows, 0xRRGGBB. */',
+  '    public static final int[] ACCENT = {',
+  ...inGame.map((bg) => `        0x${bg.accent.slice(1).toUpperCase()},`),
   '    };',
   '}',
   '',

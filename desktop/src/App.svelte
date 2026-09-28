@@ -28,6 +28,7 @@
   import { Image as ImageIcon, ChevronDown, User } from '@lucide/svelte';
 
   import './lib/theme.css';
+  import './lib/glow.css';
   import GraphiteBackdrop from './lib/graphite/GraphiteBackdrop.svelte';
   import Home from './routes/Home.svelte';
   import Profiles from './routes/Profiles.svelte';
@@ -413,7 +414,7 @@
 
 <!-- One persistent player across every route: navigation never restarts the
      approved recording or replaces it with a page-specific image. -->
-<GraphiteBackdrop {choice} />
+<GraphiteBackdrop {choice} focus={route === 'home' ? 'home' : 'page'} />
 
 <LoadingScreen visible={loading} {pending} />
 
@@ -897,11 +898,13 @@
     background-color: var(--control-fill);
   }
 
-  /* The current page is the denser, brighter-rimmed pill. */
+  /* The current page is the denser, brighter-rimmed pill, with a faint round
+     halo of the scene's accent around it (glow.css): the one place in the
+     rail that is lit. */
   .nav.active {
     color: var(--color-text);
     background-color: var(--control-fill-selected);
-    box-shadow: var(--control-rim-strong);
+    box-shadow: var(--control-rim-strong), var(--glow-selected);
   }
 
   .nav:focus-visible {

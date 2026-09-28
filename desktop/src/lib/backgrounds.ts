@@ -3,7 +3,9 @@
  *
  * The background is the user's to choose. It supplies the atmosphere; the
  * control system (`metrics` in the theme) supplies the quality, and it is the
- * same over every one of these. Nothing here is tuned per background.
+ * same over every one of these. The one thing a background brings besides its
+ * picture is its `accent`: the colour of the interface's light while it shows
+ * (glow.css), measured from the picture by tools/derive-background-accents.mjs.
  *
  * The catalogue itself is `assets/backgrounds/manifest.json`, generated into
  * `backgrounds.generated.ts` (and into the game's `BackgroundCatalog`). Three

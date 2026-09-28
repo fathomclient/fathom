@@ -178,6 +178,13 @@ public final class Graphite {
             fill = Colour.fade(fill, Math.min(1f, Colour.alpha(fill) + lift));
         }
         ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, fill);
+        // Panes catch the scene's light from above (Glow), as the launcher's
+        // Standard and Dense materials do. Not controls: a button-sized
+        // surface is too small to hold a pool of light.
+        if ((material == Material.STANDARD || material == Material.DENSE)
+                && area.height > CONTROL * 2.5f) {
+            Glow.sheen(ui, area);
+        }
         int rim = Colour.mix(Colour.mix(material.rim, RIM_HOVER, hover), RIM_SELECTED, selected);
         rim(ui, area, radius, rim);
     }

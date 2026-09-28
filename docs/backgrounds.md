@@ -17,6 +17,12 @@ offer it. From it:
   `npm run check` fails if either is stale.
 - `crates/launcher-desktop/src/lib.rs` keeps its own literal allowlist -- the id
   ends up in a URL -- and a test fails if it and the manifest disagree.
+- `tools/derive-background-accents.mjs` measures each background's `accent`,
+  the colour the interface's light takes while it shows (a hue histogram of
+  the still, weighted to its vivid, bright pixels, set at the theme's one
+  lightness). Where the loudest colour is not the one the picture is about,
+  the entry pins the hue with `accentHue`: Cherry Grove (blossom, not grass)
+  and Red Tower (the tower, not the sky).
 - `tools/prepare-background-library.mjs` builds every derived file: each video's
   full-resolution fallback still (frame 0 of the clip), every 384×216 thumbnail,
   the game's copy of every still, and Rainforest Storm's launcher video.

@@ -15,6 +15,7 @@
   import { slide } from 'svelte/transition';
   import { ChevronRight } from '@lucide/svelte';
   import { EASE, NORMAL } from '../motion';
+  import { spotlight } from '../spotlight';
 
   export let label = '';
   /** Right-aligned state on the header line: "3 of 5 on". */
@@ -46,6 +47,7 @@
       class="rows"
       class:material
       class:material-standard={material}
+      use:spotlight={material}
       transition:slide={{ duration: NORMAL, easing: EASE }}
     >
       <slot />

@@ -673,4 +673,16 @@
   --g-vignette-start: 72%;
   --g-vignette-alpha: 0.16;
   --g-grain-alpha: 0.018;
+  --g-glow-bloom-alpha: 0.2;
+  --g-glow-bloom-echo-alpha: 0.08;
+  --g-glow-bloom-size: 0.56;
+  --g-glow-sheen-alpha: 0.09;
+  --g-glow-halo-alpha: 0.28;
+  --g-glow-halo-blur: 24px;
+  --g-glow-halo-spread: -6px;
+  --g-glow-selected-alpha: 0.14;
+  --g-glow-spotlight-alpha: 0.045;
+  --g-glow-spotlight-size: 260px;
+  --g-glow-drift: 48s;
+  --g-glow-accent-lightness: 0.66;
 }

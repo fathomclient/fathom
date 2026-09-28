@@ -71,14 +71,17 @@ public final class MenuScenes {
         public final boolean gradient;
         /** Who made it, as the credits panel says it, or null. */
         public final String credit;
+        /** The light the interface takes while this scene shows, 0xRRGGBB. */
+        public final int accent;
         /** Interned once; asking NanoVG for a thumbnail allocates nothing. */
         private final ImageRef image;
 
         /** The still's classpath resource: the same picture the launcher shows. */
         final String still;
 
-        Scene(String id, String label, boolean animated, String still, String credit) {
+        Scene(String id, String label, boolean animated, String still, String credit, int accent) {
             this.id = id;
+            this.accent = accent;
             this.label = label;
             this.animated = animated;
             this.gradient = false;
@@ -102,7 +105,7 @@ public final class MenuScenes {
         for (int index = 0; index < SCENES.length; index++) {
             SCENES[index] = new Scene(BackgroundCatalog.IDS[index], BackgroundCatalog.LABELS[index],
                     BackgroundCatalog.VIDEO[index] != null, BackgroundCatalog.STILL[index],
-                    BackgroundCatalog.CREDITS[index]);
+                    BackgroundCatalog.CREDITS[index], BackgroundCatalog.ACCENT[index]);
         }
     }
 

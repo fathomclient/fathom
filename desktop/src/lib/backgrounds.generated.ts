@@ -16,6 +16,8 @@ export interface BackgroundOption {
   minecraft: 'video' | 'still' | null;
   /** Plain-text credit shown in Settings; the full record is ATTRIBUTION.md. */
   credit: string;
+  /** The glow colour while this background shows (tools/derive-background-accents.mjs). */
+  accent: string;
 }
 
 export const BACKGROUNDS: BackgroundOption[] = [
@@ -30,6 +32,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 900,
     minecraft: "still",
     credit: "Recorded in vanilla Minecraft by the Fathom project owner",
+    accent: "#cf81a8",
   },
   {
     id: "bg_6pull_city-overlook",
@@ -42,6 +45,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 972,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+    accent: "#8ca4c5",
   },
   {
     id: "golden-hour",
@@ -54,6 +58,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "still",
     credit: "\"Palm Tree Sunset Water\", credited to showtime at Wallpapers.com; see ATTRIBUTION.md",
+    accent: "#e7a06a",
   },
   {
     id: "graphite",
@@ -66,6 +71,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1440,
     minecraft: "still",
     credit: "Fathom's Graphite backdrop; see ATTRIBUTION.md",
+    accent: "#88a1c8",
   },
   {
     id: "bg_6clear",
@@ -78,6 +84,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 900,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+    accent: "#c2938e",
   },
   {
     id: "bg_3",
@@ -90,6 +97,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 900,
     minecraft: "still",
     credit: "Recorded in vanilla Minecraft by the Fathom project owner",
+    accent: "#97bab3",
   },
   {
     id: "bg_6midnight",
@@ -102,6 +110,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 900,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+    accent: "#c58c90",
   },
   {
     id: "bg_6pull_moon-tower",
@@ -114,6 +123,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 972,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+    accent: "#87a3c9",
   },
   {
     id: "bg_6pull_neon-grid",
@@ -126,6 +136,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 972,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+    accent: "#86a6ca",
   },
   {
     id: "bg_5noraintickunfrozen",
@@ -138,6 +149,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 900,
     minecraft: "still",
     credit: "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+    accent: "#7f9ad2",
   },
   {
     id: "bg_5rain",
@@ -150,6 +162,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "video",
     credit: "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+    accent: "#8dafc4",
   },
   {
     id: "bg_5noraintickfrozen",
@@ -162,6 +175,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 900,
     minecraft: "still",
     credit: "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+    accent: "#809ad0",
   },
   {
     id: "bg_6pull_red-tower",
@@ -174,6 +188,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 972,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+    accent: "#d57c82",
   },
   {
     id: "bg_4",
@@ -186,6 +201,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 900,
     minecraft: "still",
     credit: "Recorded in vanilla Minecraft by the Fathom project owner",
+    accent: "#e7ce6a",
   },
   {
     id: "bg_2",
@@ -198,6 +214,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 900,
     minecraft: "still",
     credit: "Recorded in vanilla Minecraft by the Fathom project owner",
+    accent: "#98b9af",
   },
   {
     id: "bg_6pull_storm-panorama",
@@ -210,6 +227,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 972,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+    accent: "#8ca3c5",
   },
 ];
 
