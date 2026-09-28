@@ -16,7 +16,9 @@
         "still": "scenes/bg_1.jpg",
         "video": null
       },
-      "credit": "Recorded in vanilla Minecraft by the Fathom project owner"
+      "credit": "Recorded in vanilla Minecraft by the Fathom project owner",
+      "accentHue": 330,
+      "accent": "#cf81a8"
     },
     {
       "id": "bg_6pull_city-overlook",
@@ -32,7 +34,8 @@
         "still": "scenes/bg_6pull_city-overlook.jpg",
         "video": null
       },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#8ca4c5"
     },
     {
       "id": "golden-hour",
@@ -49,7 +52,8 @@
         "video": null
       },
       "credit": "\"Palm Tree Sunset Water\", credited to showtime at Wallpapers.com; see ATTRIBUTION.md",
-      "note": "Licence not yet confirmed (ATTRIBUTION.md). Confirm or replace before a public release."
+      "note": "Licence not yet confirmed (ATTRIBUTION.md). Confirm or replace before a public release.",
+      "accent": "#e7a06a"
     },
     {
       "id": "graphite",
@@ -66,7 +70,8 @@
         "video": null
       },
       "credit": "Fathom's Graphite backdrop; see ATTRIBUTION.md",
-      "note": "Processed by GraphiteAssets from a 1672x941 capture; the source is not yet recorded in ATTRIBUTION.md."
+      "note": "Processed by GraphiteAssets from a 1672x941 capture; the source is not yet recorded in ATTRIBUTION.md.",
+      "accent": "#88a1c8"
     },
     {
       "id": "bg_6clear",
@@ -82,7 +87,8 @@
         "still": "scenes/bg_6clear.jpg",
         "video": null
       },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#c2938e"
     },
     {
       "id": "bg_3",
@@ -98,7 +104,8 @@
         "still": "scenes/bg_3.jpg",
         "video": null
       },
-      "credit": "Recorded in vanilla Minecraft by the Fathom project owner"
+      "credit": "Recorded in vanilla Minecraft by the Fathom project owner",
+      "accent": "#97bab3"
     },
     {
       "id": "bg_6midnight",
@@ -114,7 +121,8 @@
         "still": "scenes/bg_6midnight.jpg",
         "video": null
       },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#c58c90"
     },
     {
       "id": "bg_6pull_moon-tower",
@@ -130,7 +138,8 @@
         "still": "scenes/bg_6pull_moon-tower.jpg",
         "video": null
       },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#87a3c9"
     },
     {
       "id": "bg_6pull_neon-grid",
@@ -146,7 +155,8 @@
         "still": "scenes/bg_6pull_neon-grid.jpg",
         "video": null
       },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#86a6ca"
     },
     {
       "id": "bg_5noraintickunfrozen",
@@ -162,7 +172,8 @@
         "still": "scenes/bg_5noraintickunfrozen.jpg",
         "video": null
       },
-      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+      "accent": "#7f9ad2"
     },
     {
       "id": "bg_5rain",
@@ -178,7 +189,8 @@
         "still": "main-menu-bg.png",
         "video": "bg_5rain"
       },
-      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+      "accent": "#8dafc4"
     },
     {
       "id": "bg_5noraintickfrozen",
@@ -194,7 +206,8 @@
         "still": "scenes/bg_5noraintickfrozen.jpg",
         "video": null
       },
-      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+      "accent": "#809ad0"
     },
     {
       "id": "bg_6pull_red-tower",
@@ -210,7 +223,9 @@
         "still": "scenes/bg_6pull_red-tower.jpg",
         "video": null
       },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accentHue": 356,
+      "accent": "#d57c82"
     },
     {
       "id": "bg_4",
@@ -226,7 +241,8 @@
         "still": "scenes/bg_4.jpg",
         "video": null
       },
-      "credit": "Recorded in vanilla Minecraft by the Fathom project owner"
+      "credit": "Recorded in vanilla Minecraft by the Fathom project owner",
+      "accent": "#e7ce6a"
     },
     {
       "id": "bg_2",
@@ -242,7 +258,8 @@
         "still": "scenes/bg_2.jpg",
         "video": null
       },
-      "credit": "Recorded in vanilla Minecraft by the Fathom project owner"
+      "credit": "Recorded in vanilla Minecraft by the Fathom project owner",
+      "accent": "#98b9af"
     },
     {
       "id": "bg_6pull_storm-panorama",
@@ -258,7 +275,8 @@
         "still": "scenes/bg_6pull_storm-panorama.jpg",
         "video": null
       },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md"
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#8ca3c5"
     }
   ]
 }

@@ -40,4 +40,5 @@ for the stills, thumbnails and the game's copies, and
 To add a background: add its files here, add an entry to the manifest, credit it
 in `ATTRIBUTION.md`, add its id to `BACKGROUNDS` in
 `crates/launcher-desktop/src/lib.rs` (a test checks the two agree), and run the
-two scripts above.
+two scripts above, then `node tools/derive-background-accents.mjs` and
+`node tools/generate-backgrounds.mjs` again for its accent.

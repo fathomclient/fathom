@@ -6,6 +6,7 @@
   import GraphiteProfileSwitcher from '../lib/graphite/GraphiteProfileSwitcher.svelte';
   import Progress from '../lib/ui/Progress.svelte';
   import { EASE, MOTION_EXIT, MOTION_PAGE, MOTION_HOVER } from '../lib/motion';
+  import { spotlight } from '../lib/spotlight';
 
   export let view: HomeView;
   export let onAction: (command: string) => void;
@@ -39,7 +40,7 @@
 </script>
 
 <section class="home-stage">
-  <div class="launch-composition" in:fly={{ y: 8, duration: MOTION_PAGE, easing: EASE }}>
+  <div class="launch-composition" use:spotlight in:fly={{ y: 8, duration: MOTION_PAGE, easing: EASE }}>
     <div class="heading">
       <span class="eyebrow">CURRENT INSTALLATION</span>
       <h1>{title}</h1>
@@ -127,7 +128,8 @@
     width: min(440px, calc(100vw - 160px));
     padding: 24px;
     border-radius: var(--g-r-panel);
-    background: var(--g-mat-standard);
+    /* Lit from above by the scene's accent (glow.css). */
+    background: var(--glow-sheen), var(--g-mat-standard);
     box-shadow:
       inset 0 0 0 var(--metric-rim) var(--g-mat-standard-rim),
       var(--g-elevation);
@@ -179,6 +181,9 @@
   }
 
   .primary {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
     width: 168px;
     height: var(--metric-control-primary);
     border-radius: var(--metric-radius-control);
@@ -196,14 +201,17 @@
     cursor: default;
   }
 
+  /* The one thing to press gets the one halo: the accent spilling out
+     beneath it, round because it follows the capsule (glow.css). */
   .primary.ready {
     background: var(--g-action);
     color: var(--g-action-text);
-    box-shadow: none;
+    box-shadow: var(--glow-halo);
   }
 
   .primary.ready:hover {
     background: var(--g-action-hover);
+    box-shadow: var(--glow-halo-strong);
   }
 
   .primary.ready:active {
@@ -227,6 +235,43 @@
   .primary.busy {
     color: var(--g-text-secondary);
     cursor: progress;
+  }
+
+  /* Working: a soft round pool of the accent drifting across the capsule and
+     back, so a launch that is thinking still looks alive. */
+  .primary.busy::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 120px;
+    height: 120px;
+    margin: -60px 0 0 -60px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle closest-side,
+      var(--glow-halo-colour),
+      transparent
+    );
+    pointer-events: none;
+    z-index: -1;
+    animation: pool 2.4s ease-in-out infinite alternate;
+  }
+
+  @keyframes pool {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(168px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .primary.busy::before {
+      animation: none;
+      transform: translateX(84px);
+    }
   }
 
   .installation {

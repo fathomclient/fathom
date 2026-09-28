@@ -1,0 +1,101 @@
+/*
+ * Light.
+ *
+ * The launcher is lit by the scene behind it. One colour, `--glow`, is the
+ * chosen background's accent (`accent` in assets/backgrounds/manifest.json,
+ * measured from the picture by tools/derive-background-accents.mjs); every
+ * glow below is that colour at a low strength from `graphite.glow` in the
+ * theme.
+ *
+ * Two rules, and everything here follows them:
+ *
+ *   ROUND  every glow is a radial falloff or a halo that follows the rounded
+ *          shape it belongs to. No bands, no hard edges, no linear sweeps.
+ *   SUBTLE the halo under the primary action is 28%, everything else 20% or
+ *          less, all of it feathered to nothing. A glow says "here" -- the thing to press, the
+ *          page you are on -- and is otherwise barely there. Nothing that is
+ *          not the primary action or the current place gets one.
+ *
+ * Strokes are untouched: a rim is still one device pixel, and a selected thing
+ * is never drawn with a thicker line. Light goes outside and behind, never in
+ * the border.
+ */
+
+/* Registered, so a background change fades the light from one colour to the
+   next instead of snapping. */
+@property --glow {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #8dafc4;
+}
+
+:root {
+  --glow: #8dafc4;
+  transition: --glow 900ms var(--g-ease);
+
+  /* The glow at a given strength. */
+  --glow-sheen-colour: color-mix(in srgb, var(--glow) calc(var(--g-glow-sheen-alpha) * 100%), transparent);
+  --glow-halo-colour: color-mix(in srgb, var(--glow) calc(var(--g-glow-halo-alpha) * 100%), transparent);
+  --glow-halo-strong-colour: color-mix(in srgb, var(--glow) calc(var(--g-glow-halo-alpha) * 150%), transparent);
+  --glow-selected-colour: color-mix(in srgb, var(--glow) calc(var(--g-glow-selected-alpha) * 100%), transparent);
+
+  /* Light falling on a pane from above: a wide ellipse centred on its top
+     edge, fading to nothing by two-thirds of the way down. */
+  --glow-sheen: radial-gradient(120% 90% at 50% 0%, var(--glow-sheen-colour), transparent 68%);
+
+  /* The halo under the one primary action: offset down a little, pulled in by
+     the negative spread so it reads as light spilling out beneath the shape,
+     never as a coloured outline around it. */
+  --glow-halo: 0 10px var(--g-glow-halo-blur) var(--g-glow-halo-spread) var(--glow-halo-colour);
+  --glow-halo-strong: 0 12px calc(var(--g-glow-halo-blur) + 6px) var(--g-glow-halo-spread) var(--glow-halo-strong-colour);
+
+  /* The current place: a soft round halo, no offset. */
+  --glow-selected: 0 0 18px -2px var(--glow-selected-colour);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    transition: none;
+  }
+}
+
+/* Panes catch the light. `background-color` stays the material's; the sheen
+   is a layer over it. */
+.material-standard,
+.material-dense {
+  background-image: var(--glow-sheen);
+}
+
+/* -- the spotlight ---------------------------------------------------------
+   A pane under the pointer is lit where the pointer is: a circle of light
+   that follows it (`use:spotlight`, lib/spotlight.ts). Faint -- it is a
+   response, not a highlight. `:where` keeps the positioning weightless, so a
+   pane that positions itself keeps doing so. */
+:where(.spot) {
+  position: relative;
+}
+
+.spot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    circle var(--g-glow-spotlight-size) at var(--spot-x, 50%) var(--spot-y, 50%),
+    color-mix(in srgb, color-mix(in srgb, var(--glow) 60%, var(--g-text-primary)) calc(var(--g-glow-spotlight-alpha) * 100%), transparent),
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 320ms var(--g-ease);
+}
+
+.spot.lit::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spot::after {
+    display: none;
+  }
+}

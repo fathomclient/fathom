@@ -109,6 +109,18 @@ public final class GraphiteTokens {
     public static final float BACKDROP_WIDTH = 2560.000f;
     public static final float BACKDROP_HEIGHT = 1440.000f;
     public static final float BACKDROP_HUB_DOWNSCALE = 4.000f;
+    public static final float GLOW_BLOOM_ALPHA = 0.200f;
+    public static final float GLOW_BLOOM_ECHO_ALPHA = 0.080f;
+    public static final float GLOW_BLOOM_SIZE = 0.560f;
+    public static final float GLOW_SHEEN_ALPHA = 0.090f;
+    public static final float GLOW_HALO_ALPHA = 0.280f;
+    public static final float GLOW_HALO_BLUR = 24.000f;
+    public static final float GLOW_HALO_SPREAD = -6.000f;
+    public static final float GLOW_SELECTED_ALPHA = 0.140f;
+    public static final float GLOW_SPOTLIGHT_ALPHA = 0.045f;
+    public static final float GLOW_SPOTLIGHT_SIZE = 260.000f;
+    public static final float GLOW_DRIFT_SECONDS = 48.000f;
+    public static final float GLOW_ACCENT_LIGHTNESS = 0.660f;
 
     public static final float TYPE_TITLE_SIZE = 20.0f;
     public static final float TYPE_TITLE_LINE = 26.0f;

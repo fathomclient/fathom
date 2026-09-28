@@ -102,6 +102,19 @@ public interface Renderer {
      */
     void shadow(float left, float top, float right, float bottom, float radius, float spread, int argb);
 
+    /**
+     * Light: a round, soft pool of colour centred on a point, strongest in the
+     * middle and falling to nothing at {@code radius}.
+     *
+     * <p>For the accent glow behind a menu or a panel, and the halo under the
+     * one primary action. Pass the colour at its final, low strength -- a
+     * bloom is meant to be felt more than seen. Decoration only: a renderer
+     * that cannot draw soft light leaves it out, and nothing may depend on it
+     * being there.
+     */
+    default void bloom(float centreX, float centreY, float radius, int argb) {
+    }
+
     // -----------------------------------------------------------------------
     // Text
     // -----------------------------------------------------------------------

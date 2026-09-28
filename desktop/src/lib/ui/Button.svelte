@@ -10,7 +10,8 @@
              primary one, and inline actions that used to be underlined text
     caution  normal until hovered, when it warms towards the danger tone
 
-  None of them glows, lifts or scales on hover. Press is a denser fill and a
+  Only the primary glows: a soft halo of the scene's accent beneath it
+  (glow.css), a little stronger on hover. None of them lifts or scales. Press is a denser fill and a
   very slight compression. They carry no blur of their own, because they sit on
   panes that already have one.
 
@@ -52,13 +53,14 @@
 
   .btn.primary {
     background-color: var(--control-prominent);
-    box-shadow: none;
+    box-shadow: var(--glow-halo);
     color: var(--color-prominent-text);
     font-weight: var(--type-heading-weight);
   }
 
   .btn.primary:hover:not(:disabled) {
     background-color: var(--control-prominent-hover);
+    box-shadow: var(--glow-halo-strong);
   }
 
   .btn.primary:active:not(:disabled) {

@@ -148,6 +148,11 @@ function graphiteCss(g) {
   out.push(`  --g-vignette-start: ${g.backdrop['vignette-start'] * 100}%;`);
   out.push(`  --g-vignette-alpha: ${g.backdrop['vignette-alpha']};`);
   out.push(`  --g-grain-alpha: ${g.backdrop['grain-alpha']};`);
+  for (const [name, value] of Object.entries(g.glow ?? {})) {
+    if (typeof value !== 'number') continue;
+    const unit = /-(blur|spread|size)$/.test(name) && name !== 'bloom-size' ? 'px' : name.endsWith('-seconds') ? 's' : '';
+    out.push(`  --g-glow-${name.replace(/-seconds$/, '')}: ${value}${unit};`);
+  }
   out.push('}');
   out.push('');
   return out;
@@ -190,6 +195,7 @@ function graphiteJava(g) {
   floats('LAYOUT_', g.layout);
   floats('WORDMARK_', g.wordmark);
   floats('BACKDROP_', g.backdrop);
+  floats('GLOW_', g.glow ?? {});
   out.push('');
   for (const [name, r] of Object.entries(g.type)) {
     const key = `TYPE_${javaName(name)}`;

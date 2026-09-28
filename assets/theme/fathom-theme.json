@@ -732,6 +732,21 @@
       "width": 2560,
       "height": 1440,
       "hub-downscale": 4
+    },
+    "glow": {
+      "_about": "Light, not decoration. Every glow is round (a radial falloff or a halo that follows the rounded shape it belongs to) and subtle: the strongest (the halo under the one primary action) is 28%, and everything else is 20% or less. Tinted by the chosen background's accent (assets/backgrounds/manifest.json), so the interface is lit by the scene behind it. Alphas are 0-1; sizes are logical px unless named as a fraction.",
+      "bloom-alpha": 0.2,
+      "bloom-echo-alpha": 0.08,
+      "bloom-size": 0.56,
+      "sheen-alpha": 0.09,
+      "halo-alpha": 0.28,
+      "halo-blur": 24,
+      "halo-spread": -6,
+      "selected-alpha": 0.14,
+      "spotlight-alpha": 0.045,
+      "spotlight-size": 260,
+      "drift-seconds": 48,
+      "accent-lightness": 0.66
     }
   }
 }

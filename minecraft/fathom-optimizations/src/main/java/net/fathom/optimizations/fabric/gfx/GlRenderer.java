@@ -644,6 +644,31 @@ public final class GlRenderer implements Renderer {
         quad(r - inset, b - inset, r + s, b + s, gNear, gNearV, gFar, gFarV, colour);
     }
 
+    /**
+     * Four quadrants of the glow mask meeting at the centre, so the falloff is
+     * round: the mask is a quarter disc of light, full at its corner and gone
+     * at its radius, and each quadrant turns it to face outwards.
+     */
+    @Override
+    public void bloom(float centreX, float centreY, float radius, int argb) {
+        int colour = tint(argb);
+        if (Colour.invisible(colour) || !(radius > 0f)) {
+            return;
+        }
+        float cx = deviceX(centreX);
+        float cy = deviceY(centreY);
+        float r = deviceSize(radius);
+        batch.bind(sheet.texture());
+        float near = sheet.u(Shapes.GLOW_X + 0.5f);
+        float far = sheet.u(Shapes.GLOW_X + Shapes.GLOW_SIZE - 0.5f);
+        float nearV = sheet.v(Shapes.GLOW_Y + 0.5f);
+        float farV = sheet.v(Shapes.GLOW_Y + Shapes.GLOW_SIZE - 0.5f);
+        quad(cx - r, cy - r, cx, cy, far, farV, near, nearV, colour);
+        quad(cx, cy - r, cx + r, cy, near, farV, far, nearV, colour);
+        quad(cx - r, cy, cx, cy + r, far, nearV, near, farV, colour);
+        quad(cx, cy, cx + r, cy + r, near, nearV, far, farV, colour);
+    }
+
     /** A strip whose ramp runs top to bottom. */
     private void vertical(float x0, float y0, float x1, float y1, float uTop, float uBottom, float v, int argb) {
         if (x1 <= x0 || y1 <= y0) {

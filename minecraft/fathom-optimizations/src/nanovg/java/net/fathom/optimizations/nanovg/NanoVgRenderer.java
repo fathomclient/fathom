@@ -624,6 +624,25 @@ public final class NanoVgRenderer implements FathomRenderer {
         shadowImpl(left, top, right, bottom, radius, size, 0f, 0f, 0f, argb, false);
     }
 
+    @Override
+    public void bloom(float centreX, float centreY, float radius, int argb) {
+        if (Colour.invisible(argb) || !Float.isFinite(centreX) || !Float.isFinite(centreY)
+                || !(radius > 0f) || !Float.isFinite(radius)) {
+            return;
+        }
+        if (state.culled(centreX - radius, centreY - radius, centreX + radius, centreY + radius)) {
+            return;
+        }
+        // One radial gradient, faded to transparent in the same colour so the
+        // edge never darkens on its way out.
+        nvgRadialGradient(vg, centreX, centreY, 0f, radius,
+                rgba(argb, colour), rgba(argb & 0x00FFFFFF, second), nvgPaint);
+        nvgBeginPath(vg);
+        nvgCircle(vg, centreX, centreY, radius);
+        nvgFillPaint(vg, nvgPaint);
+        nvgFill(vg);
+    }
+
     /**
      * One box gradient: the cheapest soft shadow there is -- a single fill whose
      * falloff the fragment shader computes, not a blur.
