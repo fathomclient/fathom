@@ -41,6 +41,15 @@ then display a profile name for a session the launcher had nothing to do with.
 Fathom replaces Minecraft's title screen with its own, drawn by the same
 renderer and the same `Controls` as the Hub.
 
+The swap happens as the screen is handed to `setScreen`
+(`MinecraftClientMenuMixin`). In a packaged game with OptiFine patched in
+through OptiFabric, the first title screen can arrive before Fathom's client
+initializer has run; the mixin then has no runtime to ask and lets vanilla's
+screen through. `MenuTakeover` looks at the current screen once a frame and
+replaces a plain vanilla title screen as soon as Fathom is ready, and says so
+once in the module log. Switching the **Fathom main menu** module off still
+gives vanilla's screen back untouched.
+
 ```
         F  Fathom
            1.8.9 · Legacy Fabric

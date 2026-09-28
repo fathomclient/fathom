@@ -229,19 +229,20 @@ final class Shapes {
         // that reads a shade softer at its outer fringe and buys one that
         // reads at the same weight as the edge it joins.
         float half = Math.max(width / 2f, 1f);
+        float fade = width <= 1 ? 0.25f : 0.5f;
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
                 float px = x + 0.5f;
                 float py = y + 0.5f;
                 float distance = (float) Math.sqrt(px * px + py * py);
-                // Solid through the core, then a fade. The fade is wider than
-                // the half pixel geometry alone would ask for because the mask
-                // is sampled bilinearly on its way to the framebuffer, which
-                // softens the stroke a second time. Measured against the
-                // straight edges these arcs run into: at 0.5 the hub's corners
-                // came out at 170 of 195 and the menu's at 44.7 of 49.3; at
-                // 0.72 both match.
-                float inside = half + 0.72f - Math.abs(distance - middle);
+                // Solid through the core, then a fade over the last half
+                // pixel. Each framebuffer pixel samples exactly its own texel
+                // (`GlRenderer.maskCorner`), so nothing softens the stroke a
+                // second time: at 0.5 a band of two or more pixels puts
+                // exactly its own width of ink across every radius, the same
+                // as the straight side it joins. The hairline already has the
+                // extra core above, so its fade is a quarter pixel.
+                float inside = half + fade - Math.abs(distance - middle);
                 int value = Math.round(Math.max(0f, Math.min(1f, inside)) * 255f);
                 coverage[y * size + x] = (byte) value;
             }

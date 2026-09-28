@@ -384,13 +384,20 @@ final class ModsSection implements Section {
         if (contentHeight <= viewport.height || contentHeight <= 0f) {
             return;
         }
-        float handle = Math.max(32f, viewport.height * viewport.height / contentHeight);
-        float travel = viewport.height - handle;
+        // The shared scrollbar geometry: 4 wide, 3 in from the edge, 20%, and
+        // (as `Scroller` does) both ends kept out of the panel's corners.
+        float endInset = Math.min(Skin.R_SMALL, viewport.height / 2f);
+        float track = viewport.height - endInset * 2f;
+        if (track <= 0f) {
+            return;
+        }
+        float handle = Math.min(track, Math.max(32f, track * viewport.height / contentHeight));
+        float travel = track - handle;
         float progress = offset / Math.max(1f, contentHeight - viewport.height);
-        // The shared scrollbar geometry: 4 wide, 3 in from the edge, 20%.
         float x = viewport.right() - 4f - 3f;
-        float y = viewport.y + travel * progress;
-        ui.rounded(x, y, x + 4f, y + handle, 2f,
+        float y = viewport.y + endInset + travel * progress;
+        ui.rounded(x, y, x + 4f, y + handle,
+                net.fathom.optimizations.core.ui.render.RoundedGeometry.pill(4f, handle),
                 net.fathom.optimizations.generated.FathomTheme.Tokens.CONTROL_SCROLLBAR);
     }
 

@@ -1,17 +1,14 @@
 package net.fathom.optimizations.fabric.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 
-import net.fathom.optimizations.core.module.Behaviour;
-import net.fathom.optimizations.core.module.FathomModule;
-import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.menu.FathomMenuScreen;
+import net.fathom.optimizations.fabric.menu.MenuTakeover;
 
 /**
  * Fathom's main menu stands in for vanilla's.
@@ -56,6 +53,13 @@ import net.fathom.optimizations.fabric.menu.FathomMenuScreen;
  * <p>A client that replaces the first screen of the game has to be able to stop
  * doing that. The module owns the behaviour, the module can be switched off, and
  * off means vanilla's screen — unchanged, because nothing was patched into it.
+ *
+ * <h2>When this is too early</h2>
+ *
+ * <p>The first title screen can arrive before Fathom's runtime is installed
+ * (seen with OptiFine through OptiFabric in a packaged game). This Mixin then
+ * has nothing to ask and leaves vanilla's screen; {@link MenuTakeover} replaces
+ * it on the first frame after Fathom is ready.
  */
 @Mixin(MinecraftClient.class)
 public abstract class MinecraftClientMenuMixin {
@@ -68,12 +72,14 @@ public abstract class MinecraftClientMenuMixin {
                 || !net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowOptifineOverlapHooks()) {
             return screen;
         }
-        // Visual QA explicitly asks for this screen and must not depend on the
-        // last profile's optional main-menu toggle. Production still respects
-        // the saved module state exactly as before.
-        boolean visualQa = Boolean.getBoolean("fathom.captureMenu")
-                || !System.getProperty("fathom.captureUi", "").isEmpty();
-        if (!fathom$enabled() && !visualQa) {
+        // The saved main-menu toggle, and visual QA asking for the menu.
+        if (!MenuTakeover.owned()) {
+            if (!MenuTakeover.ready() && FathomMenuScreen.shouldReplace(screen)) {
+                // Not an error: MenuTakeover replaces it on the first frame
+                // after Fathom finishes loading. Logged so a log reader sees why.
+                net.fathom.optimizations.core.module.ModuleLog.say(
+                        "main menu: title screen shown before Fathom finished loading; replacing it next frame.");
+            }
             return screen;
         }
         // Vanilla is about to turn this null into a title screen, because there
@@ -83,25 +89,5 @@ public abstract class MinecraftClientMenuMixin {
             return client.world == null ? new FathomMenuScreen() : screen;
         }
         return FathomMenuScreen.shouldReplace(screen) ? new FathomMenuScreen() : screen;
-    }
-
-    /**
-     * Whether Fathom owns the menu right now.
-     *
-     * <p>Three questions, and all of them can be false during start-up: the HUD
-     * is installed after the registry, the module can be switched off, and the
-     * behaviour is named rather than assumed so {@code ModuleTests} can check
-     * that the module claiming it is the one implemented here.
-     */
-    @Unique
-    private boolean fathom$enabled() {
-        if (Runtime.hud() == null || Runtime.features() == null) {
-            return false;
-        }
-        FathomModule module = Runtime.features().find("main-menu");
-        return module != null
-                && module.enabled()
-                && module.switchable()
-                && Behaviour.implemented(Behaviour.MAIN_MENU);
     }
 }

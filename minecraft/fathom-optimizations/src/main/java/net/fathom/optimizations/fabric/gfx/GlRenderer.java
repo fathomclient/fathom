@@ -419,7 +419,16 @@ public final class GlRenderer implements Renderer {
         if (device < 0.6f) {
             return device;
         }
-        return Math.min(Math.max(1f, Math.round(device)), limit);
+        // Whole pixels even when the shape is a pill with an odd side: half of
+        // 17 is 8.5, and an 8.5-pixel corner quad starts between two pixels, so
+        // every one of its pixels is a blend of two texels and the curve goes
+        // soft and square. Eight pixels and a one-pixel straight between the
+        // two ends is indistinguishable from a circle; the blend was not.
+        float whole = (float) Math.floor(limit);
+        if (whole < 1f) {
+            return limit;
+        }
+        return Math.min(Math.max(1f, Math.round(device)), whole);
     }
 
     /** One corner of a rounded rectangle: the quarter disc, oriented. */
@@ -433,13 +442,20 @@ public final class GlRenderer implements Renderer {
 
     private void maskCorner(float x, float y, float size, boolean leftSide, boolean topSide,
             int argb, int maskX, int maskY, int maskSize) {
-        // Texel centres. Sampling the mask's full extent instead was tried and
-        // measured worse -- 159 against 170 down the middle of a corner arc --
-        // because it lands every pixel on a texel boundary and blends the pair.
-        float far = sheet.u(maskX + maskSize - 0.5f);
-        float near = sheet.u(maskX + 0.5f);
-        float farV = sheet.v(maskY + maskSize - 0.5f);
-        float nearV = sheet.v(maskY + 0.5f);
+        // The mask's full extent, edge to edge. The corner quad is whole pixels
+        // wide and starts on a whole pixel (`cornerRadius`), so each pixel's
+        // centre lands exactly on the centre of the texel rasterised for it and
+        // the circle reaches the screen as it was computed.
+        //
+        // This used to map the quad onto the texel *centres* instead
+        // (`+0.5 .. size-0.5`). That squeezes the mask by (size-1)/size, so the
+        // outermost pixel read coverage from half a pixel inside the curve: an
+        // 8-pixel corner came out a solid squircle rather than round, and every
+        // radius in the interface looked smaller and squarer than its number.
+        float far = sheet.u(maskX + maskSize);
+        float near = sheet.u(maskX);
+        float farV = sheet.v(maskY + maskSize);
+        float nearV = sheet.v(maskY);
         float u0 = leftSide ? far : near;
         float u1 = leftSide ? near : far;
         float v0 = topSide ? farV : nearV;
