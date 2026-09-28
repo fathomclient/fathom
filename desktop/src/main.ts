@@ -14,15 +14,22 @@ import { mount } from 'svelte';
 
 import App from './App.svelte';
 import Console from './routes/Console.svelte';
-import { windowLabel } from './lib/api';
+import { windowLabel, windowShow } from './lib/api';
 import { restoreAppearanceModes } from './lib/appearance';
 
 const target = document.getElementById('app');
 if (!target) throw new Error('#app is missing from index.html');
 
-// Both windows honour the glass accessibility modes. The main window stays
-// hidden until its shell data arrives, which takes longer than this read, so
-// it is never seen with the wrong material.
+// Show the window NOW, on the static splash `index.html` has already painted.
+// It starts hidden only so the OS never shows an empty white frame before the
+// WebView has drawn anything; it used to stay hidden until every piece of
+// Home's data had arrived, which is most of why the launcher felt slow to
+// open. The loading screen (`LoadingScreen.svelte`) says what is still coming.
+if (windowLabel !== 'console') void windowShow();
+
+// Both windows honour the glass accessibility modes. The loading screen is
+// opaque, so nothing behind it is seen with the wrong material while this
+// read is in flight.
 void restoreAppearanceModes();
 
 // One device pixel, in CSS pixels. A `1px` hairline at 125% or 150% display
@@ -38,7 +45,12 @@ function trackDevicePixel() {
 }
 trackDevicePixel();
 
-export default mount(windowLabel === 'console' ? Console : App, { target });
+const app = mount(windowLabel === 'console' ? Console : App, { target });
+export default app;
+
+// The Svelte loading screen now draws exactly what the static splash did, so
+// the splash can go once it has had a frame to paint.
+requestAnimationFrame(() => document.getElementById('splash')?.remove());
 
 // The geometry debug overlay (Ctrl+Shift+G): development builds only. Behind
 // `import.meta.env.DEV` the import is dead code in a release build, so the

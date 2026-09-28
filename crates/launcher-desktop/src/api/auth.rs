@@ -168,6 +168,17 @@ impl AuthProgress {
     pub(crate) fn cancelled() -> Self {
         Self::new(AuthPhase::Cancelled, "Cancelled", "Nothing was signed in")
     }
+
+    /// A saved session that did not come back within `signin::RESTORE_LIMIT`.
+    ///
+    /// Settled rather than active, so the Sign In button is live again: the
+    /// person is told to sign in instead of watching "Restoring" indefinitely.
+    pub(crate) fn restore_timed_out() -> Self {
+        let message = "Restoring your saved session is taking too long. Sign in again to continue.";
+        let mut progress = Self::new(AuthPhase::Failed, "Sign in again", message);
+        progress.failure = Some(message.to_owned());
+        progress
+    }
 }
 
 impl Default for AuthProgress {
@@ -181,6 +192,11 @@ impl Default for AuthProgress {
 pub struct Supervisor {
     progress: Mutex<AuthProgress>,
     cancel: Mutex<Cancel>,
+    /// Which attempt is current. Bumped by every `begin`, so the result of an
+    /// attempt that was overtaken -- a restore that answered after its time
+    /// ran out and the person started a new sign-in -- cannot overwrite the
+    /// attempt that replaced it.
+    generation: std::sync::atomic::AtomicU64,
 }
 
 impl Supervisor {
@@ -197,6 +213,40 @@ impl Supervisor {
         }
     }
 
+    /// The current attempt's number (see `generation`).
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Settle attempt `generation`, unless a newer one has begun since.
+    pub(crate) fn set_if_current(&self, generation: u64, progress: AuthProgress) -> bool {
+        let Ok(mut guard) = self.progress.lock() else {
+            return false;
+        };
+        if self.generation() != generation {
+            return false;
+        }
+        *guard = progress;
+        true
+    }
+
+    /// Give up on attempt `generation` if it is still restoring: settle it as
+    /// timed out and ask it to stop. Returns whether it did.
+    pub(crate) fn expire_restore(&self, generation: u64) -> bool {
+        let Ok(mut guard) = self.progress.lock() else {
+            return false;
+        };
+        if self.generation() != generation || guard.phase != AuthPhase::Restoring {
+            return false;
+        }
+        *guard = AuthProgress::restore_timed_out();
+        drop(guard);
+        if let Ok(cancel) = self.cancel.lock() {
+            cancel.cancel();
+        }
+        true
+    }
+
     /// Claim the supervisor, refusing a second concurrent attempt.
     pub(crate) fn begin(&self, initial: AuthProgress) -> Result<Cancel, String> {
         let mut progress = self
@@ -207,6 +257,8 @@ impl Supervisor {
             return Err("a sign-in is already under way".to_owned());
         }
         *progress = initial;
+        self.generation
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         let fresh = Cancel::new();
         let mut cancel = self
@@ -241,6 +293,57 @@ impl Supervisor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A restore still running at the limit is settled as "sign in again",
+    /// with the Sign In button live, and asked to stop.
+    #[test]
+    fn a_restore_past_its_limit_asks_for_a_new_sign_in() {
+        let supervisor = Supervisor::default();
+        let cancel = supervisor.begin(AuthProgress::restoring()).unwrap();
+        let attempt = supervisor.generation();
+
+        assert!(supervisor.expire_restore(attempt));
+        let progress = supervisor.progress();
+        assert_eq!(progress.phase, AuthPhase::Failed);
+        assert!(!progress.active, "the Sign In button must be usable again");
+        assert!(progress.failure.unwrap().contains("Sign in again"));
+        assert!(cancel.is_cancelled(), "the slow restore is told to stop");
+    }
+
+    /// The watchdog leaves alone a restore that already finished, and any
+    /// attempt that is not the one it was watching.
+    #[test]
+    fn the_watchdog_only_expires_the_restore_it_watched() {
+        let supervisor = Supervisor::default();
+        supervisor.begin(AuthProgress::restoring()).unwrap();
+        let first = supervisor.generation();
+        supervisor.set_if_current(first, AuthProgress::signed_in("Steve"));
+        assert!(
+            !supervisor.expire_restore(first),
+            "a finished restore stays finished"
+        );
+        assert_eq!(supervisor.progress().phase, AuthPhase::SignedIn);
+
+        supervisor.begin(AuthProgress::starting()).unwrap();
+        assert!(
+            !supervisor.expire_restore(first),
+            "a newer attempt is not touched"
+        );
+        assert_eq!(supervisor.progress().phase, AuthPhase::Starting);
+    }
+
+    /// A late answer from an overtaken attempt cannot overwrite its replacement.
+    #[test]
+    fn an_overtaken_attempt_cannot_overwrite_the_current_one() {
+        let supervisor = Supervisor::default();
+        supervisor.begin(AuthProgress::restoring()).unwrap();
+        let old = supervisor.generation();
+        supervisor.expire_restore(old);
+        supervisor.begin(AuthProgress::starting()).unwrap();
+
+        assert!(!supervisor.set_if_current(old, AuthProgress::signed_in("Late")));
+        assert_eq!(supervisor.progress().phase, AuthPhase::Starting);
+    }
 
     #[test]
     fn only_an_unsettled_sign_in_keeps_the_poll_alive() {

@@ -2107,21 +2107,30 @@ impl Launcher {
     /// is not free; the UI should call it when it opens Settings, not per
     /// frame.
     pub fn refresh_java(&mut self) -> &[JavaInstallation] {
+        self.java = Self::scan_java(&self.paths);
+        &self.java
+    }
+
+    /// Probe for Java runtimes without the launcher: what [`Self::refresh_java`]
+    /// does, as a function of the data paths alone.
+    ///
+    /// Spawns `java -version` for every candidate, one after another, which is
+    /// slow -- so a caller that holds the launcher behind a lock runs this with
+    /// the lock released and hands the result to `set_java`.
+    pub fn scan_java(paths: &DataPaths) -> Vec<JavaInstallation> {
         let mut found = java_runtime::discover();
 
         // A runtime Fathom installed itself is not on any system path, so
         // `discover` cannot see it. It goes first: it is the one we chose, know
         // the version of, and can vouch for.
         for major in [8] {
-            if let Some(managed) = java_runtime::managed::installed(&self.paths, major) {
+            if let Some(managed) = java_runtime::managed::installed(paths, major) {
                 if !found.iter().any(|other| other.path == managed.path) {
                     found.insert(0, managed);
                 }
             }
         }
-
-        self.java = found;
-        &self.java
+        found
     }
 
     /// Download a Java runtime into Fathom's own data directory.

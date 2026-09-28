@@ -623,10 +623,13 @@ fn install_bundled(
     }
 
     // Adopting is content-addressed, so this is also how "is it already the
-    // right bytes" gets answered: same file, same hash, nothing written.
+    // right bytes" gets answered: same file, same hash, nothing written. The
+    // remembered form skips reading the jar when it has not changed -- this
+    // runs for every Fathom profile on every start, and the client jar is
+    // tens of megabytes.
     let stored = engine
         .store()
-        .adopt(&jar)
+        .adopt_remembered(&jar)
         .map_err(|source| ComponentError::Install {
             component: component.id,
             source,

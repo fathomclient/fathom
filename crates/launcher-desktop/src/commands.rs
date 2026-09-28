@@ -479,26 +479,10 @@ pub fn unlock_frame_rate(
 pub fn settings_view(
     state: tauri::State<'_, State>,
 ) -> Result<api::settings::SettingsView, String> {
-    let mut core = locked!(state);
-    scan_java_once(&mut core);
+    // The start-up scan's answer, never a scan of its own (see `JavaScan`).
+    state.java_scan.wait();
+    let core = locked!(state);
     Ok(api::settings::view(&core))
-}
-
-/// Make sure Java has been looked for at least once.
-///
-/// `Launcher::new` starts with an empty list and nothing scanned, because
-/// probing runs `java -version` on every candidate and that is not something to
-/// do while a window is opening. Nothing then called `refresh_java`, so Settings
-/// and Recovery both reported "No Java found" on a machine with Java 8
-/// installed -- the launcher had simply never looked.
-///
-/// Scanned once, lazily, on the first screen that asks. An empty list after a
-/// scan is a real answer and is not re-scanned on every render; the Recovery
-/// page has an explicit Search button for that.
-fn scan_java_once(core: &mut Launcher) {
-    if core.java_installations().is_empty() {
-        core.refresh_java();
-    }
 }
 
 #[tauri::command]
@@ -530,8 +514,9 @@ pub fn privacy_view(state: tauri::State<'_, State>) -> Result<api::privacy::Priv
 pub fn recovery_view(
     state: tauri::State<'_, State>,
 ) -> Result<api::recovery::RecoveryView, String> {
-    let mut core = locked!(state);
-    scan_java_once(&mut core);
+    // The start-up scan's answer, never a scan of its own (see `JavaScan`).
+    state.java_scan.wait();
+    let core = locked!(state);
     Ok(api::recovery::view(&core))
 }
 

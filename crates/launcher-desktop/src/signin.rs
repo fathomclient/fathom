@@ -99,6 +99,33 @@ fn raise(app: &tauri::AppHandle) {
     });
 }
 
+/// How long a saved session may take to come back before the person is told
+/// to sign in again.
+///
+/// A restore is three or four round trips to Microsoft, Xbox and Mojang --
+/// normally a few seconds. A network that swallows requests rather than
+/// refusing them used to leave the drawer on "Restoring your session" for as
+/// long as the requests took to time out, with the Sign In button disabled.
+pub const RESTORE_LIMIT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Watch restore attempt `generation`: if it is still restoring after
+/// [`RESTORE_LIMIT`], settle it as "sign in again" and cancel it, so a late
+/// answer is discarded rather than adopted behind the person's back.
+fn watch_restore(app: &tauri::AppHandle, generation: u64) {
+    let handle = app.clone();
+    let _ = std::thread::Builder::new()
+        .name("fathom-restore-watchdog".to_owned())
+        .spawn(move || {
+            std::thread::sleep(RESTORE_LIMIT);
+            if handle.state::<State>().auth.expire_restore(generation) {
+                tracing::info!(
+                    seconds = RESTORE_LIMIT.as_secs(),
+                    "restoring the saved session took too long; asking the user to sign in again"
+                );
+            }
+        });
+}
+
 /// Try the stored refresh token, once, at start-up.
 ///
 /// Silent when there is nothing stored: a first run must not report a failed
@@ -121,7 +148,10 @@ pub fn restore(app: &tauri::AppHandle) {
         return;
     };
 
-    let _ = spawn(app, cancel, run_restore);
+    let generation = app.state::<State>().auth.generation();
+    if spawn(app, cancel, run_restore).is_ok() {
+        watch_restore(app, generation);
+    }
 }
 
 /// Refresh the session if its Minecraft token is about to run out.
@@ -205,11 +235,19 @@ where
     F: FnOnce(&tauri::AppHandle, &Cancel) -> AuthProgress + Send + 'static,
 {
     let handle = app.clone();
+    // The attempt this thread belongs to. `begin` has just claimed the
+    // supervisor, so nothing can start another in between.
+    let generation = app.state::<State>().auth.generation();
     let spawned = std::thread::Builder::new()
         .name("fathom-signin".to_owned())
         .spawn(move || {
             let outcome = body(&handle, &cancel);
-            handle.state::<State>().auth.set(outcome);
+            // Only if this is still the current attempt: one that was timed out
+            // and replaced must not overwrite its replacement.
+            handle
+                .state::<State>()
+                .auth
+                .set_if_current(generation, outcome);
         });
     if let Err(error) = spawned {
         // The supervisor was claimed; release it, or every later attempt is
@@ -242,11 +280,15 @@ pub fn switch_account(app: &tauri::AppHandle, id: String) -> Result<AuthProgress
         .state::<State>()
         .auth
         .begin(AuthProgress::restoring())?;
-    spawn(app, cancel, move |handle, _| run_restore_account(handle, &id))?;
+    let generation = app.state::<State>().auth.generation();
+    spawn(app, cancel, move |handle, cancel| {
+        run_restore_account(handle, cancel, &id)
+    })?;
+    watch_restore(app, generation);
     Ok(app.state::<State>().auth.progress())
 }
 
-fn run_restore_account(app: &tauri::AppHandle, account_id: &str) -> AuthProgress {
+fn run_restore_account(app: &tauri::AppHandle, cancel: &Cancel, account_id: &str) -> AuthProgress {
     let tasks = {
         let state = app.state::<State>();
         let Ok(core) = state.core.lock() else {
@@ -255,6 +297,8 @@ fn run_restore_account(app: &tauri::AppHandle, account_id: &str) -> AuthProgress
         core.tasks()
     };
     match tasks.restore_session(account_id) {
+        // Too late: the watchdog already told the person to sign in again.
+        _ if cancel.is_cancelled() => AuthProgress::restore_timed_out(),
         Ok(Some(signed_in)) => adopt(app, |core| core.adopt_session(signed_in)),
         Ok(None) => AuthProgress::failed(
             "That saved sign-in is no longer available. Forget it and add the account again.",
@@ -326,7 +370,7 @@ fn run_device_code(app: &tauri::AppHandle, cancel: &Cancel) -> AuthProgress {
     outcome
 }
 
-fn run_restore(app: &tauri::AppHandle, _cancel: &Cancel) -> AuthProgress {
+fn run_restore(app: &tauri::AppHandle, cancel: &Cancel) -> AuthProgress {
     // Read under the lock, refresh without it: the refresh is three or four
     // round trips to Microsoft, Xbox and Mojang, and the window must stay
     // usable while they happen.
@@ -342,6 +386,12 @@ fn run_restore(app: &tauri::AppHandle, _cancel: &Cancel) -> AuthProgress {
     };
 
     match tasks.restore_session(&account_id) {
+        // Too late: the watchdog already told the person to sign in again,
+        // and a session appearing afterwards would contradict it.
+        _ if cancel.is_cancelled() => {
+            tracing::info!("the saved session answered after the restore limit; discarded");
+            AuthProgress::restore_timed_out()
+        }
         // Nothing stored after all, which is not a failure and not worth a
         // message: the drawer already says "not signed in".
         Ok(None) => {

@@ -128,6 +128,9 @@ pub struct AccountSummary {
     pub avatar: Option<String>,
     /// This account is remembered and its session is being restored right now.
     ///
+    /// Computed here as "known but not signed in"; `home_view` narrows it to
+    /// "and a restore is running" (see `session_flags` in `lib.rs`).
+    ///
     /// Distinct from `signed_in`, and never true at the same time. Restoring a
     /// session is three or four round trips to Microsoft, Xbox and Mojang, so
     /// it takes a few seconds — and for those seconds the shell used to be told
@@ -139,6 +142,10 @@ pub struct AccountSummary {
     /// claims the account is usable — a launch in this state is still refused
     /// by the auth gate, which is the check that actually matters.
     pub remembered: bool,
+    /// A known account whose session did not come back -- the restore failed,
+    /// or took longer than `signin::RESTORE_LIMIT` -- and which needs signing
+    /// in again. Set by `home_view`; always false in the saved-account list.
+    pub needs_sign_in: bool,
 }
 
 impl AccountSummary {
@@ -161,6 +168,7 @@ impl AccountSummary {
                 uuid: None,
                 avatar: None,
                 remembered: false,
+                needs_sign_in: false,
             },
         }
     }
@@ -175,6 +183,7 @@ impl AccountSummary {
             // The two are exclusive by construction: an account the core hands
             // back is either the live session or the remembered one.
             remembered: !account.signed_in,
+            needs_sign_in: false,
         }
     }
 }
