@@ -26,23 +26,27 @@ by its own width, where it lands dead centre: one unit from every wall it
 faces, its outer corner pointing straight at the opening. Wall, gap and plane
 are 1, 1 and 2 units; the opening is 2. Nothing is placed by eye.
 
-**Solved in pixels.** At a tile of S px the unit is u = ⌊S ÷ 8⌋ and the frame,
-6u, is centred with a margin of (S − 6u) ÷ 2. At every size the icon ships in
-(16, 20, 24, 30, 32, 36, 40, 48, 64, 128, 256, 512) both are whole pixels, so no
-edge ever falls between two pixels.
+**Solved in pixels.** In an app icon of S px the unit is u = ⌊S ÷ 7⌋ and the
+frame, 6u, is centred with a margin of (S − 6u) ÷ 2. At every size the icon
+ships in (16, 20, 24, 30, 32, 36, 40, 48, 64, 128, 256, 512) both are whole
+pixels, so no edge ever falls between two pixels. The tiers are set by 8u, the
+size of the tile the mark was first drawn on.
 
-| Tile | Tier | Treatment |
+| Icon | Tier | Treatment |
 | --- | --- | --- |
 | 16–20 | pixel | u = 2. Square corners everywhere: at 2 px walls a curve is only grey pixels. |
 | 24–40 | curve | Outer corners 1.5u, inner corners 0.5u, concentric. Open ends cut square. |
 | 48 and up | full | The plane's corners soften to 0.25u. |
 
-Inks: frame ivory `#ededed`, plane sand `#a8afb3` (one density down), tile
-deep `#171d20`. Reversed, for light grounds: frame `#171d20`, plane
-`#646b6f`. Signal blue belongs in marketing, never in the app icon.
+Inks: frame ivory `#ededed`, plane sand `#a8afb3` (one density down).
+Reversed, for light grounds: frame `#171d20`, plane `#646b6f`. Signal blue
+belongs in marketing, never in the app icon.
 
-Keep the tile wherever contrast is not controlled (the OS, the taskbar, the
-installer). The tile is a continuous-curve square.
+The app icon is the mark alone -- frame and plane on transparency, no tile.
+The deep tile it used to sit on read as a grey outline round the frame and a
+grey square round the plane on a dark taskbar. The cost is contrast on light
+grounds (a light taskbar, File Explorer in light mode), where the ivory frame is
+faint; Windows has no light and dark variants of an executable's icon.
 
 ## The wordmark
 
@@ -83,7 +87,7 @@ the corner is always open: a closed frame means done.
 
 | File | What it is |
 | --- | --- |
-| `icon.svg`, `icon-{16,20,24,30,32,36,40,48,64}.svg` | The app icon: the 512 master and the pixel masters |
+| `icon.svg`, `icon-{16,20,24,30,32,36,40,48,64}.svg` | The app icon, untiled: the 512 master and the pixel masters |
 | `png/fathom-icon-*.png` | Every raster size |
 | `mark.svg`, `mark-reversed.svg`, `mark-one-colour.svg` | The mark without its tile, full tier |
 | `wordmark.svg`, `wordmark-text.svg`, `wordmark-small.svg` | The wordmark's three tiers, ivory |

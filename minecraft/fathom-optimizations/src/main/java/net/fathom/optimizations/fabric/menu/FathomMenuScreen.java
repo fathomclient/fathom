@@ -68,6 +68,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      * round.
      */
     private static final float WORDMARK_CAP = 16f;
+
+    private static boolean announced;
     /** The button column: x on the canvas, and each button's size and gap. */
     private static final float COLUMN_X = GraphiteTokens.SPACE_12;
     private static final float BUTTON_WIDTH = 264f;
@@ -116,6 +118,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
 
     @Override
     public void init() {
+        if (!announced) {
+            // Once per session, so a log says for certain which menu the
+            // player was given rather than leaving it to be inferred.
+            announced = true;
+            net.fathom.optimizations.core.module.ModuleLog.say("main menu: Fathom's menu is showing.");
+        }
         // The client initializer can run before 1.8.9 has loaded options.txt;
         // the first actual screen is the reliable repair boundary.
         FathomOptimizationsClient.repairLegacyFovCorruption();

@@ -32,6 +32,8 @@ public final class MenuTakeover {
 
     private static boolean said;
     private static boolean explained;
+    /** The module has been seen on this session, so off now is the player's doing. */
+    private static boolean seenOn;
 
     /**
      * Say, once, why a title screen is standing where Fathom's should be.
@@ -47,7 +49,7 @@ public final class MenuTakeover {
         }
         String why;
         if (!owned()) {
-            why = "the Fathom main menu module is switched off in this profile";
+            why = whyNotOwned();
         } else if (client() != null && client().isDemo()) {
             why = "this is a demo account";
         } else {
@@ -55,6 +57,26 @@ public final class MenuTakeover {
         }
         explained = true;
         ModuleLog.say("main menu: keeping " + screen.getClass().getName() + " because " + why + ".");
+    }
+
+    /** Which of {@link #owned}'s conditions failed, exactly. */
+    private static String whyNotOwned() {
+        if (Runtime.hud() == null || Runtime.features() == null) {
+            return "Fathom's runtime is not installed yet";
+        }
+        FathomModule module = Runtime.features().find("main-menu");
+        if (module == null) {
+            return "no main-menu module is registered";
+        }
+        if (!module.switchable()) {
+            return "the main-menu module cannot be switched on in this build";
+        }
+        if (!module.enabled()) {
+            return seenOn
+                    ? "the Fathom main menu was switched off in the Hub"
+                    : "the Fathom main menu is switched off in the profile " + Runtime.hud().sessionName();
+        }
+        return "the main-menu behaviour is not implemented";
     }
 
     private static MinecraftClient client() {
@@ -66,9 +88,15 @@ public final class MenuTakeover {
     /**
      * Whether Fathom's menu replaces vanilla's right now.
      *
-     * <p>False until the HUD and the feature registry are installed, or when
-     * the {@code main-menu} module is switched off. Visual QA runs ask for the
-     * menu explicitly and get it regardless of the last profile's toggle.
+     * <p>Only the player turns Fathom's menu off, with the module's switch, and
+     * that switch is stored in the live profile. So vanilla's screen is kept
+     * when the profile says the menu is off, or when it was switched off during
+     * this session -- and at no other time. A packaged game started from the
+     * launcher reached its first title screen with the module reading off and
+     * nothing in the profile saying so, and sat on vanilla's menu: a state
+     * nobody chose is not a reason to give the game's front door away.
+     *
+     * <p>Visual QA runs ask for the menu explicitly and always get it.
      */
     public static boolean owned() {
         if (Boolean.getBoolean("fathom.captureMenu")
@@ -79,10 +107,27 @@ public final class MenuTakeover {
             return false;
         }
         FathomModule module = Runtime.features().find("main-menu");
-        return module != null
-                && module.enabled()
-                && module.switchable()
-                && Behaviour.implemented(Behaviour.MAIN_MENU);
+        if (module == null || !module.switchable() || !Behaviour.implemented(Behaviour.MAIN_MENU)) {
+            return false;
+        }
+        if (module.enabled()) {
+            seenOn = true;
+            return true;
+        }
+        // Off. Honour it if the player did it: in the Hub this session, or in
+        // the profile they are playing.
+        return !seenOn && !profileSaysOff();
+    }
+
+    /** Whether the live profile explicitly stores the main menu as off. */
+    private static boolean profileSaysOff() {
+        net.fathom.optimizations.fabric.profile.ProfileRuntime profiles = Runtime.hud().profiles();
+        net.fathom.optimizations.core.profile.FathomProfile live = profiles == null ? null : profiles.live();
+        if (live == null) {
+            return false;
+        }
+        net.fathom.optimizations.core.profile.FathomProfile.ModuleState state = live.modules().get("main-menu");
+        return state != null && Boolean.FALSE.equals(state.enabled);
     }
 
     /** Whether the runtime the menu needs has been installed yet. */
@@ -92,6 +137,13 @@ public final class MenuTakeover {
 
     /** Once a frame: replace a vanilla title screen that got past the mixin. */
     public static void frame(MinecraftClient client) {
+        // Every frame, not only while a title screen is up, so a switch turned
+        // off in the Hub during a game is known to be the player's by the time
+        // they leave the world.
+        if (!seenOn && ready()) {
+            FathomModule module = Runtime.features().find("main-menu");
+            seenOn = module != null && module.enabled();
+        }
         if (client == null || client.currentScreen == null) {
             return;
         }

@@ -19,7 +19,7 @@
  *                                        bitmaps
  *
  * Nothing is rasterised once and shrunk. Each icon size is rendered from
- * geometry that `tileMark` has already solved in whole pixels for that size,
+ * geometry that `iconMark` has already solved in whole pixels for that size,
  * so a 16px icon is drawn as a 16px icon.
  *
  * The rasteriser below needs no image library: a scanline filler with sixteen
@@ -36,15 +36,13 @@ import {
   DARK_INK,
   LIGHT_INK,
   frameOutlines,
+  iconMark,
   lockupElements,
   lockupLayout,
   markElements,
   markGeometry,
   outlinePolygon,
   planeOutline,
-  tileMark,
-  tilePath,
-  tilePolygon,
   WORDMARK,
 } from '../../desktop/src/lib/brand/aperture.ts';
 import { BRAND } from '../../desktop/src/lib/brand/brand.generated.ts';
@@ -228,11 +226,15 @@ function paintLockup(target, layout, x, y, ink = LIGHT_INK) {
     ink.frame, 1, 'nonzero');
 }
 
-/** The app icon at one size: the deep tile, and the mark at that size's tier. */
+/**
+ * The app icon at one size: the mark at that size's tier, frame and plane
+ * only, on transparency. It used to sit on a deep tile, which on a dark
+ * taskbar read as a grey outline round the frame and a grey square round the
+ * plane.
+ */
 function renderIcon(size) {
   const out = canvas(size, size);
-  fill(out, [tilePolygon(size)], BRAND.tile);
-  paintMark(out, tileMark(size));
+  paintMark(out, iconMark(size));
   return toBytes(out);
 }
 
@@ -273,7 +275,7 @@ const svg = (w, h, body) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Fathom">${body}</svg>\n`;
 
 function iconSvg(size) {
-  return svg(size, size, `<path fill="${BRAND.tile}" d="${tilePath(size)}"/>` + markElements(tileMark(size)));
+  return svg(size, size, markElements(iconMark(size)));
 }
 
 /** The mark without its tile, full tier, one unit = 8. */

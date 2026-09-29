@@ -98,6 +98,21 @@ export function tileMark(tile: number): MarkGeometry {
 }
 
 /**
+ * The mark alone in an icon of `size` px, with no tile behind it: frame and
+ * plane on transparency, so a dark taskbar shows no grey edge round the mark
+ * and no grey square round the plane.
+ *
+ * Without a tile to fill the square, the mark is set larger than `tileMark`
+ * sets it: a unit of floor(size / 7), which leaves roughly half a unit of
+ * clear space on every side, centred on whole pixels (6u is always even).
+ */
+export function iconMark(size: number): MarkGeometry {
+  const unit = Math.max(2, Math.floor(size / 7));
+  const margin = (size - GRID * unit) / 2;
+  return markGeometry(unit, margin, margin);
+}
+
+/**
  * The frame. `closing` 0 is the mark at rest, open at the corner; toward 1 the
  * open walls grow until the frame is whole -- the loader's measure. A whole
  * frame is two outlines (outside and inside), to be filled even-odd.
