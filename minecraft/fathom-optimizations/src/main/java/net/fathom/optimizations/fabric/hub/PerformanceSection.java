@@ -308,10 +308,10 @@ final class PerformanceSection implements Section {
         float line = ui.lineHeight(Type.ROW_TITLE) + ui.lineHeight(Type.SMALL);
         Rect uiQuality = new Rect(area.x, area.y, area.width, line);
         float room = area.width - Controls.TOGGLE_WIDTH - Skin.S5;
-        ui.text("High quality UI rendering", uiQuality.x,
+        ui.text("High quality text and shapes", uiQuality.x,
                 uiQuality.y + ui.ascent(Type.ROW_TITLE),
                 Type.ROW_TITLE, Skin.TEXT);
-        ui.text(Text.fit(ui, "Antialiased Fathom geometry and icons.", Type.SMALL, room),
+        ui.text(Text.fit(ui, "Evenly spaced, sharper text and exact rounded corners. Off is faster.", Type.SMALL, room),
                 uiQuality.x, uiQuality.y + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.SMALL),
                 Type.SMALL, Skin.TEXT_FAINT);
         Rect toggle = uiQuality.vcentreRight(0f, Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT);

@@ -142,7 +142,11 @@ public final class GlRenderer implements Renderer {
         return stats;
     }
 
-    /** Selects only the shape/icon quality path; layout and text stay native-resolution. */
+    /**
+     * High quality: exact corner masks and quarter-pixel text positioning.
+     * Off ("performance mode"): stretched corner masks and whole-pixel text.
+     * Layout, sizes and measurement are identical either way.
+     */
     public void setHighQuality(boolean enabled) {
         highQuality = enabled;
     }
@@ -607,41 +611,46 @@ public final class GlRenderer implements Renderer {
     @Override
     public void shadow(float left, float top, float right, float bottom, float radius, float spread, int argb) {
         int colour = tint(argb);
-        if (Colour.invisible(colour)) {
+        if (Colour.invisible(colour) || right <= left || bottom <= top) {
             return;
         }
         float l = snap(deviceX(left));
         float t = snap(deviceY(top));
         float r = snap(deviceX(right));
         float b = snap(deviceY(bottom));
-        float s = deviceSize(spread);
+        // Whole device pixels, so each corner quad maps 1:1 onto its mask.
+        float s = Math.min(64f, Math.round(deviceSize(spread)));
         if (s < 1f) {
             return;
         }
-        float rad = Math.min(deviceSize(radius), Math.min((r - l) / 2f, (b - t) / 2f));
-        float inset = Math.max(0f, rad * 0.5f);
+        // The same corner radius the fill uses, so the shadow is the shape's
+        // own outline pushed outwards rather than a box's.
+        float rad = cornerRadius(radius, r - l, b - t);
+        if (rad < 0.6f) {
+            rad = 0f;
+        }
 
         batch.bind(sheet.texture());
         float rampNear = sheet.u(Shapes.RAMP_X + 0.5f);
         float rampFar = sheet.u(Shapes.RAMP_X + Shapes.RAMP_SIZE - 0.5f);
         float rampV = sheet.v(Shapes.RAMP_Y + 0.5f);
 
-        // Sides: opaque against the panel, transparent at the far edge. The
-        // ramp is one row of the sheet, so the fade runs along u and v is fixed.
-        vertical(l + inset, t - s, r - inset, t, rampFar, rampNear, rampV, colour);
-        vertical(l + inset, b, r - inset, b + s, rampNear, rampFar, rampV, colour);
-        horizontal(l - s, t + inset, l, b - inset, rampFar, rampNear, rampV, colour);
-        horizontal(r, t + inset, r + s, b - inset, rampNear, rampFar, rampV, colour);
+        // The straight sides run between the corners' circle centres; on a
+        // pill the left and right ones have no length and are skipped.
+        vertical(l + rad, t - s, r - rad, t, rampFar, rampNear, rampV, colour);
+        vertical(l + rad, b, r - rad, b + s, rampNear, rampFar, rampV, colour);
+        horizontal(l - s, t + rad, l, b - rad, rampFar, rampNear, rampV, colour);
+        horizontal(r, t + rad, r + s, b - rad, rampNear, rampFar, rampV, colour);
 
-        // Corners: the soft quarter disc, one per direction.
-        float gNear = sheet.u(Shapes.GLOW_X + 0.5f);
-        float gFar = sheet.u(Shapes.GLOW_X + Shapes.GLOW_SIZE - 0.5f);
-        float gNearV = sheet.v(Shapes.GLOW_Y + 0.5f);
-        float gFarV = sheet.v(Shapes.GLOW_Y + Shapes.GLOW_SIZE - 0.5f);
-        quad(l - s, t - s, l + inset, t + inset, gFar, gFarV, gNear, gNearV, colour);
-        quad(r - inset, t - s, r + s, t + inset, gNear, gFarV, gFar, gNearV, colour);
-        quad(l - s, b - inset, l + inset, b + s, gFar, gNearV, gNear, gFarV, colour);
-        quad(r - inset, b - inset, r + s, b + s, gNear, gNearV, gFar, gFarV, colour);
+        Shapes.Mask corner = rad > 96f ? null : shapes.exactShadow(Math.round(rad), Math.round(s));
+        if (corner == null) {
+            return;
+        }
+        float size = rad + s;
+        maskCorner(l - s, t - s, size, true, true, colour, corner.x, corner.y, corner.size);
+        maskCorner(r - rad, t - s, size, false, true, colour, corner.x, corner.y, corner.size);
+        maskCorner(l - s, b - rad, size, true, false, colour, corner.x, corner.y, corner.size);
+        maskCorner(r - rad, b - rad, size, false, false, colour, corner.x, corner.y, corner.size);
     }
 
     /**
@@ -708,18 +717,42 @@ public final class GlRenderer implements Renderer {
         }
 
         batch.bind(fonts.atlas().texture());
-        // The pen walks in fractional device pixels; each glyph's quad is
-        // snapped to whole ones. Fractional accumulation keeps the spacing
-        // right; snapped quads keep the rasters crisp.
+        // The pen walks in fractional device pixels, kerned pair by pair. Every
+        // glyph's quad sits on whole pixels so its raster reaches the screen
+        // one-to-one; in high quality the pen's fraction is carried inside the
+        // raster (the nearest quarter-pixel phase), so each letter is where its
+        // advance put it rather than rounded to the nearest pixel on its own.
+        // Low quality ("performance mode") keeps one raster and snaps.
+        boolean phased = highQuality;
         float pen = deviceX(x);
         float baseline = Math.round(deviceY(baselineY));
+        char previous = 0;
         for (int index = 0; index < string.length(); index++) {
-            GlyphPage.Glyph glyph = page.glyph(string.charAt(index));
+            char c = string.charAt(index);
+            if (previous != 0) {
+                pen += page.kern(previous, c);
+            }
+            previous = c;
+            GlyphPage.Glyph glyph = page.glyph(c);
             if (!glyph.blank) {
-                float gx = Math.round(pen + glyph.offsetX);
-                float gy = baseline + glyph.offsetY;
-                quad(gx, gy, gx + glyph.width, gy + glyph.height,
-                        glyph.u0, glyph.v0, glyph.u1, glyph.v1, colour);
+                float whole;
+                int phase;
+                if (phased) {
+                    whole = (float) Math.floor(pen);
+                    phase = Math.round((pen - whole) * GlyphPage.PHASES);
+                    if (phase == GlyphPage.PHASES) {
+                        whole += 1f;
+                        phase = 0;
+                    }
+                } else {
+                    whole = Math.round(pen);
+                    phase = 0;
+                }
+                GlyphPage.Raster raster = page.raster(glyph, phase);
+                float gx = whole + raster.offsetX;
+                float gy = baseline + raster.offsetY;
+                quad(gx, gy, gx + raster.width, gy + raster.height,
+                        raster.u0, raster.v0, raster.u1, raster.v1, colour);
             }
             pen += glyph.advance;
         }
@@ -995,6 +1028,15 @@ public final class GlRenderer implements Renderer {
         offsetX = deviceOriginX - (deviceOriginX - offsetX) * scale + deviceSize(translateX);
         offsetY = deviceOriginY - (deviceOriginY - offsetY) * scale + deviceSize(translateY);
         zoom *= scale;
+        if (zoom == 1f) {
+            // A pure translation moves whole device pixels. A fractional one
+            // made every primitive round on its own: a panel sliding in by
+            // 3.4 pixels put its fill on one pixel and its glyphs, snapped
+            // separately, on the next, so the text shimmered against its
+            // surface for the length of every transition.
+            offsetX = Math.round(offsetX);
+            offsetY = Math.round(offsetY);
+        }
     }
 
     @Override

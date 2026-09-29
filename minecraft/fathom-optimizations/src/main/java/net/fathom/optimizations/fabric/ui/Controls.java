@@ -545,7 +545,7 @@ public final class Controls {
         tracked.motion.to(1f, now, Timing.TOOLTIP);
         float reveal = tracked.motion.opacity(now);
         ui.pushAlpha(reveal);
-        ui.pushTransform(0f, 0f, 0.985f + 0.015f * reveal, area.centreX(), area.centreY());
+        ui.pushTransform(0f, 0f);
         badge(ui, value, area, colour);
         ui.popTransform();
         ui.popAlpha();
@@ -600,8 +600,6 @@ public final class Controls {
      */
     public boolean recessedAction(Renderer ui, String id, Rect area, String label, boolean enabled) {
         State s = state(id, area, enabled);
-        float scale = 1f - s.press * 0.010f;
-        float sink = s.press * 0.65f;
         float radius = Skin.pill(area);
         int face = !enabled
                 ? Skin.FILL_DISABLED
@@ -610,7 +608,7 @@ public final class Controls {
                 ? Skin.EDGE_RECESSED
                 : Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, Math.max(s.hover, s.press));
 
-        ui.pushTransform(0f, sink, scale, area.centreX(), area.centreY());
+        ui.pushTransform(0f, 0f);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
         ui.rim(area.x, area.y, area.right(), area.bottom(), radius, edge);
         middle(ui, label, area.x + Skin.S3, area,
@@ -648,6 +646,15 @@ public final class Controls {
                 Type.BODY_STRONG, ink);
         focusRing(ui, s, area, round);
         return s.clicked;
+    }
+
+    /**
+     * The width a button needs for its label: the label and 20 of padding a
+     * side, never under 96. Buttons sized by hand were how two buttons with
+     * short labels came out different widths in one row.
+     */
+    public static float buttonWidth(Renderer ui, String label) {
+        return Math.max(96f, ui.measure(label, Type.BODY_STRONG) + Skin.S5 * 2f);
     }
 
     /** The width {@link #back} needs for a label. */
@@ -690,8 +697,9 @@ public final class Controls {
             face = Skin.mix(face, Skin.ELEVATED, on);
         }
         float round = Skin.pill(area);
-        float scale = 1f - s.press * 0.006f;
-        ui.pushTransform(0f, 0f, scale, area.centreX(), area.centreY());
+        // Press is a denser fill (above), never a scale: a transform moved the
+        // glyph by a fraction of a pixel and it re-snapped under the pointer.
+        ui.pushTransform(0f, 0f);
         ui.rounded(area.x, area.y, area.right(), area.bottom(), round, face);
         if (s.hover > 0.01f || on > 0.01f) {
             ui.rim(area.x, area.y, area.right(), area.bottom(), round,
@@ -714,10 +722,10 @@ public final class Controls {
             boolean signature) {
         // The visual compresses around a fixed hitbox. Six tenths of a percent
         // is felt as contact without making neighbouring controls appear to move.
-        float scale = 1f - s.press * 0.006f;
-        float sink = s.press * 0.45f;
+        // Press is a denser face, never a scale or a sink: moving the label by
+        // a fraction of a pixel re-snapped its glyphs and made the text jump.
         float radius = Skin.pill(area);
-        ui.pushTransform(0f, sink, scale, area.centreX(), area.centreY());
+        ui.pushTransform(0f, 0f);
         if (signature && s.enabled) {
             // The primary action: one flat bright neutral face. No gradient,
             // no rim, no glow -- the launcher's primary exactly.
@@ -1248,8 +1256,7 @@ public final class Controls {
         }
         // Press may scale; hover may not. A 4.5% hover scale on a swatch this
         // small is a visible jump of the thing you are trying to click.
-        float scale = 1f - s.press * 0.018f;
-        ui.pushTransform(0f, 0f, scale, box.centreX(), box.centreY());
+        ui.pushTransform(0f, 0f);
         ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.R_SMALL, Skin.RECESSED);
         Rect colourFace = box.inset(3f, 3f);
         ui.rounded(colourFace.x, colourFace.y, colourFace.right(), colourFace.bottom(),

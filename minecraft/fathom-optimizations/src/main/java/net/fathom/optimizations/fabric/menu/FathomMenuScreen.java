@@ -501,8 +501,26 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      */
     public static boolean shouldReplace(Screen screen) {
         return screen != null
-                && screen.getClass() == TitleScreen.class
+                && isVanillaTitle(screen)
                 && net.minecraft.client.MinecraftClient.getInstance() != null
                 && !net.minecraft.client.MinecraftClient.getInstance().isDemo();
+    }
+
+    /**
+     * Vanilla's title screen, however it reached us.
+     *
+     * <p>Exactly {@code TitleScreen}, or a class Minecraft itself owns that is
+     * one -- a patched copy loaded under the game's own package, as OptiFine
+     * through OptiFabric can produce. The exact-class test alone let that copy
+     * through silently, and the packaged game sat on vanilla's menu for the
+     * whole session. Another mod's subclass (any other package) is still left
+     * alone: replacing it would delete that mod's buttons.
+     */
+    static boolean isVanillaTitle(Screen screen) {
+        if (screen.getClass() == TitleScreen.class) {
+            return true;
+        }
+        return screen instanceof TitleScreen
+                && screen.getClass().getName().startsWith("net.minecraft.");
     }
 }

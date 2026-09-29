@@ -31,6 +31,35 @@ import net.fathom.optimizations.fabric.Runtime;
 public final class MenuTakeover {
 
     private static boolean said;
+    private static boolean explained;
+
+    /**
+     * Say, once, why a title screen is standing where Fathom's should be.
+     *
+     * <p>This case used to be silent, which is how a packaged game could sit on
+     * vanilla's menu with nothing in the log to say why. Only ever about a
+     * title screen: every other screen is supposed to stay.
+     */
+    private static void explainKept(net.minecraft.client.gui.screen.Screen screen) {
+        if (explained || !(screen instanceof net.minecraft.client.gui.screen.TitleScreen) || !ready()) {
+            // Not ready yet: it will be replaced, or explained, once it is.
+            return;
+        }
+        String why;
+        if (!owned()) {
+            why = "the Fathom main menu module is switched off in this profile";
+        } else if (client() != null && client().isDemo()) {
+            why = "this is a demo account";
+        } else {
+            why = "it is another mod's title screen (" + screen.getClass().getName() + ")";
+        }
+        explained = true;
+        ModuleLog.say("main menu: keeping " + screen.getClass().getName() + " because " + why + ".");
+    }
+
+    private static MinecraftClient client() {
+        return MinecraftClient.getInstance();
+    }
 
     private MenuTakeover() {}
 
@@ -63,8 +92,11 @@ public final class MenuTakeover {
 
     /** Once a frame: replace a vanilla title screen that got past the mixin. */
     public static void frame(MinecraftClient client) {
-        if (client == null || client.currentScreen == null
-                || !FathomMenuScreen.shouldReplace(client.currentScreen) || !owned()) {
+        if (client == null || client.currentScreen == null) {
+            return;
+        }
+        if (!FathomMenuScreen.shouldReplace(client.currentScreen) || !owned()) {
+            explainKept(client.currentScreen);
             return;
         }
         if (!said) {

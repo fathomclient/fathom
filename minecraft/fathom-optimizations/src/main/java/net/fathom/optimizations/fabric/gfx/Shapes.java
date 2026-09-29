@@ -64,6 +64,7 @@ final class Shapes {
     private final Map<Integer, Mask> exactDiscs = new HashMap<Integer, Mask>();
     private final Map<Integer, Mask> exactRings = new HashMap<Integer, Mask>();
     private final Map<Integer, Mask> exactNotches = new HashMap<Integer, Mask>();
+    private final Map<Integer, Mask> exactShadows = new HashMap<Integer, Mask>();
 
     /** One framebuffer-sized coverage mask in the shared shape atlas. */
     static final class Mask {
@@ -87,6 +88,7 @@ final class Shapes {
         exactDiscs.clear();
         exactRings.clear();
         exactNotches.clear();
+        exactShadows.clear();
         byte[] white = new byte[WHITE_SIZE * WHITE_SIZE];
         for (int index = 0; index < white.length; index++) {
             white[index] = (byte) 0xFF;
@@ -162,6 +164,51 @@ final class Shapes {
         atlas.uploadCoverage(exactRingCoverage(size, width), at[0], at[1], size, size);
         found = new Mask(at[0], at[1], size);
         exactRings.put(Integer.valueOf(key), found);
+        return found;
+    }
+
+    /**
+     * One corner of a rounded shadow: a quarter annulus centred on the corner's
+     * own circle, empty inside the curve and fading out over {@code spread}
+     * pixels beyond it.
+     *
+     * <p>The old shadow faded from the bounding box's corner instead, and ran
+     * its straight sides all the way to within half a radius of it. On a pill
+     * that put a square band of shadow beside each round end with a lighter gap
+     * between the band and the curve -- the dark patches either side of every
+     * primary button. Following the circle, the shadow is the shape's own
+     * outline pushed outwards, at every radius.
+     *
+     * @param radius the corner radius in device pixels
+     * @param spread how far the fade reaches, in device pixels
+     */
+    Mask exactShadow(int radius, int spread) {
+        int r = Math.max(0, Math.min(96, radius));
+        int s = Math.max(1, Math.min(64, spread));
+        int size = r + s;
+        int key = r * 256 + s;
+        Mask found = exactShadows.get(Integer.valueOf(key));
+        if (found != null) {
+            return found;
+        }
+        int[] at = atlas.allocate(size, size);
+        if (at == null) {
+            return null;
+        }
+        byte[] coverage = new byte[size * size];
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                float distance = (float) Math.sqrt((x + 0.5f) * (x + 0.5f) + (y + 0.5f) * (y + 0.5f));
+                float beyond = distance - r;
+                // Half a pixel of antialiasing where the shadow meets the
+                // shape, then the same falloff the straight sides use.
+                float edge = Math.max(0f, Math.min(1f, beyond + 0.5f));
+                coverage[y * size + x] = (byte) Math.round(255f * edge * falloff(beyond / s));
+            }
+        }
+        atlas.uploadCoverage(coverage, at[0], at[1], size, size);
+        found = new Mask(at[0], at[1], size);
+        exactShadows.put(Integer.valueOf(key), found);
         return found;
     }
 

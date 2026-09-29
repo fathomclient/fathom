@@ -115,22 +115,18 @@ public final class VisualEffects {
     }
 
     /**
-     * A pane of glass: its fill, its rim, and the lit line along its top.
+     * A pane of glass: its fill and one rim, the same all the way round.
      *
-     * <p>The launcher's rim is an inset one-pixel highlight along the top edge
-     * over a faint all-round ring. Here the ring is an outline and the
-     * highlight is one hairline across the top's straight run -- between the
-     * corners, so it never pokes outside a curve and needs no clip.
-     * {@code rimTop} and {@code rimEdge} are the material's own
-     * ({@code Skin.RIM_*}).
+     * <p>This used to lay a second, brighter hairline along the top's straight
+     * run on top of the rim. Over the ring beneath it that read as a top edge
+     * twice the weight of the sides -- so every settings group looked more
+     * heavily bordered than the Mods list beside it, which has one rim. The
+     * brightness the highlight carried is kept by mixing a little of it into
+     * the one rim instead of adding a second stroke.
      */
     public static void glass(Renderer ui, Rect area, float radius, int fill, int rimTop, int rimEdge) {
         ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, fill);
-        ui.rim(area.x, area.y, area.right(), area.bottom(), radius, rimEdge);
-        float corner = Math.min(radius, Math.min(area.width, area.height) / 2f);
-        if (area.width > corner * 2f + 2f) {
-            ui.fill(area.x + corner, area.y, area.right() - corner, area.y + ui.pixel(), rimTop);
-        }
+        ui.rim(area.x, area.y, area.right(), area.bottom(), radius, Skin.mix(rimEdge, rimTop, 0.35f));
     }
 
     /** Move a colour's RGB toward another's, keeping its alpha. */

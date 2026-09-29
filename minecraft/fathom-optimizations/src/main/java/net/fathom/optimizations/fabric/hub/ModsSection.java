@@ -16,6 +16,7 @@ import net.fathom.optimizations.core.module.Implementation;
 import net.fathom.optimizations.core.module.FathomModule;
 import net.fathom.optimizations.core.module.Keybind;
 import net.fathom.optimizations.core.module.Setting;
+import net.fathom.optimizations.core.ui.Colour;
 import net.fathom.optimizations.core.hud.Sensitivity;
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
@@ -76,18 +77,27 @@ final class ModsSection implements Section {
     private static final float ROW_GAP = 0f;
     /** The group's inner padding; rows are concentric with its corners. */
     private static final float LIST_PAD = Skin.S2;
-    private static final float DETAIL_HEADER = 88f;
     private static final float CONFLICT_ROW = 18f;
     /** Search and the state filter: {@code Metrics.SEARCH} / {@code SEGMENTED}, both 36. */
     private static final float TOOLBAR_HEIGHT = FathomTheme.Metrics.SEARCH;
-    /** Every row in the detail panel -- enabled, setting, keybind: one height. */
-    private static final float DETAIL_ROW = FathomTheme.Metrics.ROW;
     private static final float TOOLBAR_GAP = 12f;
-    private static final float DETAIL_WIDTH = 360f;
+    /** The tab row: compact controls in a light track, as the state filter is. */
+    private static final float TAB_HEIGHT = FathomTheme.Metrics.CONTROL_COMPACT;
+    private static final float TAB_GAP = FathomTheme.Metrics.SPACE_3;
+    private static final float TAB_MAX = 188f;
+    private static final float TAB_MIN = 104f;
+    /** The close control inside a tab: a 20dp target around a 12dp glyph. */
+    private static final float TAB_CLOSE = 20f;
+    private static final String ALL_MODS = "All mods";
+    /** The mod page's header: the 32 tile and two lines, like a list row. */
+    private static final float PAGE_HEADER = FathomTheme.Metrics.ROW;
 
     private final Scroller scroller = new Scroller();
     private final Scroller detailScroll = new Scroller();
-    private final Motion detail = new Motion(0f, Timing.DETAIL);
+    /** The open mod pages, left to right, as tabs. */
+    private final List<FathomModule> tabs = new ArrayList<FathomModule>();
+    /** Fades a page in when the active tab changes. */
+    private final Motion pageIn = new Motion(1f, Timing.PANEL);
     private List<FathomModule> modules = Collections.emptyList();
     private List<Setting> openSettings = Collections.emptyList();
     private final List<Category> presentCategories = new ArrayList<Category>();
@@ -111,10 +121,8 @@ final class ModsSection implements Section {
 
     /** Null when the list is showing everything. */
     private Category filter;
-    /** The feature whose settings are open, or null. */
+    /** The active tab's module, or null when the "All mods" tab is active. */
     private FathomModule open;
-    /** Keeps the detail surface alive while its back transition recedes. */
-    private boolean detailClosing;
     /** Start of the current category's tight row entrance. */
     private float cardsEnteredAt;
     @Override
@@ -153,9 +161,16 @@ final class ModsSection implements Section {
         visibleFilter = null;
         stateFilter = 0;
         visibleStateFilter = -1;
-        open = null;
-        detailClosing = false;
-        detail.set(0f, context.now());
+        // Open tabs survive leaving the section and coming back, as a browser's
+        // do; only modules that no longer exist are dropped.
+        tabs.retainAll(modules);
+        if (open != null && !tabs.contains(open)) {
+            open = null;
+        }
+        if (open != null) {
+            openSettings = open.settings();
+        }
+        pageIn.set(1f, context.now());
         cardsEnteredAt = context.now();
         String qaOpen = System.getProperty("fathom.qaOpenSettings", "").trim();
         if (!qaOpen.isEmpty()) {
@@ -165,10 +180,8 @@ final class ModsSection implements Section {
                 boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
                 if (configurable && (qaOpen.equalsIgnoreCase(feature.id())
                         || "true".equalsIgnoreCase(qaOpen))) {
-                    open = feature;
-                    openSettings = feature.settings();
-                    detail.set(1f, context.now());
-                    conflictFingerprint = Integer.MIN_VALUE;
+                    openTab(context, feature);
+                    pageIn.set(1f, context.now());
                     break;
                 }
             }
@@ -181,32 +194,176 @@ final class ModsSection implements Section {
         cardsEnteredAt = context.now();
     }
 
+    /**
+     * A tab row, and under it either the list or one mod's page.
+     *
+     * <p>A mod's settings used to open as a panel over the right of the list.
+     * It covered the list's switches and text, and at 360dp its own descriptions
+     * were cut after a few words. Each mod now gets the whole content area as a
+     * page of its own, and the pages are tabs -- open several, switch between
+     * them, close them -- so comparing two modules' settings is a click rather
+     * than a close and a reopen.
+     */
     @Override
     public void render(HubContext context, Rect area) {
-        detail.to(open == null || detailClosing ? 0f : 1f, context.now());
-        float shown = detail.value(context.now());
+        // The whole content area, as every other Hub page uses it: one right
+        // edge across Quick, Mods, Performance and Profiles. The list used to
+        // stop at 744 and the pages beside it did not.
+        Rect page = area;
+        tabStrip(context, page.top(TAB_HEIGHT));
+        Rect body = page.belowTop(TAB_HEIGHT + TAB_GAP);
 
-        Rect panel = new Rect(area.right() - DETAIL_WIDTH, area.y, DETAIL_WIDTH, area.height);
-        if (shown > 0.001f) {
-            // The detail is an overlay, not a replacement page. Only its own
-            // footprint shields the grid beneath it.
-            context.controls().shield(panel);
+        float shown = pageIn.value(context.now());
+        context.ui().pushAlpha(shown);
+        context.ui().pushTransform(0f, (1f - shown) * GraphiteTokens.MOTION_TRAVEL * 0.5f);
+        if (open == null) {
+            browser(context, body);
+        } else {
+            modPage(context, body);
         }
-        browser(context, area);
-        context.controls().clearShield();
-        if (shown > 0.001f && open != null) {
-            context.ui().pushAlpha(shown);
-            context.ui().pushTransform((1f - shown) * GraphiteTokens.MOTION_TRAVEL, 0f);
-            graphiteDetailPanel(context, panel);
-            context.ui().popTransform();
-            context.ui().popAlpha();
+        context.ui().popTransform();
+        context.ui().popAlpha();
+    }
+
+    // -----------------------------------------------------------------------
+    // Tabs
+    // -----------------------------------------------------------------------
+
+    /** Open a module's page as a tab, or switch to its tab if it is open. */
+    private void openTab(HubContext context, FathomModule feature) {
+        if (!tabs.contains(feature)) {
+            tabs.add(feature);
         }
-        if (detailClosing && detail.settled(context.now()) && shown <= 0.001f) {
-            open = null;
-            openSettings = Collections.emptyList();
-            detailClosing = false;
+        activate(context, feature);
+    }
+
+    /** Make a tab (or, for null, "All mods") the one showing. */
+    private void activate(HubContext context, FathomModule feature) {
+        if (open == feature) {
+            return;
+        }
+        open = feature;
+        openSettings = feature == null ? Collections.<Setting>emptyList() : feature.settings();
+        detailScroll.reset();
+        conflictFingerprint = Integer.MIN_VALUE;
+        context.keybindCapture().cancel();
+        editing = null;
+        context.controls().clearFocus();
+        context.controls().closePopover();
+        pageIn.set(0f, context.now());
+        pageIn.to(1f, context.now(), Timing.PANEL);
+        if (feature == null) {
             cardsEnteredAt = context.now();
         }
+    }
+
+    /** Close a tab; closing the one showing shows its neighbour, as a browser does. */
+    private void closeTab(HubContext context, FathomModule feature) {
+        int index = tabs.indexOf(feature);
+        if (index < 0) {
+            return;
+        }
+        tabs.remove(index);
+        if (open == feature) {
+            FathomModule next = tabs.isEmpty() ? null
+                    : tabs.get(Math.min(index, tabs.size() - 1));
+            activate(context, next);
+        }
+    }
+
+    /**
+     * The tab row: "All mods", then one tab per open page, in one light track.
+     *
+     * <p>The same construction as the All / On / Off filter -- a light glass
+     * track, the chosen cell a denser segment with full-strength type -- so it
+     * reads as part of this page's controls rather than as a second chrome.
+     * Tabs share the room they have: they shrink towards {@link #TAB_MIN}
+     * before the oldest page that is not showing is closed to make space.
+     */
+    private void tabStrip(HubContext context, Rect row) {
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        Type type = Graphite.floor(ui, Graphite.UI);
+        float inset = FathomTheme.Metrics.SEGMENT_INSET;
+        float pad = Graphite.S3;
+        float icon = FathomTheme.Metrics.ICON_INLINE;
+
+        float homeWidth = pad + icon + Graphite.S2 + ui.measure(ALL_MODS, type) + pad;
+        float room = row.width - inset * 2f - homeWidth;
+        while (tabs.size() * TAB_MIN > room && tabs.size() > 1) {
+            // Out of room even at the narrowest: close the oldest tab not showing.
+            FathomModule oldest = tabs.get(0) == open ? tabs.get(1) : tabs.get(0);
+            tabs.remove(oldest);
+        }
+        float tabWidth = tabs.isEmpty() ? 0f : Math.max(TAB_MIN, Math.min(TAB_MAX, room / tabs.size()));
+        float natural = 0f;
+        for (FathomModule tab : tabs) {
+            natural += Math.min(tabWidth, pad + icon + Graphite.S2 + ui.measure(tab.name(), type)
+                    + Graphite.S2 + TAB_CLOSE + Graphite.S1);
+        }
+        Rect track = new Rect(row.x, row.y,
+                Math.min(row.width, inset * 2f + homeWidth + natural), row.height);
+        Graphite.surface(ui, track, Graphite.R_CONTROL, Graphite.Material.LIGHT, false);
+
+        float x = track.x + inset;
+        Rect home = new Rect(x, track.y + inset, homeWidth, track.height - inset * 2f);
+        if (tab(context, "mods.tab.all", home, Icon.GRID, ALL_MODS, open == null, null)) {
+            activate(context, null);
+        }
+        x = home.right();
+
+        FathomModule closing = null;
+        for (FathomModule feature : tabs) {
+            float width = Math.min(tabWidth, pad + icon + Graphite.S2 + ui.measure(feature.name(), type)
+                    + Graphite.S2 + TAB_CLOSE + Graphite.S1);
+            Rect cell = new Rect(x, track.y + inset, width, track.height - inset * 2f);
+            Rect close = new Rect(cell.right() - Graphite.S1 - TAB_CLOSE,
+                    cell.centreY() - TAB_CLOSE / 2f, TAB_CLOSE, TAB_CLOSE);
+            if (tab(context, "mods.tab." + feature.id(), cell, Icon.of(feature.icon()),
+                    feature.name(), open == feature, close)) {
+                activate(context, feature);
+            }
+            Controls.State closeState = controls.state("mods.tab.close." + feature.id(), close, true);
+            Graphite.overlay(ui, close, close.height / 2f,
+                    Math.max(closeState.hover, closeState.press * 1.6f), 0f);
+            float glyph = FathomTheme.Metrics.ICON_CAPTION;
+            ui.icon(Icon.CLOSE, close.centreX() - glyph / 2f, close.centreY() - glyph / 2f, glyph,
+                    Colour.mix(Graphite.TEXT_TERTIARY, Graphite.TEXT, closeState.hover));
+            controls.tooltip(closeState, close, "Close tab");
+            if (closeState.clicked) {
+                closing = feature;
+            }
+            x = cell.right();
+        }
+        if (closing != null) {
+            closeTab(context, closing);
+        }
+    }
+
+    /**
+     * One tab: glyph and label, the chosen one a denser segment. The close
+     * control (when there is one) is excluded from the tab's own hit area, so
+     * closing a tab never also selects it.
+     */
+    private boolean tab(HubContext context, String id, Rect cell, Icon icon, String label,
+            boolean selected, Rect close) {
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        Rect hit = close == null ? cell : Rect.of(cell.x, cell.y, close.x, cell.bottom());
+        Controls.State state = controls.state(id, hit, true);
+        float on = controls.towards(id + "#on", selected, GraphiteTokens.MOTION_FAST);
+        Graphite.segment(ui, cell, state.hover * (1f - on), on);
+        int ink = Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, Math.max(state.hover, on));
+        float glyph = FathomTheme.Metrics.ICON_INLINE;
+        float x = cell.x + Graphite.S3;
+        ui.icon(icon, x, Math.round(cell.centreY() - glyph / 2f), glyph, ink);
+        x += glyph + Graphite.S2;
+        Type type = Graphite.floor(ui, Graphite.UI);
+        float right = close == null ? cell.right() - Graphite.S3 : close.x - Graphite.S1;
+        ui.text(Text.fit(ui, label, type, Math.max(0f, right - x)), x,
+                Graphite.baseline(ui, cell, type), type, ink);
+        controls.focusRing(ui, state, cell, Graphite.R_SEGMENT);
+        return state.clicked && !selected;
     }
 
     private void browser(HubContext context, Rect area) {
@@ -218,7 +375,7 @@ final class ModsSection implements Section {
 
         Rect body = Rect.of(area.x, area.y + TOOLBAR_HEIGHT + TOOLBAR_GAP, area.right(), area.bottom());
         List<FathomModule> cards = visible(context);
-        Rect group = new Rect(body.x, body.y, Math.min(744f, body.width), body.height);
+        Rect group = new Rect(body.x, body.y, body.width, body.height);
         Graphite.surface(ui, group, Graphite.R_PANEL, Graphite.Material.STANDARD, true);
         Rect viewport = group.inset(LIST_PAD);
         float contentHeight = cards.size() * MODULE_ROW;
@@ -341,20 +498,21 @@ final class ModsSection implements Section {
         }
 
         // Keep the parent tile out from under the switch so one pointer gesture
-        // cannot both toggle the module and open its detail panel.
+        // cannot both toggle the module and open its page.
         Rect tileHit = new Rect(area.x, area.y,
                 Math.max(0f, toggle.x - Graphite.S2 - area.x), area.height);
         Controls.State tile = controls.state("mod.tile." + feature.id(), tileHit, true);
-        boolean selected = open == feature && !detailClosing;
-        Graphite.overlay(ui, area, Graphite.R_CONTROL,
-                selected ? 0f : tile.hover, selected ? 1f : tile.press * 0.5f);
+        boolean selected = false;
+        Graphite.overlay(ui, area, Graphite.R_CONTROL, tile.hover, tile.press * 0.5f);
 
         float mark = GraphiteTokens.SIZE_MOD_ICON;
         Graphite.modMark(ui, new Rect(area.x + Graphite.S4, area.centreY() - mark / 2f, mark, mark),
                 Icon.of(feature.icon()), visuallyEnabled ? 1f : 0f, selected ? 0f : tile.hover);
 
         float textX = area.x + Graphite.S4 + mark + Graphite.S3;
-        float textRoom = Math.max(0f, toggle.x - Graphite.S3 - textX);
+        // Room stops short of the chevron slot, so names line up whether or not
+        // a row opens a page.
+        float textRoom = Math.max(0f, toggle.x - Graphite.S3 * 2f - FathomTheme.Metrics.ICON_INLINE - textX);
         Type title = Graphite.floor(ui, Graphite.UI);
         Type description = Graphite.floor(ui, Graphite.SMALL);
         float stack = Controls.stackTop(ui, area, title, description);
@@ -370,8 +528,16 @@ final class ModsSection implements Section {
         }
 
         boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
+        if (configurable) {
+            // A page opens to the right of the switch: say so, quietly.
+            float chevron = FathomTheme.Metrics.ICON_INLINE;
+            ui.icon(Icon.CHEVRON_RIGHT, toggle.x - Graphite.S3 - chevron,
+                    Math.round(area.centreY() - chevron / 2f), chevron,
+                    Colour.mix(Graphite.TEXT_TERTIARY, Graphite.TEXT_SECONDARY, tile.hover));
+            controls.tooltip(tile, tileHit, "Open " + feature.name() + " settings");
+        }
         if (tile.clicked && configurable && !switchState.clicked) {
-            openDetail(context, feature);
+            openTab(context, feature);
         }
         if (!last) {
             Graphite.hairline(ui, area.x + Graphite.S4, area.right() - Graphite.S4, area.bottom());
@@ -512,7 +678,7 @@ final class ModsSection implements Section {
                 Type.CAPTION, visuallyEnabled ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
         if (configurable) {
             if (controls.recessedAction(ui, "mod.options." + feature.id(), options, "Configure", true)) {
-                openDetail(context, feature);
+                openTab(context, feature);
             }
         }
         if (feature.switchable()) {
@@ -528,7 +694,7 @@ final class ModsSection implements Section {
         // Clicking unused card space is an Options shortcut; action controls
         // above have separate bounds and therefore retain their own behavior.
         if (configurable && surface.clicked) {
-            openDetail(context, feature);
+            openTab(context, feature);
         }
     }
 
@@ -601,292 +767,60 @@ final class ModsSection implements Section {
         return !feature.compatibility().satisfied(inWorld, onServer);
     }
 
-    private void openDetail(HubContext context, FathomModule feature) {
-        open = feature;
-        openSettings = feature.settings();
-        detailClosing = false;
-        detail.set(0f, context.now());
-        detail.to(1f, context.now(), Timing.DETAIL);
-        detailScroll.reset();
-        conflictFingerprint = Integer.MIN_VALUE;
-        context.keybindCapture().cancel();
-        editing = null;
-        context.controls().clearFocus();
-        context.controls().closePopover();
-    }
-
     // -----------------------------------------------------------------------
-    // Mockup B detail overlay
+    // A mod's page
     // -----------------------------------------------------------------------
 
-    /** Dense 360dp overlay, with one shadow and rows directly inside it. */
-    private void graphiteDetailPanel(HubContext context, Rect panel) {
+    /**
+     * One module's configuration, as a page of the content area.
+     *
+     * <p>The header is a list row made large: the tile, the name, what it is,
+     * and its switch at the right edge. Under it one scrolling column of
+     * settings groups -- Behaviour, Appearance, Keybinds -- built from the same
+     * row component as Quick and Performance, with the page's actions at the
+     * foot. Nothing draws over anything else.
+     */
+    private void modPage(HubContext context, Rect area) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
-        Graphite.surface(ui, panel, Graphite.R_PANEL, Graphite.Material.DENSE, true);
 
-        Rect inner = panel.inset(Graphite.PAD);
+        Rect head = area.top(PAGE_HEADER);
         float tile = FathomTheme.Metrics.TILE;
-        Rect icon = new Rect(inner.x, inner.y, tile, tile);
-        Graphite.modMark(ui, icon, Icon.of(open.icon()), open.enabled() ? 1f : 0f, 0f);
+        Rect mark = new Rect(head.x, Math.round(head.centreY() - tile / 2f), tile, tile);
+        Graphite.modMark(ui, mark, Icon.of(open.icon()), open.enabled() ? 1f : 0f, 0f);
 
-        float compact = FathomTheme.Metrics.CONTROL_COMPACT;
-        Rect close = new Rect(inner.right() - compact, inner.y, compact, compact);
-        Controls.State closeState = controls.state("detail.close", close, true);
-        Graphite.overlay(ui, close, Graphite.R_SEGMENT, Math.max(closeState.hover, closeState.press * 1.6f), 0f);
-        float glyph = FathomTheme.Metrics.ICON_INLINE;
-        ui.icon(Icon.CLOSE, close.centreX() - glyph / 2f, close.centreY() - glyph / 2f, glyph,
-                net.fathom.optimizations.core.ui.Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT, closeState.hover));
-        controls.tooltip(closeState, close, "Close");
-        if (closeState.clicked) {
-            closeDetail(context);
-        }
-
-        float titleX = icon.right() + Graphite.S3;
-        Type heading = Graphite.floor(ui, Graphite.HEADING);
-        Type data = Graphite.floor(ui, Graphite.DATA_S);
-        // Title and metadata centred as one block against the tile beside them.
-        float stack = Controls.stackTop(ui, icon, heading, data);
-        ui.text(Text.fit(ui, open.name(), heading, close.x - titleX - Graphite.S2),
-                titleX, Controls.stackTitle(ui, stack, heading), heading, Graphite.TEXT);
-        String meta = open.category().label() + " · " + open.owner();
-        ui.text(Text.fit(ui, meta, data, close.x - titleX - Graphite.S2),
-                titleX, Controls.stackDetail(ui, stack, heading, data), data, Graphite.TEXT_SECONDARY);
-
-        float top = icon.bottom() + Graphite.S3;
-        Graphite.hairline(ui, inner.x, inner.right(), top);
-        top += Graphite.S2;
-        Rect viewport = Rect.of(inner.x, top, inner.right(), inner.bottom());
-
-        float contentHeight = graphiteDetailHeight();
-        float offset = detailScroll.offset(context.delta(), contentHeight, viewport.height);
-        float y = viewport.y - offset;
-        ui.clip(viewport.x, viewport.y, viewport.right(), viewport.bottom());
-
-        Rect enabledRow = new Rect(viewport.x, y, viewport.width, DETAIL_ROW);
-        graphiteEnabledRow(context, enabledRow);
-        y += enabledRow.height;
-
-        for (Setting setting : openSettings) {
-            float height = DETAIL_ROW;
-            Rect row = new Rect(viewport.x, y, viewport.width, height);
-            if (row.bottom() >= viewport.y && row.y <= viewport.bottom()) {
-                graphiteSettingRow(context, setting, row);
-            }
-            y += height;
-        }
-        for (Keybind keybind : open.keybinds()) {
-            Rect row = new Rect(viewport.x, y, viewport.width, DETAIL_ROW);
-            if (row.bottom() >= viewport.y && row.y <= viewport.bottom()) {
-                graphiteKeybindRow(context, keybind, row);
-            }
-            y += row.height;
-        }
-        ui.unclip();
-        graphiteDetailScrollbar(ui, viewport, offset, contentHeight);
-    }
-
-    private float graphiteDetailHeight() {
-        return DETAIL_ROW * (1 + openSettings.size() + open.keybinds().size());
-    }
-
-    private void graphiteEnabledRow(HubContext context, Rect row) {
-        Renderer ui = context.ui();
-        Controls controls = context.controls();
-        Type label = Graphite.floor(ui, Graphite.UI);
-        ui.text("Enabled", row.x, Graphite.baseline(ui, row, label), label, Graphite.TEXT);
+        float actionsLeft = head.right();
         if (open.switchable()) {
-            Rect toggle = new Rect(row.right() - Graphite.SWITCH_W,
-                    row.centreY() - Graphite.SWITCH_H / 2f,
-                    Graphite.SWITCH_W, Graphite.SWITCH_H);
-            Controls.State state = controls.state("detail.enabled", toggle, true);
+            Rect toggle = new Rect(head.right() - Graphite.SWITCH_W,
+                    head.centreY() - Graphite.SWITCH_H / 2f, Graphite.SWITCH_W, Graphite.SWITCH_H);
+            Controls.State state = controls.state("mods.page.enabled", toggle, true);
             if (state.clicked) {
                 context.setFeatureEnabled(open, !open.enabled());
                 visibleSearch = null;
                 visibleStateFilter = -1;
             }
-            float on = controls.towards("detail.enabled#on", open.enabled(), GraphiteTokens.MOTION_FAST);
+            float on = controls.towards("mods.page.enabled#on", open.enabled(), GraphiteTokens.MOTION_FAST);
             Graphite.switchControl(ui, toggle, on, true);
+            controls.focusRing(ui, state, toggle, toggle.height / 2f);
+            actionsLeft = toggle.x - Graphite.S4;
         }
-        Graphite.hairline(ui, row.x, row.right(), row.bottom());
-    }
 
-    private void graphiteSettingRow(HubContext context, Setting setting, Rect row) {
-        Renderer ui = context.ui();
-        boolean hovered = context.controls().pointerOverVisible(row);
-        Graphite.overlay(ui, row, Graphite.R_CONTROL,
-                context.controls().towards("detail.row." + setting.id(), hovered,
-                        GraphiteTokens.MOTION_FAST), 0f);
-
-        Type label = Graphite.floor(ui, Graphite.UI);
+        float titleX = mark.right() + Graphite.S3;
+        float room = Math.max(0f, actionsLeft - titleX);
+        Type heading = Graphite.floor(ui, Graphite.HEADING);
         Type small = Graphite.floor(ui, Graphite.SMALL);
-        boolean toggle = setting.kind() == Setting.Kind.TOGGLE;
-        float controlWidth = toggle ? Graphite.SWITCH_W : 120f;
-        float controlHeight = toggle ? Graphite.SWITCH_H : FathomTheme.Metrics.CONTROL_COMPACT;
-        Rect control = new Rect(row.right() - controlWidth,
-                Skin.snap(ui, row.centreY() - controlHeight / 2f), controlWidth, controlHeight);
-        float room = Math.max(0f, control.x - row.x - Graphite.S4);
-        float stack = Controls.stackTop(ui, row, label, small);
-        float labelY = setting.description().isEmpty()
-                ? Graphite.baseline(ui, row, label)
-                : Controls.stackTitle(ui, stack, label);
-        ui.text(Text.fit(ui, setting.label(), label, room), row.x, labelY, label, Graphite.TEXT);
-        if (!setting.description().isEmpty()) {
-            ui.text(Text.fit(ui, setting.description(), small, room), row.x,
-                    Controls.stackDetail(ui, stack, label, small), small, Graphite.TEXT_SECONDARY);
-        }
-        graphiteSettingControl(context, setting, control);
-        Graphite.hairline(ui, row.x, row.right(), row.bottom());
-    }
+        float stack = Controls.stackTop(ui, head, heading, small);
+        ui.text(Text.fit(ui, open.name(), heading, room), titleX,
+                Controls.stackTitle(ui, stack, heading), heading, Graphite.TEXT);
+        String meta = open.category().label() + " · " + open.owner()
+                + " · " + (open.enabled() ? "On" : "Off");
+        ui.text(Text.fit(ui, meta, small, room), titleX,
+                Controls.stackDetail(ui, stack, heading, small), small, Graphite.TEXT_SECONDARY);
 
-    private void graphiteSettingControl(HubContext context, Setting setting, Rect control) {
-        Renderer ui = context.ui();
-        Controls controls = context.controls();
-        String id = "detail.setting." + setting.id();
-        Controls.State state = controls.state(id, control, true);
-        switch (setting.kind()) {
-            case TOGGLE: {
-                Setting.Toggle toggle = (Setting.Toggle) setting;
-                if (state.clicked) {
-                    toggle.set(!toggle.get());
-                    edited(context, setting);
-                }
-                float on = controls.towards(id + "#on", toggle.get(), GraphiteTokens.MOTION_FAST);
-                Graphite.switchControl(ui, control, on, true);
-                return;
-            }
-            case SLIDER: {
-                Setting.Slider slider = (Setting.Slider) setting;
-                if (state.pressed) {
-                    double next = (context.pointer().x() - control.x) / Math.max(1f, control.width);
-                    slider.setFraction(Math.max(0d, Math.min(1d, next)));
-                    edited(context, setting);
-                }
-                float trackY = control.centreY() - 2f;
-                ui.rounded(control.x, trackY, control.right(), trackY + 4f, 2f,
-                        GraphiteTokens.COLOR_SLIDER_TRACK);
-                float knobX = control.x + (float) slider.fraction() * control.width;
-                ui.rounded(control.x, trackY, knobX, trackY + 4f, 2f, Graphite.TEXT);
-                ui.rounded(knobX - 7f, control.centreY() - 7f,
-                        knobX + 7f, control.centreY() + 7f, 7f, Graphite.TEXT);
-                Type data = Graphite.floor(ui, Graphite.DATA_S);
-                ui.textRight(slider.display(), control.right(), control.y - 2f, data, Graphite.TEXT_TERTIARY);
-                return;
-            }
-            case CHOICE: {
-                Setting.Choice choice = (Setting.Choice) setting;
-                if (state.clicked) {
-                    choice.advance();
-                    edited(context, setting);
-                }
-                graphiteCompactControl(ui, control, state, choice.display());
-                return;
-            }
-            case INTEGER: {
-                Setting.Whole whole = (Setting.Whole) setting;
-                if (state.clicked) {
-                    whole.nudge(whole.atMaximum() ? -1 : 1);
-                    edited(context, setting);
-                }
-                graphiteCompactControl(ui, control, state, whole.display());
-                return;
-            }
-            case TEXT: {
-                Setting.Text text = (Setting.Text) setting;
-                if (state.clicked) {
-                    editing = editing == text ? null : text;
-                    context.keybindCapture().cancel();
-                }
-                graphiteCompactControl(ui, control, state, text.get());
-                return;
-            }
-            case KEY: {
-                Setting.Key key = (Setting.Key) setting;
-                if (state.clicked) {
-                    context.keybindCapture().toggle(key.binding());
-                    editing = null;
-                }
-                graphiteCompactControl(ui, control, state,
-                        context.keybindCapture().capturing(key.binding()) ? "Press a key…" : key.binding().keyName());
-                return;
-            }
-            case COLOUR:
-            default:
-                graphiteCompactControl(ui, control, state, setting.display());
-        }
-    }
-
-    private void graphiteCompactControl(Renderer ui, Rect control, Controls.State state, String value) {
-        ui.rounded(control.x, control.y, control.right(), control.bottom(), Graphite.R_CONTROL,
-                net.fathom.optimizations.core.ui.Colour.scaleAlpha(Graphite.STATE_HOVER,
-                        0.5f + state.hover * 0.5f));
-        Graphite.rim(ui, control, Graphite.R_CONTROL,
-                net.fathom.optimizations.core.ui.Colour.mix(Graphite.RIM, Graphite.RIM_HOVER, state.hover));
-        Type data = Graphite.floor(ui, Graphite.DATA_S);
-        ui.textCentred(Text.fit(ui, value, data, control.width - Graphite.S2),
-                control.centreX(), Graphite.baseline(ui, control, data), data, Graphite.TEXT);
-    }
-
-    private void graphiteKeybindRow(HubContext context, Keybind keybind, Rect row) {
-        Renderer ui = context.ui();
-        Type label = Graphite.floor(ui, Graphite.UI);
-        ui.text(keybind.label(), row.x, Graphite.baseline(ui, row, label), label, Graphite.TEXT);
-        float compact = FathomTheme.Metrics.CONTROL_COMPACT;
-        Rect control = new Rect(row.right() - 120f, Skin.snap(ui, row.centreY() - compact / 2f), 120f, compact);
-        Controls.State state = context.controls().state("detail.key." + keybind.id(), control, true);
-        if (state.clicked) {
-            context.keybindCapture().toggle(keybind);
-            editing = null;
-        }
-        graphiteCompactControl(ui, control, state,
-                context.keybindCapture().capturing(keybind) ? "Press a key…" : keybind.keyName());
-        Graphite.hairline(ui, row.x, row.right(), row.bottom());
-    }
-
-    private void graphiteDetailScrollbar(Renderer ui, Rect viewport, float offset, float contentHeight) {
-        graphiteScrollbar(ui, viewport, offset, contentHeight, 0f);
-    }
-
-    // -----------------------------------------------------------------------
-    // The previous full-page configuration view (retained for the unrolled
-    // sections, but no longer used by the proof-pass Mods target).
-    // -----------------------------------------------------------------------
-
-    private void settingsPage(HubContext context, Rect area) {
-        Renderer ui = context.ui();
-        Controls controls = context.controls();
-        Rect head = area.top(DETAIL_HEADER);
-
-        // The way back names where it goes. Escape does the same.
-        Rect back = new Rect(head.x - Skin.S2, head.y, Controls.backWidth(ui, title()), Skin.H_MD);
-        if (controls.back(ui, "detail.back", back, title())) {
-            closeDetail(context);
-        }
-
-        Rect moduleIcon = new Rect(head.x, back.bottom() + Skin.S3, 40f, 40f);
-        Graphite.modMark(ui, moduleIcon, Icon.of(open.icon()), open.enabled() ? 1f : 0f, 0f);
-
-        float titleX = moduleIcon.right() + Skin.S3;
-        float actionsLeft = head.right();
-        if (open.switchable()) {
-            Rect toggle = new Rect(head.right() - Controls.TOGGLE_WIDTH,
-                    moduleIcon.centreY() - Controls.TOGGLE_HEIGHT / 2f,
-                    Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT);
-            if (controls.toggle(ui, "detail.enabled", toggle, open.enabled(), true)) {
-                context.setFeatureEnabled(open, !open.enabled());
-            }
-            actionsLeft = toggle.x - Skin.S4;
-        }
-        ui.text(Text.fit(ui, open.name(), Type.SECTION, Math.max(0f, actionsLeft - titleX)),
-                titleX, moduleIcon.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
-        String metadata = open.category().label() + "  ·  by " + open.owner()
-                + "  ·  " + (open.enabled() ? "Enabled" : "Disabled");
-        ui.text(Text.fit(ui, metadata, Type.CAPTION, Math.max(0f, actionsLeft - titleX)),
-                titleX, moduleIcon.y + 25f + ui.ascent(Type.CAPTION), Type.CAPTION,
-                open.enabled() ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
-
-        float footerHeight = Skin.H_MD + Skin.S4;
-        Rect viewport = Rect.of(area.x, head.bottom() + Skin.S4,
+        boolean hudEditable = hasHudWidget(context, open);
+        boolean resettable = open.changed();
+        float footerHeight = hudEditable || resettable ? FathomTheme.Metrics.CONTROL + Graphite.S4 : 0f;
+        Rect viewport = Rect.of(area.x, head.bottom() + Graphite.S3,
                 area.right(), area.bottom() - footerHeight);
         refreshConflictCache(context);
         float contentHeight = detailContentHeight(context);
@@ -895,43 +829,32 @@ final class ModsSection implements Section {
         ui.clip(viewport.x, viewport.y, viewport.right(), viewport.bottom());
         float y = viewport.y - offset;
         y = detailIntro(context, viewport, y);
-        y = settingsGroup(context, viewport, y, false,
-                "Behaviour", "How this module works.");
-        y = settingsGroup(context, viewport, y, true,
-                "Appearance", "Typography, colour and surface treatment.");
-        y = keybindGroup(context, viewport, y);
-        VisualEffects.scrollEdgeFade(ui, viewport, offset > 0.5f,
-                offset + viewport.height < contentHeight - 0.5f);
+        y = settingsGroup(context, viewport, y, false, "Behaviour", "How this module works.");
+        y = settingsGroup(context, viewport, y, true, "Appearance",
+                "Typography, colour and surface treatment.");
+        keybindGroup(context, viewport, y);
         ui.unclip();
         detailScroll.rail(ui, viewport, context.pointer(), context.now());
 
-        boolean hudEditable = hasHudWidget(context, open);
-        Rect footer = new Rect(area.x, area.bottom() - Skin.H_MD, area.width, Skin.H_MD);
-        if (hudEditable) {
-            Rect button = new Rect(footer.x, footer.y, 132f, footer.height);
-            if (controls.secondary(ui, "detail.hud", button, "Edit position", true)) {
-                context.editHud();
+        if (footerHeight > 0f) {
+            float height = FathomTheme.Metrics.CONTROL;
+            Rect footer = new Rect(area.x, area.bottom() - height, area.width, height);
+            if (hudEditable) {
+                Rect button = new Rect(footer.x, footer.y,
+                        Controls.buttonWidth(ui, "Edit position"), footer.height);
+                if (controls.secondary(ui, "mods.page.hud", button, "Edit position", true)) {
+                    context.editHud();
+                }
+            }
+            if (resettable) {
+                float width = Controls.buttonWidth(ui, "Reset defaults");
+                Rect button = footer.vcentreRight(0f, width, footer.height);
+                if (controls.danger(ui, "mods.page.reset", button, "Reset defaults", true)) {
+                    open.resetToDefaults();
+                    edited(context, null);
+                }
             }
         }
-        if (open.changed()) {
-            Rect button = footer.vcentreRight(0f, 116f, footer.height);
-            if (controls.danger(ui, "detail.reset", button, "Reset defaults", true)) {
-                open.resetToDefaults();
-                edited(context, null);
-            }
-        }
-    }
-
-    private void closeDetail(HubContext context) {
-        if (open == null || detailClosing) {
-            return;
-        }
-        detailClosing = true;
-        detail.to(0f, context.now(), Timing.DETAIL);
-        context.keybindCapture().cancel();
-        context.controls().closePopover();
-        context.controls().clearFocus();
-        editing = null;
     }
 
     private float detailContentHeight(HubContext context) {
@@ -1390,7 +1313,8 @@ final class ModsSection implements Section {
             return type(context, character, keyCode);
         }
         if (open != null && keyCode == Keyboard.KEY_ESCAPE) {
-            closeDetail(context);
+            // Back to the list, as a browser's Back would; the tab stays open.
+            activate(context, null);
             return true;
         }
         return false;
