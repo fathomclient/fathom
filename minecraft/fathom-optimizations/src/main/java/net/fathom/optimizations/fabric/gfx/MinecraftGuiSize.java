@@ -42,8 +42,12 @@ public final class MinecraftGuiSize {
             unicodeOption = unicode;
             Window window = new Window(client);
             scaleFactor = Math.max(1, window.getScaleFactor());
-            scaledWidth = Math.max(1, (int) window.getScaledWidth());
-            scaledHeight = Math.max(1, (int) window.getScaledHeight());
+            // Rounded up, as Minecraft's own whole-number size is: its
+            // projection spans the exact quotient (1280 / 3 = 426.67), and a
+            // size rounded down left the last two pixels of a full-screen
+            // backdrop unpainted.
+            scaledWidth = Math.max(1, (int) Math.ceil(window.getScaledWidth()));
+            scaledHeight = Math.max(1, (int) Math.ceil(window.getScaledHeight()));
         }
         return this;
     }

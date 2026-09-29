@@ -897,6 +897,22 @@ public final class Controls {
      * A segmented control whose cells follow their labels. Narrows padding
      * before it scrolls, and never shortens a label.
      */
+    /**
+     * How wide {@link #segmentedNatural} draws these options in {@code room},
+     * so a caller can place it against the right edge of a row.
+     */
+    public float segmentedNaturalWidth(Renderer ui, String[] options, float room) {
+        if (options == null || options.length == 0) {
+            return 0f;
+        }
+        float[] widths = segmentWidths(options.length);
+        float total = measureCells(ui, options, widths, Skin.S3, 48f);
+        if (total > room) {
+            total = measureCells(ui, options, widths, Skin.S2, 42f);
+        }
+        return Math.min(room, total);
+    }
+
     public int segmentedNatural(Renderer ui, String id, Rect area, String[] options, int selected) {
         if (options == null || options.length == 0) {
             return selected;
@@ -1160,11 +1176,11 @@ public final class Controls {
                 Skin.ELEVATED, listen);
         float radius = Skin.pill(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
-        if (listen > 0.01f) {
-            // Waiting for a key is input focus: the steady signal rim a text
-            // field wears, not a pulse.
-            ui.rim(area.x, area.y, area.right(), area.bottom(), radius, Skin.scaleAlpha(Skin.FOCUS, listen));
-        }
+        // The recessed rim the stepper and text field wear, so a key reads as
+        // a field at rest and not as loose type. Waiting for a key is input
+        // focus: the rim turns to the steady signal a text field wears.
+        int rest = Skin.mix(Skin.EDGE_RECESSED, Skin.EDGE_ELEVATED, s.hover);
+        ui.rim(area.x, area.y, area.right(), area.bottom(), radius, Skin.mix(rest, Skin.FOCUS, listen));
         focusRing(ui, s, area, radius);
         ui.textCentred(
                 Text.fit(ui, listening ? "Press a key…" : key, Type.BODY_STRONG, area.width - Skin.S2),

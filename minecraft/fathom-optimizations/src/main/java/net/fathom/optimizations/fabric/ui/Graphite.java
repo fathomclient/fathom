@@ -353,6 +353,29 @@ public final class Graphite {
         return ui.measure(GraphiteTokens.WORDMARK_TEXT, UI.at(capHeight * 1.4f));
     }
 
+    /**
+     * The lockup: the Aperture mark, then the wordmark on its baseline. {@code y}
+     * is the mark's top. A renderer without the brand sheet gets the wordmark
+     * alone.
+     *
+     * @return its width
+     */
+    public static float lockup(Renderer ui, float x, float y, float capHeight) {
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
+            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).lockup(x, y, capHeight, TEXT,
+                    net.fathom.optimizations.generated.FathomTheme.Tokens.BRAND_PLANE_INK);
+        }
+        return wordmark(ui, x, y, capHeight);
+    }
+
+    /** The lockup's height, the mark's, at an ascender height. */
+    public static float lockupHeight(Renderer ui, float capHeight) {
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
+            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).lockupHeight(capHeight);
+        }
+        return capHeight;
+    }
+
     /** The wordmark's width at an ascender height, without drawing it. */
     public static float wordmarkWidth(Renderer ui, float capHeight) {
         if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {

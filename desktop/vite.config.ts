@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { GRAPHITE_WORDMARK } from './src/lib/brand/graphiteWordmark';
+import { wordmarkLayout } from './src/lib/brand/aperture';
 
 /**
  * The wordmark in `index.html`'s static splash, from the same generated path
@@ -8,10 +8,13 @@ import { GRAPHITE_WORDMARK } from './src/lib/brand/graphiteWordmark';
  * letter geometry.
  */
 function splashWordmark(): Plugin {
-  const { d, width, cap } = GRAPHITE_WORDMARK;
+  // Laid out as `Wordmark.svelte` lays out an 18px ascender at 100%, so the
+  // hand-over to `LoadingScreen.svelte` does not move a pixel there.
+  const layout = wordmarkLayout(18);
   const svg =
-    `<svg viewBox="0 0 ${width} ${cap}" role="img" aria-label="Fathom">` +
-    `<path d="${d}" fill="currentColor" fill-rule="evenodd"/></svg>`;
+    `<svg viewBox="0 0 ${layout.width / layout.scale} 100" width="${layout.width}" ` +
+    `height="${layout.height}" role="img" aria-label="Fathom">` +
+    `<path d="${layout.d}" fill="currentColor"/></svg>`;
   return {
     name: 'fathom-splash-wordmark',
     transformIndexHtml: (html) => html.replace('<!--fathom:wordmark-->', svg),

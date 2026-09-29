@@ -215,7 +215,10 @@ final class QuickSection implements Section {
                 + "× on " + framebufferWidth + "×" + framebufferHeight;
         label(context, row, "Fathom UI scale", effective);
 
-        Rect control = row.vcentreRight(0f, SCALE_CONTROL, Skin.H_SM);
+        // Against the row's right edge, where every other row's control ends.
+        float natural = context.controls().segmentedNaturalWidth(
+                ui, ClientPrefs.SCALE_CHOICES, SCALE_CONTROL);
+        Rect control = row.vcentreRight(0f, natural, Skin.H_SM);
         int chosen = context.controls().segmentedNatural(
                 ui, "quick.uiscale", control, ClientPrefs.SCALE_CHOICES, prefs.scaleChoice());
         if (chosen != prefs.scaleChoice()) {

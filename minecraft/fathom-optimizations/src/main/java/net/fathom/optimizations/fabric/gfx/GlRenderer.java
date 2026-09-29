@@ -16,6 +16,8 @@ import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.RoundedGeometry;
 import net.fathom.optimizations.core.ui.render.Type;
+import net.fathom.optimizations.generated.FathomTheme;
+import net.fathom.optimizations.generated.Wordmark;
 
 /**
  * Fathom's 2D renderer, on the GL context the game already has.
@@ -203,8 +205,19 @@ public final class GlRenderer implements Renderer {
             }
 
             MinecraftGuiSize minecraftUi = MinecraftGuiSize.get(client);
-            vertexScaleX = minecraftUi.width() / (float) framebufferWidth;
-            vertexScaleY = minecraftUi.height() / (float) framebufferHeight;
+            // Minecraft's GUI projection spans the window divided by the scale
+            // factor *exactly* -- 1280 / 3 = 426.67 units -- so one framebuffer
+            // pixel is 1 / factor units. This was the whole-number GUI width
+            // over the window width instead (426 / 1280), which put every
+            // vertex a little left of its pixel, more the further right it was:
+            // two thirds of a pixel at the middle of a 1280-wide window. Glyph
+            // rasters were resampled between texels, uneven across a line, and
+            // each right-hand corner mask read its atlas neighbour, a dark
+            // one-pixel seam down every button. Only widths that the factor
+            // does not divide were affected, which is why the seams were all
+            // vertical.
+            vertexScaleX = 1f / minecraftUi.scaleFactor();
+            vertexScaleY = 1f / minecraftUi.scaleFactor();
 
             offsetX = 0f;
             offsetY = 0f;
@@ -872,6 +885,91 @@ public final class GlRenderer implements Renderer {
                     entry.u0, entry.v0, entry.u1, entry.v1, colour);
         }
         return BrandArt.wordmarkWidth(cap) / ui.scale();
+    }
+
+    /**
+     * The Aperture lockup: the mark, and the wordmark three units after it.
+     *
+     * <p>The launcher's rules (desktop/src/lib/brand/aperture.ts): the mark
+     * stands on the word's baseline and its plane's top is the word's
+     * x-height, which makes the mark six units of a quarter x-height each.
+     * Everything is solved in device pixels -- the unit is whole, and the
+     * word's size is chosen so its x-height is exactly four units -- so no
+     * wall falls between two pixels.
+     *
+     * <p>The frame is the rounded ring {@link #outline} draws (outer radius
+     * one and a half units, inner half a unit: concentric, as the mark's
+     * construction has them), drawn twice through a clip that leaves out the
+     * open corner, so its ends are cut square. Below a 24-pixel tile the
+     * corners are square, as the icon's are.
+     *
+     * @param y the top of the mark, which is the top of the lockup
+     * @return the lockup's width, in logical units
+     */
+    public float lockup(float x, float y, float capHeight, int frameArgb, int planeArgb) {
+        float scale = ui.scale() * zoom;
+        int wanted = Math.round(capHeight * ui.scale());
+        int unit = Math.max(2, Math.round(wanted * Wordmark.TEXT_X_HEIGHT / Wordmark.CAP
+                / (FathomTheme.Tokens.BRAND_GRID - FathomTheme.Tokens.BRAND_PLANE)));
+        int grid = Math.round(FathomTheme.Tokens.BRAND_GRID);
+        int plane = Math.round(FathomTheme.Tokens.BRAND_PLANE);
+        int cap = BrandArt.capForXHeight(unit * (grid - plane), wanted);
+        BrandArt.Layout layout = BrandArt.layout(cap);
+
+        // Whole device pixels from here on; converted back to logical units
+        // only to hand to the shape calls, which snap them to the same pixels.
+        float left = Math.round(deviceX(x));
+        float top = Math.round(deviceY(y));
+        float size = grid * unit;
+        float wall = FathomTheme.Tokens.BRAND_WALL * unit;
+        float reach = (grid - plane) * unit;
+        float tile = unit * FathomTheme.Tokens.BRAND_UNIT_DIVISOR;
+        float outer = tile >= FathomTheme.Tokens.BRAND_TIER_CURVE
+                ? FathomTheme.Tokens.BRAND_CORNER_OUTER * unit : 0f;
+        float planeRadius = tile >= FathomTheme.Tokens.BRAND_TIER_FULL
+                ? FathomTheme.Tokens.BRAND_CORNER_PLANE * unit : 0f;
+
+        float l = logicalX(left);
+        float t = logicalY(top);
+        float r = logicalX(left + size);
+        float b = logicalY(top + size);
+        float open = logicalX(left + reach);
+        float openY = logicalY(top + reach);
+        float ring = wall / scale;
+        clip(l, t, open, b);
+        outline(l, t, r, b, outer / scale, ring, frameArgb);
+        unclip();
+        clip(open, t, r, openY);
+        outline(l, t, r, b, outer / scale, ring, frameArgb);
+        unclip();
+
+        float planeAt = (reach - plane * unit);
+        rounded(logicalX(left + planeAt), logicalY(top + planeAt),
+                logicalX(left + planeAt + plane * unit), logicalY(top + planeAt + plane * unit),
+                planeRadius / scale, planeArgb);
+
+        // The word: on the mark's baseline, three units after it.
+        float gap = FathomTheme.Tokens.BRAND_LOCKUP_GAP * unit;
+        float wordLeft = left + size + gap;
+        float wordTop = top + size - layout.ascender;
+        wordmark(logicalX(wordLeft), logicalY(wordTop), cap / ui.scale(), frameArgb);
+        return (size + gap + layout.width) / scale;
+    }
+
+    /** The lockup's height -- the mark's -- in logical units, for centring it. */
+    public float lockupHeight(float capHeight) {
+        int wanted = Math.round(capHeight * ui.scale());
+        int unit = Math.max(2, Math.round(wanted * Wordmark.TEXT_X_HEIGHT / Wordmark.CAP
+                / (FathomTheme.Tokens.BRAND_GRID - FathomTheme.Tokens.BRAND_PLANE)));
+        return FathomTheme.Tokens.BRAND_GRID * unit / (ui.scale() * zoom);
+    }
+
+    private float logicalX(float device) {
+        return (device - offsetX) / (ui.scale() * zoom);
+    }
+
+    private float logicalY(float device) {
+        return (device - offsetY) / (ui.scale() * zoom);
     }
 
     // -----------------------------------------------------------------------

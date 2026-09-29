@@ -33,13 +33,17 @@ public final class Text {
     /** What a truncated string ends with. One character, not three dots. */
     public static final String ELLIPSIS = "…";
 
+    /** How far past its box a string may reach and still count as fitting. */
+    private static final float FIT_SLACK = 0.25f;
+
     private Text() {}
 
     /**
      * The string, or as much of it as fits with an ellipsis.
      *
-     * <p>Returns the original when it fits — no allocation, no ellipsis, no
-     * "almost fits" fudge.
+     * <p>Returns the original when it fits — no allocation, no ellipsis. The
+     * only tolerance is {@link #FIT_SLACK}, for float error, not for text that
+     * is actually too long.
      */
     public static String fit(Renderer renderer, String text, Type type, float maxWidth) {
         if (text == null || text.isEmpty()) {
@@ -48,7 +52,11 @@ public final class Text {
         if (maxWidth <= 0f) {
             return "";
         }
-        if (renderer.measure(text, type) <= maxWidth) {
+        // A box sized to its own label -- a badge is its text plus padding --
+        // hands back a room that float arithmetic can leave a hair short of
+        // the measure it was built from, and "Live" became "Li...". A quarter
+        // unit of overhang is invisible inside any padding; an ellipsis is not.
+        if (renderer.measure(text, type) <= maxWidth + FIT_SLACK) {
             return text;
         }
         float ellipsis = renderer.measure(ELLIPSIS, type);

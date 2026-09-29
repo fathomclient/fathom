@@ -12,7 +12,7 @@
 -->
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import GraphiteWordmark from '../graphite/GraphiteWordmark.svelte';
+  import Wordmark from '../brand/Wordmark.svelte';
 
   /** What is still being loaded, most important first. Empty when done. */
   export let pending: string[] = [];
@@ -24,7 +24,7 @@
 {#if visible}
   <div class="loading" role="status" aria-live="polite" out:fade={{ duration: 260 }}>
     <div class="mark">
-      <GraphiteWordmark height={18} />
+      <Wordmark height={18} />
       <div class="line" aria-hidden="true"></div>
       <p class="step">{step}</p>
     </div>

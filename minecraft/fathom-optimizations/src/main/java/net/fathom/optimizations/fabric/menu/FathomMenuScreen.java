@@ -61,7 +61,13 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private static final float CANVAS_HEIGHT = GraphiteTokens.LAYOUT_CANVAS_HEIGHT;
     /** The wordmark's margin from the canvas's top-left corner. */
     private static final float WORDMARK_MARGIN = GraphiteTokens.SPACE_8;
-    private static final float WORDMARK_CAP = GraphiteTokens.WORDMARK_CAP_GAME;
+    /**
+     * The lockup's ascender. Larger than the Hub's wordmark: at the Hub's
+     * size the mark would be twelve pixels, walls two pixels thick, too small
+     * to read as a shape; here its unit reaches three pixels and its corners
+     * round.
+     */
+    private static final float WORDMARK_CAP = 16f;
     /** The button column: x on the canvas, and each button's size and gap. */
     private static final float COLUMN_X = GraphiteTokens.SPACE_12;
     private static final float BUTTON_WIDTH = 264f;
@@ -188,9 +194,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         // The scene's light (Glow): pooling behind the menu, and faintly behind
         // the wordmark, before either is drawn.
         Glow.behind(ui, menuPanel);
-        ui.bloom(canvasX + WORDMARK_MARGIN + WORDMARK_CAP * 2.4f, canvasY + WORDMARK_MARGIN + WORDMARK_CAP / 2f,
+        ui.bloom(canvasX + WORDMARK_MARGIN + WORDMARK_CAP * 3.4f, canvasY + WORDMARK_MARGIN + WORDMARK_CAP / 2f,
                 WORDMARK_CAP * 7f, Glow.at(GraphiteTokens.GLOW_BLOOM_ECHO_ALPHA));
-        Graphite.wordmark(ui, canvasX + WORDMARK_MARGIN, canvasY + WORDMARK_MARGIN, WORDMARK_CAP);
+        // The whole identity here, mark and word: this is the one screen that
+        // is Fathom's front door. The Hub keeps the word alone, as the
+        // launcher's header does.
+        Graphite.lockup(ui, canvasX + WORDMARK_MARGIN, canvasY + WORDMARK_MARGIN, WORDMARK_CAP);
 
         // One floating glass group gives the controls presence without turning
         // four actions into four opaque cards.

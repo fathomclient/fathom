@@ -174,17 +174,20 @@ final class ModsSection implements Section {
         cardsEnteredAt = context.now();
         String qaOpen = System.getProperty("fathom.qaOpenSettings", "").trim();
         if (!qaOpen.isEmpty()) {
-            // Either "true" for the first configurable module, or a module id,
-            // so a capture can be of one particular detail page.
-            for (FathomModule feature : modules) {
-                boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
-                if (configurable && (qaOpen.equalsIgnoreCase(feature.id())
-                        || "true".equalsIgnoreCase(qaOpen))) {
-                    openTab(context, feature);
-                    pageIn.set(1f, context.now());
-                    break;
+            // "true" for the first configurable module, or module ids separated
+            // by commas -- each opens a tab and the last is shown -- so a
+            // capture can be of one particular page with its tab row.
+            for (String wanted : qaOpen.split(",")) {
+                for (FathomModule feature : modules) {
+                    boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
+                    if (configurable && (wanted.trim().equalsIgnoreCase(feature.id())
+                            || "true".equalsIgnoreCase(wanted.trim()))) {
+                        openTab(context, feature);
+                        break;
+                    }
                 }
             }
+            pageIn.set(1f, context.now());
         }
         context.keybindCapture().cancel();
     }
@@ -784,7 +787,10 @@ final class ModsSection implements Section {
         Renderer ui = context.ui();
         Controls controls = context.controls();
 
-        Rect head = area.top(PAGE_HEADER);
+        // The settings groups leave the scroll rail a gutter at the right; the
+        // header and footer end where the groups do, so the switch and the
+        // reset button line up with the rows' own controls.
+        Rect head = area.top(PAGE_HEADER).inset(0f, 0f, Skin.S3, 0f);
         float tile = FathomTheme.Metrics.TILE;
         Rect mark = new Rect(head.x, Math.round(head.centreY() - tile / 2f), tile, tile);
         Graphite.modMark(ui, mark, Icon.of(open.icon()), open.enabled() ? 1f : 0f, 0f);
@@ -838,7 +844,7 @@ final class ModsSection implements Section {
 
         if (footerHeight > 0f) {
             float height = FathomTheme.Metrics.CONTROL;
-            Rect footer = new Rect(area.x, area.bottom() - height, area.width, height);
+            Rect footer = new Rect(area.x, area.bottom() - height, area.width - Skin.S3, height);
             if (hudEditable) {
                 Rect button = new Rect(footer.x, footer.y,
                         Controls.buttonWidth(ui, "Edit position"), footer.height);
@@ -878,8 +884,9 @@ final class ModsSection implements Section {
         return height + Skin.S4;
     }
 
+    /** The description line, and the note line under it when there is one. */
     private float introHeight() {
-        return 48f;
+        return compactBadge(open).isEmpty() ? 22f : 48f;
     }
 
     /**

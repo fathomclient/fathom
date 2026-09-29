@@ -75,12 +75,15 @@ final class BrandArt {
         final int width;
         /** Ascender to baseline, rounded up; the baseline sits at the bottom. */
         final int ascender;
+        /** The x-height drawn, in device pixels: whole up to the text tier. */
+        final float xHeight;
 
-        Layout(String path, float scale, int width, int ascender) {
+        Layout(String path, float scale, int width, int ascender, float xHeight) {
             this.path = path;
             this.scale = scale;
             this.width = width;
             this.ascender = ascender;
+            this.xHeight = xHeight;
         }
     }
 
@@ -152,7 +155,28 @@ final class BrandArt {
         float drawn = cap <= GraphiteTokens.WORDMARK_TEXT_MAX ? Math.max(1, Math.round(exact)) : exact;
         float scale = drawn / xHeight;
         return new Layout(path, scale, (int) Math.ceil(width * scale),
-                (int) Math.ceil(Wordmark.CAP * scale));
+                (int) Math.ceil(Wordmark.CAP * scale), drawn);
+    }
+
+    /**
+     * The ascender, near {@code near}, whose drawn x-height is exactly
+     * {@code xHeight} device pixels -- for the lockup, where the word's
+     * x-height is the top of the mark's plane. {@code near} if none is.
+     */
+    static int capForXHeight(int xHeight, int near) {
+        int best = clampCap(near);
+        int bestDistance = Integer.MAX_VALUE;
+        for (int cap = clampCap(near - 12); cap <= clampCap(near + 12); cap++) {
+            if (Math.round(layout(cap).xHeight) != xHeight) {
+                continue;
+            }
+            int distance = Math.abs(cap - near);
+            if (distance < bestDistance) {
+                best = cap;
+                bestDistance = distance;
+            }
+        }
+        return best;
     }
 
     /** Room around the ink for the round letters' overshoot, in device pixels. */
