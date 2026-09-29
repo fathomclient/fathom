@@ -46,7 +46,7 @@
   import LoadingScreen from './lib/ui/LoadingScreen.svelte';
   import FathomIcon from './lib/ui/FathomIcon.svelte';
   import WindowControls from './lib/ui/WindowControls.svelte';
-  import GraphiteWordmark from './lib/graphite/GraphiteWordmark.svelte';
+  import Wordmark from './lib/brand/Wordmark.svelte';
   import { FATHOM_ICONS } from './lib/icons.generated';
   import { BACKGROUNDS, DEFAULT_BACKGROUND, PICKER_AVAILABLE } from './lib/backgrounds';
   import { EASE, EASE_EXIT, MOTION_EXIT, MOTION_PAGE, MOTION_SURFACE } from './lib/motion';
@@ -437,9 +437,10 @@
     on:dblclick={() => void windowToggleMaximize()}
   >
     <div class="brand" data-tauri-drag-region>
-      <!-- The same simple tracked FATHOM wordmark used by Home and Minecraft. -->
+      <!-- The lowercase wordmark, the same outlines the game and the icon
+           files draw, at a 13px ascender. -->
       <span class="brand-mark" data-tauri-drag-region>
-        <GraphiteWordmark height={13} />
+        <Wordmark height={13} />
       </span>
       {#if route !== 'home'}
         <span class="crumb legible" data-tauri-drag-region>{activeLabel}</span>

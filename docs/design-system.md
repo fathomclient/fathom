@@ -227,7 +227,7 @@ work.
 | `Page` | `lib/ui` | Document frame with an edgeless readability veil |
 | `Sheet` | `lib/ui` | The one modal: inset dense glass, scrim, Escape closes |
 | `Notice` | `lib/ui` | The notification surface (inline; no toasts by design). Standard glass on the photograph; flat inside a pane that is already glass, so blur never stacks |
-| `Progress`, `SoundingLine` | `lib/ui`, `lib/brand` | Loading states; still under reduced motion |
+| `Progress`, `ApertureMark` | `lib/ui`, `lib/brand` | Loading states; still under reduced motion |
 
 **Deepening one pane.** Where a pane crosses the brightest part of the
 photograph and its type falls short of 4.5:1, deepen that pane locally with
@@ -269,21 +269,25 @@ product. Each has one implementation per side.
 
 ## 7b. The brand
 
-The Surface wordmark, the offset ring and the Sounding Line are drawn from one
-construction in [`desktop/src/lib/brand/surface.ts`](../desktop/src/lib/brand/surface.ts),
-with their colours and construction numbers in the manifest (`system.brand`,
-emitted to CSS as `--brand-*`, to `brand.generated.ts`, and to Java as
-`FathomTheme.Tokens.BRAND_*`). In the launcher the header wordmark is
-`lib/graphite/GraphiteWordmark.svelte` and the loading mark is
-`lib/brand/SoundingLine.svelte`; the icon files are
-rendered from the same geometry by `assets/brand/build-brand.mjs`. See
+Aperture: the mark is drawn from one construction in
+[`desktop/src/lib/brand/aperture.ts`](../desktop/src/lib/brand/aperture.ts),
+with its numbers and inks in the manifest (`system.brand`, emitted to CSS as
+`--brand-*`, to `brand.generated.ts`, and to Java as
+`FathomTheme.Tokens.BRAND_*`). The wordmark is lowercase Geist, outlined by
+`tools/generate-wordmark.py` into `wordmark.generated.ts` and
+`generated/Wordmark.java`, with its optical tiers in `graphite.wordmark`. In the
+launcher the header wordmark is `lib/brand/Wordmark.svelte` and the loading
+mark is `lib/brand/ApertureMark.svelte`; the icon files and installer bitmaps
+are rendered from the same geometry by `assets/brand/build-brand.mjs`. See
 [`assets/brand/README.md`](../assets/brand/README.md) for the rules.
 
-- The header shows the tracked FATHOM wordmark (`GraphiteWordmark`) at a 13px
-  cap, the same mark the game's Hub and title screen draw. It does not animate.
-- The Sounding Line is the loading symbol. Nothing in the brand spins.
-- Editing a brand colour means running `node assets/brand/build-brand.mjs` as
-  well as the theme generator, so the icon files follow.
+- The header shows the lowercase wordmark at a 13px ascender, the same outlines
+  the game's Hub and title screen draw. It does not animate, and the Standard
+  capitalization setting does not change it.
+- The mark is the loading symbol: the open corner closes as work completes.
+  Nothing in the brand spins.
+- Editing a brand colour or number means running `node assets/brand/build-brand.mjs`
+  as well as the theme generator, so the icon files follow.
 
 ## 8. Accessibility
 
@@ -323,8 +327,7 @@ snapshot, taken once when the screen opens. HUD modules never get a live blur.
 | Primary button | `Skin.PROMINENT`: the dark dense fill, ivory type, never coloured |
 | Selection / on | a denser fill and `Skin.EDGE_ELEVATED`; switches and sliders in champagne with an ivory knob |
 | The old red | `Skin.ENERGY*`: ivory luminance only. There is no hue but the status tones |
-| `GraphiteWordmark.svelte` | `Graphite.wordmark` (and `BrandMark.wordmark` for the Surface mark): the outlines are `generated/BrandGeometry.java`, emitted from `surface.ts` by the theme generator; `GlRenderer` rasterises them once per size into their own sheet with the same pixel snapping and tiers, plus the mark shadow |
-| `SoundingLine.svelte` | `BrandMark.soundingLine`: the small mark and the loading glyph |
+| `Wordmark.svelte` | `Graphite.wordmark`: the outlines are `generated/Wordmark.java`, from the same generator as the launcher's; `GlRenderer` rasterises them once per size into their own sheet with the same optical tiers and x-height snapping |
 | `Background.svelte` | `MenuScenes` + `MenuPoster`: the approved set (Golden Hour), the launcher's warm scrim, the warm field only when the picture cannot load. The Hub opened from the title screen draws the same photograph behind itself (`FathomMenuScreen.drawBackdrop`) |
 
 The Hub has no window. The background -- the world under the light scrim, or
@@ -343,11 +346,10 @@ groups whose rows are not cards. Material use:
 Radii follow the launcher: controls are pills, cards and groups
 `RADIUS_XL`, major groups `RADIUS_2XL`, popovers `RADIUS_LG`, and rows inside a
 group are concentric with it (its radius less the inset). Control heights are
-the launcher's 28/34/40. The wordmark is sized by device pixels so it keeps the
-Surface: the Hub's header never falls under the 20px reduced tier, and the
-menu's hero wordmark is drawn at the 48px full tier or above. The offset ring
-is not drawn in game: at in-game sizes it is too coarse, and the Sounding Line
-is the small form of the brand.
+the launcher's 28/34/40. The wordmark is sized by device pixels, as in the
+launcher: its optical tier follows the ascender in device pixels, so the 12dp
+wordmark is SemiBold at 1x and Medium from 1.5x, and its x-height is always a
+whole number of pixels.
 
 ## 10. What a component may not do
 

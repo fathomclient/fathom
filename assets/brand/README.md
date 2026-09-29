@@ -1,89 +1,108 @@
 # Brand assets
 
-Fathom's identity is built on one construction: **the Surface**. Letters sit on
-a 100-unit cap height, and an implied surface runs 42 units above the baseline.
-Nothing is drawn along it. Everything below it is displaced slightly to the
-right -- refraction, not a glitch.
+Fathom's identity is **Aperture**: a mark built on a six-unit grid, and the
+word "fathom" set lowercase in Geist.
 
 Every file here is generated. The construction lives in
-[`desktop/src/lib/brand/surface.ts`](../../desktop/src/lib/brand/surface.ts);
-colours and construction numbers live in the theme manifest
-([`assets/theme/fathom-theme.json`](../theme/fathom-theme.json), `system.brand`
-and the `brand-*` palette entries). Regenerate with:
+[`desktop/src/lib/brand/aperture.ts`](../../desktop/src/lib/brand/aperture.ts);
+its numbers and inks are `system.brand` in the theme manifest
+([`assets/theme/fathom-theme.json`](../theme/fathom-theme.json)); the
+wordmark's outlines are
+[`wordmark.generated.ts`](../../desktop/src/lib/brand/wordmark.generated.ts),
+made from the launcher's Geist by `tools/generate-wordmark.py`. Regenerate
+with:
 
 ```
+node tools/generate-fathom-theme.mjs
+python tools/generate-wordmark.py        (only when the wordmark changes)
 node assets/brand/build-brand.mjs
 ```
 
-## The three marks
+## The mark
 
-| Mark | Role | Files |
+A frame six units square with one-unit walls, open at its bottom-right corner.
+The missing corner, two units square, is set inside as the **plane**, moved in
+by its own width, where it lands dead centre: one unit from every wall it
+faces, its outer corner pointing straight at the opening. Wall, gap and plane
+are 1, 1 and 2 units; the opening is 2. Nothing is placed by eye.
+
+**Solved in pixels.** At a tile of S px the unit is u = ⌊S ÷ 8⌋ and the frame,
+6u, is centred with a margin of (S − 6u) ÷ 2. At every size the icon ships in
+(16, 20, 24, 30, 32, 36, 40, 48, 64, 128, 256, 512) both are whole pixels, so no
+edge ever falls between two pixels.
+
+| Tile | Tier | Treatment |
 | --- | --- | --- |
-| **Surface wordmark** | The primary wordmark | `wordmark.svg` (full tier), `wordmark-reduced.svg`, `wordmark-plain.svg`, `wordmark-dark.svg` |
-| **Offset ring** | The primary app icon; the wordmark's O | `icon.svg`, `icon-{16,24,32,48,64}.svg`, `ring.svg` (untiled), `png/fathom-icon-*.png` |
-| **Sounding Line** | Loading and progress; the smallest mark | `sounding-line.svg`, `sounding-line-tile.svg` |
+| 16–20 | pixel | u = 2. Square corners everywhere: at 2 px walls a curve is only grey pixels. |
+| 24–40 | curve | Outer corners 1.5u, inner corners 0.5u, concentric. Open ends cut square. |
+| 48 and up | full | The plane's corners soften to 0.25u. |
 
-The shipped application icons are `crates/launcher-desktop/icons/icon.ico`
-(16, 20, 24, 32, 40, 48, 64, 128, 256) and `icon.png` (512). They are build
-output: the executable's icon resource, the window and taskbar icon, and the
-installer's icon all come from them.
+Inks: frame ivory `#ededed`, plane sand `#a8afb3` (one density down), tile
+deep `#171d20`. Reversed, for light grounds: frame `#171d20`, plane
+`#646b6f`. Signal blue belongs in marketing, never in the app icon.
+
+Keep the tile wherever contrast is not controlled (the OS, the taskbar, the
+installer). The tile is a continuous-curve square.
 
 ## The wordmark
 
-- Stems 15u, bars 12u, continuous outer corners 5u, inner corners 2u. The step
-  where a stroke crosses the surface stays sharp.
-- The displacement at a rendered size is about a sixth of the stem width,
-  **snapped to whole pixels**. The surface itself falls on a pixel row. No
-  fractional displacement, no blur.
-- **48px cap and up:** full displacement, two densities, the 1px bronze detail
-  along the lower-right edges above the surface.
-- **20–47px:** a 1px displacement and the two densities; no edge detail.
-- **Under 20px:** the plain letters. The icon carries the identity.
-- Above the surface: ivory at 88%. Below: ivory-beneath at 90%, no edge.
-- `wordmark-dark.svg` is the deep-brown variant for crops where bright gold
-  sits behind the letters.
+"fathom", always lowercase, in Geist, outlined so it is the same drawing in
+the launcher, the game and every file here. It is shaped by HarfBuzz, so
+Geist's kerning is kept. What changes with size is weight and spacing, chosen
+by the ascender (Geist's cap height) in **device** pixels:
 
-Never: chromatic aberration, RGB splits, several slices, jitter, noise, waves,
-water, or anything nautical.
+| Tier | Ascender | Weight | Tracking | Where |
+| --- | --- | --- | --- | --- |
+| small | ≤ 16 px | SemiBold | +2% | the launcher header (13 px), the game (12 dp), the installer |
+| text | 17–32 px | Medium | 0% | the header at 125% and up, the README, documents |
+| display | ≥ 33 px | Medium | −1.5% | anything larger |
 
-## The offset ring
+Up to 32 px the x-height is rounded to whole pixels. The minimum is a 10 px
+ascender. The Standard capitalization setting never touches it; its
+accessible name is "Fathom".
 
-The O's counter is dropped by 4u: walls of about 19u above, 15u at the sides,
-11u below. The ring never takes the horizontal step. Ivory above the surface,
-ivory-beneath below; the counter shows the tile, or the photograph when the
-ring is used untiled at hero size.
+## The lockup
 
-Every size is solved in pixels for that size rather than scaled from one master
-(`ringGeometry`): an even diameter so it centres, whole-pixel side walls, and a
-counter that drops at least one full pixel -- so at 16px the top wall is still
-visibly heavier than the bottom and the icon cannot become a generic circle.
+The mark stands on the wordmark's baseline and its plane's top is the
+x-height, so the mark is one and a half x-heights tall, a little taller than
+the ascenders. The gap is half the mark (3u). Stacked, the mark doubles its
+unit and sits centred above, 3u clear. Clear space is the missing corner, 2u,
+on every side.
 
-| Size | Treatment |
+## Loading
+
+The mark is also the loading and progress symbol (`ApertureMark.svelte`).
+With a known value the open corner closes as the work completes, over the
+closed frame drawn at 16% so the measure is visible; without one the plane
+breathes slowly between two densities. Done closes the frame with the plane in
+the success ink; failed stops where it was with the plane in the danger ink.
+Nothing spins, nothing travels; under reduced motion it holds still. At rest
+the corner is always open: a closed frame means done.
+
+## Files
+
+| File | What it is |
 | --- | --- |
-| 16, 20 | One tone |
-| 24–40 | Two tones: ivory above the surface, ivory-beneath below |
-| 48 and up | Two tones and the bronze edge detail |
+| `icon.svg`, `icon-{16,20,24,30,32,36,40,48,64}.svg` | The app icon: the 512 master and the pixel masters |
+| `png/fathom-icon-*.png` | Every raster size |
+| `mark.svg`, `mark-reversed.svg`, `mark-one-colour.svg` | The mark without its tile, full tier |
+| `wordmark.svg`, `wordmark-text.svg`, `wordmark-small.svg` | The wordmark's three tiers, ivory |
+| `wordmark-reversed.svg` | The display tier for light grounds |
+| `lockup.svg`, `lockup-reversed.svg` | Mark and word side by side |
+| `lockup-stacked.svg`, `lockup-stacked-reversed.svg` | Stacked |
 
-Keep the deep tile wherever contrast is not controlled (the OS, the taskbar,
-the installer). The tile is a continuous-curve square.
+The shipped application icons are `crates/launcher-desktop/icons/icon.ico`
+(16, 20, 24, 30, 32, 36, 40, 48, 64, 128, 256; 30 and 36 are the taskbar's
+frames at 125% and 150%) and `icon.png` (512). The installer's header and
+sidebar are `nsis-header.bmp` (150 × 57) and `nsis-sidebar.bmp` (164 × 314)
+beside them. All are build output.
 
-## The Sounding Line
-
-One stem crossing the surface and stepping right beneath it. The launcher uses
-it as the loading and progress symbol (`SoundingLine.svelte`): with a known
-value, its depth below the surface is the measure; without one it breathes
-very slowly between two densities. It is not an app icon.
-
-## Placement on the golden-hour background
-
-For a hero or splash wordmark on `golden-hour.jpg`: the smooth rose sky near
-the top, about 7–8% down; away from the horizon and palm band and from the
-water. Do not line the wordmark's surface up with the photograph's horizon. A
-very soft local darkening behind it is allowed (the `veil` brand token: at
-most 18% at the centre, feathered to nothing). If a crop puts bright gold
-behind the letters, use the dark variant.
+Never: glow, chromatic aberration, RGB splits, stretching, a closed frame at
+rest, a moved or resized plane, waves, water, or anything nautical.
 
 ## History
 
-`concepts/` holds the six studies from the previous identity ("Aperture"),
-kept as a record. Nothing ships from it.
+`concepts/` holds the six symbol studies that first produced Aperture. The
+Surface identity (refraction wordmark, offset ring, Sounding Line) that
+replaced it for a week is retired; its construction is in the history at
+commit 25fcc91 (`desktop/src/lib/brand/surface.ts`).
