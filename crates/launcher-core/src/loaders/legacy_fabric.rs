@@ -199,15 +199,7 @@ impl LoaderProvider for LegacyFabricProvider {
         http: &HttpClient,
         feature: Feature,
     ) -> Result<LoaderInstallation, LoaderError> {
-        let entry: LoaderEntry = Self::fetch_json(
-            &format!(
-                "/v2/versions/loader/{}/{}",
-                encode(minecraft_version),
-                encode(loader_version)
-            ),
-            http,
-            feature,
-        )?;
+        let entry = Self::loader_profile(minecraft_version, loader_version, cache, http, feature)?;
 
         let meta = entry.launcher_meta.ok_or_else(|| {
             LoaderError::Malformed(
@@ -269,11 +261,81 @@ impl LegacyFabricProvider {
         Ok(versions.iter().any(|v| v.version == minecraft_version))
     }
 
+    /// The launch profile of one loader build, from the metadata cache when a
+    /// valid copy is there, otherwise from the service -- kept for next time.
+    ///
+    /// A build's profile never changes once published, so there is no reason
+    /// for every launch to ask for it again. It used to: each press of Play
+    /// fetched it before anything else, so a slow, down or misbehaving
+    /// metadata service -- one answer came back without its `loader` field --
+    /// stopped an installation that was already complete from starting at all.
+    fn loader_profile(
+        minecraft_version: &str,
+        loader_version: &str,
+        cache: &ArtifactCache,
+        http: &HttpClient,
+        feature: Feature,
+    ) -> Result<LoaderEntry, LoaderError> {
+        let file = cache
+            .paths()
+            .metadata_cache_dir()
+            .join("legacy-fabric")
+            .join(format!("{}-{}.json", encode(minecraft_version), encode(loader_version)));
+        if let Ok(bytes) = std::fs::read(&file) {
+            match serde_json::from_slice::<LoaderEntry>(&bytes) {
+                Ok(entry) if entry.launcher_meta.is_some() => return Ok(entry),
+                // Unreadable or incomplete: fetch it again, as if absent.
+                _ => tracing::warn!(file = %file.display(), "ignoring an unusable cached loader profile"),
+            }
+        }
+
+        let path = format!(
+            "/v2/versions/loader/{}/{}",
+            encode(minecraft_version),
+            encode(loader_version)
+        );
+        let body = Self::fetch_bytes(&path, http, feature)?;
+        let entry: LoaderEntry = Self::parse(&path, &body)?;
+        if entry.launcher_meta.is_some() {
+            // Best effort: a copy that cannot be written costs one fetch next
+            // time, not this launch. Written beside and renamed over, so a
+            // crash mid-write never leaves half a document to be read.
+            let written = file
+                .parent()
+                .map_or(Ok(()), std::fs::create_dir_all)
+                .and_then(|()| {
+                    let partial = file.with_extension("json.partial");
+                    std::fs::write(&partial, &body)?;
+                    std::fs::rename(&partial, &file)
+                });
+            if let Err(error) = written {
+                tracing::warn!(%error, file = %file.display(), "could not keep the loader profile");
+            }
+        }
+        Ok(entry)
+    }
+
     fn fetch_json<T: serde::de::DeserializeOwned>(
         path: &str,
         http: &HttpClient,
         feature: Feature,
     ) -> Result<T, LoaderError> {
+        let body = Self::fetch_bytes(path, http, feature)?;
+        Self::parse(path, &body)
+    }
+
+    /// A document that does not parse is reported with the start of what
+    /// actually came back: "missing field `loader`" alone cannot tell a
+    /// changed format from an error page or a rate limit.
+    fn parse<T: serde::de::DeserializeOwned>(path: &str, body: &[u8]) -> Result<T, LoaderError> {
+        serde_json::from_slice(body).map_err(|e| {
+            let text = String::from_utf8_lossy(body);
+            let start: String = text.chars().take(160).collect();
+            LoaderError::Malformed(format!("{path}: {e} (the service sent: {start})"))
+        })
+    }
+
+    fn fetch_bytes(path: &str, http: &HttpClient, feature: Feature) -> Result<Vec<u8>, LoaderError> {
         let request = RequestDescriptor::new(
             Destination::LegacyFabricMeta,
             Purpose::ResolveLoaderMetadata,
@@ -289,8 +351,7 @@ impl LegacyFabricProvider {
             )));
         }
 
-        serde_json::from_slice(&response.body)
-            .map_err(|e| LoaderError::Malformed(format!("{path}: {e}")))
+        Ok(response.body)
     }
 
     /// A library the metadata described, with its own repository URL and hash.
@@ -454,6 +515,61 @@ fn encode(segment: &str) -> String {
 )]
 mod tests {
     use super::*;
+
+    fn offline() -> (tempfile::TempDir, ArtifactCache, HttpClient) {
+        use crate::network::{NetworkJournal, NetworkPolicy};
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let paths = crate::paths::DataPaths::rooted_at(tmp.path());
+        paths.ensure().unwrap();
+        let http = HttpClient::new(
+            NetworkPolicy { online: false, ..NetworkPolicy::default() },
+            NetworkJournal::new(),
+            "test/0.0",
+        );
+        (tmp, ArtifactCache::new(paths), http)
+    }
+
+    const PROFILE: &str = r#"{"loader":{"maven":"net.fabricmc:fabric-loader:0.19.3","version":"0.19.3","stable":true},
+        "intermediary":{"maven":"net.legacyfabric:intermediary:1.8.9"},
+        "launcherMeta":{"min_java_version":8,
+            "mainClass":{"client":"net.fabricmc.loader.impl.launch.knot.KnotClient"},
+            "libraries":{"common":[{"name":"org.ow2.asm:asm:9.10.1","url":"https://maven.fabricmc.net/",
+                "sha1":"ada2141c0cc52ee8f5c48cd5fa4ce0e794f22236"}],"client":[]}}}"#;
+
+    fn cached(cache: &ArtifactCache) -> std::path::PathBuf {
+        let dir = cache.paths().metadata_cache_dir().join("legacy-fabric");
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("1.8.9-0.19.3.json")
+    }
+
+    /// A build's profile never changes, so a launch with it cached must not
+    /// depend on the metadata service being up.
+    #[test]
+    fn a_cached_loader_profile_launches_without_the_service() {
+        let (_tmp, cache, http) = offline();
+        std::fs::write(cached(&cache), PROFILE).unwrap();
+        let entry = LegacyFabricProvider::loader_profile("1.8.9", "0.19.3", &cache, &http, Feature::Play)
+            .expect("read from the cache");
+        assert_eq!(entry.loader.version, "0.19.3");
+        assert!(entry.launcher_meta.is_some());
+        assert_eq!(http.journal().summary().total, 0);
+    }
+
+    #[test]
+    fn an_unusable_cached_profile_is_fetched_again_rather_than_trusted() {
+        let (_tmp, cache, http) = offline();
+        std::fs::write(cached(&cache), r#"{"loader":{"maven":"x","version":"0.19.3"}}"#).unwrap();
+        // Offline, so fetching again fails -- which is the point: it tried.
+        assert!(LegacyFabricProvider::loader_profile("1.8.9", "0.19.3", &cache, &http, Feature::Play).is_err());
+    }
+
+    #[test]
+    fn a_document_that_does_not_parse_says_what_came_back() {
+        let error = LegacyFabricProvider::parse::<LoaderEntry>("/p", br#"{"code":502,"message":"Bad Gateway"}"#)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Bad Gateway"), "{error}");
+    }
 
     #[test]
     fn maven_coordinates_become_repository_paths() {
