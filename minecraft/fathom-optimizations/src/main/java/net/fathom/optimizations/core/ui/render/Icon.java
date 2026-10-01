@@ -43,6 +43,9 @@ public enum Icon {
     PIN,
     MINUS,
     PLUS,
+    SETTINGS,
+    PLAY,
+    MODS,
 
     // -- status ---------------------------------------------------------------
     INFO,

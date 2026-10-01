@@ -31,7 +31,7 @@
 use std::collections::BTreeSet;
 
 use super::definition::{
-    Conflict, ConflictKind, Dependency, DownloadSource, License, MinecraftCompatibility,
+    Conflict, ConflictKind, DownloadSource, License, MinecraftCompatibility,
     ModDefinition, ModId, ModVersion, PrivacyClassification, Provenance, RedistributionPolicy,
 };
 use crate::profiles::Loader;
@@ -85,6 +85,7 @@ pub fn entries() -> Vec<ModDefinition> {
         memoryfix(),
         mouse_delay_fix(),
         fabric_api(),
+        optifabric(),
     ]
 }
 
@@ -184,12 +185,11 @@ fn fathom_optimizations() -> ModDefinition {
         },
         redistribution: RedistributionPolicy::FetchOnRequest,
         privacy: PrivacyClassification::Local,
-        dependencies: vec![Dependency {
-            id: id("fabric-api"),
-            minimum_version: None,
-            optional: false,
-            reason: "Uses Fabric's event and rendering hooks.".into(),
-        }],
+        // None. Its fabric.mod.json asks for the loader, Minecraft and Java,
+        // and it hooks the game with its own Mixins: no Fabric API class is
+        // referenced anywhere in it. This used to claim Fabric API was
+        // required, and blocked launching a profile that ran perfectly.
+        dependencies: Vec::new(),
         conflicts: vec![
             Conflict {
                 id: id("optifine"),
@@ -406,6 +406,35 @@ fn fabric_api() -> ModDefinition {
         conflicts: Vec::new(),
         summary: "The shared API most Fabric mods build against.".into(),
         homepage: Some("https://github.com/Legacy-Fabric/fabric".into()),
+    }
+}
+
+/// Legacy OptiFabric: what loads an `OptiFine` jar under Legacy Fabric.
+fn optifabric() -> ModDefinition {
+    ModDefinition {
+        id: id("optifabric"),
+        name: "OptiFabric".into(),
+        version: ModVersion::new("2.3.6+1.3.1-1.13.2"),
+        minecraft: MinecraftCompatibility::only("1.8.9"),
+        loaders: loaders(&[Loader::LegacyFabric]),
+        provenance: Provenance::BuiltInCatalogue {
+            reviewed: REVIEWED.into(),
+        },
+        // Modrinth, which returns the file's hash with it; see MODRINTH_OPTIFABRIC
+        // for why no older build may be pinned.
+        download: Some(DownloadSource::Modrinth {
+            project: MODRINTH_OPTIFABRIC.into(),
+        }),
+        hash: None,
+        license: License::Spdx {
+            id: "MPL-2.0".into(),
+        },
+        redistribution: RedistributionPolicy::FetchOnRequest,
+        privacy: PrivacyClassification::Local,
+        dependencies: Vec::new(),
+        conflicts: Vec::new(),
+        summary: "Lets OptiFine run on Legacy Fabric.".into(),
+        homepage: Some("https://modrinth.com/mod/legacy-optifabric".into()),
     }
 }
 

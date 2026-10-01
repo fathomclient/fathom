@@ -24,7 +24,22 @@ public final class BackgroundChoice {
     private static final Pattern BACKGROUND =
             Pattern.compile("\"background\"\\s*:\\s*\"([^\"\\\\]{1,64})\"");
 
+    private static final Pattern STANDARD_CAPITALIZATION =
+            Pattern.compile("\"standardCapitalization\"\\s*:\\s*(true|false)");
+
     private BackgroundChoice() {}
+
+    /**
+     * Whether the launcher's "Standard capitalization" switch is on. Off -- the
+     * launcher's default, and what an absent file means -- is lowercase.
+     */
+    public static boolean standardCapitalization(String json) {
+        if (json == null) {
+            return false;
+        }
+        Matcher found = STANDARD_CAPITALIZATION.matcher(json);
+        return found.find() && "true".equals(found.group(1));
+    }
 
     /**
      * The catalogue id {@code json} names, or {@code fallback} when it names

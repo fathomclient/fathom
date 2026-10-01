@@ -241,28 +241,52 @@ fn our_optimizations_alongside_optifine_is_reported_not_crashed_into() {
     assert_eq!(conflict.severity(), Severity::Warning);
 }
 
+/// Fathom's module hooks the game with its own Mixins and asks only for the
+/// loader. It was once catalogued as needing Fabric API, which blocked a
+/// profile that ran perfectly.
+#[test]
+fn fathom_alone_needs_nothing_else() {
+    let f = Fixture::new();
+    let config = config_with(&[catalog::FATHOM_OPTIMIZATIONS]);
+
+    let resolution = f.engine.resolve(&config, "1.8.9", Loader::LegacyFabric);
+    assert!(resolution.is_launchable(), "{:?}", resolution.problems);
+}
+
+/// OptiFine on Legacy Fabric without the bridge that loads it.
 #[test]
 fn a_missing_dependency_is_named_before_anything_starts() {
     let f = Fixture::new();
-    // Our optimizations need Fabric API, which is not in this profile.
-    let config = config_with(&[catalog::FATHOM_OPTIMIZATIONS]);
+    let config = config_with(&["optifine"]);
 
     let resolution = f.engine.resolve(&config, "1.8.9", Loader::LegacyFabric);
     assert!(!resolution.is_launchable());
 
     let names = launcher_core::mods::NameLookup::from_definitions(&catalog::entries());
     let message = resolution.problems[0].message(&names);
-    assert!(message.contains("Fabric API"), "{message}");
+    assert!(message.contains("OptiFabric"), "{message}");
     assert!(message.contains("requires"), "{message}");
 }
 
+/// OptiFine with OptiFabric is how Fathom's OptiFine profiles run: no
+/// "not a Legacy Fabric mod", and OptiFabric is a catalogued mod, not an
+/// unknown file.
 #[test]
 fn adding_the_dependency_resolves_it() {
     let f = Fixture::new();
-    let config = config_with(&[catalog::FATHOM_OPTIMIZATIONS, "fabric-api"]);
+    let config = config_with(&["optifine", "optifabric"]);
 
     let resolution = f.engine.resolve(&config, "1.8.9", Loader::LegacyFabric);
     assert!(resolution.is_launchable(), "{:?}", resolution.problems);
+    assert!(
+        !resolution.problems.iter().any(|p| matches!(
+            p,
+            launcher_core::mods::Problem::WrongLoader { .. }
+                | launcher_core::mods::Problem::UnknownMod { .. }
+        )),
+        "{:?}",
+        resolution.problems
+    );
     assert_eq!(resolution.effective.len(), 2);
 }
 
@@ -295,7 +319,8 @@ fn a_superseded_mod_is_reported_as_redundant_not_broken() {
 #[test]
 fn a_forge_mod_in_a_fabric_profile_is_refused() {
     let f = Fixture::new();
-    let config = config_with(&["optifine"]);
+    // Patcher is Forge-only, and nothing bridges it.
+    let config = config_with(&["patcher"]);
 
     let resolution = f.engine.resolve(&config, "1.8.9", Loader::LegacyFabric);
     assert!(!resolution.is_launchable());

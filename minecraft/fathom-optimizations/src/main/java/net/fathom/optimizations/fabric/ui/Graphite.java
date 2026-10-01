@@ -171,7 +171,7 @@ public final class Graphite {
         }
         // Glass, as the launcher's panes are: the blurred scene under the tint,
         // when the screen captured one this frame (captureFrost).
-        if ((material == Material.STANDARD || material == Material.DENSE)
+        if (material != Material.CLEAR
                 && ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
             ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).frost(
                     area.x, area.y, area.right(), area.bottom(), radius);

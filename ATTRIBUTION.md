@@ -5,10 +5,10 @@ file records the creators whose work appears in this repository, and the terms
 it is used under. Anything added to the repository that was not made for Fathom
 must be recorded here before it is committed.
 
-Fathom is not an official Minecraft product. It is not approved by or associated
-with Mojang or Microsoft. Minecraft is a trademark of Mojang Synergies AB. The
-launcher downloads the game from Mojang's own servers and does not redistribute
-it.
+Fathom is an independent Minecraft mod. Neither Fathom nor The Fathom Project is affiliated with, endorsed by, or otherwise connected to Mojang AB or the Microsoft Corporation. The terms 'Minecraft,' 'Mojang,' 'Microsoft,' and any other product marks, trademarks, logos, word marks, or service marks, along with Minecraft and underlying materials therein are the property of their respective owners. Use of the foregoing does not imply any affiliation with or endorsement by Mojang or Microsoft.
+
+The launcher downloads the game from Mojang's own servers and does not
+redistribute it.
 
 ---
 

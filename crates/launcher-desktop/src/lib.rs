@@ -567,6 +567,14 @@ pub fn run() {
         // answer before it opens.
         .setup(|app| {
             use tauri::Manager as _;
+            // The window's own icon, set rather than left to the bundle
+            // config: the taskbar showed a generic one for a build whose
+            // executable carries the right icon.
+            if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")) {
+                for (_, window) in app.webview_windows() {
+                    let _ = window.set_icon(icon.clone());
+                }
+            }
             app.state::<State>().java_scan.start(app.handle());
             signin::restore(&app.handle().clone());
             match session::open_launcher_bridge(app.handle()) {

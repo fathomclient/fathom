@@ -61,7 +61,7 @@
       class="menu"
       role="menu"
       tabindex="-1"
-      in:fly={{ y: 6, duration: MOTION_SURFACE, easing: EASE }}
+      in:fly={{ x: -6, duration: MOTION_SURFACE, easing: EASE }}
       out:fade={{ duration: MOTION_EXIT, easing: EASE_EXIT }}
       on:click|stopPropagation
       on:keydown={(event) => event.key === 'Escape' && (open = false)}
@@ -127,17 +127,21 @@
     outline-offset: 2px;
   }
 
+  /* Beside the button, over the scene, bottom-aligned with it. It used to open
+     upwards over the card's own heading, and a dense tint nested inside the
+     card's glass blurs only the card -- so the installation name showed
+     through the list. Nearly opaque for the same reason. */
   .menu {
     position: absolute;
-    left: -180px;
-    bottom: 52px;
+    left: calc(100% + var(--space-2));
+    bottom: 0;
     z-index: 80;
     width: 280px;
     max-height: 216px;
     overflow-y: auto;
     padding: var(--space-2);
     border-radius: var(--metric-radius-panel);
-    background: var(--g-mat-dense);
+    background: rgba(12, 16, 20, 0.92);
     box-shadow:
       inset 0 0 0 var(--metric-rim) var(--g-mat-dense-rim),
       var(--g-elevation);

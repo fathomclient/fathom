@@ -30,6 +30,16 @@ public final class FathomNavigation {
         return hub;
     }
 
+    /** The Hub, opened on the section titled {@code section}. */
+    public static FathomHubScreen openHub(MinecraftClient client, FathomHud hud, String section) {
+        if (client == null || hud == null) {
+            return null;
+        }
+        FathomHubScreen hub = new FathomHubScreen(hud).startingAt(section);
+        push(client, hub);
+        return hub;
+    }
+
     public static void push(MinecraftClient client, Screen next) {
         if (client == null || next == null) {
             return;

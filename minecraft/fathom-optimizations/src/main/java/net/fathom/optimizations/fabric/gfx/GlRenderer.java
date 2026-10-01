@@ -87,6 +87,15 @@ public final class GlRenderer implements Renderer {
     private boolean inFrame;
     private boolean highQuality = true;
 
+    /**
+     * The launcher's "Standard capitalization" switch, off by default: Fathom's
+     * interface is lowercase there, and was title case here, which made the two
+     * read as different products. Monospaced data and text inside
+     * {@link #pushKeepCase} keep their own case, as the launcher's do.
+     */
+    private boolean lowercase;
+    private int keepCase;
+
     /*
      * Frost: the screen as it was before the interface, blurred, for glass.
      * See captureFrost.
@@ -100,6 +109,14 @@ public final class GlRenderer implements Renderer {
     private int frostHeight;
     /** Whether this frame captured; glass is drawn only over a copy of itself. */
     private boolean frostReady;
+    /**
+     * Panes frosted this frame, device left/top/right/bottom. A pane inside one
+     * of them is not frosted again: the copy is the scene before any interface,
+     * so frosting a card inside a group would wipe the group's tint out from
+     * under the card.
+     */
+    private final float[] frosted = new float[4 * 32];
+    private int frostedCount;
     /** One render-thread snapshot, reused every frame to avoid hot-path garbage. */
     private final GlStateSnapshot frameState = new GlStateSnapshot();
     private GlStateSnapshot inheritedState;
@@ -638,6 +655,7 @@ public final class GlRenderer implements Renderer {
      */
     public void captureFrost() {
         frostReady = false;
+        frostedCount = 0;
         ContextCapabilities caps = GLContext.getCapabilities();
         boolean core = caps.OpenGL30;
         if (!core && !caps.GL_ARB_framebuffer_object) {
@@ -693,6 +711,20 @@ public final class GlRenderer implements Renderer {
         float r = snap(deviceX(right));
         float b = snap(deviceY(bottom));
         float rad = cornerRadius(radius, r - l, b - t);
+        for (int index = 0; index < frostedCount; index++) {
+            int at = index * 4;
+            if (l >= frosted[at] && t >= frosted[at + 1] && r <= frosted[at + 2] && b <= frosted[at + 3]) {
+                return false;
+            }
+        }
+        if (frostedCount < frosted.length / 4) {
+            int at = frostedCount * 4;
+            frosted[at] = l;
+            frosted[at + 1] = t;
+            frosted[at + 2] = r;
+            frosted[at + 3] = b;
+            frostedCount++;
+        }
         batch.bind(frostTexture);
         // Four taps averaged by blending: the k-th at 1/k over the ones before.
         float[][] taps = {{-FROST_TAP, -FROST_TAP}, {FROST_TAP, FROST_TAP},
@@ -878,11 +910,34 @@ public final class GlRenderer implements Renderer {
     // Text
     // -----------------------------------------------------------------------
 
+    /** Lowercase interface text, as the launcher's default; see {@link #lowercase}. */
+    public void setLowercase(boolean on) {
+        lowercase = on;
+    }
+
+    /** Text drawn until {@link #popKeepCase} keeps its own case: names, legal text. */
+    public void pushKeepCase() {
+        keepCase++;
+    }
+
+    public void popKeepCase() {
+        keepCase = Math.max(0, keepCase - 1);
+    }
+
+    private String cased(String string, Type type) {
+        if (!lowercase || keepCase > 0 || type.weight() == Type.Weight.MONO_REGULAR
+                || type.weight() == Type.Weight.MONO_MEDIUM) {
+            return string;
+        }
+        return string.toLowerCase(java.util.Locale.ROOT);
+    }
+
     @Override
     public float text(String string, float x, float baselineY, Type type, int argb) {
         if (string == null || string.isEmpty()) {
             return 0f;
         }
+        string = cased(string, type);
         int colour = tint(argb);
         GlyphPage page = fonts.page(type, ui.scale());
         float advance = page.width(string);
@@ -969,7 +1024,7 @@ public final class GlRenderer implements Renderer {
         if (string == null || string.isEmpty()) {
             return 0f;
         }
-        return fonts.page(type, ui.scale()).width(string) / ui.scale();
+        return fonts.page(type, ui.scale()).width(cased(string, type)) / ui.scale();
     }
 
     @Override

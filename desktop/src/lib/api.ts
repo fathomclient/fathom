@@ -333,6 +333,8 @@ export interface PerformanceView {
   presets: PresetOption[];
   groups: OptimizationGroup[];
   module: ModuleStatus;
+  /** Catalogue entries with no implementation yet. They have no row. */
+  planned: number;
   summary: string;
   /** Null until somebody runs a benchmark in game. */
   benchmark: BenchmarkSummary | null;
@@ -802,7 +804,8 @@ const FIXTURE_PERFORMANCE: PerformanceView = {
     detail: 'Java settings still apply.',
     version: '0.2.0',
   },
-  summary: '3 of 20 running',
+  planned: 14,
+  summary: '5 available',
   benchmark: null,
   benchmarkCount: 0,
   videoLimits: null,

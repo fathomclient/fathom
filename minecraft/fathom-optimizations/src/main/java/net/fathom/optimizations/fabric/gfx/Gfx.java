@@ -77,6 +77,7 @@ public final class Gfx {
     public static float begin(MinecraftClient client, float scalePreference) {
         screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
         GlRenderer active = renderer(client);
+        active.setLowercase(false);
         active.setHighQuality(net.fathom.optimizations.fabric.Runtime.highQualityUi());
         float delta = clock().advance(System.nanoTime());
         FRAMES.begin();
@@ -118,6 +119,9 @@ public final class Gfx {
             }
         }
         screenDelta = begin(client, scalePreference);
+        // Screens follow the launcher's capitalization; the HUD, which also
+        // draws through begin(), is gameplay and keeps its own.
+        renderer.setLowercase(!net.fathom.optimizations.fabric.menu.MenuScenes.standardCapitalization());
         glOpen = true;
         screenRenderer = renderer;
         return renderer;

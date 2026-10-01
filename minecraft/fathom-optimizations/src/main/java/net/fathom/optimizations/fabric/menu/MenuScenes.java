@@ -180,6 +180,8 @@ public final class MenuScenes {
      * menu is open arrives within a second. A game started without the
      * launcher has no file and shows the default.
      */
+    private static boolean standardCapitalization;
+
     public static Scene selected() {
         long now = System.nanoTime();
         if (chosen != null && now - chosenAt < CHOICE_REFRESH_NANOS) {
@@ -202,7 +204,18 @@ public final class MenuScenes {
             }
         }
         chosen = byId(BackgroundChoice.resolve(json, BackgroundCatalog.IDS, BackgroundCatalog.DEFAULT_ID));
+        standardCapitalization = BackgroundChoice.standardCapitalization(json);
         return chosen;
+    }
+
+    /**
+     * Whether Fathom's screens use standard capitalization: the launcher's
+     * Appearance switch, read from the same file as the background, so it
+     * changes here within a second of changing there.
+     */
+    public static boolean standardCapitalization() {
+        selected();
+        return standardCapitalization;
     }
 
     public static Scene byLabel(String label) {

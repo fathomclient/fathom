@@ -142,6 +142,15 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         this.hud = hud;
     }
 
+    /** The section to open on, by title, instead of Mods. */
+    private String startAt;
+
+    /** Open on the section titled {@code title} (Quick, Mods, Performance...). */
+    public FathomHubScreen startingAt(String title) {
+        startAt = title;
+        return this;
+    }
+
     @Override
     public void init() {
         buttons.clear();
@@ -162,7 +171,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             pageSwap = new Motion(1f, GraphiteTokens.MOTION_PANEL, Ease.Curve.GRAPHITE);
             // Mods is where the Hub opens.
             current = 1;
-            previous = 1;
+            for (int index = 0; startAt != null && index < sections.size(); index++) {
+                if (sections.get(index).title().equalsIgnoreCase(startAt)) {
+                    current = index;
+                }
+            }
+            previous = current;
             sections.get(current).opened(context);
             selectCaptureSection();
         }
@@ -371,8 +385,10 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         ui.pushAlpha(shown);
         ui.pushTransform(0f, (1f - open) * GraphiteTokens.MOTION_TRAVEL);
 
-        // The scene's light pooling behind the Hub (Glow).
-        Glow.behind(ui, panel);
+        // The scene behind the glass, so the Hub's panes are frosted like the
+        // title screen's and the launcher's. No light pooled behind the panel:
+        // it read as a pale haze the launcher does not have.
+        Graphite.captureFrost(ui);
         header(ui);
         Rect rail = new Rect(panel.x, panel.y + RAIL_TOP, RAIL_WIDTH, railHeight());
         rail(ui, rail);

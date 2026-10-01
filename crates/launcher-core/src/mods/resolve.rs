@@ -398,10 +398,25 @@ pub fn resolve(candidates: &[Candidate], minecraft_version: &str, loader: Loader
             });
         }
 
-        // Only meaningful when the loader loads mods at all; otherwise every
-        // mod would also report "not a Vanilla mod", which is true but is the
-        // same finding said twice.
-        if loader.supports_mods() && !definition.loaders.contains(&loader) {
+        // OptiFine is a Forge mod, but OptiFabric loads it on Legacy Fabric --
+        // which is how Fathom's own OptiFine profiles run. Reporting it as the
+        // wrong loader there blocked a launch that works. Without OptiFabric it
+        // genuinely cannot load, and the useful sentence is what it needs.
+        if loader == Loader::LegacyFabric && candidate.id.as_str() == "optifine" {
+            let bridge = ModId::new("optifabric")
+                .unwrap_or_else(|e| unreachable!("a literal id is valid: {e}"));
+            if !present.contains(&bridge) {
+                problems.push(Problem::MissingDependency {
+                    needed_by: candidate.id.clone(),
+                    missing: bridge,
+                    optional: false,
+                    reason: "OptiFabric is what loads OptiFine on Legacy Fabric.".into(),
+                });
+            }
+        } else if loader.supports_mods() && !definition.loaders.contains(&loader) {
+            // Only meaningful when the loader loads mods at all; otherwise every
+            // mod would also report "not a Vanilla mod", which is true but is the
+            // same finding said twice.
             problems.push(Problem::WrongLoader {
                 id: candidate.id.clone(),
                 wanted: loader,

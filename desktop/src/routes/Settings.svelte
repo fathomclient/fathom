@@ -50,7 +50,7 @@
   import SearchField from '../lib/ui/SearchField.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
   import { EASE, MOTION_HOVER, MOTION_PAGE } from '../lib/motion';
-  import { WORLD_CREDITS } from '../lib/credits';
+  import { LEGAL_NOTICE, WORLD_CREDITS } from '../lib/credits';
   import {
     BACKGROUNDS,
     DEFAULT_BACKGROUND,
@@ -318,6 +318,9 @@
                     </p>
                   </div>
                 {/each}
+                <!-- The required notice, verbatim and in its own case whatever
+                     the capitalization setting says. -->
+                <p class="legal keep-case">{LEGAL_NOTICE}</p>
               </Section>
             {/if}
 
@@ -667,6 +670,13 @@
 
   .picker-pad {
     padding: var(--space-4);
+  }
+
+  .legal {
+    margin: var(--space-2) 0 0;
+    font-size: var(--type-caption-size);
+    line-height: 1.5;
+    color: var(--color-text-secondary);
   }
 
   /* -- credits: Row's geometry, because their content is a sentence with links

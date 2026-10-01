@@ -327,6 +327,14 @@
         </Section>
       {/each}
     </div>
+    {#if view.planned > 0}
+      <!-- Not rows: an entry nobody has implemented has nothing to switch, and
+           listing them dimmed under "Needs module" read as the module missing. -->
+      <p class="planned">
+        {view.planned} more {view.planned === 1 ? 'optimization is' : 'optimizations are'} planned.
+        They appear here once the module implements them.
+      </p>
+    {/if}
   </Page>
 {/if}
 
@@ -373,6 +381,12 @@
   /* Tighter than the page's default section spacing, and with a hairline
      between each: six collapsed categories 22px apart with nothing between
      them read as loose labels rather than as a list. */
+  .planned {
+    margin: var(--space-4) 0 0;
+    font-size: var(--type-caption-size);
+    color: var(--color-text-secondary);
+  }
+
   .groups {
     display: flex;
     flex-direction: column;

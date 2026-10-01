@@ -125,6 +125,12 @@ public final class VisualEffects {
      * the one rim instead of adding a second stroke.
      */
     public static void glass(Renderer ui, Rect area, float radius, int fill, int rimTop, int rimEdge) {
+        // Frosted, as the launcher's glass is, when the screen captured its
+        // scene this frame (GlRenderer.captureFrost).
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
+            ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).frost(
+                    area.x, area.y, area.right(), area.bottom(), radius);
+        }
         ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, fill);
         ui.rim(area.x, area.y, area.right(), area.bottom(), radius, Skin.mix(rimEdge, rimTop, 0.35f));
     }

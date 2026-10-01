@@ -49,7 +49,7 @@ base64.workspace = true
 # dialog -- is either something the frontend must not have, or something
 # launcher-core already does behind a typed command. `tauri` itself is the whole
 # surface, which is the smallest this can be while still opening a window.
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["image-png"] }
 
 # The native file picker, on the Rust side of the boundary.
 #

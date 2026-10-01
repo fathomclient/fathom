@@ -11,6 +11,14 @@
  * `crates/launcher-desktop/src/pages.rs` lists.
  */
 
+/**
+ * The required notice, word for word, in Settings > Appearance > Credits and at
+ * the top of ATTRIBUTION.md. Not to be paraphrased, shortened or recased; the
+ * game's own short form is in FathomMenuScreen.
+ */
+export const LEGAL_NOTICE =
+  "Fathom is an independent Minecraft mod. Neither Fathom nor The Fathom Project is affiliated with, endorsed by, or otherwise connected to Mojang AB or the Microsoft Corporation. The terms 'Minecraft,' 'Mojang,' 'Microsoft,' and any other product marks, trademarks, logos, word marks, or service marks, along with Minecraft and underlying materials therein are the property of their respective owners. Use of the foregoing does not imply any affiliation with or endorsement by Mojang or Microsoft.";
+
 export interface WorldCredit {
   world: string;
   creator: string;

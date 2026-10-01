@@ -23,6 +23,8 @@ pub struct PerformanceView {
     pub presets: Vec<PresetOption>,
     pub groups: Vec<OptimizationGroup>,
     pub module: ModuleStatus,
+    /// Catalogue entries with no implementation yet, which have no row.
+    pub planned: usize,
     /// One line for the page header: "4 of 20 running".
     pub summary: String,
     /// The most recent measured run, if this profile has ever been benchmarked.
@@ -376,26 +378,45 @@ fn first_sentence(text: &str) -> String {
 pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
     let catalogue = optimizations::all();
     let active = optimizations::active_count();
+    // What another installed mod already does: OptiFine, mostly. Those stay
+    // listed and say why they are off, rather than offering a switch that the
+    // launcher overrides at every launch.
+    let standdowns = optimizations::conflicts::for_profile(profile);
 
+    // Only what is implemented gets a row. Every unimplemented entry used to be
+    // listed too, dimmed, badged "Needs module" -- next to a card saying the
+    // module was installed. It was never the module they needed; it was code
+    // nobody has written yet. They are counted at the foot of the page instead.
     let groups = PAGE_GROUPS
         .iter()
         .map(|(id, label)| {
             let rows: Vec<OptimizationRow> = catalogue
                 .iter()
-                .filter(|entry| page_group(entry) == *id)
-                .map(|entry| OptimizationRow {
-                    id: entry.id.to_owned(),
-                    name: entry.name.to_owned(),
-                    summary: first_sentence(entry.summary),
-                    detail: entry.summary.to_owned(),
-                    enabled: is_enabled(profile, entry),
-                    running: entry.status == Status::Active,
-                    can_toggle: entry.is_actionable(),
-                    status: entry.status.label().to_owned(),
-                    readiness: entry.readiness.label().to_owned(),
-                    category: entry.category.label().to_owned(),
-                    tone: tone_of(entry.category),
-                    evidence: entry.evidence.map(str::to_owned),
+                .filter(|entry| page_group(entry) == *id && entry.status == Status::Active)
+                .map(|entry| {
+                    let stood_down = standdowns.iter().find(|s| s.optimization == entry.id);
+                    let enabled = is_enabled(profile, entry);
+                    OptimizationRow {
+                        id: entry.id.to_owned(),
+                        name: entry.name.to_owned(),
+                        summary: first_sentence(entry.summary),
+                        detail: match stood_down {
+                            Some(standdown) => format!("{} {}", entry.summary, standdown.detail),
+                            None => entry.summary.to_owned(),
+                        },
+                        enabled: enabled && stood_down.is_none(),
+                        running: stood_down.is_none(),
+                        can_toggle: stood_down.is_none(),
+                        status: match stood_down {
+                            Some(standdown) => format!("Off with {}", standdown.because_of),
+                            None if enabled => "On".to_owned(),
+                            None => "Off".to_owned(),
+                        },
+                        readiness: entry.readiness.label().to_owned(),
+                        category: entry.category.label().to_owned(),
+                        tone: tone_of(entry.category),
+                        evidence: entry.evidence.map(str::to_owned),
+                    }
                 })
                 .collect();
 
@@ -430,7 +451,8 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
             .collect(),
         groups,
         module: module_status(core, profile),
-        summary: format!("{active} of {} running", catalogue.len()),
+        planned: catalogue.iter().filter(|entry| entry.status != Status::Active).count(),
+        summary: format!("{active} available"),
     }
 }
 

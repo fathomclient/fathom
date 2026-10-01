@@ -9,14 +9,19 @@ import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen;
 import net.minecraft.client.gui.screen.world.SelectWorldScreen;
 import net.minecraft.client.util.ScreenshotUtils;
 
+import net.fathom.optimizations.core.module.LaunchSession;
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.Text;
+import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
+import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.FathomOptimizationsClient;
 import net.fathom.optimizations.fabric.gfx.FathomScreen;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
+import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Controls;
@@ -26,65 +31,88 @@ import net.fathom.optimizations.fabric.hud.HudEditorScreen;
 import net.fathom.optimizations.generated.GraphiteTokens;
 
 /**
- * Fathom's title screen, in Graphite + Instrument.
+ * Fathom's title screen: the launcher's Home, in the game.
  *
  * <pre>
- *   FATHOM
- *
- *
- *   [ Singleplayer ]
- *   [ Multiplayer  ]        (the processed capture, vignette and grain)
- *   [ Options      ]
- *   [ Quit Game    ]
+ *   fathom                                       1.8.9  ( @ name )
+ *   ╭──╮
+ *   │⌂ │  home, mods, performance, profiles (the Hub's pages)
+ *   ╰──╯
+ *        ╭──────────────────────────────╮
+ *        │ CURRENT INSTALLATION         │
+ *        │ optimized                    │
+ *        │ 1.8.9 · Legacy Fabric        │
+ *        │ [ Singleplayer ] [Multi] [x] │
+ *        │ client · preset · hub key    │
+ *   ╭──╮ ╰──────────────────────────────╯
+ *   │⚙ │  quick settings, options
+ *   ╰──╯                                Not affiliated with Mojang or Microsoft...
  * </pre>
  *
- * <p>The backdrop is the launcher's own file: a curated Minecraft capture,
- * processed offline into near-black smoke, so the title screen and the launcher
- * match exactly and nothing is blurred at runtime. Over it, the wordmark at the
- * top left and a left-aligned column of four Light buttons, 240x36, 8dp apart,
- * vertically centred. There is no primary action here: the title screen is a
- * choice between places, and nothing on it is brighter than anything else.
- * Language and resource packs are in Options, as they are in vanilla; the Hub is
- * Right Shift.
+ * <p>It used to be its own thing -- a lockup and a column of four quiet rows in
+ * a panel -- and beside the launcher it read as a different product. Now it is
+ * the launcher's composition with the launcher's numbers: the 56 header with
+ * the wordmark and the account, the 76 rail column with two glass capsules that
+ * widen to 200 under the pointer, and the 440 installation card 28 in from the
+ * rail and 40 up from the foot, its Play-sized primary, its 14/14 hairline
+ * footer. The glass is frosted over the scene, as the launcher's is.
  *
- * <p>Layout is on the 1280x720dp reference canvas, centred; on a wider window
- * the extra width stays backdrop.
- *
- * <p>The vanilla title screen draws a rotating skybox and {@code ButtonWidget}s
- * from a nine-slice texture magnified by the GUI scale. This draws at framebuffer
- * resolution and hands off to vanilla's own screens the moment a button is
- * pressed.
+ * <p>Pressing something answers at once: the press shows on the frame it
+ * happens, and the hand-off to Minecraft's own screen is on the next one. The
+ * old 120ms fade-out before every hand-off, followed by vanilla reading every
+ * save before it drew a thing, looked like a button that had not worked and
+ * then a frozen game.
  */
 public final class FathomMenuScreen extends Screen implements FathomScreen {
 
-    private static final float CANVAS_WIDTH = GraphiteTokens.LAYOUT_CANVAS_WIDTH;
-    private static final float CANVAS_HEIGHT = GraphiteTokens.LAYOUT_CANVAS_HEIGHT;
-    /** The wordmark's margin from the canvas's top-left corner. */
-    private static final float WORDMARK_MARGIN = GraphiteTokens.SPACE_8;
-    /**
-     * The lockup's ascender. Larger than the Hub's wordmark: at the Hub's
-     * size the mark would be twelve pixels, walls two pixels thick, too small
-     * to read as a shape; here its unit reaches three pixels and its corners
-     * round.
-     */
-    private static final float WORDMARK_CAP = 16f;
+    // -- the launcher's shell metrics (theme: layout.shell, layout.rail) -------
+    private static final float HEADER = 56f;
+    private static final float RAIL_COLUMN = 76f;
+    private static final float RAIL_LEFT = GraphiteTokens.SPACE_3;
+    private static final float RAIL_WIDTH = 48f;
+    private static final float RAIL_TRAY = 200f;
+    private static final float RAIL_ITEM = GraphiteTokens.SIZE_CONTROL;
+    private static final float RAIL_INSET = (RAIL_WIDTH - RAIL_ITEM) / 2f;
+    private static final float RAIL_GAP = GraphiteTokens.SPACE_1;
+    /** The rail's lower group sits above where the launcher's status row was. */
+    private static final float RAIL_FOOT = 44f;
 
-    private static boolean announced;
-    /** The button column: x on the canvas, and each button's size and gap. */
-    private static final float COLUMN_X = GraphiteTokens.SPACE_12;
-    private static final float BUTTON_WIDTH = 264f;
-    private static final float BUTTON_HEIGHT = GraphiteTokens.SIZE_PRIMARY;
-    private static final float BUTTON_GAP = GraphiteTokens.SPACE_1;
-    /**
-     * One rounded surface, rows inside it with no borders of their own (the
-     * surface's rim is the only line). The 8 inset is what makes a row's small
-     * radius (10) concentric with the panel's 18.
-     */
-    private static final float MENU_PAD = GraphiteTokens.SPACE_2;
+    // -- the installation card (Home.svelte .launch-composition) --------------
+    private static final float CARD_LEFT = RAIL_COLUMN + 28f;
+    private static final float CARD_BOTTOM = 40f;
+    private static final float CARD_WIDTH = 440f;
+    private static final float CARD_PAD = 24f;
+    private static final float PRIMARY_WIDTH = GraphiteTokens.SIZE_PRIMARY_MIN_WIDTH;
+    private static final float PRIMARY_HEIGHT = GraphiteTokens.SIZE_PRIMARY;
+    /** The launcher's wordmark: a 13px ascender, 24 in, centred in the header. */
+    private static final float WORDMARK_CAP = GraphiteTokens.WORDMARK_CAP_LAUNCHER;
+
     private static final float TRAVEL = GraphiteTokens.MOTION_TRAVEL;
 
-    private static final String[] IDS = {"menu.single", "menu.multi", "menu.options", "menu.quit"};
-    private static final String[] LABELS = {"Singleplayer", "Multiplayer", "Options", "Quit Game"};
+    /** The required short notice, verbatim. The long form is in ATTRIBUTION.md. */
+    static final String LEGAL = "Not affiliated with Mojang or Microsoft. Do not distribute!";
+
+    private static final String SINGLE = "menu.single";
+    private static final String MULTI = "menu.multi";
+    private static final String QUIT = "menu.quit";
+
+    /** The rail: id, label, icon, and the Hub section it opens (null: not the Hub). */
+    private static final String[][] RAIL_TOP = {
+        {"rail.home", "Home", "HOME", null},
+        {"rail.mods", "Mods", "MODS", "Mods"},
+        {"rail.performance", "Performance", "GAUGE", "Performance"},
+        {"rail.profiles", "Profiles", "USER", "Profiles"},
+    };
+    private static final String[][] RAIL_BOTTOM = {
+        {"rail.quick", "Quick settings", "SLIDERS", "Quick"},
+        {"rail.options", "Options", "SETTINGS", null},
+    };
+
+    /** Tab order: the card's actions, then the rail. */
+    private static final String[] FOCUS_ORDER = {
+        SINGLE, MULTI, QUIT,
+        "rail.mods", "rail.performance", "rail.profiles", "rail.quick", "rail.options",
+    };
 
     /** Reused because the background isolation pass runs once per rendered frame. */
     private final Runnable backgroundPass = new Runnable() {
@@ -94,6 +122,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         }
     };
 
+    private static boolean announced;
+
     private final Controls controls = new Controls();
     private final Pointer pointer = new Pointer();
     private Transition transition;
@@ -102,14 +132,15 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private boolean captureTargetOpened;
     private boolean closeCaptureFinished;
 
-    private float canvasX;
-    private float canvasY;
-    private Rect menuPanel;
-    private final Rect[] stack = new Rect[IDS.length];
+    private Rect card;
+    private Rect railTop;
+    private Rect railBottom;
 
-    private Screen pendingScreen;
-    private boolean pendingHub;
-    private boolean pendingQuit;
+    /** What was pressed, drawn as working until the hand-off. */
+    private String busy;
+    private Runnable handoff;
+    /** Frames drawn since the press: the hand-off waits for one to be shown. */
+    private int handoffFrames;
     private boolean closing;
     private boolean attached;
     private String keyboardActivation;
@@ -143,9 +174,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                     Ease.Curve.GRAPHITE, Ease.Curve.GRAPHITE);
         }
         transition.open(now);
-        pendingScreen = null;
-        pendingHub = false;
-        pendingQuit = false;
+        busy = null;
+        handoff = null;
+        handoffFrames = 0;
         closing = false;
         keyboardActivation = null;
         keyboardFocus = false;
@@ -155,10 +186,19 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
 
     @Override
     public void render(int ignoredMouseX, int ignoredMouseY, float ignoredDelta) {
+        // The press was drawn last frame and that frame is on screen: hand over
+        // now, before drawing again, so whatever the destination does on
+        // opening happens under the frame that says it is opening.
+        if (handoff != null && handoffFrames > 0) {
+            Runnable next = handoff;
+            handoff = null;
+            next.run();
+            return;
+        }
+
         Gfx.isolated(backgroundPass);
 
         Renderer ui = Gfx.beginScreen(client, Runtime.uiScale());
-        boolean handoffReady = false;
         try {
             pointer.poll(client, ui);
             controls.begin(pointer, Gfx.screenDelta(), ui);
@@ -166,12 +206,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             layout(ui);
             draw(ui, now);
             controls.end();
-            handoffReady = transition.finished(now);
         } finally {
             Gfx.endScreen();
         }
-        if (handoffReady) {
-            finishNavigation();
+        if (handoff != null) {
+            handoffFrames++;
             return;
         }
         captureSettledFrame();
@@ -179,71 +218,298 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         finishCloseCapture();
     }
 
+    // -----------------------------------------------------------------------
+    // Layout
+    // -----------------------------------------------------------------------
+
     private void layout(Renderer ui) {
-        canvasX = Math.max(0f, (ui.width() - CANVAS_WIDTH) / 2f);
-        canvasY = Math.max(0f, (ui.height() - CANVAS_HEIGHT) / 2f);
-        float stackHeight = BUTTON_HEIGHT * IDS.length + BUTTON_GAP * (IDS.length - 1);
-        float top = ui.height() / 2f - stackHeight / 2f;
-        menuPanel = new Rect(canvasX + COLUMN_X - MENU_PAD, top - MENU_PAD,
-                BUTTON_WIDTH + MENU_PAD * 2f, stackHeight + MENU_PAD * 2f);
-        for (int index = 0; index < IDS.length; index++) {
-            stack[index] = new Rect(canvasX + COLUMN_X, top + index * (BUTTON_HEIGHT + BUTTON_GAP),
-                    BUTTON_WIDTH, BUTTON_HEIGHT);
-        }
+        float width = Math.min(CARD_WIDTH, Math.max(280f, ui.width() - CARD_LEFT - 56f));
+        float height = cardHeight(ui);
+        card = new Rect(CARD_LEFT, ui.height() - CARD_BOTTOM - height, width, height);
+        railTop = new Rect(RAIL_LEFT, HEADER + GraphiteTokens.SPACE_1, RAIL_WIDTH, groupHeight(RAIL_TOP.length));
+        float bottomHeight = groupHeight(RAIL_BOTTOM.length);
+        railBottom = new Rect(RAIL_LEFT, ui.height() - RAIL_FOOT - bottomHeight, RAIL_WIDTH, bottomHeight);
     }
 
+    private static float groupHeight(int items) {
+        return RAIL_INSET * 2f + RAIL_ITEM * items + RAIL_GAP * (items - 1);
+    }
+
+    /** Line boxes as the launcher's CSS sets them: size times line height. */
+    private static float line(Type type, float ratio) {
+        return Math.round(type.size() * ratio);
+    }
+
+    private static float cardHeight(Renderer ui) {
+        return CARD_PAD
+                + line(Graphite.CAPTION, 1.4f) + 6f            // eyebrow
+                + line(Graphite.TITLE, 1.3f)                   // installation name
+                + 4f + line(Graphite.SMALL, 1.4f)              // version line
+                + 18f                                          // heading's margin
+                + PRIMARY_HEIGHT + 10f                         // actions, progress line
+                + 14f + 14f                                    // hairline footer
+                + line(Graphite.CAPTION, 1.4f) + 3f + line(Graphite.UI, 1.4f)
+                + CARD_PAD;
+    }
+
+    // -----------------------------------------------------------------------
+    // Drawing
+    // -----------------------------------------------------------------------
+
     private void draw(Renderer ui, float now) {
-        // Fade and rise 8dp on entry, 180ms; fade out on exit, 120ms.
+        // Fade and rise 8dp on entry, as the launcher's pages do.
         float enter = transition.enter(now);
-        float exit = transition.exit(now);
-        ui.pushAlpha(enter * (1f - exit));
+        ui.pushAlpha(enter);
         ui.pushTransform(0f, (1f - enter) * TRAVEL);
 
-        // The scene behind the glass, before anything is drawn over it. No
-        // light is pooled behind the menu any more: over a still scene it read
-        // as a pale haze round the panel that the launcher does not have.
+        // The scene behind the glass, before anything is drawn over it.
         Graphite.captureFrost(ui);
-        // The whole identity here, mark and word: this is the one screen that
-        // is Fathom's front door. The Hub keeps the word alone, as the
-        // launcher's header does.
-        Graphite.lockup(ui, canvasX + WORDMARK_MARGIN, canvasY + WORDMARK_MARGIN, WORDMARK_CAP);
 
-        // One floating glass group gives the controls presence without turning
-        // four actions into four opaque cards.
-        Graphite.surface(ui, menuPanel, Graphite.R_PANEL, Graphite.Material.STANDARD, true);
-
-        for (int index = 0; index < IDS.length; index++) {
-            if (button(ui, IDS[index], stack[index], LABELS[index])) {
-                activate(index);
-            }
-        }
+        header(ui);
+        rail(ui, railTop, RAIL_TOP, "rail.top");
+        rail(ui, railBottom, RAIL_BOTTOM, "rail.bottom");
+        installation(ui, now);
+        legal(ui);
 
         ui.popTransform();
         ui.popAlpha();
     }
 
-    /** A row inside the shared glass group; no nested material surface. */
-    private boolean button(Renderer ui, String id, Rect area, String label) {
+    /** The launcher's header: wordmark at the left, version and account at the right. */
+    private void header(Renderer ui) {
+        float cap = WORDMARK_CAP;
+        Graphite.wordmark(ui, 24f, Math.round((HEADER - cap) / 2f), cap);
+
+        float compact = GraphiteTokens.SIZE_CONTROL_COMPACT;
+        float right = ui.width() - GraphiteTokens.SPACE_3;
+        float top = (HEADER - compact) / 2f;
+
+        String name = playerName();
+        Type nameType = Graphite.floor(ui, Graphite.UI);
+        float avatar = 24f;
+        float capsuleWidth = 5f + avatar + GraphiteTokens.SPACE_2 + measureKept(ui, name, nameType) + 14f;
+        Rect capsule = new Rect(right - capsuleWidth, top, capsuleWidth, compact);
+        Graphite.surface(ui, capsule, capsule.height / 2f, Graphite.Material.CLEAR, false);
+        Rect face = new Rect(capsule.x + 5f, capsule.centreY() - avatar / 2f, avatar, avatar);
+        ui.rounded(face.x, face.y, face.right(), face.bottom(), avatar / 2f, 0x2EFFFFFF);
+        Graphite.rim(ui, face, avatar / 2f, GraphiteTokens.COLOR_RIM_HOVER);
+        Type initial = Graphite.floor(ui, Graphite.CAPTION.weighing(Type.Weight.SEMIBOLD));
+        keepCase(ui, true);
+        ui.textCentred(name.isEmpty() ? "" : name.substring(0, 1).toUpperCase(java.util.Locale.ROOT),
+                face.centreX(), Graphite.baseline(ui, face, initial), initial, Graphite.TEXT);
+        ui.text(name, face.right() + GraphiteTokens.SPACE_2, Graphite.baseline(ui, capsule, nameType),
+                nameType, Graphite.TEXT);
+        keepCase(ui, false);
+
+        Type version = Graphite.floor(ui, Graphite.SMALL);
+        ui.textRight(minecraftVersion(), capsule.x - GraphiteTokens.SPACE_3,
+                Graphite.baseline(ui, capsule, version), version, Graphite.TEXT_SECONDARY);
+    }
+
+    /**
+     * One of the rail's two capsules: icons, widening to show labels while the
+     * pointer is over it, and only it -- the launcher's rule since its own
+     * rail widened both together.
+     */
+    private void rail(Renderer ui, Rect closed, String[][] items, String id) {
+        boolean over = !closing && pointer.x() >= closed.x && pointer.y() >= closed.y
+                && pointer.x() <= closed.x + RAIL_TRAY && pointer.y() <= closed.bottom()
+                && (pointer.x() <= closed.right() || controls.towards(id + "#open", true, 0f) > 0.5f);
+        float open = controls.towards(id + "#open", over, GraphiteTokens.MOTION_FAST);
+        Rect group = new Rect(closed.x, closed.y, closed.width + (RAIL_TRAY - closed.width) * open, closed.height);
+        Graphite.surface(ui, group, Graphite.R_PANEL, Graphite.Material.STANDARD, open > 0.01f);
+
+        float y = group.y + RAIL_INSET;
+        Type label = Graphite.floor(ui, Graphite.UI);
+        for (String[] item : items) {
+            Rect row = new Rect(group.x + RAIL_INSET, y, group.width - RAIL_INSET * 2f, RAIL_ITEM);
+            boolean current = "rail.home".equals(item[0]);
+            Controls.State state = controls.state(item[0], row, !closing && !current);
+            Graphite.overlay(ui, row, Graphite.R_CONTROL, current ? 0f : Math.max(state.hover, state.press),
+                    current ? 1f : 0f);
+            if (current) {
+                Glow.current(ui, row, Graphite.R_CONTROL, 1f);
+            }
+            int ink = current || state.hover > 0.5f ? Graphite.TEXT : Graphite.TEXT_SECONDARY;
+            float iconSize = 20f;
+            ui.icon(Icon.valueOf(item[2]), row.x + (RAIL_ITEM - iconSize) / 2f, row.centreY() - iconSize / 2f,
+                    iconSize, ink);
+            if (open > 0.01f) {
+                ui.pushAlpha(open);
+                ui.text(item[1], row.x + RAIL_ITEM + GraphiteTokens.SPACE_1,
+                        Graphite.baseline(ui, row, label), label, ink);
+                ui.popAlpha();
+            }
+            if (keyboardFocus && controls.focused(item[0])) {
+                focusRing(ui, row, Graphite.R_CONTROL);
+            }
+            if (state.clicked || (state.enabled && item[0].equals(keyboardActivation))) {
+                keyboardActivation = null;
+                railAction(item);
+            }
+            y += RAIL_ITEM + RAIL_GAP;
+        }
+    }
+
+    /** The installation card, as on the launcher's Home. */
+    private void installation(Renderer ui, float now) {
+        Graphite.surface(ui, card, Graphite.R_PANEL, Graphite.Material.STANDARD, true);
+        float x = card.x + CARD_PAD;
+        float inner = card.width - CARD_PAD * 2f;
+        float y = card.y + CARD_PAD;
+
+        Type eyebrow = Graphite.floor(ui, Graphite.CAPTION);
+        ui.text("CURRENT INSTALLATION", x, y + ui.ascent(eyebrow) + 1f, eyebrow, Graphite.TEXT_SECONDARY);
+        y += line(Graphite.CAPTION, 1.4f) + 6f;
+
+        Type title = Graphite.floor(ui, Graphite.TITLE);
+        ui.text(Text.fit(ui, installationName(), title, inner), x, y + ui.ascent(title) + 2f, title, Graphite.TEXT);
+        y += line(Graphite.TITLE, 1.3f) + 4f;
+
+        Type small = Graphite.floor(ui, Graphite.SMALL);
+        ui.text(minecraftVersion() + " · " + loaderName(), x, y + ui.ascent(small) + 2f, small,
+                Graphite.TEXT_SECONDARY);
+        y += line(Graphite.SMALL, 1.4f) + 18f;
+
+        // Singleplayer is the Play of the title screen: the bright primary.
+        Rect primary = new Rect(x, y, PRIMARY_WIDTH, PRIMARY_HEIGHT);
+        String primaryLabel = SINGLE.equals(busy) ? "Opening worlds…" : "Singleplayer";
+        if (cardButton(ui, SINGLE, primary, primaryLabel, true) || activated(SINGLE)) {
+            press(SINGLE, new Runnable() {
+                @Override
+                public void run() {
+                    client.setScreen(new SelectWorldScreen(FathomMenuScreen.this));
+                }
+            });
+        }
+        focus(ui, SINGLE, primary, Graphite.R_CONTROL);
+        if (busy != null) {
+            working(ui, new Rect(primary.x + 16f, primary.bottom() + 6f, primary.width - 32f, 2f), now);
+        }
+
+        float gap = GraphiteTokens.SPACE_3;
+        String multiLabel = MULTI.equals(busy) ? "Opening…" : "Multiplayer";
+        float multiWidth = Controls.buttonWidth(ui, "Multiplayer");
+        Rect multi = new Rect(primary.right() + gap, y, multiWidth, PRIMARY_HEIGHT);
+        if (cardButton(ui, MULTI, multi, multiLabel, false) || activated(MULTI)) {
+            press(MULTI, new Runnable() {
+                @Override
+                public void run() {
+                    client.setScreen(new MultiplayerScreen(FathomMenuScreen.this));
+                }
+            });
+        }
+        focus(ui, MULTI, multi, Graphite.R_CONTROL);
+
+        Rect quit = new Rect(multi.right() + gap, y, PRIMARY_HEIGHT, PRIMARY_HEIGHT);
+        if (quit.right() <= card.right() - CARD_PAD + 0.5f) {
+            // The launcher's square beside Play: light glass, the control radius.
+            Controls.State state = controls.state(QUIT, quit, !closing);
+            Graphite.surface(ui, quit, Graphite.R_CONTROL, Graphite.Material.LIGHT,
+                    state.hover, state.press, 0f, false);
+            float iconSize = 16f;
+            ui.icon(Icon.CLOSE, quit.centreX() - iconSize / 2f, quit.centreY() - iconSize / 2f, iconSize,
+                    Graphite.TEXT);
+            controls.tooltip(state, quit, "Quit game");
+            if (state.clicked || activated(QUIT)) {
+                press(QUIT, new Runnable() {
+                    @Override
+                    public void run() {
+                        client.scheduleStop();
+                    }
+                });
+            }
+            focus(ui, QUIT, quit, Graphite.R_CONTROL);
+        }
+        y += PRIMARY_HEIGHT + 10f + 14f;
+
+        // The footer: three labelled facts between hairlines, 14 above and below.
+        Graphite.hairline(ui, x, x + inner, y - 14f);
+        float column = inner / 3f;
+        String[][] facts = {
+            {"Client", "Fathom"},
+            {"Preset", presetName()},
+            {"Hub", hubKey()},
+        };
+        Type label = Graphite.floor(ui, Graphite.CAPTION);
+        Type value = Graphite.floor(ui, Graphite.UI);
+        for (int index = 0; index < facts.length; index++) {
+            float cx = x + column * index + (index == 0 ? 0f : 12f);
+            if (index > 0) {
+                float divider = x + column * index;
+                ui.fill(divider, y, divider + ui.pixel(), y + line(Graphite.CAPTION, 1.4f) + 3f
+                        + line(Graphite.UI, 1.4f), Graphite.HAIRLINE);
+            }
+            float room = column - (index == 0 ? 12f : 24f);
+            ui.text(Text.fit(ui, facts[index][0], label, room), cx, y + ui.ascent(label) + 1f, label,
+                    Graphite.TEXT_TERTIARY);
+            ui.text(Text.fit(ui, facts[index][1], value, room), cx,
+                    y + line(Graphite.CAPTION, 1.4f) + 3f + ui.ascent(value) + 2f, value, Graphite.TEXT);
+        }
+    }
+
+    /**
+     * A button of the card, in Home's own shapes: the control radius, not a
+     * pill. The primary is the launcher's Play -- the action fill, its dark
+     * type at 15/600, and the accent halo spilling out beneath it. The other
+     * is light glass, like the square beside Play.
+     */
+    private boolean cardButton(Renderer ui, String id, Rect area, String label, boolean primary) {
         Controls.State state = controls.state(id, area, !closing);
-        // Hover and press are density only: a row never gets a rim, so the menu
-        // never shows a border inside a border.
-        Graphite.segment(ui, area, Math.max(state.hover, state.press), 0f);
-        // The row under the pointer is lit, softly, in the scene's accent.
-        Glow.current(ui, area, Graphite.R_SEGMENT, state.hover);
-        ui.text(label, area.x + Graphite.PAD, Graphite.baseline(ui, area, Graphite.floor(ui, Graphite.UI)),
-                Graphite.floor(ui, Graphite.UI), Graphite.TEXT);
+        float radius = Graphite.R_CONTROL;
+        Type type;
+        int ink;
+        if (primary) {
+            boolean working = id.equals(busy);
+            if (!working) {
+                Glow.halo(ui, area, radius, 1f + 0.5f * state.hover);
+            }
+            int fill = working ? GraphiteTokens.MATERIAL_STANDARD_FILL
+                    : net.fathom.optimizations.core.ui.Colour.mix(
+                            net.fathom.optimizations.core.ui.Colour.mix(GraphiteTokens.COLOR_ACTION,
+                                    GraphiteTokens.COLOR_ACTION_HOVER, state.hover),
+                            GraphiteTokens.COLOR_ACTION_PRESSED, state.press);
+            if (working) {
+                Graphite.surface(ui, area, radius, Graphite.Material.STANDARD, false);
+            } else {
+                ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, fill);
+            }
+            type = Graphite.floor(ui, new Type(GraphiteTokens.TYPE_PRIMARY_SIZE, Type.Weight.SEMIBOLD));
+            ink = working ? Graphite.TEXT_SECONDARY : GraphiteTokens.COLOR_ACTION_TEXT;
+        } else {
+            Graphite.surface(ui, area, radius, Graphite.Material.LIGHT, state.hover, state.press, 0f, false);
+            type = Graphite.floor(ui, Graphite.UI);
+            ink = Graphite.TEXT;
+        }
+        ui.textCentred(Text.fit(ui, label, type, area.width - GraphiteTokens.SPACE_4), area.centreX(),
+                Graphite.baseline(ui, area, type), type, ink);
+        return state.clicked;
+    }
+
+    /** The launcher's indeterminate line: a 40% segment sweeping a faint track. */
+    private void working(Renderer ui, Rect track, float now) {
+        ui.rounded(track.x, track.y, track.right(), track.bottom(), 1f, Graphite.HAIRLINE);
+        float phase = (now * 0.9f) % 1f;
+        float segment = track.width * 0.4f;
+        float left = track.x - segment + (track.width + segment) * phase;
+        ui.clip(track.x, track.y, track.right(), track.bottom());
+        ui.rounded(left, track.y, left + segment, track.bottom(), 1f, Graphite.TEXT_SECONDARY);
+        ui.unclip();
+    }
+
+    /** The required notice, in its own words and its own case, bottom right. */
+    private void legal(Renderer ui) {
+        Type caption = Graphite.floor(ui, Graphite.CAPTION);
+        keepCase(ui, true);
+        ui.textRight(LEGAL, ui.width() - GraphiteTokens.SPACE_4, ui.height() - GraphiteTokens.SPACE_4,
+                caption, Graphite.TEXT_TERTIARY);
+        keepCase(ui, false);
+    }
+
+    private void focus(Renderer ui, String id, Rect area, float radius) {
         if (keyboardFocus && controls.focused(id)) {
-            focusRing(ui, area, Graphite.R_SEGMENT);
+            focusRing(ui, area, radius);
         }
-        if (state.clicked) {
-            keyboardFocus = false;
-            return true;
-        }
-        if (state.enabled && id.equals(keyboardActivation)) {
-            keyboardActivation = null;
-            return true;
-        }
-        return false;
     }
 
     /** The keyboard focus ring: the launcher's -- signal, two device pixels, 2dp outside, following the shape. */
@@ -252,21 +518,148 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 net.fathom.optimizations.fabric.ui.Skin.FOCUS);
     }
 
-    private void activate(int index) {
-        switch (index) {
-            case 0:
-                navigate(new SelectWorldScreen(this));
-                break;
-            case 1:
-                navigate(new MultiplayerScreen(this));
-                break;
-            case 2:
-                navigate(new SettingsScreen(this, client.options));
-                break;
-            default:
-                quitAfterExit();
-                break;
+    private static void keepCase(Renderer ui, boolean on) {
+        if (ui instanceof GlRenderer) {
+            if (on) {
+                ((GlRenderer) ui).pushKeepCase();
+            } else {
+                ((GlRenderer) ui).popKeepCase();
+            }
         }
+    }
+
+    private static float measureKept(Renderer ui, String text, Type type) {
+        keepCase(ui, true);
+        float width = ui.measure(text, type);
+        keepCase(ui, false);
+        return width;
+    }
+
+    // -----------------------------------------------------------------------
+    // What the card says
+    // -----------------------------------------------------------------------
+
+    private LaunchSession session() {
+        return Runtime.bridge() == null ? null : Runtime.bridge().session();
+    }
+
+    private String installationName() {
+        LaunchSession session = session();
+        String name = session == null ? null : session.profileName();
+        return name == null || name.trim().isEmpty() ? "Fathom" : name.trim();
+    }
+
+    private String minecraftVersion() {
+        LaunchSession session = session();
+        String version = session == null ? null : session.minecraft();
+        return version == null || version.trim().isEmpty() ? "1.8.9" : version.trim();
+    }
+
+    private String loaderName() {
+        LaunchSession session = session();
+        String loader = session == null ? null : session.loader();
+        return loader == null || loader.trim().isEmpty() ? "Legacy Fabric" : loader.trim();
+    }
+
+    /** The launcher's preset id as its label: "maximum-fps" is "Maximum FPS". */
+    private String presetName() {
+        LaunchSession session = session();
+        String preset = session == null ? null : session.preset();
+        if (preset == null || preset.trim().isEmpty()) {
+            return "—";
+        }
+        StringBuilder out = new StringBuilder();
+        for (String word : preset.trim().split("-")) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            if (out.length() > 0) {
+                out.append(' ');
+            }
+            if ("fps".equalsIgnoreCase(word)) {
+                out.append("FPS");
+            } else {
+                out.append(out.length() == 0 ? Character.toUpperCase(word.charAt(0)) + word.substring(1) : word);
+            }
+        }
+        return out.toString();
+    }
+
+    private String hubKey() {
+        return Runtime.hud() == null ? "Right Shift" : Runtime.hud().hubKey().keyName();
+    }
+
+    private String playerName() {
+        try {
+            String name = client.getSession() == null ? null : client.getSession().getUsername();
+            return name == null ? "" : name;
+        } catch (RuntimeException unavailable) {
+            return "";
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Actions
+    // -----------------------------------------------------------------------
+
+    private boolean activated(String id) {
+        if (id.equals(keyboardActivation)) {
+            keyboardActivation = null;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Show the press now, act on the next frame. Input stops so a second press
+     * cannot start a second hand-off.
+     */
+    private void press(String id, Runnable action) {
+        if (closing) {
+            return;
+        }
+        closing = true;
+        keyboardFocus = false;
+        busy = id;
+        handoff = action;
+        handoffFrames = 0;
+        controls.setInputEnabled(false);
+        controls.closePopover();
+    }
+
+    private void railAction(final String[] item) {
+        if ("rail.options".equals(item[0])) {
+            press(item[0], new Runnable() {
+                @Override
+                public void run() {
+                    client.setScreen(new SettingsScreen(FathomMenuScreen.this, client.options));
+                }
+            });
+            return;
+        }
+        if (item[3] != null) {
+            openHub(item[0], item[3]);
+        }
+    }
+
+    private void openHub(String id, final String section) {
+        // Sealed on the first open, exactly as the hotkey path does: registration
+        // is finished, and a module arriving while a list is being drawn is a
+        // module whose settings were never loaded from disk.
+        if (Runtime.hud() == null) {
+            return;
+        }
+        Runtime.features().seal();
+        press(id, new Runnable() {
+            @Override
+            public void run() {
+                if (section == null) {
+                    FathomNavigation.openHub(client, Runtime.hud());
+                } else {
+                    FathomNavigation.openHub(client, Runtime.hud(), section);
+                }
+            }
+        });
     }
 
     // -----------------------------------------------------------------------
@@ -356,59 +749,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     }
 
     // -----------------------------------------------------------------------
-    // Navigation
-    // -----------------------------------------------------------------------
-
-    private void openHub() {
-        // Sealed on the first open, exactly as the hotkey path does: registration
-        // is finished, and a module arriving while a list is being drawn is a
-        // module whose settings were never loaded from disk.
-        if (Runtime.hud() == null) {
-            return;
-        }
-        Runtime.features().seal();
-        if (closing) {
-            return;
-        }
-        pendingHub = true;
-        beginExit();
-    }
-
-    private void navigate(Screen destination) {
-        if (destination == null || closing) {
-            return;
-        }
-        pendingScreen = destination;
-        beginExit();
-    }
-
-    private void quitAfterExit() {
-        if (closing) {
-            return;
-        }
-        pendingQuit = true;
-        beginExit();
-    }
-
-    private void beginExit() {
-        closing = true;
-        controls.setInputEnabled(false);
-        controls.closePopover();
-        transition.close(Gfx.clock().seconds());
-    }
-
-    /** Called after Gfx.end(), so the destination inherits a restored GL state. */
-    private void finishNavigation() {
-        if (pendingQuit) {
-            client.scheduleStop();
-        } else if (pendingHub) {
-            FathomNavigation.openHub(client, Runtime.hud());
-        } else if (pendingScreen != null) {
-            client.setScreen(pendingScreen);
-        }
-    }
-
-    // -----------------------------------------------------------------------
     // Input
     // -----------------------------------------------------------------------
 
@@ -419,7 +759,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         }
         if (Runtime.hud() != null && Runtime.hud().hubKey().matches(keyCode)) {
             // Right Shift opens the Hub from here too.
-            openHub();
+            openHub("hub.key", null);
             return true;
         }
         if (keyCode == Keyboard.KEY_ESCAPE) {
@@ -446,20 +786,21 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
 
     private void moveFocus(boolean backwards) {
         int current = -1;
-        for (int index = 0; index < IDS.length; index++) {
-            if (controls.focused(IDS[index])) {
+        for (int index = 0; index < FOCUS_ORDER.length; index++) {
+            if (controls.focused(FOCUS_ORDER[index])) {
                 current = index;
                 break;
             }
         }
+        int count = FOCUS_ORDER.length;
         int next = current < 0
-                ? (backwards ? IDS.length - 1 : 0)
-                : (current + (backwards ? -1 : 1) + IDS.length) % IDS.length;
-        controls.focus(IDS[next]);
+                ? (backwards ? count - 1 : 0)
+                : (current + (backwards ? -1 : 1) + count) % count;
+        controls.focus(FOCUS_ORDER[next]);
     }
 
     private String focusedAction() {
-        for (String id : IDS) {
+        for (String id : FOCUS_ORDER) {
             if (controls.focused(id)) {
                 return id;
             }

@@ -2,16 +2,16 @@
   The shell.
 
   ┌──────────────────────────────────────────────┐
-  │ FATHOM  Home              1.8.9  (account) ─□× │   header row: type + glass
+  │ fathom  Home   1.8.9 (background) (account) ─□× │   header row: type + glass
   │ ╭──╮                                          │
   │ │⌂ │            MAIN CONTENT                  │   the photograph continues
   │ │▦ │                                          │   behind everything
   │ ╰──╯                                          │
-  │ ● state · Fathom 0.1.0   (install)  (switch) │   status line: type + glass
+  │ ╭──╮                                          │   logs and settings
   └──────────────────────────────────────────────┘
 
   ONE PHOTOGRAPHIC ENVIRONMENT. There are no bars. The photograph fills the
-  window, and the header row, the navigation and the status line are pieces of
+  window, and the header row and the navigation are pieces of
   glass and legible type laid onto it -- so the window reads as one scene with
   an interface in it, not as a frame around a picture.
 
@@ -41,7 +41,6 @@
   import Logs from './routes/Logs.svelte';
   import AddOptiFine from './routes/AddOptiFine.svelte';
   import AccountDrawer from './lib/ui/AccountDrawer.svelte';
-  import ProfileSwitcher from './lib/ui/ProfileSwitcher.svelte';
   import BackgroundPicker from './lib/ui/BackgroundPicker.svelte';
   import LoadingScreen from './lib/ui/LoadingScreen.svelte';
   import FathomIcon from './lib/ui/FathomIcon.svelte';
@@ -61,7 +60,6 @@
     play,
     setBackground,
     settingsView,
-    shellStatus,
     signIn,
     reopenSignInPage,
     signInDevelopment,
@@ -79,7 +77,6 @@
     type HomeView,
     type AccountSummary,
     type LaunchProgress,
-    type ShellStatus,
   } from './lib/api';
 
   /* One icon family throughout (Lucide geometry, Fathom ids), and one table.
@@ -108,11 +105,13 @@
   settingsCategory = devQuery?.get('category') ?? settingsCategory;
   let home: HomeView | null = null;
   let accounts: AccountSummary[] = [];
-  let status: ShellStatus | null = null;
   let choice = DEFAULT_BACKGROUND;
   let pickerOpen = false;
   let accountOpen = devQuery?.get("sheet") === "account";
-  let railOpen = false;
+  /* Each rail group widens on its own, under the pointer: hovering the pages
+     used to widen Logs and Settings at the foot as well. */
+  let railTop = false;
+  let railBottom = false;
   /** The launch in flight, if any. `NO_LAUNCH` the rest of the time. */
   let launch: LaunchProgress = NO_LAUNCH;
   let poll: ReturnType<typeof setInterval> | null = null;
@@ -155,7 +154,7 @@
         const { listen } = await import('@tauri-apps/api/event');
         stop = await listen('fathom://show-diagnostics', () => {
           route = 'logs';
-          railOpen = false;
+          railTop = railBottom = false;
         });
       } catch {
         /* Not in the app shell. There is no game to ask, either. */
@@ -185,10 +184,9 @@
     void (async () => {
       try {
         const [
-          homeResult, statusResult, choiceResult, accountsResult, settings, authResult, launchResult,
+          homeResult, choiceResult, accountsResult, settings, authResult, launchResult,
         ] = await Promise.all([
           tracked('Checking Java and your installation', homeView()),
-          tracked('Reading the launcher', shellStatus()),
           tracked('Loading your background', loadBackground()),
           tracked('Loading accounts', accountsView()),
           tracked('Loading settings', settingsView()),
@@ -196,7 +194,6 @@
           launchProgress(),
         ]);
         home = homeResult;
-        status = statusResult;
         choice = choiceResult;
         accounts = accountsResult;
         canSignIn = settings.account.canSignIn;
@@ -337,14 +334,14 @@
   let epoch = 0;
 
   async function refreshShell() {
-    [home, status, accounts] = await Promise.all([homeView(), shellStatus(), accountsView()]);
+    [home, accounts] = await Promise.all([homeView(), accountsView()]);
     epoch += 1;
   }
 
   function go(next: string, category?: string) {
     if (category) settingsCategory = category;
     route = next;
-    railOpen = false;
+    railTop = railBottom = false;
   }
 
   function onAction(command: string) {
@@ -369,13 +366,6 @@
       ? 'Add OptiFine'
       : ([...ROUTES, ...UTILITY].find((r) => r.id === route)?.label ?? 'Home');
   $: backgroundLabel = BACKGROUNDS.find((b) => b.id === choice)?.label ?? 'Background';
-  $: ready = home?.action.ready ?? false;
-  /* One line, from whichever of the two knows more. While a launch is under way
-     it is the launch; otherwise it is whatever the launch control is saying.
-     Previously this was hard-coded to "Sign in required", which was wrong for
-     every blocker that is not sign-in. */
-  $: stateLine =
-    launch.phase === 'idle' ? (home?.action.detail ?? '') : launch.headline || launch.detail;
 
   /**
    * F11 toggles fullscreen, from any page.
@@ -419,12 +409,13 @@
 <LoadingScreen visible={loading} {pending} />
 
 <!-- One photographic environment. Nothing below paints a bar: the header row,
-     the navigation and the status line are pieces of glass and type laid onto
+     the navigation are pieces of glass and type laid onto
      the photograph, which continues behind all of them. -->
-<!-- Home is the same shell: the same header, account and rail in the same
-     places, so nothing jumps when you leave it. It only drops the crumb (it is
-     the root) and the status line (its launch panel already says all of it). -->
-<div class="shell" class:home={route === 'home'}>
+<!-- Every page is the same shell: the same header, account and rail in the
+     same places, so nothing jumps between them. There is no status line: it
+     showed on every page but Home, repeated what Home's launch panel says, and
+     carried a second Logs button beside the rail's. -->
+<div class="shell">
   <!-- The header row: brand, where you are, the account, and the window's own
        controls. The native strip is disabled; this whole row is the drag
        region, and only its interactive pieces opt out of it. -->
@@ -451,6 +442,42 @@
 
     {#if home?.profile}
       <span class="version tnum legible" data-tauri-drag-region>{home.profile.version}</span>
+    {/if}
+
+    <!-- The background, from every page. It used to live only in the status
+         line, which Home did not have, and in Settings > Appearance. -->
+    {#if PICKER_AVAILABLE}
+      <div class="picker-anchor">
+        <button
+          class="ui-capsule material-clear material-interactive"
+          aria-haspopup="menu"
+          aria-expanded={pickerOpen}
+          use:tooltip={pickerOpen ? '' : 'Background'}
+          on:click|stopPropagation={() => (pickerOpen = !pickerOpen)}
+        >
+          <ImageIcon size={ICON.inline} />
+          <span class="picker-label">{backgroundLabel}</span>
+        </button>
+
+        {#if pickerOpen}
+          <div
+            class="picker ui-popover"
+            in:fly={{ y: -6, duration: MOTION_SURFACE, easing: EASE }}
+            out:fade={{ duration: MOTION_EXIT, easing: EASE_EXIT }}
+            on:click|stopPropagation
+            on:keydown={(event) => event.key === 'Escape' && (pickerOpen = false)}
+            role="menu"
+            tabindex="-1"
+          >
+            <span class="picker-title">Background</span>
+            <!-- The list is taller than the window has room for, so it scrolls
+                 and the title stays put. -->
+            <div class="picker-scroll">
+              <BackgroundPicker options={BACKGROUNDS} value={choice} onChoose={chooseBackground} />
+            </div>
+          </div>
+        {/if}
+      </div>
     {/if}
 
     <button
@@ -501,20 +528,21 @@
        crossed the edge of the window. The current page is the denser pill,
        not a coloured bar. -->
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-  <nav
-    class="rail"
-    aria-label="Pages"
-    on:mouseenter={() => (railOpen = true)}
-    on:mouseleave={() => (railOpen = false)}
-  >
-    <div class="rail-group top material-standard" class:open={railOpen}>
+  <nav class="rail" aria-label="Pages">
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+      class="rail-group top material-standard"
+      class:open={railTop}
+      on:mouseenter={() => (railTop = true)}
+      on:mouseleave={() => (railTop = false)}
+    >
       {#each ROUTES as item}
         <button
           class="nav"
           class:active={route === item.id}
           aria-current={route === item.id ? 'page' : undefined}
           aria-label={item.label}
-          use:tooltip={railOpen ? '' : item.label}
+          use:tooltip={railTop ? '' : item.label}
           on:click={() => go(item.id)}
         >
           <span class="glyph"><FathomIcon name={item.icon} size={ICON.nav} /></span>
@@ -522,14 +550,20 @@
         </button>
       {/each}
     </div>
-    <div class="rail-group bottom material-standard" class:open={railOpen}>
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+      class="rail-group bottom material-standard"
+      class:open={railBottom}
+      on:mouseenter={() => (railBottom = true)}
+      on:mouseleave={() => (railBottom = false)}
+    >
       {#each UTILITY as item}
         <button
           class="nav"
           class:active={route === item.id}
           aria-current={route === item.id ? 'page' : undefined}
           aria-label={item.label}
-          use:tooltip={railOpen ? '' : item.label}
+          use:tooltip={railBottom ? '' : item.label}
           on:click={() => go(item.id)}
         >
           <span class="glyph"><FathomIcon name={item.icon} size={ICON.nav} /></span>
@@ -582,77 +616,6 @@
     {/key}
   </main>
 
-  <!-- THE STATUS LINE. Type on the photograph and a few capsules, not a bar. -->
-  {#if route !== 'home'}
-  <footer class="status">
-    <div class="zone left legible">
-      <span class="dot" class:ready={ready && launch.phase === 'idle'} aria-hidden="true"></span>
-      <span class="state">{stateLine}</span>
-      <span class="sep" aria-hidden="true">·</span>
-      <span class="meta tnum">Fathom {status?.version ?? ''}</span>
-      <span class="meta">{status?.offline ? 'Offline' : 'Online'}</span>
-    </div>
-
-    <button
-      class="zone centre ui-capsule small material-clear material-interactive"
-      use:tooltip={'Change installation'}
-      on:click={() => go('installations')}
-    >
-      <span class="tnum summary">{status?.summary ?? ''}</span>
-    </button>
-
-    <div class="zone right">
-      <!-- The switcher, not a link to Profiles. Picking which setup to launch
-           is the second most common thing anybody does here, and it used to be
-           possible on exactly one screen. -->
-      <ProfileSwitcher {epoch} onChanged={refreshShell} />
-
-      <!-- Only offered when there is a choice to make. With one approved
-           background a picker would be a control that does nothing. -->
-      {#if PICKER_AVAILABLE}
-        <div class="picker-anchor">
-          <button
-            class="ui-capsule small material-clear material-interactive"
-            aria-haspopup="menu"
-            aria-expanded={pickerOpen}
-            on:click|stopPropagation={() => (pickerOpen = !pickerOpen)}
-          >
-            <ImageIcon size={ICON.inline} />
-            <span>{backgroundLabel}</span>
-          </button>
-
-          {#if pickerOpen}
-            <div
-              class="picker ui-popover"
-              in:fly={{ y: 6, duration: MOTION_SURFACE, easing: EASE }}
-              out:fade={{ duration: MOTION_EXIT, easing: EASE_EXIT }}
-              on:click|stopPropagation
-              on:keydown={(event) => event.key === 'Escape' && (pickerOpen = false)}
-              role="menu"
-              tabindex="-1"
-            >
-              <span class="picker-title">Background</span>
-              <!-- The list is taller than the window has room for, so it scrolls
-                   and the title stays put. -->
-              <div class="picker-scroll">
-                <BackgroundPicker
-                  options={BACKGROUNDS}
-                  value={choice}
-                  onChoose={chooseBackground}
-                />
-              </div>
-            </div>
-          {/if}
-        </div>
-      {/if}
-
-      <button class="ui-capsule small material-clear material-interactive" on:click={() => go('logs')}>
-        <FathomIcon name="logs" size={ICON.inline} />
-        <span>Logs</span>
-      </button>
-    </div>
-  </footer>
-  {/if}
 </div>
 
 {#if accountOpen && home}
@@ -679,22 +642,14 @@
     position: relative;
     display: grid;
     grid-template-columns: var(--layout-shell-rail) minmax(0, 1fr);
+    /* The third row keeps the rail's lower group where it always was; the page
+       runs on through it to the bottom of the window. */
     grid-template-rows: var(--layout-shell-header) minmax(0, 1fr) var(--layout-shell-status);
     grid-template-areas:
       'top top'
       'rail main'
-      'bottom bottom';
-    height: 100%;
-  }
-
-  /* Home has no status line: its page runs to the bottom of the window. The
-     rail keeps its own row, so its lower group sits exactly where it does on
-     every other page. */
-  .shell.home {
-    grid-template-areas:
-      'top top'
-      'rail main'
       '. main';
+    height: 100%;
   }
 
   /* -- header row -------------------------------------------------------- */
@@ -947,72 +902,6 @@
     inset: 0;
   }
 
-  /* -- status line --------------------------------------------------------- */
-  .status {
-    grid-area: bottom;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-    gap: var(--space-3);
-    padding: 0 var(--space-4) 0 var(--space-5);
-    font-size: var(--type-caption-size);
-  }
-
-  .zone {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-  }
-
-  /* Not on the centre zone: it is a capsule itself, and its own gap is the
-     small capsule's, as for every other capsule in this bar. */
-  .zone.left,
-  .zone.right {
-    gap: var(--space-2);
-  }
-
-  .zone.right {
-    justify-content: flex-end;
-  }
-
-  .zone.centre {
-    justify-self: center;
-    max-width: 100%;
-  }
-
-  .summary {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .dot {
-    width: 7px;
-    height: 7px;
-    flex-shrink: 0;
-    border-radius: var(--radius-pill);
-    background-color: var(--color-warning-text);
-  }
-
-  .dot.ready {
-    background-color: var(--color-success-text);
-  }
-
-  .state {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: var(--type-button-weight);
-    color: var(--color-text);
-  }
-
-  .meta,
-  .sep {
-    flex-shrink: 0;
-    color: var(--color-text-secondary);
-    white-space: nowrap;
-  }
-
   /* -- background popover (shown only when there is more than one) --------- */
   .picker-anchor {
     position: relative;
@@ -1020,14 +909,22 @@
 
   .picker {
     position: absolute;
-    bottom: calc(100% + var(--space-2));
+    top: calc(100% + var(--space-2));
     right: 0;
-    z-index: 20;
+    z-index: 40;
     width: 300px;
     padding: var(--space-3);
     gap: var(--space-2);
     /* Never taller than the window it opens into. */
-    max-height: calc(100vh - var(--layout-shell-status) - var(--space-6));
+    max-height: calc(100vh - var(--layout-shell-header) - var(--space-6));
+  }
+
+  /* Long names would push the account off the header; the icon says enough. */
+  .picker-label {
+    max-width: 14ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .picker-scroll {
