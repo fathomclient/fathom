@@ -281,21 +281,30 @@ impl LegacyFabricProvider {
             .metadata_cache_dir()
             .join("legacy-fabric")
             .join(format!("{}-{}.json", encode(minecraft_version), encode(loader_version)));
-        if let Ok(bytes) = std::fs::read(&file) {
-            match serde_json::from_slice::<LoaderEntry>(&bytes) {
+        // Why the cached copy was not used, for the error if fetching fails
+        // too: "the service is down" alone does not say why the copy that
+        // should have made that irrelevant was passed over.
+        let passed_over = match std::fs::read(&file) {
+            Ok(bytes) => match serde_json::from_slice::<LoaderEntry>(&bytes) {
                 Ok(entry) if entry.launcher_meta.is_some() => return Ok(entry),
-                // Unreadable or incomplete: fetch it again, as if absent.
-                _ => tracing::warn!(file = %file.display(), "ignoring an unusable cached loader profile"),
-            }
-        }
+                Ok(_) => format!("the copy at {} has no launcherMeta", file.display()),
+                Err(error) => format!("the copy at {} does not parse ({error})", file.display()),
+            },
+            Err(error) => format!("no usable copy at {} ({error})", file.display()),
+        };
+        tracing::info!(reason = %passed_over, "fetching the loader profile");
 
         let path = format!(
             "/v2/versions/loader/{}/{}",
             encode(minecraft_version),
             encode(loader_version)
         );
-        let body = Self::fetch_bytes(&path, http, feature)?;
-        let entry: LoaderEntry = Self::parse(&path, &body)?;
+        let with_reason = |error: LoaderError| match error {
+            LoaderError::Malformed(detail) => LoaderError::Malformed(format!("{detail}; {passed_over}")),
+            other => other,
+        };
+        let body = Self::fetch_bytes(&path, http, feature).map_err(with_reason)?;
+        let entry: LoaderEntry = Self::parse(&path, &body).map_err(with_reason)?;
         if entry.launcher_meta.is_some() {
             // Best effort: a copy that cannot be written costs one fetch next
             // time, not this launch. Written beside and renamed over, so a
