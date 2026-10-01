@@ -36,9 +36,9 @@ redistribute it.
 | Image | The Graphite backdrop: a Minecraft scene processed by `GraphiteAssets` (`BackdropProcess`) |
 | Source | **Not yet recorded.** `assets/graphite/cinematic-scene.png` (1672×941) is the capture it was processed from; who captured or authored it, and in which world, is not written down. Record it here before a public release. |
 
-- `assets/graphite/backdrop-default.png`, its game copy
-  `textures/menu/graphite/backdrop-default.png`, and the launcher's
-  `desktop/public/backgrounds/graphite.jpg` / `thumbs/graphite.jpg` ("Graphite").
+- `assets/graphite/backdrop-default.png` and its game copy
+  `textures/menu/graphite/backdrop-default.png`, behind some in-game menus. It
+  is no longer offered as a background in the launcher.
 
 ## Background footage
 

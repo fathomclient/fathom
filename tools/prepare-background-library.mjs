@@ -66,12 +66,6 @@ for (const bg of manifest.backgrounds) {
     made++;
   }
 
-  // Graphite: the shipped PNG master, as a launcher JPEG.
-  if (bg.id === 'graphite' && needed(launcher(bg.asset))) {
-    ffmpeg(['-i', path.join(root, 'assets/graphite/backdrop-default.png'), '-q:v', '2', launcher(bg.asset)]);
-    made++;
-  }
-
   // The picker thumbnail.
   const thumb = launcher(bg.thumbnail);
   if (needed(thumb)) {

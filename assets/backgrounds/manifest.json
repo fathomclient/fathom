@@ -26,8 +26,8 @@
       "asset": "backgrounds/bg_1.webm",
       "still": "backgrounds/bg_1.jpg",
       "thumbnail": "backgrounds/thumbs/bg_1.jpg",
-      "width": 1600,
-      "height": 900,
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
         "still": "scenes/bg_1.jpg",
@@ -56,32 +56,14 @@
       "accent": "#e7a06a"
     },
     {
-      "id": "graphite",
-      "label": "Graphite",
-      "type": "image",
-      "asset": "backgrounds/graphite.jpg",
-      "still": "backgrounds/graphite.jpg",
-      "thumbnail": "backgrounds/thumbs/graphite.jpg",
-      "width": 2560,
-      "height": 1440,
-      "launcher": true,
-      "minecraft": {
-        "still": "graphite/backdrop-default.png",
-        "video": null
-      },
-      "credit": "Fathom's Graphite backdrop; see ATTRIBUTION.md",
-      "note": "Processed by GraphiteAssets from a 1672x941 capture; the source is not yet recorded in ATTRIBUTION.md.",
-      "accent": "#88a1c8"
-    },
-    {
       "id": "bg_6clear",
       "label": "Metropolis",
       "type": "video",
       "asset": "backgrounds/bg_6clear.webm",
       "still": "backgrounds/bg_6clear.jpg",
       "thumbnail": "backgrounds/thumbs/bg_6clear.jpg",
-      "width": 1600,
-      "height": 900,
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
         "still": "scenes/bg_6clear.jpg",
@@ -97,15 +79,15 @@
       "asset": "backgrounds/bg_3.webm",
       "still": "backgrounds/bg_3.jpg",
       "thumbnail": "backgrounds/thumbs/bg_3.jpg",
-      "width": 1600,
-      "height": 900,
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
         "still": "scenes/bg_3.jpg",
         "video": null
       },
       "credit": "Recorded in vanilla Minecraft by the Fathom project owner",
-      "accent": "#97bab3"
+      "accent": "#95bbb4"
     },
     {
       "id": "bg_6midnight",
@@ -114,15 +96,15 @@
       "asset": "backgrounds/bg_6midnight.webm",
       "still": "backgrounds/bg_6midnight.jpg",
       "thumbnail": "backgrounds/thumbs/bg_6midnight.jpg",
-      "width": 1600,
-      "height": 900,
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
         "still": "scenes/bg_6midnight.jpg",
         "video": null
       },
       "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-      "accent": "#c58c90"
+      "accent": "#c48d90"
     },
     {
       "id": "bg_5noraintickunfrozen",
@@ -131,22 +113,22 @@
       "asset": "backgrounds/bg_5noraintickunfrozen.webm",
       "still": "backgrounds/bg_5noraintickunfrozen.jpg",
       "thumbnail": "backgrounds/thumbs/bg_5noraintickunfrozen.jpg",
-      "width": 1600,
-      "height": 900,
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
         "still": "scenes/bg_5noraintickunfrozen.jpg",
         "video": null
       },
       "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
-      "accent": "#7f9ad2"
+      "accent": "#7f9cd2"
     },
     {
       "id": "bg_5rain",
       "label": "Rainforest Storm",
       "type": "video",
       "asset": "backgrounds/bg_5rain.webm",
-      "still": "backgrounds/bg_5rain.png",
+      "still": "backgrounds/bg_5rain.jpg",
       "thumbnail": "backgrounds/thumbs/bg_5rain.jpg",
       "width": 1920,
       "height": 1080,
@@ -156,7 +138,7 @@
         "video": "bg_5rain"
       },
       "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
-      "accent": "#8dafc4"
+      "accent": "#8dadc3"
     },
     {
       "id": "bg_5noraintickfrozen",
@@ -165,15 +147,15 @@
       "asset": "backgrounds/bg_5noraintickfrozen.webm",
       "still": "backgrounds/bg_5noraintickfrozen.jpg",
       "thumbnail": "backgrounds/thumbs/bg_5noraintickfrozen.jpg",
-      "width": 1600,
-      "height": 900,
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
         "still": "scenes/bg_5noraintickfrozen.jpg",
         "video": null
       },
       "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
-      "accent": "#809ad0"
+      "accent": "#809bd0"
     },
     {
       "id": "bg_4",
@@ -182,8 +164,8 @@
       "asset": "backgrounds/bg_4.webm",
       "still": "backgrounds/bg_4.jpg",
       "thumbnail": "backgrounds/thumbs/bg_4.jpg",
-      "width": 1600,
-      "height": 900,
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
         "still": "scenes/bg_4.jpg",
@@ -199,15 +181,15 @@
       "asset": "backgrounds/bg_2.webm",
       "still": "backgrounds/bg_2.jpg",
       "thumbnail": "backgrounds/thumbs/bg_2.jpg",
-      "width": 1600,
-      "height": 900,
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
         "still": "scenes/bg_2.jpg",
         "video": null
       },
       "credit": "Recorded in vanilla Minecraft by the Fathom project owner",
-      "accent": "#98b9af"
+      "accent": "#96bbaf"
     },
     {
       "id": "bg_6tokyo",

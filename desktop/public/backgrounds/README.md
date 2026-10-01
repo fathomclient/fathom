@@ -12,24 +12,23 @@ Per background:
 | File | What it is |
 | --- | --- |
 | `<id>.webm` | A video background: VP9, looping, silent. |
-| `<id>.jpg` / `bg_5rain.png` | The full-resolution still. For a video it is frame 0 of the clip, shown until the first frame decodes and instead of the video if it cannot play. For an image it is the background. |
+| `<id>.jpg` | The full-resolution still. For a video it is frame 0 of the clip, shown until the first frame decodes and instead of the video if it cannot play. For an image it is the background. |
 | `thumbs/<id>.jpg` | 384×216 picker thumbnail. Never shown full size. |
 
 | id | Name | Type | Native size | Notes |
 | --- | --- | --- | --- | --- |
-| `bg_1` | Cherry Grove | video | 1600×900 | blur baked in (legacy encode) |
-| `bg_2` | Snowfall | video | 1600×900 | blur baked in; very dark |
-| `bg_3` | Midnight Coast | video | 1600×900 | blur baked in; very dark |
-| `bg_4` | Savanna | video | 1600×900 | blur baked in |
-| `bg_5rain` | Rainforest Storm | video | 1920×1080 | **default**; unblurred, CRF 23, from the game's frame sequence |
-| `bg_5noraintickfrozen` | Rainforest Twilight | video | 1600×900 | blur baked in |
-| `bg_5noraintickunfrozen` | Rainforest Drift | video | 1600×900 | blur baked in |
-| `bg_6clear` | Metropolis | video | 1600×900 | blur baked in |
-| `bg_6midnight` | Midnight Metropolis | video | 1600×900 | blur baked in; 6 s loop |
+| `bg_1` | Cherry Grove | video | 1920×1080 | unblurred, CRF 23 |
+| `bg_2` | Snowfall | video | 1920×1080 | very dark; unblurred, CRF 23 |
+| `bg_3` | Midnight Coast | video | 1920×1080 | very dark; unblurred, CRF 23 |
+| `bg_4` | Savanna | video | 1920×1080 | unblurred, CRF 23 |
+| `bg_5rain` | Rainforest Storm | video | 1920×1080 | **default**; unblurred, CRF 23 |
+| `bg_5noraintickfrozen` | Rainforest Twilight | video | 1920×1080 | unblurred, CRF 23 |
+| `bg_5noraintickunfrozen` | Rainforest Drift | video | 1920×1080 | unblurred, CRF 23 |
+| `bg_6clear` | Metropolis | video | 1920×1080 | unblurred, CRF 23 |
+| `bg_6midnight` | Midnight Metropolis | video | 1920×1080 | 6 s loop; unblurred, CRF 23 |
 | `bg_6tokyo` | Tokyo Tower | video | 1920×1080 | unblurred, CRF 23 |
 | `bg_6aurora` | Aurora | video | 1920×1080 | unblurred, CRF 23 |
 | `golden-hour` | Golden Hour | image | 1920×1080 | licence not yet confirmed |
-| `graphite` | Graphite | image | 2560×1440 | source not yet recorded |
 
 The legacy videos were encoded with a Gaussian blur (sigma 3.5) at 1600×900,
 CRF 30. That cannot be undone from these files: rebuild them from the original
