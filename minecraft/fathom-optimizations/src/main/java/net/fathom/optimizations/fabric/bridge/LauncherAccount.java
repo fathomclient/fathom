@@ -150,6 +150,23 @@ public final class LauncherAccount {
         });
     }
 
+    /**
+     * Bring the launcher to the front -- starting it if it is closed -- and
+     * then run {@code after} (the game quitting, say), all off the render thread.
+     */
+    public void openLauncher(final Runnable after) {
+        run(new Runnable() {
+            @Override
+            public void run() {
+                bridge.refresh();
+                bridge.open();
+                if (after != null) {
+                    after.run();
+                }
+            }
+        });
+    }
+
     /** Switch the launcher's active account without leaving the game UI. */
     public void switchTo(final String accountId) {
         if (working) {

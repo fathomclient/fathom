@@ -53,15 +53,18 @@ public final class Glow {
     }
 
     /**
-     * Light falling on a pane from above: a wide round pool centred on its top
-     * edge, inside the pane only. Drawn after the pane's fill, before its
-     * content.
+     * Light falling on a pane from above, fading to nothing towards its foot,
+     * inside the pane's own rounded shape. Drawn after the pane's fill, before
+     * its content.
+     *
+     * <p>This was a round bloom clipped to the pane -- and a clip is a
+     * rectangle, so the light filled the square corners outside the pane's
+     * curve: on a narrow pane like the title screen's rail, a faint box around
+     * the capsule. A rounded fade cannot leave the shape.
      */
-    public static void sheen(Renderer ui, Rect pane) {
-        float radius = Math.max(pane.width * 0.6f, pane.height * 0.7f);
-        ui.clip(pane.x, pane.y, pane.right(), pane.bottom());
-        ui.bloom(pane.centreX(), pane.y, radius, at(GraphiteTokens.GLOW_SHEEN_ALPHA));
-        ui.unclip();
+    public static void sheen(Renderer ui, Rect pane, float radius) {
+        ui.gradient(pane.x, pane.y, pane.right(), pane.bottom(), radius,
+                at(GraphiteTokens.GLOW_SHEEN_ALPHA), at(0f));
     }
 
     /**

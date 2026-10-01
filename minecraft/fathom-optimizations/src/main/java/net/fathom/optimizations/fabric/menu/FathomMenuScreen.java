@@ -18,6 +18,8 @@ import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
+import net.fathom.optimizations.fabric.bridge.LauncherAccount;
+import net.fathom.optimizations.fabric.bridge.LauncherBridge;
 import net.fathom.optimizations.fabric.FathomOptimizationsClient;
 import net.fathom.optimizations.fabric.gfx.FathomScreen;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
@@ -147,6 +149,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     /** The signal focus ring is for the keyboard: a pointer press does not show it. */
     private boolean keyboardFocus;
 
+    /** The account panel under the header's account pill. */
+    private boolean accountOpen;
+    private Rect accountPill;
+    private LauncherAccount account;
+
     @Override
     public void init() {
         if (!announced) {
@@ -182,6 +189,14 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         keyboardFocus = false;
         pointer.reset();
         controls.reset();
+        accountOpen = Boolean.getBoolean("fathom.qaAccountOpen");
+        account = LauncherAccount.get(client.runDirectory);
+        account.check();
+    }
+
+    /** Whether the page under the account panel takes input. */
+    private boolean live() {
+        return !closing && !accountOpen;
     }
 
     @Override
@@ -270,6 +285,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         rail(ui, railBottom, RAIL_BOTTOM, "rail.bottom");
         installation(ui, now);
         legal(ui);
+        if (accountOpen) {
+            accountPanel(ui);
+        }
 
         ui.popTransform();
         ui.popAlpha();
@@ -287,19 +305,30 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         String name = playerName();
         Type nameType = Graphite.floor(ui, Graphite.UI);
         float avatar = 24f;
-        float capsuleWidth = 5f + avatar + GraphiteTokens.SPACE_2 + measureKept(ui, name, nameType) + 14f;
+        float chevron = 14f;
+        float capsuleWidth = 5f + avatar + GraphiteTokens.SPACE_2 + measureKept(ui, name, nameType)
+                + GraphiteTokens.SPACE_2 + chevron + 10f;
         Rect capsule = new Rect(right - capsuleWidth, top, capsuleWidth, compact);
-        Graphite.surface(ui, capsule, capsule.height / 2f, Graphite.Material.CLEAR, false);
+        accountPill = capsule;
+        // The launcher's account capsule: clear glass, the head, the name, and
+        // a chevron, because it opens something.
+        Controls.State pill = controls.state("account.pill", capsule, !closing);
+        Graphite.surface(ui, capsule, capsule.height / 2f, Graphite.Material.CLEAR,
+                pill.hover, pill.press, accountOpen ? 1f : 0f, false);
         Rect face = new Rect(capsule.x + 5f, capsule.centreY() - avatar / 2f, avatar, avatar);
-        ui.rounded(face.x, face.y, face.right(), face.bottom(), avatar / 2f, 0x2EFFFFFF);
-        Graphite.rim(ui, face, avatar / 2f, GraphiteTokens.COLOR_RIM_HOVER);
-        Type initial = Graphite.floor(ui, Graphite.CAPTION.weighing(Type.Weight.SEMIBOLD));
+        head(ui, face, name);
         keepCase(ui, true);
-        ui.textCentred(name.isEmpty() ? "" : name.substring(0, 1).toUpperCase(java.util.Locale.ROOT),
-                face.centreX(), Graphite.baseline(ui, face, initial), initial, Graphite.TEXT);
         ui.text(name, face.right() + GraphiteTokens.SPACE_2, Graphite.baseline(ui, capsule, nameType),
                 nameType, Graphite.TEXT);
         keepCase(ui, false);
+        ui.icon(accountOpen ? Icon.CHEVRON_DOWN : Icon.CHEVRON_DOWN, capsule.right() - 10f - chevron,
+                capsule.centreY() - chevron / 2f, chevron, Graphite.TEXT_SECONDARY);
+        if (pill.clicked) {
+            accountOpen = !accountOpen;
+            if (accountOpen && account != null) {
+                account.check();
+            }
+        }
 
         Type version = Graphite.floor(ui, Graphite.SMALL);
         ui.textRight(minecraftVersion(), capsule.x - GraphiteTokens.SPACE_3,
@@ -312,7 +341,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      * rail widened both together.
      */
     private void rail(Renderer ui, Rect closed, String[][] items, String id) {
-        boolean over = !closing && pointer.x() >= closed.x && pointer.y() >= closed.y
+        boolean over = live() && pointer.x() >= closed.x && pointer.y() >= closed.y
                 && pointer.x() <= closed.x + RAIL_TRAY && pointer.y() <= closed.bottom()
                 && (pointer.x() <= closed.right() || controls.towards(id + "#open", true, 0f) > 0.5f);
         float open = controls.towards(id + "#open", over, GraphiteTokens.MOTION_FAST);
@@ -324,7 +353,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         for (String[] item : items) {
             Rect row = new Rect(group.x + RAIL_INSET, y, group.width - RAIL_INSET * 2f, RAIL_ITEM);
             boolean current = "rail.home".equals(item[0]);
-            Controls.State state = controls.state(item[0], row, !closing && !current);
+            Controls.State state = controls.state(item[0], row, live() && !current);
             Graphite.overlay(ui, row, Graphite.R_CONTROL, current ? 0f : Math.max(state.hover, state.press),
                     current ? 1f : 0f);
             if (current) {
@@ -404,7 +433,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         Rect quit = new Rect(multi.right() + gap, y, PRIMARY_HEIGHT, PRIMARY_HEIGHT);
         if (quit.right() <= card.right() - CARD_PAD + 0.5f) {
             // The launcher's square beside Play: light glass, the control radius.
-            Controls.State state = controls.state(QUIT, quit, !closing);
+            Controls.State state = controls.state(QUIT, quit, live());
             Graphite.surface(ui, quit, Graphite.R_CONTROL, Graphite.Material.LIGHT,
                     state.hover, state.press, 0f, false);
             float iconSize = 16f;
@@ -455,7 +484,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
      * is light glass, like the square beside Play.
      */
     private boolean cardButton(Renderer ui, String id, Rect area, String label, boolean primary) {
-        Controls.State state = controls.state(id, area, !closing);
+        Controls.State state = controls.state(id, area, live());
         float radius = Graphite.R_CONTROL;
         Type type;
         int ink;
@@ -484,6 +513,182 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.textCentred(Text.fit(ui, label, type, area.width - GraphiteTokens.SPACE_4), area.centreX(),
                 Graphite.baseline(ui, area, type), type, ink);
         return state.clicked;
+    }
+
+    /** The account's head: the launcher's cut of the skin, or the name's initial. */
+    private void head(Renderer ui, Rect face, String name) {
+        int texture = 0;
+        if (account != null) {
+            String uuid = sessionUuid();
+            texture = AccountHead.texture(account.launcherRoot(), uuid);
+        }
+        float radius = face.width / 2f;
+        if (texture > 0 && ui instanceof GlRenderer) {
+            ((GlRenderer) ui).roundedImage(texture, face.x, face.y, face.right(), face.bottom(), radius);
+        } else {
+            ui.rounded(face.x, face.y, face.right(), face.bottom(), radius, 0x2EFFFFFF);
+            Type initial = Graphite.floor(ui, Graphite.CAPTION.weighing(Type.Weight.SEMIBOLD)
+                    .at(Math.max(Graphite.CAPTION.size(), face.height * 0.42f)));
+            keepCase(ui, true);
+            ui.textCentred(name.isEmpty() ? "" : name.substring(0, 1).toUpperCase(java.util.Locale.ROOT),
+                    face.centreX(), Graphite.baseline(ui, face, initial), initial, Graphite.TEXT);
+            keepCase(ui, false);
+        }
+        Graphite.rim(ui, face, radius, GraphiteTokens.COLOR_RIM_HOVER);
+    }
+
+    /**
+     * Who is playing, and the other accounts the launcher remembers.
+     *
+     * <p>A running 1.8.9 cannot change the account it was started with, and the
+     * game never holds an account's token -- the launcher does. So switching
+     * asks the launcher to select that account, and then offers to quit to it:
+     * the next Play is as the new account.
+     */
+    private void accountPanel(Renderer ui) {
+        float width = 300f;
+        float pad = GraphiteTokens.SPACE_4;
+        LauncherBridge.SavedAccount[] saved = account == null ? new LauncherBridge.SavedAccount[0]
+                : account.savedAccounts();
+        String current = sessionUuid().replace("-", "").toLowerCase(java.util.Locale.ROOT);
+        java.util.List<LauncherBridge.SavedAccount> others = new java.util.ArrayList<LauncherBridge.SavedAccount>();
+        for (LauncherBridge.SavedAccount each : saved) {
+            if (!each.uuid.equals(current)) {
+                others.add(each);
+            }
+        }
+        String switched = account == null ? "" : account.name();
+        boolean pendingSwitch = !switched.isEmpty() && !switched.equalsIgnoreCase(playerName())
+                && account.phase() == LauncherAccount.Phase.SIGNED_IN;
+
+        float row = GraphiteTokens.SIZE_CONTROL;
+        float height = pad + 48f + pad + 1f + pad + line(Graphite.CAPTION, 1.4f) + GraphiteTokens.SPACE_2
+                + Math.max(1, others.size()) * (row + GraphiteTokens.SPACE_1)
+                + GraphiteTokens.SPACE_2 + row + (pendingSwitch ? row + GraphiteTokens.SPACE_2 : 0f) + pad;
+        Rect panel = new Rect(accountPill.right() - width, accountPill.bottom() + GraphiteTokens.SPACE_2,
+                width, height);
+
+        // Anything outside the panel closes it; registered after the page and
+        // before the panel's own controls, so neither the page nor the panel
+        // sees a click that was meant for the other.
+        Controls.State outside = controls.state("account.outside", new Rect(0f, 0f, ui.width(), ui.height()),
+                !closing);
+        Controls.State inside = controls.state("account.inside", panel, !closing);
+        if (outside.clicked && !inside.hovered && !accountPill.contains(pointer.x(), pointer.y())) {
+            accountOpen = false;
+        }
+
+        Graphite.surface(ui, panel, Graphite.R_PANEL, Graphite.Material.DENSE, true);
+        float x = panel.x + pad;
+        float inner = panel.width - pad * 2f;
+        float y = panel.y + pad;
+
+        // Who: the head, the name, the account and its id.
+        Rect face = new Rect(x, y, 48f, 48f);
+        String name = playerName();
+        head(ui, face, name);
+        Type title = Graphite.floor(ui, Graphite.HEADING);
+        Type small = Graphite.floor(ui, Graphite.SMALL);
+        Type data = Graphite.floor(ui, Graphite.DATA_S);
+        float textX = face.right() + GraphiteTokens.SPACE_3;
+        float room = panel.right() - pad - textX;
+        keepCase(ui, true);
+        ui.text(Text.fit(ui, name.isEmpty() ? "Not signed in" : name, title, room), textX,
+                y + ui.ascent(title) + 2f, title, Graphite.TEXT);
+        keepCase(ui, false);
+        ui.text(Text.fit(ui, accountKind(), small, room), textX, y + 22f + ui.ascent(small), small,
+                Graphite.TEXT_SECONDARY);
+        ui.text(Text.fit(ui, shortUuid(current), data, room), textX, y + 38f + ui.ascent(data), data,
+                Graphite.TEXT_TERTIARY);
+        y += 48f + pad;
+        Graphite.hairline(ui, x, x + inner, y);
+        y += 1f + pad;
+
+        Type label = Graphite.floor(ui, Graphite.CAPTION);
+        ui.text("Other accounts", x, y + ui.ascent(label) + 1f, label, Graphite.TEXT_SECONDARY);
+        y += line(Graphite.CAPTION, 1.4f) + GraphiteTokens.SPACE_2;
+
+        Type rowType = Graphite.floor(ui, Graphite.UI);
+        if (others.isEmpty()) {
+            ui.text("None yet. Add one below.", x, y + (row + ui.ascent(small) - ui.descent(small)) / 2f, small,
+                    Graphite.TEXT_TERTIARY);
+            y += row + GraphiteTokens.SPACE_1;
+        }
+        for (LauncherBridge.SavedAccount other : others) {
+            Rect area = new Rect(x - GraphiteTokens.SPACE_2, y, inner + GraphiteTokens.SPACE_4, row);
+            Controls.State state = controls.state("account.switch." + other.uuid, area,
+                    !closing && account != null && !account.working());
+            Graphite.overlay(ui, area, Graphite.R_CONTROL, Math.max(state.hover, state.press), 0f);
+            Rect small24 = new Rect(x, area.centreY() - 12f, 24f, 24f);
+            ui.rounded(small24.x, small24.y, small24.right(), small24.bottom(), 12f, 0x2EFFFFFF);
+            Type initial = Graphite.floor(ui, Graphite.CAPTION.weighing(Type.Weight.SEMIBOLD));
+            keepCase(ui, true);
+            ui.textCentred(other.name.substring(0, 1).toUpperCase(java.util.Locale.ROOT), small24.centreX(),
+                    Graphite.baseline(ui, small24, initial), initial, Graphite.TEXT);
+            ui.text(other.name, small24.right() + GraphiteTokens.SPACE_2, Graphite.baseline(ui, area, rowType),
+                    rowType, Graphite.TEXT);
+            keepCase(ui, false);
+            ui.textRight("Switch", area.right() - GraphiteTokens.SPACE_2, Graphite.baseline(ui, area, small),
+                    small, state.hover > 0.5f ? Graphite.TEXT : Graphite.TEXT_SECONDARY);
+            if (state.clicked) {
+                account.switchTo(other.uuid);
+            }
+            y += row + GraphiteTokens.SPACE_1;
+        }
+        y += GraphiteTokens.SPACE_2;
+
+        if (pendingSwitch) {
+            // Selected in the launcher; the game still plays as who it started as.
+            Rect quit = new Rect(x, y, inner, row);
+            if (cardButton(ui, "account.quit", quit, "Quit to play as " + switched, true)) {
+                final net.minecraft.client.MinecraftClient game = client;
+                account.openLauncher(new Runnable() {
+                    @Override
+                    public void run() {
+                        game.scheduleStop();
+                    }
+                });
+                accountOpen = false;
+            }
+            y += row + GraphiteTokens.SPACE_2;
+        }
+
+        Rect add = new Rect(x, y, inner, row);
+        Controls.State addState = controls.state("account.add", add, !closing && account != null);
+        Graphite.surface(ui, add, Graphite.R_CONTROL, Graphite.Material.LIGHT, addState.hover, addState.press, 0f,
+                false);
+        String notice = account == null ? null : account.notice();
+        ui.textCentred(Text.fit(ui, notice != null && account.working() ? notice : "Add an account", rowType,
+                add.width - GraphiteTokens.SPACE_4), add.centreX(), Graphite.baseline(ui, add, rowType), rowType,
+                Graphite.TEXT);
+        if (addState.clicked) {
+            account.signIn();
+        }
+    }
+
+    private String sessionUuid() {
+        try {
+            String uuid = client.getSession() == null ? null : client.getSession().getUuid();
+            return uuid == null ? "" : uuid;
+        } catch (RuntimeException unavailable) {
+            return "";
+        }
+    }
+
+    /** How this game is signed in, in one phrase. */
+    private String accountKind() {
+        LaunchSession session = session();
+        if (session == null || !session.present()) {
+            return "Offline session";
+        }
+        return "Microsoft account";
+    }
+
+    private static String shortUuid(String compact) {
+        if (compact == null || compact.length() < 12) {
+            return "";
+        }
+        return compact.substring(0, 8) + "…" + compact.substring(compact.length() - 4);
     }
 
     /** The launcher's indeterminate line: a 40% segment sweeping a faint track. */
@@ -763,7 +968,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             return true;
         }
         if (keyCode == Keyboard.KEY_ESCAPE) {
-            // Nowhere above the title screen; Escape never quits the game.
+            // Closes the account panel; otherwise there is nowhere above the
+            // title screen, and Escape never quits the game.
+            accountOpen = false;
             return true;
         }
         if (keyCode == Keyboard.KEY_TAB) {

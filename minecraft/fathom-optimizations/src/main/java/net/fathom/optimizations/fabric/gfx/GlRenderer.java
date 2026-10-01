@@ -725,6 +725,17 @@ public final class GlRenderer implements Renderer {
             frosted[at + 3] = b;
             frostedCount++;
         }
+        // One pixel in from the shape's edge: the glass's own edge is geometry
+        // with no antialiasing, and here it sits under the antialiased fill
+        // and rim drawn over it, so the pane's outline stays smooth.
+        l += 1f;
+        t += 1f;
+        r -= 1f;
+        b -= 1f;
+        rad = Math.max(0f, rad - 1f);
+        if (r <= l || b <= t) {
+            return false;
+        }
         batch.bind(frostTexture);
         // Four taps averaged by blending: the k-th at 1/k over the ones before.
         float[][] taps = {{-FROST_TAP, -FROST_TAP}, {FROST_TAP, FROST_TAP},
@@ -735,6 +746,36 @@ public final class GlRenderer implements Renderer {
         }
         return true;
     }
+
+    /**
+     * A whole texture in a rounded rectangle, nearest-filtered by the texture's
+     * own parameters: the account's head, as a circle. The edge is geometry,
+     * so draw a rim over it.
+     */
+    public void roundedImage(int textureId, float left, float top, float right, float bottom, float radius) {
+        if (textureId <= 0 || right <= left || bottom <= top) {
+            return;
+        }
+        int colour = tint(0xFFFFFFFF);
+        if (Colour.invisible(colour)) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float rad = cornerRadius(radius, r - l, b - t);
+        batch.bind(textureId);
+        imageBox = new float[] {l, t, r, b};
+        imageMode = true;
+        frostShape(l, t, r, b, rad, 0f, 0f, colour);
+        imageMode = false;
+        batch.forget();
+    }
+
+    /** While true, frostPolygon maps positions across {@link #imageBox} instead of the screen. */
+    private boolean imageMode;
+    private float[] imageBox = new float[4];
 
     /** The rounded rectangle as quads and corner fans, textured by screen position. */
     private void frostShape(float l, float t, float r, float b, float rad, float dx, float dy, int argb) {
@@ -759,7 +800,7 @@ public final class GlRenderer implements Renderer {
 
     /** A quarter disc from {@code from} degrees, as triangles (quads with a repeated corner). */
     private void frostFan(float cx, float cy, float rad, float from, float dx, float dy, int argb) {
-        int steps = Math.max(4, Math.min(16, Math.round(rad / 2f)));
+        int steps = Math.max(6, Math.min(32, Math.round(rad)));
         double start = Math.toRadians(from);
         double step = Math.toRadians(90d) / steps;
         float px = cx + (float) Math.cos(start) * rad;
@@ -776,6 +817,19 @@ public final class GlRenderer implements Renderer {
 
     private void frostPolygon(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
             float dx, float dy, int argb) {
+        if (imageMode) {
+            float w = imageBox[2] - imageBox[0];
+            float h = imageBox[3] - imageBox[1];
+            float ox = imageBox[0];
+            float oy = imageBox[1];
+            batch.vertices(
+                    x0 * vertexScaleX, y0 * vertexScaleY, (x0 - ox) / w, (y0 - oy) / h,
+                    x1 * vertexScaleX, y1 * vertexScaleY, (x1 - ox) / w, (y1 - oy) / h,
+                    x2 * vertexScaleX, y2 * vertexScaleY, (x2 - ox) / w, (y2 - oy) / h,
+                    x3 * vertexScaleX, y3 * vertexScaleY, (x3 - ox) / w, (y3 - oy) / h,
+                    argb);
+            return;
+        }
         // The copy is the framebuffer the right way up for GL: origin bottom-left.
         float w = frostWidth;
         float h = frostHeight;

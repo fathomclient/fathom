@@ -190,7 +190,7 @@ public final class Graphite {
         // surface is too small to hold a pool of light.
         if ((material == Material.STANDARD || material == Material.DENSE)
                 && area.height > CONTROL * 2.5f) {
-            Glow.sheen(ui, area);
+            Glow.sheen(ui, area, radius);
         }
         int rim = Colour.mix(Colour.mix(material.rim, RIM_HOVER, hover), RIM_SELECTED, selected);
         rim(ui, area, radius, rim);

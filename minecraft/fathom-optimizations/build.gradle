@@ -166,6 +166,10 @@ loom {
                 // Visual-only: fixed pointer position (UI units, "x,y") for hover captures.
                 vmArg "-Dfathom.qaPointer=${project.property('qaPointer')}"
             }
+            if (project.hasProperty('qaAccount')) {
+                // Visual-only: the title screen's account panel, open.
+                vmArg '-Dfathom.qaAccountOpen=true'
+            }
             if (project.hasProperty('qaFocusSearch')) {
                 vmArg '-Dfathom.qaFocusSearch=true'
             }
