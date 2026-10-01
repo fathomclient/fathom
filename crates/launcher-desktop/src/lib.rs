@@ -281,23 +281,20 @@ fn background(state: tauri::State<'_, State>) -> Result<String, String> {
 /// launcher's picker and the game's menus are generated from it, and the test
 /// at the bottom of this file fails if this list and it disagree. Any other
 /// stored preference is migrated to the default when read.
-const BACKGROUNDS: [&str; 16] = [
+const BACKGROUNDS: [&str; 13] = [
+    "bg_6aurora",
     "bg_1",
-    "bg_6pull_city-overlook",
     "golden-hour",
     "graphite",
     "bg_6clear",
     "bg_3",
     "bg_6midnight",
-    "bg_6pull_moon-tower",
-    "bg_6pull_neon-grid",
     "bg_5noraintickunfrozen",
     "bg_5rain",
     "bg_5noraintickfrozen",
-    "bg_6pull_red-tower",
     "bg_4",
     "bg_2",
-    "bg_6pull_storm-panorama",
+    "bg_6tokyo",
 ];
 
 /// What a first run shows, and what any retired, unknown or unreadable
@@ -745,7 +742,7 @@ mod tests {
     /// and anything unrecognised migrate to the default.
     #[test]
     fn retired_backgrounds_migrate_to_the_default() {
-        for retired in ["bg1", "bg_5", "static", "bg_6pull", "../../secret"] {
+        for retired in ["bg1", "bg_5", "static", "bg_6pull", "bg_6pull_red-tower", "../../secret"] {
             let mut stored = serde_json::Map::new();
             stored.insert("background".to_owned(), serde_json::Value::from(retired));
             assert!(migrate_appearance(&mut stored), "{retired} should migrate");

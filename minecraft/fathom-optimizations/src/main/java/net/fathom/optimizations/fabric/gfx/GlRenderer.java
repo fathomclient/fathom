@@ -1,6 +1,12 @@
 package net.fathom.optimizations.fabric.gfx;
 
+import org.lwjgl.opengl.ARBFramebufferObject;
+import org.lwjgl.opengl.ContextCapabilities;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
+import org.lwjgl.opengl.GL14;
+import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GLContext;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.GLX;
@@ -80,6 +86,20 @@ public final class GlRenderer implements Renderer {
     private boolean created;
     private boolean inFrame;
     private boolean highQuality = true;
+
+    /*
+     * Frost: the screen as it was before the interface, blurred, for glass.
+     * See captureFrost.
+     */
+    /** How many mip levels down glass samples the copy: 2^4.5, about 22 pixels. */
+    private static final float FROST_LOD = 4.5f;
+    /** The four taps' offset, device pixels, smoothing the mip level's blocks. */
+    private static final float FROST_TAP = 6f;
+    private int frostTexture;
+    private int frostWidth;
+    private int frostHeight;
+    /** Whether this frame captured; glass is drawn only over a copy of itself. */
+    private boolean frostReady;
     /** One render-thread snapshot, reused every frame to avoid hot-path garbage. */
     private final GlStateSnapshot frameState = new GlStateSnapshot();
     private GlStateSnapshot inheritedState;
@@ -230,6 +250,7 @@ public final class GlRenderer implements Renderer {
             alphaDepth = 0;
             alphaOverflow = 0;
             stats.reset();
+            frostReady = false;
             stats.glyphPages = fonts.pageCount();
             stats.iconEntries = icons.count();
 
@@ -324,6 +345,10 @@ public final class GlRenderer implements Renderer {
         icons.delete();
         brand.delete();
         sheet.delete();
+        if (frostTexture != 0) {
+            GlStateManager.deleteTexture(frostTexture);
+            frostTexture = 0;
+        }
         created = false;
     }
 
@@ -592,6 +617,142 @@ public final class GlRenderer implements Renderer {
         maskCorner(r - rad, t, rad, false, true, cover, notch.x, notch.y, notch.size);
         maskCorner(l, b - rad, rad, true, false, cover, notch.x, notch.y, notch.size);
         maskCorner(r - rad, b - rad, rad, false, false, cover, notch.x, notch.y, notch.size);
+    }
+
+    /**
+     * Copy the screen as it stands into the frost texture, for glass.
+     *
+     * <p>The launcher's panes are frosted glass: CSS {@code backdrop-filter}
+     * blurs whatever is behind them and the material's tint goes over that.
+     * The game's panes were the tint alone, 20% over a sharp scene, which is
+     * why the title menu read as thin and grey beside the launcher's card.
+     * Minecraft 1.8.9 has no shader to blur with, so the blur is the GPU's own
+     * mipmap chain: the frame is copied once, the chain generated, and a pane
+     * samples it a few levels down (FROST_LOD), averaged over four offset taps
+     * so the coarse level's blocks do not show. One copy and one mip
+     * generation a frame, both on the GPU.
+     *
+     * <p>Call it after the backdrop is drawn and before anything that should
+     * not be blurred into the glass. A frame that does not call it draws no
+     * glass, and a driver without GPU mip generation keeps the plain tint.
+     */
+    public void captureFrost() {
+        frostReady = false;
+        ContextCapabilities caps = GLContext.getCapabilities();
+        boolean core = caps.OpenGL30;
+        if (!core && !caps.GL_ARB_framebuffer_object) {
+            return;
+        }
+        batch.flush();
+        int width = Math.max(1, client.width);
+        int height = Math.max(1, client.height);
+        if (frostTexture == 0 || width != frostWidth || height != frostHeight) {
+            if (frostTexture != 0) {
+                GlStateManager.deleteTexture(frostTexture);
+            }
+            frostTexture = GL11.glGenTextures();
+            GlStateManager.bindTexture(frostTexture);
+            // RGB: the framebuffer's alpha is whatever was last written to it,
+            // not coverage, and glass sampled with it came out see-through.
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB8, width, height, 0,
+                    GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, (java.nio.ByteBuffer) null);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+            // The blur itself: sampled at 1:1, every lookup is pushed this many
+            // levels down the chain.
+            GL11.glTexParameterf(GL11.GL_TEXTURE_2D, GL14.GL_TEXTURE_LOD_BIAS, FROST_LOD);
+            frostWidth = width;
+            frostHeight = height;
+        } else {
+            GlStateManager.bindTexture(frostTexture);
+        }
+        GL11.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+        if (core) {
+            GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+        } else {
+            ARBFramebufferObject.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+        }
+        // The batch remembers the last texture it bound; this one replaced it.
+        batch.forget();
+        frostReady = true;
+    }
+
+    /**
+     * Frosted glass in a rounded rectangle: the blurred screen behind it.
+     * Draw the material's tint and rim over it. Returns false, drawing
+     * nothing, in a frame that did not {@link #captureFrost}.
+     */
+    public boolean frost(float left, float top, float right, float bottom, float radius) {
+        if (!frostReady || right <= left || bottom <= top) {
+            return false;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float rad = cornerRadius(radius, r - l, b - t);
+        batch.bind(frostTexture);
+        // Four taps averaged by blending: the k-th at 1/k over the ones before.
+        float[][] taps = {{-FROST_TAP, -FROST_TAP}, {FROST_TAP, FROST_TAP},
+            {FROST_TAP, -FROST_TAP}, {-FROST_TAP, FROST_TAP}};
+        for (int index = 0; index < taps.length; index++) {
+            int colour = tint(Colour.fade(0xFFFFFFFF, 1f / (index + 1)));
+            frostShape(l, t, r, b, rad, taps[index][0], taps[index][1], colour);
+        }
+        return true;
+    }
+
+    /** The rounded rectangle as quads and corner fans, textured by screen position. */
+    private void frostShape(float l, float t, float r, float b, float rad, float dx, float dy, int argb) {
+        frostQuad(l, t + rad, r, b - rad, dx, dy, argb);
+        frostQuad(l + rad, t, r - rad, t + rad, dx, dy, argb);
+        frostQuad(l + rad, b - rad, r - rad, b, dx, dy, argb);
+        if (rad < 0.6f) {
+            return;
+        }
+        frostFan(l + rad, t + rad, rad, 180f, dx, dy, argb);
+        frostFan(r - rad, t + rad, rad, 270f, dx, dy, argb);
+        frostFan(r - rad, b - rad, rad, 0f, dx, dy, argb);
+        frostFan(l + rad, b - rad, rad, 90f, dx, dy, argb);
+    }
+
+    private void frostQuad(float x0, float y0, float x1, float y1, float dx, float dy, int argb) {
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
+        frostPolygon(x0, y0, x0, y1, x1, y1, x1, y0, dx, dy, argb);
+    }
+
+    /** A quarter disc from {@code from} degrees, as triangles (quads with a repeated corner). */
+    private void frostFan(float cx, float cy, float rad, float from, float dx, float dy, int argb) {
+        int steps = Math.max(4, Math.min(16, Math.round(rad / 2f)));
+        double start = Math.toRadians(from);
+        double step = Math.toRadians(90d) / steps;
+        float px = cx + (float) Math.cos(start) * rad;
+        float py = cy + (float) Math.sin(start) * rad;
+        for (int index = 1; index <= steps; index++) {
+            double angle = start + step * index;
+            float qx = cx + (float) Math.cos(angle) * rad;
+            float qy = cy + (float) Math.sin(angle) * rad;
+            frostPolygon(cx, cy, px, py, qx, qy, qx, qy, dx, dy, argb);
+            px = qx;
+            py = qy;
+        }
+    }
+
+    private void frostPolygon(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
+            float dx, float dy, int argb) {
+        // The copy is the framebuffer the right way up for GL: origin bottom-left.
+        float w = frostWidth;
+        float h = frostHeight;
+        batch.vertices(
+                x0 * vertexScaleX, y0 * vertexScaleY, (x0 + dx) / w, 1f - (y0 + dy) / h,
+                x1 * vertexScaleX, y1 * vertexScaleY, (x1 + dx) / w, 1f - (y1 + dy) / h,
+                x2 * vertexScaleX, y2 * vertexScaleY, (x2 + dx) / w, 1f - (y2 + dy) / h,
+                x3 * vertexScaleX, y3 * vertexScaleY, (x3 + dx) / w, 1f - (y3 + dy) / h,
+                argb);
     }
 
     /**
@@ -1245,6 +1406,25 @@ public final class GlRenderer implements Renderer {
             }
             Tessellator.getInstance().getBuffer().begin(GL11.GL_QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
             building = true;
+        }
+
+        /** Something else bound a texture; bind ours again before the next quad. */
+        void forget() {
+            flush();
+            texture = -1;
+        }
+
+        /** Four arbitrary corners, in order round the shape. */
+        void vertices(
+                float x0, float y0, float u0, float v0, float x1, float y1, float u1, float v1,
+                float x2, float y2, float u2, float v2, float x3, float y3, float u3, float v3, int argb) {
+            start();
+            BufferBuilder buffer = Tessellator.getInstance().getBuffer();
+            vertex(buffer, x0, y0, u0, v0, argb);
+            vertex(buffer, x1, y1, u1, v1, argb);
+            vertex(buffer, x2, y2, u2, v2, argb);
+            vertex(buffer, x3, y3, u3, v3, argb);
+            owner.stats.quads++;
         }
 
         void flush() {

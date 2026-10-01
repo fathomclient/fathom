@@ -108,13 +108,14 @@ background shows its full-resolution still from `textures/menu/scenes/`, the
 same picture the launcher shows. A game started without the launcher shows the
 default. The HUD is gameplay and never draws a menu background.
 
-## Screenshot pulls
+## Tokyo Tower and Aurora
 
-The five `bg_6pull_*.jpg` images in `desktop/public/backgrounds` are stills from
-`bg_6screenshotPulls.mp4`. They are 1728×972 crops: 96 pixels are removed from
-each side and the lower 108 pixels are removed to exclude the hotbar while
-retaining 16:9 composition. Exact source frame numbers are recorded in the
-asset-folder README.
+`bg_6tokyo` and `bg_6aurora` replaced the five `bg_6pull_*` screenshots, which
+were stills from a walkthrough and showed the player's hand. Both are fixed-camera
+recordings in the same world (`tokyo.mp4`, `aurora.mp4`), encoded by
+`tools/prepare-background-video.ps1` at 1920×1080 like the others: Tokyo graded
+up slightly (gamma 1.08) and Aurora down (0.82) to sit in the library's
+brightness range.
 
 ## Attribution
 

@@ -3,6 +3,23 @@
   "default": "bg_5rain",
   "backgrounds": [
     {
+      "id": "bg_6aurora",
+      "label": "Aurora",
+      "type": "video",
+      "asset": "backgrounds/bg_6aurora.webm",
+      "still": "backgrounds/bg_6aurora.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6aurora.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6aurora.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#7b9fd5"
+    },
+    {
       "id": "bg_1",
       "label": "Cherry Grove",
       "type": "video",
@@ -19,23 +36,6 @@
       "credit": "Recorded in vanilla Minecraft by the Fathom project owner",
       "accentHue": 330,
       "accent": "#cf81a8"
-    },
-    {
-      "id": "bg_6pull_city-overlook",
-      "label": "City Overlook",
-      "type": "image",
-      "asset": "backgrounds/bg_6pull_city-overlook.jpg",
-      "still": "backgrounds/bg_6pull_city-overlook.jpg",
-      "thumbnail": "backgrounds/thumbs/bg_6pull_city-overlook.jpg",
-      "width": 1728,
-      "height": 972,
-      "launcher": true,
-      "minecraft": {
-        "still": "scenes/bg_6pull_city-overlook.jpg",
-        "video": null
-      },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-      "accent": "#8ca4c5"
     },
     {
       "id": "golden-hour",
@@ -125,40 +125,6 @@
       "accent": "#c58c90"
     },
     {
-      "id": "bg_6pull_moon-tower",
-      "label": "Moon Tower",
-      "type": "image",
-      "asset": "backgrounds/bg_6pull_moon-tower.jpg",
-      "still": "backgrounds/bg_6pull_moon-tower.jpg",
-      "thumbnail": "backgrounds/thumbs/bg_6pull_moon-tower.jpg",
-      "width": 1728,
-      "height": 972,
-      "launcher": true,
-      "minecraft": {
-        "still": "scenes/bg_6pull_moon-tower.jpg",
-        "video": null
-      },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-      "accent": "#87a3c9"
-    },
-    {
-      "id": "bg_6pull_neon-grid",
-      "label": "Neon Grid",
-      "type": "image",
-      "asset": "backgrounds/bg_6pull_neon-grid.jpg",
-      "still": "backgrounds/bg_6pull_neon-grid.jpg",
-      "thumbnail": "backgrounds/thumbs/bg_6pull_neon-grid.jpg",
-      "width": 1728,
-      "height": 972,
-      "launcher": true,
-      "minecraft": {
-        "still": "scenes/bg_6pull_neon-grid.jpg",
-        "video": null
-      },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-      "accent": "#86a6ca"
-    },
-    {
       "id": "bg_5noraintickunfrozen",
       "label": "Rainforest Drift",
       "type": "video",
@@ -210,24 +176,6 @@
       "accent": "#809ad0"
     },
     {
-      "id": "bg_6pull_red-tower",
-      "label": "Red Tower",
-      "type": "image",
-      "asset": "backgrounds/bg_6pull_red-tower.jpg",
-      "still": "backgrounds/bg_6pull_red-tower.jpg",
-      "thumbnail": "backgrounds/thumbs/bg_6pull_red-tower.jpg",
-      "width": 1728,
-      "height": 972,
-      "launcher": true,
-      "minecraft": {
-        "still": "scenes/bg_6pull_red-tower.jpg",
-        "video": null
-      },
-      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-      "accentHue": 356,
-      "accent": "#d57c82"
-    },
-    {
       "id": "bg_4",
       "label": "Savanna",
       "type": "video",
@@ -262,21 +210,21 @@
       "accent": "#98b9af"
     },
     {
-      "id": "bg_6pull_storm-panorama",
-      "label": "Storm Panorama",
-      "type": "image",
-      "asset": "backgrounds/bg_6pull_storm-panorama.jpg",
-      "still": "backgrounds/bg_6pull_storm-panorama.jpg",
-      "thumbnail": "backgrounds/thumbs/bg_6pull_storm-panorama.jpg",
-      "width": 1728,
-      "height": 972,
+      "id": "bg_6tokyo",
+      "label": "Tokyo Tower",
+      "type": "video",
+      "asset": "backgrounds/bg_6tokyo.webm",
+      "still": "backgrounds/bg_6tokyo.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6tokyo.jpg",
+      "width": 1920,
+      "height": 1080,
       "launcher": true,
       "minecraft": {
-        "still": "scenes/bg_6pull_storm-panorama.jpg",
+        "still": "scenes/bg_6tokyo.jpg",
         "video": null
       },
       "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-      "accent": "#8ca3c5"
+      "accent": "#8abbc7"
     }
   ]
 }

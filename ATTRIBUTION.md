@@ -86,18 +86,15 @@ Assets derived from these recordings:
 | World | [Tokyo Inspired City](https://www.curseforge.com/minecraft/worlds/tokyo-inspired-city) |
 | Creator | [CoinCoffer](https://www.curseforge.com/members/coincoffer/projects) |
 
-All bg_6 recordings and screenshots were taken in this world, with the help of
+All bg_6 recordings were taken in this world, with the help of
 native game commands such as `/tick freeze` and `/tick rate`.
 
 Assets derived from these recordings:
 
 - `desktop/public/backgrounds/bg_6clear` (`.webm`, `.jpg`)
 - `desktop/public/backgrounds/bg_6midnight` (`.webm`, `.jpg`)
-- `desktop/public/backgrounds/bg_6pull_city-overlook.jpg`
-- `desktop/public/backgrounds/bg_6pull_moon-tower.jpg`
-- `desktop/public/backgrounds/bg_6pull_neon-grid.jpg`
-- `desktop/public/backgrounds/bg_6pull_red-tower.jpg`
-- `desktop/public/backgrounds/bg_6pull_storm-panorama.jpg`
+- `desktop/public/backgrounds/bg_6tokyo` (`.webm`, `.jpg`)
+- `desktop/public/backgrounds/bg_6aurora` (`.webm`, `.jpg`)
 
 ---
 

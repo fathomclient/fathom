@@ -26,7 +26,8 @@ Per background:
 | `bg_5noraintickunfrozen` | Rainforest Drift | video | 1600×900 | blur baked in |
 | `bg_6clear` | Metropolis | video | 1600×900 | blur baked in |
 | `bg_6midnight` | Midnight Metropolis | video | 1600×900 | blur baked in; 6 s loop |
-| `bg_6pull_*` (5) | City Overlook, Moon Tower, Neon Grid, Red Tower, Storm Panorama | image | 1728×972 | |
+| `bg_6tokyo` | Tokyo Tower | video | 1920×1080 | unblurred, CRF 23 |
+| `bg_6aurora` | Aurora | video | 1920×1080 | unblurred, CRF 23 |
 | `golden-hour` | Golden Hour | image | 1920×1080 | licence not yet confirmed |
 | `graphite` | Graphite | image | 2560×1440 | source not yet recorded |
 

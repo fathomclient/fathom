@@ -54,11 +54,6 @@ $Scenes = @(
     [pscustomobject]@{ Id = 'bg_6clear';              From = 'bg_6clear.mp4';              Start = 2;  Gamma = 0.84; Saturation = 0.92 }
     # The screenshot pulls are already cropped stills in the launcher's assets;
     # the frame numbers behind them are recorded in docs/backgrounds.md.
-    [pscustomobject]@{ Id = 'bg_6pull_city-overlook';  Still = 'bg_6pull_city-overlook.jpg';  Gamma = 1.04; Saturation = 0.94 }
-    [pscustomobject]@{ Id = 'bg_6pull_moon-tower';     Still = 'bg_6pull_moon-tower.jpg';     Gamma = 1.16; Saturation = 0.94 }
-    [pscustomobject]@{ Id = 'bg_6pull_red-tower';      Still = 'bg_6pull_red-tower.jpg';      Gamma = 1.08; Saturation = 0.94 }
-    [pscustomobject]@{ Id = 'bg_6pull_storm-panorama'; Still = 'bg_6pull_storm-panorama.jpg'; Gamma = 1.10; Saturation = 0.94 }
-    [pscustomobject]@{ Id = 'bg_6pull_neon-grid';      Still = 'bg_6pull_neon-grid.jpg';      Gamma = 1.02; Saturation = 0.96 }
 )
 
 function Resolve-FFmpeg {

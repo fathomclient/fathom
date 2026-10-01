@@ -199,11 +199,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         ui.pushAlpha(enter * (1f - exit));
         ui.pushTransform(0f, (1f - enter) * TRAVEL);
 
-        // The scene's light (Glow): pooling behind the menu, and faintly behind
-        // the wordmark, before either is drawn.
-        Glow.behind(ui, menuPanel);
-        ui.bloom(canvasX + WORDMARK_MARGIN + WORDMARK_CAP * 3.4f, canvasY + WORDMARK_MARGIN + WORDMARK_CAP / 2f,
-                WORDMARK_CAP * 7f, Glow.at(GraphiteTokens.GLOW_BLOOM_ECHO_ALPHA));
+        // The scene behind the glass, before anything is drawn over it. No
+        // light is pooled behind the menu any more: over a still scene it read
+        // as a pale haze round the panel that the launcher does not have.
+        Graphite.captureFrost(ui);
         // The whole identity here, mark and word: this is the one screen that
         // is Fathom's front door. The Hub keeps the word alone, as the
         // launcher's header does.

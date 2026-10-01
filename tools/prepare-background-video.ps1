@@ -94,6 +94,11 @@ $Clips = @(
     [pscustomobject]@{ Index = 5; Name = 'bg_5noraintickunfrozen'; Start = 6; Gamma = 0.88; Saturation = 0.94; LoopFrames = 300; Scene = 'moving jungle twilight' }
     [pscustomobject]@{ Index = 6; Name = 'bg_6midnight'; Start = 0; Gamma = 1.12; Saturation = 0.96; LoopFrames = 180; Scene = 'midnight metropolis' }
     [pscustomobject]@{ Index = 6; Name = 'bg_6clear'; Start = 0; Gamma = 0.84; Saturation = 0.92; LoopFrames = 300; Scene = 'daylight metropolis' }
+    # Recorded in the same Tokyo Inspired City world, replacing the five
+    # screenshots (bg_6pull_*), which showed the player's hand. `File` names a
+    # source recording that is not called <Name>.mp4.
+    [pscustomobject]@{ Index = 6; Name = 'bg_6tokyo'; File = 'tokyo.mp4'; Start = 5; Gamma = 1.08; Saturation = 0.96; LoopFrames = 300; Scene = 'tower under moving cloud' }
+    [pscustomobject]@{ Index = 6; Name = 'bg_6aurora'; File = 'aurora.mp4'; Start = 20; Gamma = 0.82; Saturation = 0.92; LoopFrames = 300; Scene = 'aurora overhead' }
 )
 
 function Resolve-FFmpeg {
@@ -127,7 +132,8 @@ if (-not $selected) {
 foreach ($clip in $selected) {
     $name = $clip.Name
     $LoopFrames = $clip.LoopFrames
-    $clipPath = Join-Path $Source "$name.mp4"
+    $file = if ($clip.PSObject.Properties['File']) { $clip.File } else { "$name.mp4" }
+    $clipPath = Join-Path $Source $file
     if (-not (Test-Path $clipPath)) { throw "Source recording not found: $clipPath" }
 
     Write-Host ""

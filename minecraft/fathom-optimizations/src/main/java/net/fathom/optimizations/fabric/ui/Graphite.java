@@ -169,6 +169,13 @@ public final class Graphite {
         if (shadow && material.shadowAllowed) {
             shadow(ui, area, radius);
         }
+        // Glass, as the launcher's panes are: the blurred scene under the tint,
+        // when the screen captured one this frame (captureFrost).
+        if ((material == Material.STANDARD || material == Material.DENSE)
+                && ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
+            ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).frost(
+                    area.x, area.y, area.right(), area.bottom(), radius);
+        }
         int fill = material.fill;
         if (selected > 0.001f) {
             fill = Colour.mix(fill, material.denser().fill, selected);
@@ -187,6 +194,17 @@ public final class Graphite {
         }
         int rim = Colour.mix(Colour.mix(material.rim, RIM_HOVER, hover), RIM_SELECTED, selected);
         rim(ui, area, radius, rim);
+    }
+
+    /**
+     * Take the screen as it stands as the backdrop the glass of every pane
+     * drawn after it this frame frosts. Call once the scene is drawn and
+     * before anything that should not show through the glass.
+     */
+    public static void captureFrost(Renderer ui) {
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
+            ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).captureFrost();
+        }
     }
 
     /** A resting surface with no state. */
