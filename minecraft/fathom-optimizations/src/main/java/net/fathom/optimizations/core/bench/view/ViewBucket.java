@@ -123,6 +123,20 @@ public final class ViewBucket {
         return sum / 1_000_000d / frameCount;
     }
 
+    /** Standard deviation of frame time: the pacing figure a frame cap is judged on. */
+    public double frameStddevMillis() {
+        if (frameCount < 2) {
+            return 0d;
+        }
+        double mean = meanFrameMillis() * 1_000_000d;
+        double square = 0d;
+        for (int index = 0; index < frameCount; index++) {
+            double difference = frames[index] - mean;
+            square += difference * difference;
+        }
+        return Math.sqrt(square / (frameCount - 1)) / 1_000_000d;
+    }
+
     /** Exact, nearest-rank. */
     public double frameMillisAt(double percentile) {
         if (frameCount == 0) {
@@ -208,6 +222,11 @@ public final class ViewBucket {
 
     public List<Double> windowMeans() {
         return windowMeans;
+    }
+
+    /** How long a window lasted on average: fixed for a view, the rebuild time for a reload. */
+    public double meanWindowSeconds() {
+        return windowMeans.isEmpty() ? 0d : measuredSeconds / windowMeans.size();
     }
 
     public long gcCount() {

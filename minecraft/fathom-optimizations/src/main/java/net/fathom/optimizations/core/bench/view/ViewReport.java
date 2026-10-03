@@ -521,6 +521,14 @@ public final class ViewReport {
                                 : (other.meanFrameMillis() - normal.meanFrameMillis()) / normal.meanFrameMillis() * 100d,
                         normal.frameMillisAt(50d), other.frameMillisAt(50d),
                         terrainMillis(normal), terrainMillis(other)));
+                line(out, String.format(Locale.ROOT,
+                        "  %-12s pacing: sd %.4f -> %.4f ms; p1 %.4f -> %.4f; p99 %.4f -> %.4f",
+                        "", normal.frameStddevMillis(), other.frameStddevMillis(),
+                        normal.frameMillisAt(1d), other.frameMillisAt(1d),
+                        normal.frameMillisAt(99d), other.frameMillisAt(99d)));
+                line(out, String.format(Locale.ROOT,
+                        "  %-12s window length: %.3f -> %.3f s (the rebuild time, in the reload scene)",
+                        "", normal.meanWindowSeconds(), other.meanWindowSeconds()));
             }
             line(out, "");
         }

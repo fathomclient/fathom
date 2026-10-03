@@ -112,6 +112,12 @@ public final class ViewBenchmark implements ViewProbe.Sink {
      * between windows, so the save's own hitch lands in the next settle phase.
      */
     private static final boolean SCREENSHOTS = Boolean.getBoolean("fathom.view.screenshots");
+    /**
+     * A frame cap for the run, in memory only (0 leaves the profile's own).
+     * The frame limiter can only be measured against a cap, and the profiles
+     * Fathom ships are uncapped.
+     */
+    private static final int FPS_CAP = intProperty("fathom.view.fpsCap", 0);
     private static final boolean QUIT = !"false".equalsIgnoreCase(System.getProperty("fathom.view.quit", "true"));
     private static final String DEFAULT_COMMANDS =
             "gamerule doDaylightCycle false;time set 6000;weather clear 1000000;difficulty 0;"
@@ -125,7 +131,14 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         DOWN90("down90", 90f, "looking straight down at the ground"),
         ENTITIES("entities", 0f, "level view with 48 armoured, sword-holding players with nametags in front"),
         PARTICLES("particles", 0f, "level view with a steady field of flame and smoke particles in front"),
-        TRANSLUCENT("translucent", 0f, "level view through two stained-glass walls and a water wall");
+        TRANSLUCENT("translucent", 0f, "level view through two stained-glass walls and a water wall"),
+        /**
+         * Chunk loading, not a steady view: every window starts by rebuilding
+         * every chunk (vanilla's F3+A) and ends once nothing has been rebuilt or
+         * uploaded for the quiet period. The window's length is the rebuild time.
+         * Not in the default scene list.
+         */
+        RELOAD("reload", 0f, "level view while every chunk is rebuilt (F3+A)");
 
         final String id;
         final float pitch;
@@ -323,6 +336,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 // A window that loses focus must not open the pause menu: the
                 // frame is rejected instead, and the run carries on when focus returns.
                 client.options.pauseOnLostFocus = false;
+                if (FPS_CAP > 0) {
+                    client.options.maxFramerate = FPS_CAP;
+                }
             }
             System.out.println("[FATHOM VIEW] armed: scenes " + sceneIds() + ", arms " + ARMS
                     + ", " + ROUNDS + " rounds of " + MEASURE_SECONDS + " s windows.");
@@ -385,7 +401,13 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 return;
             case MEASURE:
                 double window = current.record ? MEASURE_SECONDS : WARMUP_SECONDS;
-                if ((now - measureStarted) / 1_000_000_000d >= window) {
+                double measured = (now - measureStarted) / 1_000_000_000d;
+                boolean done = current.scene == Scene.RELOAD
+                        ? (measured >= QUIET_SECONDS
+                                && (now - lastChunkActivity) / 1_000_000_000d >= QUIET_SECONDS)
+                                || measured >= SETTLE_CAP_SECONDS
+                        : measured >= window;
+                if (done) {
                     endMeasure(client, current, now);
                     advance(client, now);
                 }
@@ -510,6 +532,13 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         Step current = steps.get(stepIndex);
         phase = Phase.MEASURE;
         measureStarted = now;
+        if (current.scene == Scene.RELOAD) {
+            // The rebuild is the workload: start it with the window, and count
+            // the frame that starts it as chunk activity so the window cannot
+            // end before the first rebuild is even queued.
+            MinecraftClient.getInstance().worldRenderer.reload();
+            lastChunkActivity = now;
+        }
         windowFrames = 0;
         windowFrameNanos = 0L;
         long[] gc = gcTotals();
@@ -884,6 +913,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                         + "(cap %.0f s, hit %d times); warm-up %.1f s per scene, not recorded.",
                 ROUNDS, MEASURE_SECONDS, SETTLE_SECONDS, QUIET_SECONDS, SETTLE_CAP_SECONDS, settleTimeouts,
                 WARMUP_SECONDS));
+        if (FPS_CAP > 0) {
+            out.add("Frame cap for this run: " + FPS_CAP + " fps (in memory, not saved).");
+        }
         out.add(REQUIRE_FOCUS
                 ? "Frames rejected when: window unfocused, a screen open, or the world not loaded."
                 : "Frames rejected when: a screen open, or the world not loaded. Unfocused frames count "

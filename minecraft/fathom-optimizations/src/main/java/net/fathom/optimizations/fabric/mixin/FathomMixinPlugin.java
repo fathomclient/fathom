@@ -97,6 +97,7 @@ public final class FathomMixinPlugin implements IMixinConfigPlugin {
         {"WorldRendererDirectionsMixin", "OptiFine rewrites its target"},
         {"ChunkVisibilityDirectionsMixin", "OptiFine rewrites its target"},
         {"ClientChunkProviderMixin", "measured no benefit with OptiFine installed"},
+        {"ChunkBuilderWorkersMixin", "OptiFine sizes its own chunk worker pool"},
     };
 
     /**

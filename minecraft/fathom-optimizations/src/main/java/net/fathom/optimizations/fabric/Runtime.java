@@ -59,6 +59,10 @@ public final class Runtime {
             net.fathom.optimizations.core.registry.OptimizationId.of("memory.world-change-gc");
     public static final net.fathom.optimizations.core.registry.OptimizationId UNFOCUSED_CAP =
             net.fathom.optimizations.core.registry.OptimizationId.of(FrameCapPolicy.UNFOCUSED_ID);
+    public static final net.fathom.optimizations.core.registry.OptimizationId CHUNK_WORKERS =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.chunk.rebuild-scheduling");
+    public static final net.fathom.optimizations.core.registry.OptimizationId FRAME_LIMITER =
+            net.fathom.optimizations.core.registry.OptimizationId.of("input.frame-limiter-accuracy");
     public static final net.fathom.optimizations.core.registry.OptimizationId PACK_ICON_DOWNSCALE =
             net.fathom.optimizations.core.registry.OptimizationId.of("resources.pack-icon-downscale");
 
@@ -73,6 +77,7 @@ public final class Runtime {
     public static boolean fontMetricsCache;
     public static boolean chunkLookupCache;
     public static boolean hotPathAllocation;
+    public static boolean frameLimiter;
 
     /** Re-read the hot switches from the board. Cheap: a handful of map lookups. */
     public static void refreshHotSwitches() {
@@ -83,6 +88,7 @@ public final class Runtime {
         fontMetricsCache = current.isEnabled(FONT_METRICS_CACHE);
         chunkLookupCache = current.isEnabled(CHUNK_LOOKUP_CACHE);
         hotPathAllocation = current.isEnabled(HOT_PATH_ALLOCATION);
+        frameLimiter = current.isEnabled(FRAME_LIMITER);
     }
 
     /**

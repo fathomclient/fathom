@@ -5,6 +5,7 @@
   "plugin": "net.fathom.optimizations.fabric.mixin.FathomMixinPlugin",
   "minVersion": "0.8",
   "client": [
+    "ChunkBuilderWorkersMixin",
     "ChunkVisibilityDirectionsMixin",
     "ClientChunkProviderMixin",
     "ClientPlayerEntitySprintMixin",
@@ -18,6 +19,7 @@
     "KeyBindingPressMixin",
     "KeyboardInputSneakMixin",
     "MinecraftClientFrameCapMixin",
+    "MinecraftClientFrameLimiterMixin",
     "MinecraftClientFrameMixin",
     "MinecraftClientTimingMixin",
     "MinecraftClientMenuMixin",
