@@ -193,11 +193,12 @@
       "brand-deep": "#171d20"
     },
     "brand": {
-      "_about": "Aperture. A frame `grid` units square with `wall`-unit walls, open at its bottom-right corner; the missing corner, `plane` units square, is set inside as the plane, moved in by its own width. At a tile of S px the unit is floor(S / unit-divisor), so every icon size is whole pixels. Corners are in units; tiers are tile sizes in px. The wordmark's tiers live in graphite.wordmark.",
+      "_about": "Aperture. A frame `grid` units square with `wall`-unit walls, open at its bottom-right corner; the missing corner, `plane` units square, is set inside as the plane, moved in by its own width. In an app icon of S px the unit is floor(S / icon-divisor), so every icon size is whole pixels; the icon has no tile. Corners are in units. The tiers are tile sizes in px, read as unit x unit-divisor: the tile the mark was first drawn on. The wordmark's tiers live in graphite.wordmark.",
       "grid": 6,
       "wall": 1,
       "plane": 2,
       "unit-divisor": 8,
+      "icon-divisor": 7,
       "corner-outer": 1.5,
       "corner-inner": 0.5,
       "corner-plane": 0.25,
@@ -208,7 +209,6 @@
       "stacked-scale": 2,
       "frame-ink": "@brand-ivory",
       "plane-ink": "@brand-sand",
-      "tile": "@brand-deep",
       "dark-frame-ink": "@brand-deep",
       "dark-plane-ink": "@brand-bronze",
       "measure-track": 0.16
