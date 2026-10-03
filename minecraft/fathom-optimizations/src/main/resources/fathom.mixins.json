@@ -31,6 +31,7 @@
     "WorldRendererTimingMixin",
     "EntityRenderDispatcherTimingMixin",
     "EntityRenderDispatcherCullMixin",
+    "WorldRendererOcclusionMixin",
     "BlockEntityRenderDispatcherCullMixin",
     "EntityRendererNametagMixin",
     "ResourcePackIconMixin",

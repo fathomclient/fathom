@@ -31,6 +31,7 @@ import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.player.ClientPlayerEntity;
+import net.minecraft.entity.mob.ZombieEntity;
 import net.minecraft.entity.player.OtherClientPlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -132,6 +133,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         ENTITIES("entities", 0f, "level view with 48 armoured, sword-holding players with nametags in front"),
         PARTICLES("particles", 0f, "level view with a steady field of flame and smoke particles in front"),
         TRANSLUCENT("translucent", 0f, "level view through two stained-glass walls and a water wall"),
+        /** Not in the default list: entity occlusion culling's scenes. */
+        MOBS("mobs", 0f, "level view with 48 armoured, sword-holding zombies 20-35 blocks ahead"),
+        OCCLUDED("occluded", 0f, "the same 48 zombies behind a stone wall 16 blocks ahead"),
         /**
          * Chunk loading, not a steady view: every window starts by rebuilding
          * every chunk (vanilla's F3+A) and ends once nothing has been rebuilt or
@@ -252,6 +256,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     // Scene props.
     private final List<Integer> spawned = new ArrayList<Integer>();
     private final List<BlockPos> placed = new ArrayList<BlockPos>();
+    private int pauseMenusClosed;
+    /** Blocks a scene replaced that were not air, with what to put back. */
+    private final Map<BlockPos, BlockState> replaced = new LinkedHashMap<BlockPos, BlockState>();
     private long particlesSpawnedAt;
 
     private ViewBenchmark() {}
@@ -348,6 +355,15 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         ClientPlayerEntity player = client.player;
         boolean inWorld = client.world != null && player != null;
         boolean focused = Display.isActive();
+        if (inWorld && client.currentScreen instanceof net.minecraft.client.gui.screen.GameMenuScreen) {
+            // The run is unattended and the pause menu voids every frame
+            // behind it; it opens anyway on some focus changes. Closed, said
+            // so, and the run goes on. Closing the window still ends a run.
+            client.setScreen(null);
+            if (++pauseMenusClosed <= 5) {
+                System.out.println("[FATHOM VIEW] closed the pause menu.");
+            }
+        }
         ViewProbe.markFrame(inWorld && client.currentScreen == null && (focused || !REQUIRE_FOCUS));
         int ending = ViewProbe.currentTag();
         if (!focused && ending >= 0 && ending < tags.size()) {
@@ -599,6 +615,11 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             spawnPlayers(client);
         } else if (scene == Scene.TRANSLUCENT) {
             buildWalls(client);
+        } else if (scene == Scene.MOBS) {
+            spawnZombies(client);
+        } else if (scene == Scene.OCCLUDED) {
+            spawnZombies(client);
+            buildStoneWall(client);
         }
     }
 
@@ -618,6 +639,10 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             world.setBlockState(pos, air);
         }
         placed.clear();
+        for (Map.Entry<BlockPos, BlockState> entry : replaced.entrySet()) {
+            world.setBlockState(entry.getKey(), entry.getValue());
+        }
+        replaced.clear();
     }
 
     /**
@@ -651,6 +676,82 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 world.addEntity(id, other);
                 spawned.add(Integer.valueOf(id));
                 id--;
+            }
+        }
+    }
+
+    /**
+     * Forty-eight client-side zombies in iron armour with iron swords, 20 to 35
+     * blocks ahead: past occlusion culling's 16-block floor, unnamed, so
+     * nothing exempts them. Removed when the scene ends.
+     */
+    private void spawnZombies(MinecraftClient client) {
+        ClientWorld world = client.world;
+        double radians = Math.toRadians(startYaw);
+        double forwardX = -Math.sin(radians);
+        double forwardZ = Math.cos(radians);
+        int id = -7100;
+        for (int row = 0; row < 6; row++) {
+            for (int column = 0; column < 8; column++) {
+                double distance = 20d + row * 3d;
+                double offset = (column - 3.5d) * 1.6d;
+                double x = startX + forwardX * distance + forwardZ * offset;
+                double z = startZ + forwardZ * distance - forwardX * offset;
+                BlockPos top = world.getTopPosition(new BlockPos(x, 0d, z));
+                ZombieEntity zombie = new ZombieEntity(world);
+                zombie.refreshPositionAndAngles(x, top.getY(), z, startYaw + 180f, 0f);
+                zombie.setArmorSlot(0, new ItemStack(Items.IRON_SWORD));
+                zombie.setArmorSlot(1, new ItemStack(Items.IRON_BOOTS));
+                zombie.setArmorSlot(2, new ItemStack(Items.IRON_LEGGINGS));
+                zombie.setArmorSlot(3, new ItemStack(Items.IRON_CHESTPLATE));
+                zombie.setArmorSlot(4, new ItemStack(Items.IRON_HELMET));
+                world.addEntity(id, zombie);
+                spawned.add(Integer.valueOf(id));
+                id--;
+            }
+        }
+    }
+
+    /**
+     * A stone wall 16 blocks ahead, 28 wide and 2 thick, from solid ground to 10 above the
+     * feet, client-side; every block it replaces is put back.
+     */
+    private void buildStoneWall(MinecraftClient client) {
+        ClientWorld world = client.world;
+        double radians = Math.toRadians(startYaw);
+        double forwardX = -Math.sin(radians);
+        double forwardZ = Math.cos(radians);
+        BlockState stone = Blocks.STONE.getDefaultState();
+        int baseY = (int) Math.floor(startY);
+        for (int index = 0; index < 28 * 2; index++) {
+            // Two blocks thick: a one-block wall on a diagonal is a staircase
+            // of blocks touching only at their edges, which is not what a
+            // hillside or a building is.
+            int across = index / 2 - 14;
+            int depth = 16 + index % 2;
+            double x = startX + forwardX * depth + forwardZ * across;
+            double z = startZ + forwardZ * depth - forwardX * across;
+            // Down to solid ground, wherever it is: a wall hanging in the air
+            // over a slope, or with leaves left in it, hides little. Leaves
+            // and plants are replaced too, and put back afterwards.
+            for (int y = baseY + 9; y > 0; y--) {
+                BlockPos pos = new BlockPos(x, y, z);
+                BlockState state = world.getBlockState(pos);
+                boolean ground = state.getBlock().hasTransparency()
+                        && state.getBlock().renderAsNormalBlock()
+                        && !(state.getBlock() instanceof net.minecraft.block.BaseLeavesBlock);
+                if (ground && y < baseY - 3) {
+                    break;
+                }
+                if (ground || placed.contains(pos) || replaced.containsKey(pos)) {
+                    continue;
+                }
+                if (world.isAir(pos)) {
+                    placed.add(pos);
+                } else {
+                    replaced.put(pos, state);
+                }
+                world.setBlockState(pos, stone);
             }
         }
     }
@@ -860,6 +961,8 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         overlays.put(Scene.ENTITIES.id, Scene.HORIZON.id);
         overlays.put(Scene.PARTICLES.id, Scene.HORIZON.id);
         overlays.put(Scene.TRANSLUCENT.id, Scene.HORIZON.id);
+        overlays.put(Scene.MOBS.id, Scene.HORIZON.id);
+        overlays.put(Scene.OCCLUDED.id, Scene.HORIZON.id);
         String focus = SCENES.contains(Scene.DOWN45) ? Scene.DOWN45.id : SCENES.get(SCENES.size() - 1).id;
         ViewReport report = new ViewReport(sceneIds(), ARMS, buckets, environment, probePairNanos,
                 SCENES.get(0).id, focus, overlays);

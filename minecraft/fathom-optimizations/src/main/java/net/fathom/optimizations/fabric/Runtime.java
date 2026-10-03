@@ -63,6 +63,8 @@ public final class Runtime {
             net.fathom.optimizations.core.registry.OptimizationId.of("render.chunk.rebuild-scheduling");
     public static final net.fathom.optimizations.core.registry.OptimizationId FRAME_LIMITER =
             net.fathom.optimizations.core.registry.OptimizationId.of("input.frame-limiter-accuracy");
+    public static final net.fathom.optimizations.core.registry.OptimizationId ENTITY_OCCLUSION =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.occlusion-culling");
     public static final net.fathom.optimizations.core.registry.OptimizationId PACK_ICON_DOWNSCALE =
             net.fathom.optimizations.core.registry.OptimizationId.of("resources.pack-icon-downscale");
 
@@ -78,6 +80,7 @@ public final class Runtime {
     public static boolean chunkLookupCache;
     public static boolean hotPathAllocation;
     public static boolean frameLimiter;
+    public static boolean entityOcclusion;
 
     /** Re-read the hot switches from the board. Cheap: a handful of map lookups. */
     public static void refreshHotSwitches() {
@@ -89,6 +92,7 @@ public final class Runtime {
         chunkLookupCache = current.isEnabled(CHUNK_LOOKUP_CACHE);
         hotPathAllocation = current.isEnabled(HOT_PATH_ALLOCATION);
         frameLimiter = current.isEnabled(FRAME_LIMITER);
+        entityOcclusion = current.isEnabled(ENTITY_OCCLUSION);
     }
 
     /**

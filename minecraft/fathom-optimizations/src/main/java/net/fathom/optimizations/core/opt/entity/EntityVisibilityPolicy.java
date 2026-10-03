@@ -150,6 +150,21 @@ public final class EntityVisibilityPolicy {
      */
     public static final double MAXIMUM_CULL_SIZE_BLOCKS = 4.0;
 
+    // The exemptions' verdicts, made once: they are handed out per entity per
+    // frame, and a verdict built per call would be garbage per call.
+    private static final Verdict VIEWER = render("the viewer, or attached to them");
+    private static final Verdict PLAYER = render("a player; hiding one for a frame is a correctness"
+            + " failure in a PvP client whatever it saves");
+    private static final Verdict NAMETAG = render("has a visible nametag, which vanilla draws through"
+            + " terrain");
+    private static final Verdict NEVER_CULL = render("its type is on the never-cull list");
+    private static final Verdict BEYOND_BOUNDS = render("renders beyond its own bounds; culling it"
+            + " would delete the beam or line, not just the entity");
+    private static final Verdict EFFECTS = render("drawing its own effects");
+    private static final Verdict LARGE = render("larger than " + MAXIMUM_CULL_SIZE_BLOCKS + " blocks;"
+            + " a sampled occlusion test does not speak for a box that size");
+    private static final Verdict CLOSE = render("within " + MINIMUM_CULL_DISTANCE_BLOCKS + " blocks");
+
     private final Set<Hook> hooks = new LinkedHashSet<Hook>();
 
     private long rendered;
@@ -195,32 +210,41 @@ public final class EntityVisibilityPolicy {
         if (!entity.occludedByOpaqueGeometry()) {
             return render("not occluded");
         }
+        Verdict exempt = exemption(entity);
+        return exempt != null ? exempt
+                : new Verdict(false, "occluded, distant, small, unnamed, and nothing objected");
+    }
+
+    /**
+     * The rules that do not depend on the occlusion test, or null if none
+     * applies. An occlusion test costs more than all of these together, so a
+     * caller asks this first and only tests what could be culled; {@link
+     * #decide} still applies every rule to the answer.
+     */
+    public Verdict exemption(EntityFacts entity) {
         if (entity.isViewer() || entity.isAttachedToViewer()) {
-            return render("the viewer, or attached to them");
+            return VIEWER;
         }
         if (entity.isPlayer()) {
-            return render("a player; hiding one for a frame is a correctness failure in a PvP"
-                    + " client whatever it saves");
+            return PLAYER;
         }
         if (entity.hasVisibleNameTag()) {
-            return render("has a visible nametag, which vanilla draws through terrain");
+            return NAMETAG;
         }
         if (NEVER_CULL_TYPES.contains(entity.typeId())) {
-            return render("type " + entity.typeId() + " is on the never-cull list");
+            return NEVER_CULL;
         }
         if (entity.rendersBeyondItsBounds()) {
-            return render("renders beyond its own bounds; culling it would delete the beam or"
-                    + " line, not just the entity");
+            return BEYOND_BOUNDS;
         }
         if (entity.hasVisualEffects()) {
-            return render("drawing its own effects");
+            return EFFECTS;
         }
         if (entity.sizeBlocks() > MAXIMUM_CULL_SIZE_BLOCKS) {
-            return render("larger than " + MAXIMUM_CULL_SIZE_BLOCKS + " blocks; a single-point"
-                    + " occlusion test does not speak for a box that size");
+            return LARGE;
         }
         if (entity.distanceBlocks() < MINIMUM_CULL_DISTANCE_BLOCKS) {
-            return render("within " + MINIMUM_CULL_DISTANCE_BLOCKS + " blocks");
+            return CLOSE;
         }
         for (Hook hook : hooks) {
             boolean insists;
@@ -238,7 +262,7 @@ public final class EntityVisibilityPolicy {
                 return render("hook " + hook.name() + " requires it");
             }
         }
-        return new Verdict(false, "occluded, distant, small, unnamed, and nothing objected");
+        return null;
     }
 
     private static Verdict render(String reason) {

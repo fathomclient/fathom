@@ -57,6 +57,8 @@ public enum ViewSection {
     ENTITIES("entities + block entities", WORLD, Owner.VANILLA_OPTIFINE),
     ENTITY("entity draws", ENTITIES, Owner.VANILLA_OPTIFINE),
     NAMETAG("nametags", ENTITY, Owner.VANILLA_FATHOM),
+    /** Entity occlusion culling's sight-line test, per entity it is asked about. */
+    FATHOM_OCCLUSION("entity occlusion test", ENTITIES, Owner.FATHOM),
     BLOCK_ENTITY("block entity draws", ENTITIES, Owner.VANILLA_OPTIFINE),
     SELECTION("selection box", WORLD, Owner.VANILLA),
     BLOCK_DAMAGE("block damage overlay", WORLD, Owner.VANILLA),

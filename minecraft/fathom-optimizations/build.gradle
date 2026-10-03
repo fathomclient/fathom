@@ -428,6 +428,7 @@ def coreSuites = [
         'net.fathom.optimizations.core.ViewTests',
         'net.fathom.optimizations.core.RegistryTests',
         'net.fathom.optimizations.core.PacingTests',
+        'net.fathom.optimizations.core.OcclusionTests',
 ]
 
 def coreTest = tasks.register('coreTest') {

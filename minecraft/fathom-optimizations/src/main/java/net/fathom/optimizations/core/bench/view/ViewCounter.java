@@ -24,7 +24,13 @@ public enum ViewCounter {
     /** A rebuild done on the client thread, inside the frame. */
     REBUILDS_SYNC("rebuilds on the client thread"),
     /** A finished layer buffer uploaded to the GPU. */
-    UPLOADS("layer buffers uploaded");
+    UPLOADS("layer buffers uploaded"),
+    /** An entity occlusion culling ran its sight-line test on. */
+    OCCLUSION_TESTED("entities occlusion-tested"),
+    /** An entity that test hid. */
+    OCCLUSION_HIDDEN("entities hidden by occlusion"),
+    /** Sight lines the test walked. */
+    OCCLUSION_LINES("occlusion sight lines");
 
     public static final ViewCounter[] ALL = values();
     public static final int COUNT = ALL.length;

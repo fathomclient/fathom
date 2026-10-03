@@ -10,9 +10,11 @@ import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.entity.Entity;
 
 import net.fathom.optimizations.fabric.perf.EntityCulling;
+import net.fathom.optimizations.fabric.perf.EntityOcclusion;
 
 /**
- * Entity distance limits, on the answer to "should this entity be drawn".
+ * Entity distance limits and occlusion culling, on the answer to "should this
+ * entity be drawn".
  *
  * <p>{@code @ModifyReturnValue}, not a cancellable {@code @Inject}: the
  * original method — vanilla's range test and frustum test, as OptiFine left
@@ -35,7 +37,10 @@ public abstract class EntityRenderDispatcherCullMixin {
                 net.fathom.optimizations.fabric.gfx.GlStateAudit.beginRequested(
                         net.fathom.optimizations.fabric.gfx.GlStateAudit.ENTITY_LIMIT,
                         net.fathom.optimizations.fabric.perf.PerfLayer.entitiesLimited);
-        boolean result = original && EntityCulling.allow(entity, cameraX, cameraY, cameraZ);
+        // Distance first: occlusion's test costs more, and is wasted on an
+        // entity the distance limit would drop anyway.
+        boolean result = original && EntityCulling.allow(entity, cameraX, cameraY, cameraZ)
+                && EntityOcclusion.allow(entity);
         net.fathom.optimizations.fabric.gfx.GlStateAudit.afterFathom(audit, false, "policy-only");
         net.fathom.optimizations.fabric.gfx.GlStateAudit.finish(
                 net.fathom.optimizations.fabric.gfx.GlStateAudit.ENTITY_LIMIT);
