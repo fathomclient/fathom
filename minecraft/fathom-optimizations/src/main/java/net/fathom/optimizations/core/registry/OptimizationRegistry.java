@@ -411,19 +411,23 @@ public final class OptimizationRegistry {
                     .description(
                             "Skip entities fully hidden behind geometry. Must exempt nametags,"
                                     + " ender dragons and withers, and must never reveal anything"
-                                    + " vanilla hides. Only the refusal half is written: the rules"
-                                    + " that say an entity must be drawn whatever an occlusion"
-                                    + " test concluded. There is no occlusion test yet, so this"
-                                    + " cannot currently make anything faster and is not claimed"
-                                    + " to.")
+                                    + " vanilla hides. Built and measured in game on 2026-10-03"
+                                    + " (branch experiment/entity-occlusion) and not shipped:"
+                                    + " proving an entity hidden on the CPU cost more than"
+                                    + " drawing it. A sampled test hid a walled-off crowd of 48"
+                                    + " armoured zombies but spent 1.8-2.3 ms a frame to save"
+                                    + " 1.2; an exact test never errs but proves too few hidden"
+                                    + " behind real terrain, and the scene was still 0.35 ms"
+                                    + " slower with it on.")
                     .group(Optimization.Group.ENTITIES)
                     .category(Category.OPTIONAL)
                     .implementedInCore()
                     .basis(Basis.THIRD_PARTY_PROBLEM_STATEMENT)
                     .expectedBenefit(
-                            "The view benchmark measured 23 us per armoured player drawn, so a"
-                                    + " crowd behind a wall is real work. Breaks visibly if the"
-                                    + " test is wrong, which is why it needs its own research.")
+                            "About 25 us per armoured mob drawn is the most it can save, and"
+                                    + " players and anything named are exempt. Needs a test far"
+                                    + " cheaper than that per entity -- likely GPU occlusion"
+                                    + " queries -- before it is worth offering.")
                     .conflict(Conflict.disableOurs(
                             "OptiFine shaders",
                             "PolyPatcher documents that entity culling and OptiFine shaders"

@@ -126,10 +126,10 @@ Vanilla renders at full speed into a window you have alt-tabbed away from. This 
 
 #### `render.entity.occlusion-culling` — Entity occlusion culling
 
-Skip entities fully hidden behind geometry. Must exempt nametags, ender dragons and withers, and must never reveal anything vanilla hides. Only the refusal half is written: the rules that say an entity must be drawn whatever an occlusion test concluded. There is no occlusion test yet, so this cannot currently make anything faster and is not claimed to.
+Skip entities fully hidden behind geometry. Must exempt nametags, ender dragons and withers, and must never reveal anything vanilla hides. Built and measured in game on 2026-10-03 (branch experiment/entity-occlusion) and not shipped: proving an entity hidden on the CPU cost more than drawing it. A sampled test hid a walled-off crowd of 48 armoured zombies but spent 1.8-2.3 ms a frame to save 1.2; an exact test never errs but proves too few hidden behind real terrain, and the scene was still 0.35 ms slower with it on.
 
 - **Status:** Core written, not hooked up. **Control:** Launcher switch. **Class:** Optional. **Group:** Entities.
-- **Expected benefit:** The view benchmark measured 23 us per armoured player drawn, so a crowd behind a wall is real work. Breaks visibly if the test is wrong, which is why it needs its own research.
+- **Expected benefit:** About 25 us per armoured mob drawn is the most it can save, and players and anything named are exempt. Needs a test far cheaper than that per entity -- likely GPU occlusion queries -- before it is worth offering.
 - **Measured:** nothing yet.
 - **Stood down by OptiFine shaders:** PolyPatcher documents that entity culling and OptiFine shaders cannot be made compatible. Shaders present is a hard gate: culling is off, not merely adjusted.
 
@@ -202,7 +202,8 @@ own run (`docs/performance/view-direction-2026-10-02.md`):
 same mean; on by default) and `render.chunk.rebuild-scheduling`, which on
 reading the code reduced to the worker pool size (rebuild after a reload
 ≈0.15 s vs ≈0.26 s without OptiFine; off by default, one machine). Only
-occlusion culling is still planned.
+occlusion culling is still planned; it was then built and measured (2026-10-03) and
+proved slower than drawing what it hides, so it stays planned with those numbers.
 
 The launcher no longer shows a count. It lists the planned entries by name, with
 how far each has got, and shows every implemented one with a truthful status:

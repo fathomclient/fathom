@@ -198,6 +198,28 @@ machine, so it ships switchable and **off** by default. Of the three ideas this
 entry merged, rebuild prioritisation was dropped (vanilla already sorts by
 distance) and redundant-rebuild skipping was dropped (none were observed).
 
+### Entity occlusion culling — built, measured, not shipped (2026-10-03)
+
+Code on branch `experiment/entity-occlusion`. New view scenes: `mobs` (48 iron-
+armoured zombies with swords, 20-35 blocks out, unnamed so nothing exempts
+them) and `occluded` (the same behind a stone wall). OptiFine profile, arms
+`normal` vs `off:render.entity.occlusion-culling`, 3 rounds × 3 s.
+
+| Design | Hidden (of 49) | Test cost / frame | `occluded` on → off |
+|---|---|---|---|
+| Sampled lines, 0.5-block grid | 49 | 1.8-2.3 ms | 3.9-4.2 → 3.0-3.1 ms |
+| + remembered blockers | 49 | ~1.4 ms | 3.11-3.15 → 2.54-2.71 ms |
+| Exact convex span, 1-thick diagonal wall | 6 | 0.74 ms | 3.52-3.64 → 2.62-2.87 ms |
+| Exact convex span, 2-thick wall | 13 | 0.62 ms | 3.12-3.18 → 2.76-2.88 ms |
+
+Drawing the 48 zombies costs about 1.2 ms (25 µs each). Proving one hidden on
+the CPU never came in under that: the sampled test needs on the order of a
+hundred sight lines per entity, and the exact test, which is never wrong in
+the dangerous direction, rarely succeeds behind real terrain because the
+lines end on a mix of wall and ground that no single solid spans. In the open
+(`mobs`) the test added 0.04-0.3 ms. The registry entry stays planned with
+these numbers; GPU occlusion queries are the next thing worth trying.
+
 ### Rejected
 
 - **Chunk lookup cache under OptiFine:** no benefit (above).
