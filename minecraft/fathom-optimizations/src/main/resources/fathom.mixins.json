@@ -30,7 +30,24 @@
     "EntityRenderDispatcherTimingMixin",
     "EntityRenderDispatcherCullMixin",
     "BlockEntityRenderDispatcherCullMixin",
-    "EntityRendererNametagMixin"
+    "EntityRendererNametagMixin",
+    "view.ViewClientMixin",
+    "view.ViewTaskMixin",
+    "view.ViewGameRendererMixin",
+    "view.ViewWorldRendererMixin",
+    "view.ViewParticleMixin",
+    "view.ViewWorldTickMixin",
+    "view.ViewClientWorldMixin",
+    "view.ViewEntityMixin",
+    "view.ViewBlockEntityMixin",
+    "view.ViewChunkBuilderMixin",
+    "view.ViewBuiltChunkMixin",
+    "view.ViewConnectionMixin",
+    "view.ViewTextureMixin",
+    "view.ViewFramebufferMixin",
+    "view.ViewCameraMixin",
+    "view.ViewFrustumMixin",
+    "view.ViewTextMixin"
   ],
   "injectors": {
     "defaultRequire": 1

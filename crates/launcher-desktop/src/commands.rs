@@ -471,6 +471,20 @@ pub fn unlock_frame_rate(
     Ok(api::performance::view(&core, &target))
 }
 
+/// Turn OptiFine's Render Regions on or off for a profile, at the player's
+/// request. Edits the one key in `optionsof.txt`; nothing else changes.
+#[tauri::command]
+pub fn set_render_regions(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+    on: bool,
+) -> Result<api::performance::PerformanceView, String> {
+    let core = locked!(state);
+    let target = resolve_profile(&core, profile.as_deref())?;
+    api::performance::set_render_regions(&core, &target, on)?;
+    Ok(api::performance::view(&core, &target))
+}
+
 // ---------------------------------------------------------------------------
 // Settings, Privacy, Recovery
 // ---------------------------------------------------------------------------

@@ -73,9 +73,18 @@ public final class FathomMixinPlugin implements IMixinConfigPlugin {
      *   <li>{@code ChunkVisibilityDirectionsMixin} — redirects inside
      *       {@code ChunkOcclusionDataBuilder.getOpenFaces}, the other half of
      *       the same visibility system, rewritten by the same OptiFine feature.
-     *   <li>{@code ClientChunkProviderMixin} — caches chunk lookups.
-     *       OptiFine has its own chunk-lookup caching, so this is both a
-     *       likely structural conflict and redundant work if it applied.
+     *   <li>{@code ClientChunkProviderMixin} — the chunk lookup cache. Not a
+     *       conflict, and this list used to say it was: OptiFine has "its own
+     *       chunk-lookup caching", it claimed. Checked against the classes
+     *       OptiFabric actually patches (HD U M5, 2026-10-02): OptiFine never
+     *       touches {@code ClientChunkProvider}, and its {@code ChunkCacheOF}
+     *       serves chunk-build worker threads this Mixin leaves alone anyway.
+     *       It is still skipped, for a measured reason instead: re-enabled
+     *       under OptiFine and A/B'd in the view benchmark (three interleaved
+     *       rounds, seven scenes), it moved nothing outside window-to-window
+     *       noise -- entities 3.7% faster, particles 0.6%, the terrain views
+     *       1.5-2.9% slower. A hook that cannot show a benefit does not ship.
+     *       The launcher reports it as not applied with OptiFine.
      * </ul>
      *
      * <p>{@code WorldDirectionsMixin} is deliberately <em>not</em> here: it
@@ -137,6 +146,12 @@ public final class FathomMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        // The view benchmark's timing Mixins exist for one diagnostic run and
+        // cost a callback per boundary, some of them per entity. A normal launch
+        // never applies them, so it pays nothing -- not even a folded branch.
+        if (mixinClassName.contains(".mixin.view.")) {
+            return net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED;
+        }
         if (!OPTIFINE_PRESENT) {
             return true;
         }

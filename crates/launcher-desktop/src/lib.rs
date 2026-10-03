@@ -620,6 +620,7 @@ pub fn run() {
             commands::set_preset,
             commands::set_optimization,
             commands::unlock_frame_rate,
+            commands::set_render_regions,
             commands::settings_view,
             commands::set_setting,
             commands::logs_view,

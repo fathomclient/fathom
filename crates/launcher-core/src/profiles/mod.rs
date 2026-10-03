@@ -31,6 +31,7 @@ pub mod game_options;
 pub mod inherit;
 pub mod model;
 pub mod ops;
+pub mod optifine_options;
 pub mod seed;
 pub mod store;
 pub mod validate;

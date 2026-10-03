@@ -344,6 +344,16 @@ export interface PerformanceView {
    * down. Null is the normal state and the page shows nothing for it.
    */
   videoLimits: VideoLimits | null;
+  /** OptiFine's Render Regions, for a profile that runs OptiFine; null otherwise. */
+  renderRegions: RenderRegions | null;
+}
+
+/** OptiFine's Render Regions: reported and offered, never changed unasked. */
+export interface RenderRegions {
+  on: boolean;
+  /** Render Regions needs VBOs; with them off OptiFine ignores the setting. */
+  vboOff: boolean;
+  summary: string;
 }
 
 /** A profile capped by its own saved video settings. */
@@ -809,6 +819,7 @@ const FIXTURE_PERFORMANCE: PerformanceView = {
   benchmark: null,
   benchmarkCount: 0,
   videoLimits: null,
+  renderRegions: null,
 };
 
 const FIXTURE_SETTINGS: SettingsView = {
@@ -1075,6 +1086,11 @@ export async function setPreset(preset: string, profile?: string): Promise<Perfo
 export async function unlockFrameRate(profile?: string): Promise<PerformanceView> {
   if (!inTauri) return FIXTURE_PERFORMANCE;
   return invoke<PerformanceView>('unlock_frame_rate', { profile: profile ?? null });
+}
+
+export async function setRenderRegions(on: boolean, profile?: string): Promise<PerformanceView> {
+  if (!inTauri) return FIXTURE_PERFORMANCE;
+  return invoke<PerformanceView>('set_render_regions', { on, profile: profile ?? null });
 }
 
 export async function setOptimization(

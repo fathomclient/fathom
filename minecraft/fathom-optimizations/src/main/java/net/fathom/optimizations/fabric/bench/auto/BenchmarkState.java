@@ -48,7 +48,14 @@ public final class BenchmarkState {
     public static final boolean PERF_PAIRED = "perf-paired".equalsIgnoreCase(
             System.getProperty("fathom.benchmark", ""));
 
-    private static final boolean CORE_DIAGNOSTIC = CORE || CORE_PAIRED;
+    /**
+     * The view-direction profile: fixed camera scenes, exact-boundary section
+     * timing, and interleaved arms (probes off, Fathom bypassed, GPU drain).
+     * A core-diagnostic mode because its Fathom-off arm uses the same bypass.
+     */
+    public static final boolean VIEW = net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED;
+
+    private static final boolean CORE_DIAGNOSTIC = CORE || CORE_PAIRED || VIEW;
 
     private static boolean detect() {
         try {

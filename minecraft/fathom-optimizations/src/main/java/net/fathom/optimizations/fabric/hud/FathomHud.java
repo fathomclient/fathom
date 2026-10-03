@@ -12,6 +12,8 @@ import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 
+import net.fathom.optimizations.core.bench.view.ViewProbe;
+import net.fathom.optimizations.core.bench.view.ViewSection;
 import net.fathom.optimizations.core.module.ModuleRegistry;
 import net.fathom.optimizations.core.module.ModuleStore;
 import net.fathom.optimizations.core.module.FathomModule;
@@ -323,6 +325,7 @@ public final class FathomHud {
         // that knows what a frame is. Click sampling is skipped entirely when
         // neither module that reads it is on -- a switched-off module must cost
         // nothing, and polling the mouse is the one thing here that is not free.
+        if (ViewProbe.REQUESTED) ViewProbe.enter(ViewSection.FATHOM_HUD_DECIDE);
         Widgets.frame();
         WidgetProfile.frame();
         if (features.widgetAllowed("cps") || features.widgetAllowed("keystrokes")) {
@@ -330,6 +333,7 @@ public final class FathomHud {
         }
         TextRenderer vanilla = client.textRenderer;
         if (vanilla == null) {
+            if (ViewProbe.REQUESTED) ViewProbe.exit(ViewSection.FATHOM_HUD_DECIDE);
             net.fathom.optimizations.core.instrument.Probe.stop(
                     net.fathom.optimizations.core.instrument.Probe.Section.HUD, probe);
             return;
@@ -378,6 +382,7 @@ public final class FathomHud {
                     renderer, placement(widget.id()), features.owningWidget(widget.id())));
         }
 
+        if (ViewProbe.REQUESTED) ViewProbe.exit(ViewSection.FATHOM_HUD_DECIDE);
         if (!drawing.isEmpty()) {
             HudFont minecraftFont = HudFonts.vanilla(vanilla);
 
@@ -390,6 +395,7 @@ public final class FathomHud {
             // recorded layer (see HudLayerCache) and only the realtime ones --
             // input feedback -- are drawn from Java every frame.
             boolean cached = !editing && net.fathom.optimizations.fabric.perf.PerfLayer.hudCache;
+            if (ViewProbe.REQUESTED) ViewProbe.enter(ViewSection.FATHOM_HUD_LAYER);
             if (cached) {
                 long signature = layerSignature(client, screenWidth, screenHeight);
                 if (signature != 0L
@@ -407,14 +413,34 @@ public final class FathomHud {
                     }
                 }
             }
+            if (ViewProbe.REQUESTED) ViewProbe.exit(ViewSection.FATHOM_HUD_LAYER);
+            if (ViewProbe.REQUESTED) ViewProbe.enter(ViewSection.FATHOM_HUD_LIVE);
+            // Realtime widgets that are standing still this frame are replayed
+            // rather than redrawn (HudSteadyCache); everything else is live.
+            long steady = cached && net.fathom.optimizations.fabric.perf.HudSteadyCache.enabled()
+                    ? steadySignature(client, minecraftFont, screenWidth, screenHeight) : 0L;
+            if (steady != 0L && net.fathom.optimizations.fabric.perf.HudSteadyCache.beginFrame(steady)) {
+                try {
+                    for (int index = 0; index < drawing.size(); index++) {
+                        Drawable each = drawing.get(index);
+                        if (each.steady) {
+                            drawOne(client, minecraftFont, each.renderer, each.placement,
+                                    screenWidth, screenHeight, false);
+                        }
+                    }
+                } finally {
+                    net.fathom.optimizations.fabric.perf.HudSteadyCache.endRecording();
+                }
+            }
             for (int index = 0; index < drawing.size(); index++) {
                 Drawable each = drawing.get(index);
-                if (!usesFathom(each.owner) && !(cached && layered(each))) {
+                if (!usesFathom(each.owner) && !(cached && layered(each)) && !(steady != 0L && each.steady)) {
                     drawOne(client, minecraftFont, each.renderer, each.placement,
                             screenWidth, screenHeight, editing);
                 }
             }
 
+            if (ViewProbe.REQUESTED) ViewProbe.exit(ViewSection.FATHOM_HUD_LIVE);
             boolean needsFathom = false;
             for (int index = 0; index < drawing.size(); index++) {
                 if (usesFathom(drawing.get(index).owner)) {
@@ -422,6 +448,7 @@ public final class FathomHud {
                     break;
                 }
             }
+            if (ViewProbe.REQUESTED) ViewProbe.enter(ViewSection.FATHOM_HUD_OWN);
             GlRenderer opened = null;
             try {
                 if (needsFathom) {
@@ -439,6 +466,7 @@ public final class FathomHud {
             } finally {
                 Gfx.endOverlay(opened);
             }
+            if (ViewProbe.REQUESTED) ViewProbe.exit(ViewSection.FATHOM_HUD_OWN);
         }
         net.fathom.optimizations.core.instrument.Probe.stop(
                 net.fathom.optimizations.core.instrument.Probe.Section.HUD, probe);
@@ -480,16 +508,63 @@ public final class FathomHud {
         return hash == 0L ? 1L : hash;
     }
 
+    /**
+     * Everything the steady realtime widgets' drawing depends on, or zero when
+     * none of them can vouch for their content this frame. Marks each drawable
+     * that joins the steady set.
+     *
+     * <p>The widgets supply what only they know (their content, see
+     * {@link HudWidget#contentSignature}); this adds what the HUD decides: which
+     * widgets, where, how big, at what scale and opacity, on what screen, under
+     * what settings. The same inputs as {@link #layerSignature}, plus content.
+     */
+    private long steadySignature(MinecraftClient client, HudFont font, int screenWidth, int screenHeight) {
+        long hash = 0xcbf29ce484222325L;
+        int members = 0;
+        for (int index = 0; index < drawing.size(); index++) {
+            Drawable each = drawing.get(index);
+            each.steady = false;
+            if (usesFathom(each.owner) || layered(each)) {
+                continue;
+            }
+            long content = each.renderer.contentSignature(client, font);
+            if (content == 0L) {
+                continue;
+            }
+            each.steady = true;
+            members++;
+            hash = (hash ^ System.identityHashCode(each.renderer)) * 0x100000001b3L;
+            hash = (hash ^ System.identityHashCode(each.placement)) * 0x100000001b3L;
+            hash = (hash ^ content) * 0x100000001b3L;
+            hash = (hash ^ each.renderer.width(client, font)) * 0x100000001b3L;
+            hash = (hash ^ each.renderer.height(client, font)) * 0x100000001b3L;
+        }
+        if (members == 0) {
+            return 0L;
+        }
+        hash = (hash ^ screenWidth) * 0x100000001b3L;
+        hash = (hash ^ screenHeight) * 0x100000001b3L;
+        hash = (hash ^ client.width) * 0x100000001b3L;
+        hash = (hash ^ client.height) * 0x100000001b3L;
+        hash = (hash ^ System.identityHashCode(layout)) * 0x100000001b3L;
+        hash = (hash ^ net.fathom.optimizations.core.module.Setting.revision()) * 0x100000001b3L;
+        hash = (hash ^ Float.floatToIntBits(interfaceScale())) * 0x100000001b3L;
+        return hash == 0L ? 1L : hash;
+    }
+
     /** A widget that is going to be drawn, and where. */
     private static final class Drawable {
         HudWidget renderer;
         Placement placement;
         FathomModule owner;
+        /** In this frame's steady set: replayed or recorded, not drawn live. */
+        boolean steady;
 
         Drawable set(HudWidget renderer, Placement placement, FathomModule owner) {
             this.renderer = renderer;
             this.placement = placement;
             this.owner = owner;
+            this.steady = false;
             return this;
         }
     }

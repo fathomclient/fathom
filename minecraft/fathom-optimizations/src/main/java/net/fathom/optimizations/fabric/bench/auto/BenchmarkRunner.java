@@ -36,6 +36,12 @@ public final class BenchmarkRunner {
         }
         maybeAutoJoin(client);
         maybeTakeFocus(client);
+        if (BenchmarkState.VIEW) {
+            // Its own driver: it loads its world, owns its scenes and arms, and
+            // never uses the subsystem registry the other modes measure.
+            net.fathom.optimizations.fabric.bench.view.ViewBenchmark.frame(client);
+            return;
+        }
         if (!started) {
             if (!announce(client)) {
                 return;
@@ -132,6 +138,9 @@ public final class BenchmarkRunner {
 
     /** Whether a run is in progress, for anything that wants to stay out of the way. */
     public static boolean running() {
+        if (BenchmarkState.VIEW) {
+            return !net.fathom.optimizations.fabric.bench.view.ViewBenchmark.finished();
+        }
         return BenchmarkState.ACTIVE
                 && ((pairedManager != null && !pairedManager.finished())
                 || (coreManager != null && !coreManager.finished())

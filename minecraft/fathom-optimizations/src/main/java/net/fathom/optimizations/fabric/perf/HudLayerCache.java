@@ -87,7 +87,6 @@ public final class HudLayerCache {
     private static long recordedSignature;
     private static boolean recording;
     private static final GlState START = new GlState();
-    private static final GlState END = new GlState();
     private static net.fathom.optimizations.fabric.gfx.GlStateAudit.Scope audit;
 
     /**
@@ -144,7 +143,10 @@ public final class HudLayerCache {
         }
         recording = false;
         GL11.glEndList();
-        END.capture();
+        // The end state used to be captured here as well: another twenty-odd
+        // glGet calls, each a point where the CPU can wait for the driver,
+        // twenty times a second -- for a snapshot nothing ever read. The
+        // invariant callers rely on is the line below, which does not need it.
         // Recording used COMPILE_AND_EXECUTE, so it must obey the same caller
         // state invariant as a replay.
         START.force();

@@ -32,10 +32,11 @@ import com.mojang.blaze3d.platform.GLX;
 public final class GlStateAudit {
     public static final String NAMETAG = "EntityRenderer.renderLabelIfPresent/nametag";
     public static final String HUD_CACHE = "InGameHud.render/HudLayerCache";
+    public static final String HUD_STEADY = "InGameHud.render/HudSteadyCache";
     public static final String ENTITY_LIMIT = "EntityRenderDispatcher.shouldRender/entity-limit";
     public static final String TILE_LIMIT = "BlockEntityRenderDispatcher.renderEntity/tile-limit";
 
-    private static final String[] TARGETS = { NAMETAG, HUD_CACHE, ENTITY_LIMIT, TILE_LIMIT };
+    private static final String[] TARGETS = { NAMETAG, HUD_CACHE, HUD_STEADY, ENTITY_LIMIT, TILE_LIMIT };
     private static final int FRAMEBUFFER_BINDING = 0x8CA6;
     private static final IntBuffer INT_QUERY = BufferUtils.createIntBuffer(16);
     private static final FloatBuffer FLOAT_QUERY = BufferUtils.createFloatBuffer(16);

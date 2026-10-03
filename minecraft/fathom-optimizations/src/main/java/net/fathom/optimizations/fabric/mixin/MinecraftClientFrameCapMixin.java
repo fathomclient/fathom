@@ -40,6 +40,20 @@ public abstract class MinecraftClientFrameCapMixin {
 
     @Inject(method = "getMaxFramerate()I", at = @At("RETURN"), cancellable = true)
     private void fathom$capFramerate(CallbackInfoReturnable<Integer> callback) {
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.enter(net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_FRAME_CAP);
+        }
+        try {
+            fathom$capFramerateTimed(callback);
+        } finally {
+            if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+                net.fathom.optimizations.core.bench.view.ViewProbe.exit(net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_FRAME_CAP);
+            }
+        }
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private void fathom$capFramerateTimed(CallbackInfoReturnable<Integer> callback) {
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                 net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
         if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowCoreHooks()) {

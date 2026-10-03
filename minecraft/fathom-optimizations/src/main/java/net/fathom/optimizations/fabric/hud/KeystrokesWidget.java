@@ -53,6 +53,8 @@ public final class KeystrokesWidget implements HudWidget {
     /** How lit each key is, 0 to 1, advanced in real time. */
     private final float[] lit = new float[8];
     private long lastNanos;
+    /** The HUD frame {@link #lit} was last advanced in, so it advances once a frame. */
+    private long advancedFrame = -1L;
 
     public KeystrokesWidget(ClickTracker clicks) {
         this.clicks = clicks;
@@ -131,7 +133,9 @@ public final class KeystrokesWidget implements HudWidget {
             return;
         }
         FathomModule module = module();
-        advance(client, module);
+        if (advancedFrame != Widgets.frameNumber()) {
+            advance(client, module);
+        }
 
         // Two passes over the same layout: every rectangle in one batched draw,
         // then the labels. Keys never overlap, so drawing all plates before any
@@ -147,6 +151,32 @@ public final class KeystrokesWidget implements HudWidget {
     }
 
     /** Move every key towards its real state, in real time. */
+    /**
+     * How lit each key is, and the click counts when they are printed on the
+     * mouse keys. Advances the fade first, so the signature describes the
+     * frame about to be drawn; {@link #draw} then does not advance it again.
+     * A key mid-fade changes every frame, so the HUD only ever reuses a
+     * drawing of keystrokes that are standing still.
+     */
+    @Override
+    public long contentSignature(MinecraftClient client, HudFont font) {
+        if (client.options == null) {
+            return 0L;
+        }
+        advance(client, module());
+        advancedFrame = Widgets.frameNumber();
+        long hash = 0xcbf29ce484222325L;
+        for (float value : lit) {
+            hash = (hash ^ Float.floatToIntBits(value)) * 0x100000001b3L;
+        }
+        if (Widgets.option("keystrokes", "cps-on-keys", false)) {
+            hash = (hash ^ clicks.left()) * 0x100000001b3L;
+            hash = (hash ^ clicks.right()) * 0x100000001b3L;
+        }
+        hash = (hash ^ System.identityHashCode(font)) * 0x100000001b3L;
+        return hash == 0L ? 1L : hash;
+    }
+
     private void advance(MinecraftClient client, FathomModule module) {
         long now = System.nanoTime();
         float elapsed = lastNanos == 0L ? 0f : Math.min(0.25f, (now - lastNanos) / 1_000_000_000f);

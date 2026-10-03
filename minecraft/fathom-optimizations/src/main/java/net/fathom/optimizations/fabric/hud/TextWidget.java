@@ -235,6 +235,35 @@ public abstract class TextWidget implements HudWidget {
      * the armour list — so every module's Background, Border and Corner radius
      * rows mean the same thing wherever they are drawn.
      */
+    /**
+     * The lines, their colours and the box they sit in. A text widget draws
+     * nothing that is not a function of these and its settings, which the HUD
+     * hashes itself. Obfuscated text is the exception -- Minecraft redraws
+     * {@code §k} with random glyphs every frame -- and is never vouched for.
+     */
+    @Override
+    public long contentSignature(MinecraftClient client, HudFont font) {
+        List<String> lines = currentLines(client);
+        if (lines == null) {
+            return 0L;
+        }
+        int textColour = HudStyle.textColour(module()) & 0x00FFFFFF;
+        long hash = 0xcbf29ce484222325L;
+        for (int index = 0; index < lines.size(); index++) {
+            String line = lines.get(index);
+            if (line.indexOf("§k") >= 0 || line.indexOf("§K") >= 0) {
+                return 0L;
+            }
+            hash = (hash ^ line.hashCode()) * 0x100000001b3L;
+            hash = (hash ^ colourFor(index, line, textColour)) * 0x100000001b3L;
+        }
+        hash = (hash ^ width(client, font)) * 0x100000001b3L;
+        hash = (hash ^ height(client, font)) * 0x100000001b3L;
+        hash = (hash ^ Float.floatToIntBits(alignment)) * 0x100000001b3L;
+        hash = (hash ^ System.identityHashCode(font)) * 0x100000001b3L;
+        return hash == 0L ? 1L : hash;
+    }
+
     static void backdrop(FathomModule module, int x, int y, int width, int height, int alpha) {
         HudSurface.draw(module, x, y, width, height, alpha);
     }

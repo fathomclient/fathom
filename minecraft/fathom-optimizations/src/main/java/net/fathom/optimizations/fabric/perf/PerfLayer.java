@@ -119,6 +119,7 @@ public final class PerfLayer {
         }
         if (!hudCache) {
             HudLayerCache.release();
+            HudSteadyCache.release();
         }
     }
 

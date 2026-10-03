@@ -40,6 +40,7 @@
     performanceView,
     setOptimization,
     setPreset,
+    setRenderRegions,
     unlockFrameRate,
     type PerformanceView,
   } from '../lib/api';
@@ -80,6 +81,21 @@
     busy = true;
     try {
       view = await unlockFrameRate();
+      onChanged();
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * OptiFine's Render Regions, on or off. Its setting, not ours: only ever
+   * changed from this switch, and it takes effect next launch.
+   */
+  async function chooseRenderRegions(on: boolean) {
+    if (busy) return;
+    busy = true;
+    try {
+      view = await setRenderRegions(on);
       onChanged();
     } finally {
       busy = false;
@@ -137,6 +153,34 @@
           </div>
         </Notice>
       </div>
+    {/if}
+
+    <!-- OPTIFINE: RENDER REGIONS -->
+    {#if view.renderRegions}
+      <!-- The biggest terrain saving Fathom's view profile found is OptiFine's
+           own, switched off by default. Fathom does not duplicate it and does
+           not turn it on behind anyone's back: it says what it measured and
+           offers the switch. -->
+      <Section label="OptiFine">
+        <Row
+          title="Render Regions"
+          detail={view.renderRegions.vboOff
+            ? `${view.renderRegions.summary} It needs VBOs, which are off in this profile's video settings.`
+            : view.renderRegions.summary}
+          badge={view.renderRegions.on ? 'On' : 'Off'}
+          tone={view.renderRegions.on ? 'good' : 'neutral'}
+          compact
+        >
+          <svelte:fragment slot="control">
+            <Switch
+              checked={view.renderRegions.on}
+              disabled={busy}
+              label="Render Regions"
+              onChange={chooseRenderRegions}
+            />
+          </svelte:fragment>
+        </Row>
+      </Section>
     {/if}
 
     <!-- PRESET -->

@@ -176,6 +176,17 @@ pub fn limits(dirs: &ProfileDirs) -> VideoLimits {
     limits
 }
 
+/// Whether the VBO chunk renderer is on, or `None` when the file does not say.
+///
+/// Read for OptiFine's Render Regions, which only works on top of it.
+pub fn use_vbo(dirs: &ProfileDirs) -> Option<bool> {
+    let text = std::fs::read_to_string(dirs.options_file()).ok()?;
+    text.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        (key.trim() == "useVbo").then(|| value.trim().parse().ok()).flatten()
+    })
+}
+
 /// Rewrite just the two shipped keys in an existing `options.txt`, leaving
 /// every other line exactly as it was.
 ///

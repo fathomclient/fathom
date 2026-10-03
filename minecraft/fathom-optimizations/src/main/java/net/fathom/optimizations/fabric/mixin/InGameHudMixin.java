@@ -37,6 +37,9 @@ public abstract class InGameHudMixin {
      */
     @Inject(method = "render(F)V", at = @At("HEAD"))
     private void fathom$captureBackdrop(float tickDelta, CallbackInfo info) {
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.enter(net.fathom.optimizations.core.bench.view.ViewSection.HUD);
+        }
         if (net.fathom.optimizations.fabric.gfx.WorldBackdrop.pending()) {
             net.fathom.optimizations.fabric.gfx.WorldBackdrop.captureIfRequested(MinecraftClient.getInstance());
         }
@@ -44,6 +47,9 @@ public abstract class InGameHudMixin {
 
     @Inject(method = "render(F)V", at = @At("RETURN"))
     private void fathom$drawHud(float tickDelta, CallbackInfo info) {
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.enter(net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_HUD);
+        }
         long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
         try {
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
@@ -78,8 +84,15 @@ public abstract class InGameHudMixin {
             // FathomHud and the surrounding InGameHud method have completed.
             net.fathom.optimizations.fabric.gfx.GlStateAudit.finish(
                     net.fathom.optimizations.fabric.gfx.GlStateAudit.HUD_CACHE);
+            net.fathom.optimizations.fabric.gfx.GlStateAudit.finish(
+                    net.fathom.optimizations.fabric.gfx.GlStateAudit.HUD_STEADY);
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
                     net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
+            if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+                net.fathom.optimizations.core.bench.view.ViewProbe.exit(net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_HUD);
+                // InGameHud.render returns right after this: the vanilla HUD ends here too.
+                net.fathom.optimizations.core.bench.view.ViewProbe.exit(net.fathom.optimizations.core.bench.view.ViewSection.HUD);
+            }
         }
     }
 }

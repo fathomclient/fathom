@@ -44,6 +44,52 @@ pub struct PerformanceView {
     /// shows nothing at all in that case — an always-present row saying "not
     /// capped" is noise.
     pub video_limits: Option<VideoLimitsView>,
+    /// OptiFine's Render Regions, for a profile that runs OptiFine. `None`
+    /// otherwise: there is nothing to say about a setting the game does not have.
+    pub render_regions: Option<RenderRegionsView>,
+}
+
+/// The one OptiFine setting the view-direction profile found worth raising.
+///
+/// It is OptiFine's, so it is reported and offered, never changed on the
+/// launcher's own initiative. See `launcher_core::profiles::optifine_options`
+/// for the measurement behind it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderRegionsView {
+    /// What `optionsof.txt` says now. A file that does not mention it means
+    /// OptiFine's default, which is off.
+    pub on: bool,
+    /// Render Regions needs the VBO renderer; with VBOs off OptiFine ignores it.
+    pub vbo_off: bool,
+    pub summary: String,
+}
+
+fn render_regions(core: &Launcher, profile: &Profile) -> Option<RenderRegionsView> {
+    let runs_optifine = profile
+        .mods
+        .enabled()
+        .any(|entry| entry.id.as_str() == "optifine");
+    if !runs_optifine {
+        return None;
+    }
+    let dirs = core.dirs_for(profile);
+    let on = launcher_core::profiles::optifine_options::render_regions(&dirs).unwrap_or(false);
+    let vbo_off = game_options::use_vbo(&dirs) == Some(false);
+    let summary = if on {
+        "OptiFine's Render Regions is on. Terrain is drawn in grouped batches.".to_owned()
+    } else {
+        "OptiFine's Render Regions is off. Terrain is what slows down frames when you look at          the ground, and this groups it into fewer draws: measured on an RTX 4060 it took a          ground-facing frame from 0.68 to 0.36 ms with the same picture."
+            .to_owned()
+    };
+    Some(RenderRegionsView { on, vbo_off, summary })
+}
+
+/// Turn Render Regions on or off in this profile's `optionsof.txt`, at the
+/// player's request. Takes effect the next time the game starts.
+pub fn set_render_regions(core: &Launcher, profile: &Profile, on: bool) -> Result<bool, String> {
+    launcher_core::profiles::optifine_options::set_render_regions(&core.dirs_for(profile), on)
+        .map_err(|error| error.to_string())
 }
 
 /// A profile whose frame rate is capped by its own saved video settings.
@@ -439,6 +485,7 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
         benchmark: runs.iter().find(|run| run.is_usable()).map(summarise),
         benchmark_count: runs.len(),
         video_limits: video_limits(core, profile),
+        render_regions: render_regions(core, profile),
         profile_name: profile.display_name.clone(),
         presets: OptimizationPreset::ALL
             .into_iter()

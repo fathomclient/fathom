@@ -117,6 +117,9 @@ public abstract class TextRendererWidthMixin {
     private void fathom$fontReloaded(CallbackInfo callback) {
         fathom$memo().invalidate();
         net.fathom.optimizations.fabric.perf.NametagRenderer.release();
+        // Both HUD recordings name the glyph texture by id, and a reload makes a new one.
+        net.fathom.optimizations.fabric.perf.HudSteadyCache.release();
+        net.fathom.optimizations.fabric.perf.HudLayerCache.invalidate();
     }
 
     /** The unicode font toggle changes widths without reloading resources. */
@@ -124,5 +127,7 @@ public abstract class TextRendererWidthMixin {
     private void fathom$unicodeChanged(boolean unicode, CallbackInfo callback) {
         fathom$memo().invalidate();
         net.fathom.optimizations.fabric.perf.NametagRenderer.release();
+        net.fathom.optimizations.fabric.perf.HudSteadyCache.release();
+        net.fathom.optimizations.fabric.perf.HudLayerCache.invalidate();
     }
 }

@@ -74,6 +74,11 @@ final class GlStateSnapshot {
         }
         restored = false;
         captured = true;
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            // Timed on its own: a glGet can make the CPU wait for the driver to
+            // catch up with everything the world pass queued before it.
+            net.fathom.optimizations.core.bench.view.ViewProbe.enter(net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_GL_STATE);
+        }
         net.fathom.optimizations.fabric.diag.GlSync.captured(QUERIES);
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.GL_STATE_CAPTURE);
         framebufferSupported = GLX.supportsFbo();
@@ -123,6 +128,9 @@ final class GlStateSnapshot {
         GlStateManager.matrixMode(GL11.GL_TEXTURE);
         GlStateManager.pushMatrix();
         GlStateManager.matrixMode(matrixMode);
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.exit(net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_GL_STATE);
+        }
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
                 net.fathom.optimizations.core.instrument.Probe.Section.GL_WRAPPERS, fathom$probe);
         return this;

@@ -81,7 +81,8 @@ public final class PerformanceLayer {
                         "For Custom. Beacons, end portals and pistons are never limited.",
                         48, TileDistances.FLOOR_BLOCKS, TileDistances.VANILLA_BLOCKS, 4, "blocks"))
                 .setting(new Setting.Toggle(HUD_CACHE, "HUD caching",
-                        "Redraws slow-changing HUD widgets 20 times a second instead of every frame.",
+                        "Reuses HUD widgets that have not changed since the last frame, and redraws"
+                                + " slow-changing ones 20 times a second instead of every frame.",
                         true))
                 .setting(new Setting.Toggle(STATS, "Show performance statistics",
                         "A small readout of what the performance layer skipped.", false))

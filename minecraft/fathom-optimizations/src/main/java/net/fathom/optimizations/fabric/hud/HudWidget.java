@@ -77,4 +77,23 @@ public interface HudWidget {
      */
     default void align(float horizontal) {
     }
+
+    /**
+     * A hash of everything this frame's drawing depends on that the HUD cannot
+     * see for itself, or 0 when the widget cannot vouch for that.
+     *
+     * <p>The HUD already accounts for position, size, scale, opacity, the
+     * screen and every setting. What it cannot see is content: the text a
+     * readout shows, how lit a key is. A widget that returns the same non-zero
+     * value two frames running is promising that it would draw the same pixels
+     * both times, and the HUD replays the first frame's drawing instead of
+     * drawing again. Anything that animates on a clock it does not report --
+     * the crosshair's hit flash -- must keep the default.
+     *
+     * <p>Called once per frame, before {@link #draw}, only for widgets drawn
+     * with the Minecraft font.
+     */
+    default long contentSignature(MinecraftClient client, HudFont font) {
+        return 0L;
+    }
 }

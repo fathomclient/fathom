@@ -62,6 +62,13 @@ public abstract class MinecraftClientFrameMixin {
 
     @Inject(method = "runGameLoop()V", at = @At("HEAD"))
     private void fathom$frameStart(CallbackInfo info) {
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            // The view benchmark's frame boundary: first, so the previous frame
+            // ends before any of this frame's work, Fathom's included, begins.
+            net.fathom.optimizations.core.bench.view.ViewProbe.loopHead();
+            net.fathom.optimizations.core.bench.view.ViewProbe.enter(
+                    net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_FRAME);
+        }
         fathom$frameStartNanos = System.nanoTime();
         fathom$gameLoopProbe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
@@ -93,10 +100,19 @@ public abstract class MinecraftClientFrameMixin {
         }
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
                 net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, callback);
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.exit(
+                    net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_FRAME);
+        }
     }
 
     @Inject(method = "runGameLoop()V", at = @At("RETURN"))
     private void fathom$frameEnd(CallbackInfo info) {
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.loopReturn();
+            net.fathom.optimizations.core.bench.view.ViewProbe.enter(
+                    net.fathom.optimizations.core.bench.view.ViewSection.POST_FRAME);
+        }
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                 net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.MIXIN_CALLBACK);
         long callback = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
@@ -112,6 +128,10 @@ public abstract class MinecraftClientFrameMixin {
         }
         if (net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE) {
             net.fathom.optimizations.fabric.bench.PerfBench.frame((MinecraftClient) (Object) this, frameNanos);
+        }
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.exit(
+                    net.fathom.optimizations.core.bench.view.ViewSection.POST_FRAME);
         }
     }
 }

@@ -195,6 +195,19 @@ loom {
                     }
                 }
             }
+            if (project.hasProperty('viewBench')) {
+                // View-direction frame profile (sky, horizon, ground, entities,
+                // particles, translucency): `gradle runClient -PviewBench=<save folder>`.
+                // Report lands in run/logs/fathom-view-<stamp>.txt. Extra settings
+                // pass through as -PviewRounds=3, -PviewArms=..., -PviewScenes=...
+                vmArg '-Dfathom.benchmark=view'
+                vmArg "-Dfathom.view.world=${project.property('viewBench')}"
+                ['rounds', 'arms', 'scenes', 'seconds', 'settle', 'warmup', 'joinSettle', 'quit'].each { key ->
+                    if (project.hasProperty("view${key.capitalize()}")) {
+                        vmArg "-Dfathom.view.${key}=${project.property("view${key.capitalize()}")}"
+                    }
+                }
+            }
             if (project.hasProperty('jfrFile')) {
                 // Sampling profile of a run, read with JDK 17's `jfr print`.
                 vmArg "-XX:StartFlightRecording=settings=profile,filename=${project.property('jfrFile')}"
@@ -412,6 +425,7 @@ def coreSuites = [
         'net.fathom.optimizations.core.ProfileLocationTests',
         'net.fathom.optimizations.core.AccountTests',
         'net.fathom.optimizations.core.BenchmarkTests',
+        'net.fathom.optimizations.core.ViewTests',
 ]
 
 def coreTest = tasks.register('coreTest') {

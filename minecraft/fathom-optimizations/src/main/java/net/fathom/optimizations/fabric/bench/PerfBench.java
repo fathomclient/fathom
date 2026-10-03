@@ -185,7 +185,9 @@ public final class PerfBench {
 
     /** Whether the unfocused cap should stand aside for a benchmark run. */
     public static boolean suppressUnfocusedCap() {
-        return ACTIVE;
+        // The view benchmark measures with the window unfocused when the user
+        // is working in another window; a 30 fps cap would void every frame.
+        return ACTIVE || net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED;
     }
 
     /** Called once per frame, after the frame has been timed. */

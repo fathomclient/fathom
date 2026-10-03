@@ -44,6 +44,9 @@ public abstract class EntityRendererNametagMixin {
             at = @At("HEAD"), cancellable = true)
     private void fathom$fastNametag(Entity entity, String text, double x, double y, double z,
             int maxDistance, CallbackInfo callback) {
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.enter(net.fathom.optimizations.core.bench.view.ViewSection.NAMETAG);
+        }
         fathom$nametagAudit = net.fathom.optimizations.fabric.gfx.GlStateAudit.beginRequested(
                 net.fathom.optimizations.fabric.gfx.GlStateAudit.NAMETAG, PerfLayer.fastNametags);
         NametagRenderer.Result result = PerfLayer.fastNametags
@@ -53,6 +56,9 @@ public abstract class EntityRendererNametagMixin {
                 fathom$nametagAudit, result.mutated, result.path);
         if (result.handled) {
             callback.cancel();
+            if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+                net.fathom.optimizations.core.bench.view.ViewProbe.exit(net.fathom.optimizations.core.bench.view.ViewSection.NAMETAG);
+            }
             net.fathom.optimizations.fabric.gfx.GlStateAudit.finish(
                     net.fathom.optimizations.fabric.gfx.GlStateAudit.NAMETAG);
             fathom$nametagAudit = null;
@@ -63,6 +69,9 @@ public abstract class EntityRendererNametagMixin {
             at = @At("RETURN"))
     private void fathom$finishNametagAudit(Entity entity, String text, double x, double y, double z,
             int maxDistance, CallbackInfo callback) {
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.exit(net.fathom.optimizations.core.bench.view.ViewSection.NAMETAG);
+        }
         if (fathom$nametagAudit != null) {
             net.fathom.optimizations.fabric.gfx.GlStateAudit.finish(
                     net.fathom.optimizations.fabric.gfx.GlStateAudit.NAMETAG);
