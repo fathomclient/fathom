@@ -243,6 +243,7 @@ public final class FathomTheme {
         public static final float BRAND_WALL = 1.000f;
         public static final float BRAND_PLANE = 2.000f;
         public static final float BRAND_UNIT_DIVISOR = 8.000f;
+        public static final float BRAND_ICON_DIVISOR = 7.000f;
         public static final float BRAND_CORNER_OUTER = 1.500f;
         public static final float BRAND_CORNER_INNER = 0.500f;
         public static final float BRAND_CORNER_PLANE = 0.250f;
@@ -253,7 +254,6 @@ public final class FathomTheme {
         public static final float BRAND_STACKED_SCALE = 2.000f;
         public static final int BRAND_FRAME_INK = 0xFFEDEDED;
         public static final int BRAND_PLANE_INK = 0xFFA8AFB3;
-        public static final int BRAND_TILE = 0xFF171D20;
         public static final int BRAND_DARK_FRAME_INK = 0xFF171D20;
         public static final int BRAND_DARK_PLANE_INK = 0xFF646B6F;
         public static final float BRAND_MEASURE_TRACK = 0.160f;

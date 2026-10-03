@@ -6,13 +6,15 @@
  * moved in by its own width -- where it lands dead centre, one unit from every
  * wall it faces, its outer corner pointing straight at the opening.
  *
- * Every size is solved in whole pixels. At a tile of S px the unit is
- * floor(S / 8) and the frame, 6 units, is centred with a margin of
+ * Every size is solved in whole pixels. In an app icon of S px the unit is
+ * floor(S / 7) and the frame, 6 units, is centred with a margin of
  * (S - 6u) / 2 -- a whole number at every size the icon ships in, so no edge
- * falls between two pixels. Below a 24 px tile the corners stay square (at
- * 2 px walls a curve is only grey pixels); from 24 px the outer corners take a
- * 1.5-unit radius and the inner ones 0.5, concentric; from 48 px the plane's
- * corners soften to a quarter unit.
+ * falls between two pixels. The icon is the mark alone, with no tile. The
+ * tiers are read in the units of the tile the mark was first drawn on, 8 per
+ * unit: below 24 px the corners stay square (at 2 px walls a curve is only
+ * grey pixels); from 24 px the outer corners take a 1.5-unit radius and the
+ * inner ones 0.5, concentric; from 48 px the plane's corners soften to a
+ * quarter unit.
  *
  * The wordmark stands on the same baseline as the mark, and the plane's top is
  * its x-height. That fixes the mark at one and a half x-heights and the gap at
@@ -47,11 +49,6 @@ const PLANE = BRAND.plane;
 const REACH = GRID - PLANE;
 /** The plane's offset: its own width in from the missing corner. */
 const PLANE_AT = REACH - PLANE;
-
-/** The unit for a tile of `tile` px. */
-export function unitFor(tile: number): number {
-  return Math.max(2, Math.floor(tile / BRAND.unitDivisor));
-}
 
 /** The tier for a mark drawn at `unit` px per unit, tiled or not. */
 export function markTier(unit: number): MarkTier {
@@ -90,24 +87,17 @@ export function markGeometry(unit: number, x = 0, y = 0): MarkGeometry {
   };
 }
 
-/** The mark centred in a tile of `tile` px, on whole pixels. */
-export function tileMark(tile: number): MarkGeometry {
-  const unit = unitFor(tile);
-  const margin = (tile - GRID * unit) / 2;
-  return markGeometry(unit, margin, margin);
-}
-
 /**
  * The mark alone in an icon of `size` px, with no tile behind it: frame and
  * plane on transparency, so a dark taskbar shows no grey edge round the mark
  * and no grey square round the plane.
  *
- * Without a tile to fill the square, the mark is set larger than `tileMark`
- * sets it: a unit of floor(size / 7), which leaves roughly half a unit of
- * clear space on every side, centred on whole pixels (6u is always even).
+ * Without a tile to fill the square, the mark is set larger than it was on
+ * one: a unit of floor(size / icon-divisor), which leaves roughly half a unit
+ * of clear space on every side, centred on whole pixels (6u is always even).
  */
 export function iconMark(size: number): MarkGeometry {
-  const unit = Math.max(2, Math.floor(size / 7));
+  const unit = Math.max(2, Math.floor(size / BRAND.iconDivisor));
   const margin = (size - GRID * unit) / 2;
   return markGeometry(unit, margin, margin);
 }
@@ -226,33 +216,6 @@ export function outlinePolygon(o: Outline, segments = 12): Polygon {
     }
   }
   return out;
-}
-
-// ---------------------------------------------------------------------------
-// The tile
-// ---------------------------------------------------------------------------
-
-/**
- * The icon tile: a continuous-curve square (a superellipse), so its corners
- * ease into the sides instead of meeting them at a visible join.
- */
-export function tilePolygon(size: number, exponent = 5, segments = 256): Polygon {
-  const half = size / 2;
-  const out: Point[] = [];
-  for (let i = 0; i < segments; i += 1) {
-    const a = (i / segments) * Math.PI * 2;
-    const c = Math.cos(a);
-    const s = Math.sin(a);
-    out.push([
-      half + half * Math.sign(c) * Math.abs(c) ** (2 / exponent),
-      half + half * Math.sign(s) * Math.abs(s) ** (2 / exponent),
-    ]);
-  }
-  return out;
-}
-
-export function tilePath(size: number): string {
-  return 'M' + tilePolygon(size).map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join('L') + 'Z';
 }
 
 // ---------------------------------------------------------------------------

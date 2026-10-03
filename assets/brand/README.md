@@ -26,7 +26,7 @@ by its own width, where it lands dead centre: one unit from every wall it
 faces, its outer corner pointing straight at the opening. Wall, gap and plane
 are 1, 1 and 2 units; the opening is 2. Nothing is placed by eye.
 
-**Solved in pixels.** In an app icon of S px the unit is u = ⌊S ÷ 7⌋ and the
+**Solved in pixels.** In an app icon of S px the unit is u = ⌊S ÷ 7⌋ (`icon-divisor`) and the
 frame, 6u, is centred with a margin of (S − 6u) ÷ 2. At every size the icon
 ships in (16, 20, 24, 30, 32, 36, 40, 48, 64, 128, 256, 512) both are whole
 pixels, so no edge ever falls between two pixels. The tiers are set by 8u, the
