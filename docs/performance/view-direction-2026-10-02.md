@@ -159,6 +159,45 @@ where their content is unchanged.
 calls, 20 times a second) and never read it. Removed. It is not measured on its
 own, and nothing depended on it.
 
+### Frame limiter (`FramePacer`, "Accurate frame limiter") — 2026-10-02
+
+Replaces `Display.sync` in the game loop with fixed deadlines on
+`System.nanoTime`: sleep while more than 1.5 ms remains, then yield; a frame a
+whole period late releases at once and restarts the schedule. Run
+`view-2026-10-02-pace144`: OptiFine profile, frame cap 144, arms `normal` vs
+`off:input.frame-limiter-accuracy`, 3 rounds × 3 s per view.
+
+| View | sd on → off | p1 on → off | p99 on → off | mean on → off |
+|---|---|---|---|---|
+| sky | 0.242 → 0.511 ms | 6.37 → 5.51 | 7.58 → 7.87 | 6.948 → 6.941 |
+| horizon | 0.377 → 0.549 ms | 6.41 → 5.63 | 7.52 → 7.87 | 6.959 → 6.941 |
+| 45° down | 0.406 → 0.516 ms | 6.20 → 5.51 | 7.82 → 7.80 | 6.961 → 6.941 |
+
+Same average; frames sit closer to 6.94 ms on both sides. Default on: it is
+output-identical and does nothing without a cap.
+
+### Chunk worker pool (`ChunkWorkerPolicy`, "Chunk rebuild scheduling") — 2026-10-03
+
+Vanilla 1.8.9 builds chunks on 2 threads with 5 buffers; this uses half the
+hardware threads (2-5) and workers + 3 buffers. Not under OptiFine, which sizes
+its own pool. Run `view-2026-10-03-chunk-workers`: the user's profile *without*
+OptiFine, scene `reload` (renderer reload at window start; the window ends after
+0.5 s with no rebuild), four launches on/off/off/on because the pool is fixed
+when the renderer is built, 3 reloads each. Window length (rebuild + 0.5 s):
+
+| Launch | Reload 1 | Reload 2 | Reload 3 |
+|---|---|---|---|
+| on (5 workers) | 0.672 s | 0.649 s | 0.635 s |
+| off (2 workers) | 1.267 s | 0.738 s | 0.724 s |
+| off (2 workers) | 0.774 s | 1.003 s | 0.724 s |
+| on (5 workers) | 0.653 s | 0.642 s | 1.123 s |
+
+Median 0.65 s on vs 0.76 s off; mean 0.73 s vs 0.87 s. So the rebuild itself is
+roughly 0.15 s against 0.26 s. Every arm had one slow outlier and this is one
+machine, so it ships switchable and **off** by default. Of the three ideas this
+entry merged, rebuild prioritisation was dropped (vanilla already sorts by
+distance) and redundant-rebuild skipping was dropped (none were observed).
+
 ### Rejected
 
 - **Chunk lookup cache under OptiFine:** no benefit (above).

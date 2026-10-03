@@ -410,7 +410,18 @@ public final class CoreTests {
     }
 
     static void presetsNeverIncludeExperimental() {
-        OptimizationRegistry registry = OptimizationRegistry.standard();
+        // The standard registry has no experimental entry at the moment, so one
+        // is added: the rule has to hold for the next one, not just today's list.
+        List<Optimization> entries = new ArrayList<Optimization>(OptimizationRegistry.standard().all());
+        entries.add(Optimization.builder("render.test.experiment")
+                .group(Optimization.Group.RENDERING)
+                .name("x")
+                .description("a description long enough to be a real one")
+                .category(Category.EXPERIMENTAL)
+                .basis(Optimization.Basis.VANILLA_ANALYSIS)
+                .expectedBenefit("something")
+                .build());
+        OptimizationRegistry registry = OptimizationRegistry.of(entries);
         List<Optimization> experimental = registry.inCategory(Category.EXPERIMENTAL);
         check(!experimental.isEmpty(), "there is an experimental entry to test with");
 

@@ -436,39 +436,63 @@ public final class OptimizationRegistry {
             out.add(Optimization.builder("render.chunk.rebuild-scheduling")
                     .name("Chunk rebuild scheduling")
                     .description(
-                            "Without OptiFine, 1.8.9 rebuilds chunks on two worker threads in"
-                                    + " queue order, so nearby and in-view chunks can wait behind"
-                                    + " distant ones. Merges three earlier ideas: prioritising"
-                                    + " rebuilds, skipping ones that cannot change the mesh, and"
-                                    + " sizing the worker pool.")
+                            "Without OptiFine, 1.8.9 rebuilds chunks on exactly two worker"
+                                    + " threads whatever the machine. This sizes the pool to the"
+                                    + " CPU instead -- half the hardware threads, between two and"
+                                    + " five -- with a build buffer per worker. Of the three ideas"
+                                    + " merged here, only the pool size survived reading the code:"
+                                    + " vanilla already builds nearest chunks first, and the view"
+                                    + " benchmark found no redundant rebuilds to skip. Takes"
+                                    + " effect at the next renderer reload (joining a world, F3+A).")
                     .group(Optimization.Group.CHUNKS)
-                    .category(Category.EXPERIMENTAL)
+                    .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
                     .expectedBenefit(
-                            "Chunk-loading latency when joining and moving, not steady frame"
-                                    + " time: the view benchmark saw no rebuilds at all once a"
-                                    + " view settled. Needs a chunk-loading benchmark before it"
-                                    + " can be built honestly.")
+                            "Chunks fill in sooner when joining, teleporting or reloading."
+                                    + " Steady frame time is untouched: once a view settles"
+                                    + " nothing is being rebuilt. Not on by default -- one"
+                                    + " machine, and each arm had an outlier.")
+                    .evidence(Evidence.inGame(
+                            "view-2026-10-03-chunk-workers",
+                            "Full renderer reloads on the user's profile without OptiFine, four"
+                                    + " launches in on-off-off-on order, three reloads each,"
+                                    + " 5 workers against vanilla's 2: reload-to-quiet median"
+                                    + " 0.65 s against 0.76 s, mean 0.73 s against 0.87 s"
+                                    + " (each including a fixed 0.5 s quiet period)."))
                     .conflict(Conflict.disableOurs(
                             "OptiFine",
-                            "OptiFine already schedules rebuilds and sizes its worker pool to"
-                                    + " the CPU (up to five threads)."))
+                            "OptiFine already sizes its own chunk worker pool to the CPU (up to"
+                                    + " five threads)."))
                     .reference("docs/research/performance.md §2.3")
+                    .reference("docs/performance/view-direction-2026-10-02.md — chunk worker pool")
                     .build());
 
             out.add(Optimization.builder("input.frame-limiter-accuracy")
                     .name("Accurate frame limiter")
                     .description(
-                            "Vanilla's FPS cap busy-waits imprecisely, producing uneven frame"
-                                    + " pacing at capped rates.")
+                            "Vanilla's FPS cap waits using LWJGL's estimates of how long a sleep"
+                                    + " and a yield take, so it reaches the right average with"
+                                    + " uneven frames around it. This waits for fixed deadlines"
+                                    + " on the system's precise clock instead: sleep while more"
+                                    + " than 1.5 ms remains, then yield. Only does anything with"
+                                    + " a frame cap set.")
                     .group(Optimization.Group.FRAMES)
                     .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
                     .expectedBenefit(
-                            "Expected to reduce frame time variance at a cap without changing"
-                                    + " average FPS. Only matters with a frame cap set; Fathom"
-                                    + " profiles default to uncapped.")
+                            "More even frame pacing at a cap, same average FPS. Nothing at all"
+                                    + " uncapped.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "view-2026-10-02-pace144",
+                            "Capped at 144 FPS with OptiFine, three views, three rounds each:"
+                                    + " frame-time standard deviation 0.51 -> 0.24 ms (sky),"
+                                    + " 0.55 -> 0.38 ms (horizon), 0.52 -> 0.41 ms (45 degrees"
+                                    + " down); mean frame time unchanged within 0.02 ms."))
                     .reference("docs/research/performance.md §6.3")
+                    .reference("docs/performance/view-direction-2026-10-02.md — frame limiter")
                     .build());
 
             return out;

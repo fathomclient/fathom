@@ -13,14 +13,14 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 
 ## 1. Where things stand
 
-**13** entries: **10** implemented and hooked into the game, **3** planned. **9** carry a measurement, **5** of them taken in a running game.
+**13** entries: **12** implemented and hooked into the game, **1** planned. **11** carry a measurement, **7** of them taken in a running game.
 
 | Status | Count |
 |---|---|
-| Runs in game | 10 |
+| Runs in game | 12 |
 | In the module, not yet seen in game | 0 |
 | Core written, not hooked up | 1 |
-| Planned | 2 |
+| Planned | 0 |
 
 ## 2. The register
 
@@ -37,8 +37,8 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 | `resources.pack-icon-downscale` | Downscale resource pack icons | Resources | Safe | Runs in game | Launcher switch | isolated (`opt-2026-08-26-pack-icons`) | — |
 | `input.unfocused-fps-cap` | Cap frame rate when unfocused | Frames and input | Safe | Runs in game | Launcher switch | isolated (`opt-2026-09-04-frame-caps`) | — |
 | `render.entity.occlusion-culling` | Entity occlusion culling | Entities | Optional | Core written, not hooked up | Launcher switch | **none** | OptiFine shaders |
-| `render.chunk.rebuild-scheduling` | Chunk rebuild scheduling | Chunks | Experimental | Planned | Launcher switch | **none** | OptiFine |
-| `input.frame-limiter-accuracy` | Accurate frame limiter | Frames and input | Safe | Planned | Launcher switch | **none** | — |
+| `render.chunk.rebuild-scheduling` | Chunk rebuild scheduling | Chunks | Safe | Runs in game | Launcher switch | in-game (`view-2026-10-03-chunk-workers`) | OptiFine |
+| `input.frame-limiter-accuracy` | Accurate frame limiter | Frames and input | Safe | Runs in game | Launcher switch | in-game (`view-2026-10-02-pace144`) | — |
 
 ## 3. Every entry in full
 
@@ -135,20 +135,20 @@ Skip entities fully hidden behind geometry. Must exempt nametags, ender dragons 
 
 #### `render.chunk.rebuild-scheduling` — Chunk rebuild scheduling
 
-Without OptiFine, 1.8.9 rebuilds chunks on two worker threads in queue order, so nearby and in-view chunks can wait behind distant ones. Merges three earlier ideas: prioritising rebuilds, skipping ones that cannot change the mesh, and sizing the worker pool.
+Without OptiFine, 1.8.9 rebuilds chunks on exactly two worker threads whatever the machine. This sizes the pool to the CPU instead -- half the hardware threads, between two and five -- with a build buffer per worker. Of the three ideas merged here, only the pool size survived reading the code: vanilla already builds nearest chunks first, and the view benchmark found no redundant rebuilds to skip. Takes effect at the next renderer reload (joining a world, F3+A).
 
-- **Status:** Planned. **Control:** Launcher switch. **Class:** Experimental. **Group:** Chunks.
-- **Expected benefit:** Chunk-loading latency when joining and moving, not steady frame time: the view benchmark saw no rebuilds at all once a view settled. Needs a chunk-loading benchmark before it can be built honestly.
-- **Measured:** nothing yet.
-- **Stood down by OptiFine:** OptiFine already schedules rebuilds and sizes its worker pool to the CPU (up to five threads).
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Chunks.
+- **Expected benefit:** Chunks fill in sooner when joining, teleporting or reloading. Steady frame time is untouched: once a view settles nothing is being rebuilt. Not on by default -- one machine, and each arm had an outlier.
+- **Measured** (in-game, `view-2026-10-03-chunk-workers`): Full renderer reloads on the user's profile without OptiFine, four launches in on-off-off-on order, three reloads each, 5 workers against vanilla's 2: reload-to-quiet median 0.65 s against 0.76 s, mean 0.73 s against 0.87 s (each including a fixed 0.5 s quiet period).
+- **Stood down by OptiFine:** OptiFine already sizes its own chunk worker pool to the CPU (up to five threads).
 
 #### `input.frame-limiter-accuracy` — Accurate frame limiter
 
-Vanilla's FPS cap busy-waits imprecisely, producing uneven frame pacing at capped rates.
+Vanilla's FPS cap waits using LWJGL's estimates of how long a sleep and a yield take, so it reaches the right average with uneven frames around it. This waits for fixed deadlines on the system's precise clock instead: sleep while more than 1.5 ms remains, then yield. Only does anything with a frame cap set.
 
-- **Status:** Planned. **Control:** Launcher switch. **Class:** Safe. **Group:** Frames and input.
-- **Expected benefit:** Expected to reduce frame time variance at a cap without changing average FPS. Only matters with a frame cap set; Fathom profiles default to uncapped.
-- **Measured:** nothing yet.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Frames and input.
+- **Expected benefit:** More even frame pacing at a cap, same average FPS. Nothing at all uncapped.
+- **Measured** (in-game, `view-2026-10-02-pace144`): Capped at 144 FPS with OptiFine, three views, three rounds each: frame-time standard deviation 0.51 -> 0.24 ms (sky), 0.55 -> 0.38 ms (horizon), 0.52 -> 0.41 ms (45 degrees down); mean frame time unchanged within 0.02 ms.
 
 <!-- generated:end -->
 
@@ -195,6 +195,14 @@ from the in-game performance layer: `render.nametag.replay`,
 **Result:** 14 planned → **3 valid planned** (occlusion culling, rebuild
 scheduling, frame limiter). 1 implemented this pass, 1 replaced by an
 implemented module, 3 merged into one, 7 removed.
+
+**Update 2026-10-03:** two of the three now run in game, each measured in its
+own run (`docs/performance/view-direction-2026-10-02.md`):
+`input.frame-limiter-accuracy` (frame-time sd at a 144 cap 0.51 → 0.24 ms,
+same mean; on by default) and `render.chunk.rebuild-scheduling`, which on
+reading the code reduced to the worker pool size (rebuild after a reload
+≈0.15 s vs ≈0.26 s without OptiFine; off by default, one machine). Only
+occlusion culling is still planned.
 
 The launcher no longer shows a count. It lists the planned entries by name, with
 how far each has got, and shows every implemented one with a truthful status:

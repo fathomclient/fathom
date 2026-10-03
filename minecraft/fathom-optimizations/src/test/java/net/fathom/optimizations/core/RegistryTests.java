@@ -77,8 +77,8 @@ public final class RegistryTests {
                     planned++;
             }
         }
-        check(running == 10, "expected 10 implemented entries, found " + running);
-        check(planned == 3, "expected 3 planned entries, found " + planned);
+        check(running == 12, "expected 12 implemented entries, found " + running);
+        check(planned == 1, "expected 1 planned entry, found " + planned);
     }
 
     /** A conflict that does not say what goes wrong is not something anyone can act on. */
