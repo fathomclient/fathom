@@ -120,7 +120,7 @@ final class PerformanceSection implements Section {
 
         Rect body = new Rect(area.x, cursor, area.width,
                 Math.max(0f, area.bottom() - cursor));
-        List<Optimization> entries = Runtime.registry().all();
+        List<Optimization> entries = engineEntries();
         List<Row> layerRows = layerRows();
         float layerHeight = 0f;
         for (int index = 0; index < layerRows.size(); index++) {
@@ -401,7 +401,9 @@ final class PerformanceSection implements Section {
         // exists and has tests; only the first means a Mixin calls it, and
         // gating a switch on the wrong one is how four optimizations came to
         // offer a control that changed a boolean nothing read.
-        boolean live = entry.runsInGame() && entry.isGameSide();
+        boolean live = (entry.status() == Optimization.Status.RUNS_IN_GAME
+                || entry.status() == Optimization.Status.IN_MODULE)
+                && entry.isGameSide() && entry.control() == Optimization.Control.SWITCH;
         boolean jvm = !entry.isGameSide();
         boolean hovered = context.controls().pointerOverVisible(row);
         controls.rowBackground(ui, "perf." + entry.id(), row, hovered, false);
@@ -451,11 +453,28 @@ final class PerformanceSection implements Section {
         scroller.wheel(notches);
     }
 
+    /**
+     * The registry's entries that belong in the engine list. Entries set in the
+     * performance layer's own settings are left out: they are already drawn
+     * above as the layer's controls, and a second, registry switch for them
+     * would be a switch that nothing reads.
+     */
+    static List<Optimization> engineEntries() {
+        List<Optimization> out = new ArrayList<Optimization>();
+        for (Optimization entry : Runtime.registry().all()) {
+            if (entry.control() != Optimization.Control.IN_GAME) {
+                out.add(entry);
+            }
+        }
+        return out;
+    }
+
     /** Every switchable entry, for the tests that check nothing unimplemented is. */
     static List<Optimization> switchable() {
         List<Optimization> out = new ArrayList<Optimization>();
         for (Optimization entry : Runtime.registry().all()) {
-            if (entry.implementedInCore() && entry.isGameSide()) {
+            if (entry.implementedInCore() && entry.isGameSide()
+                    && entry.control() == Optimization.Control.SWITCH) {
                 out.add(entry);
             }
         }

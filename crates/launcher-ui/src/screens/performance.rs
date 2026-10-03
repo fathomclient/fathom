@@ -150,7 +150,7 @@ fn optimization_row<'a>(app: &'a App, entry: Optimization) -> Element<'a, Messag
 
     let (tone, state) = match entry.status {
         Status::Active => (style::GOOD, entry.readiness.label()),
-        Status::RequiresModule => match entry.readiness {
+        Status::Planned => match entry.readiness {
             Readiness::CoreWritten => (style::ACCENT_STRONG, "Core written"),
             _ => (style::TEXT_FAINT, "Planned"),
         },

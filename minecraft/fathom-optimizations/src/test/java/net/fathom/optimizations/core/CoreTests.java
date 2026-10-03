@@ -191,7 +191,7 @@ public final class CoreTests {
         // And the mechanism, not just the current state: an entry that asks to default on
         // still does not until it is measured.
         Optimization wants =
-                Optimization.builder("render.test.thing")
+                Optimization.builder("render.test.thing").group(net.fathom.optimizations.core.registry.Optimization.Group.RENDERING)
                         .name("x")
                         .description("a description long enough to be a real one")
                         .category(Category.SAFE)
@@ -202,7 +202,7 @@ public final class CoreTests {
         check(!wants.defaultEnabled(), "unmeasured SAFE does not default on");
 
         Optimization measured =
-                Optimization.builder("render.test.thing")
+                Optimization.builder("render.test.thing").group(net.fathom.optimizations.core.registry.Optimization.Group.RENDERING)
                         .name("x")
                         .description("a description long enough to be a real one")
                         .category(Category.SAFE)
@@ -220,7 +220,7 @@ public final class CoreTests {
         check(!measured.measuredInGame(), "just not in the game");
 
         Optimization inGame =
-                Optimization.builder("render.test.thing")
+                Optimization.builder("render.test.thing").group(net.fathom.optimizations.core.registry.Optimization.Group.RENDERING)
                         .name("x")
                         .description("a description long enough to be a real one")
                         .category(Category.SAFE)
@@ -242,7 +242,7 @@ public final class CoreTests {
             expectThrows("defaultOn with " + category, new Runnable() {
                 @Override
                 public void run() {
-                    Optimization.builder("render.test.thing")
+                    Optimization.builder("render.test.thing").group(net.fathom.optimizations.core.registry.Optimization.Group.RENDERING)
                             .name("x")
                             .description("a description long enough to be a real one")
                             .category(category)

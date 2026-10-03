@@ -66,7 +66,12 @@ impl Settings {
     /// it cannot affect.
     pub fn from_profile(profile: &Profile) -> Self {
         let mut switches = BTreeMap::new();
-        for optimization in super::GAME {
+        // Launcher switches only. An entry that is always on, or set from an
+        // in-game module's own settings, has no launcher answer to send.
+        for optimization in super::game()
+            .iter()
+            .filter(|o| o.control == super::Control::Switch)
+        {
             // Through the shared resolver, not the stored map. The map and the
             // preset can disagree, and reading it directly here is what made the
             // game run a different set of optimizations from the ones the
@@ -174,9 +179,13 @@ mod tests {
     fn a_default_profile_writes_the_balanced_set() {
         let profile = profile();
         let settings = Settings::from_profile(&profile);
-        assert_eq!(settings.switches.len(), super::super::GAME.len());
+        let switchable: Vec<_> = super::super::game()
+            .iter()
+            .filter(|o| o.control == super::super::Control::Switch)
+            .collect();
+        assert_eq!(settings.switches.len(), switchable.len());
 
-        for optimization in super::super::GAME {
+        for optimization in switchable {
             let on = settings.switches.get(optimization.id).copied().unwrap();
             assert_eq!(
                 on,
@@ -213,12 +222,12 @@ mod tests {
         p.optimizations.preset = OptimizationPreset::Custom;
         p.optimizations
             .rendering
-            .insert("render.font.batching".to_owned(), true);
+            .insert("input.unfocused-fps-cap".to_owned(), true);
         let text = Settings::from_profile(&p).to_properties();
 
         assert!(text.contains("schema = 1"));
-        assert!(text.contains("opt.render.font.batching = true"));
-        assert!(text.contains("opt.render.hud.quad-batching = false"));
+        assert!(text.contains("opt.input.unfocused-fps-cap = true"));
+        assert!(text.contains("opt.input.frame-limiter-accuracy = false"));
     }
 
     /// The file is rewritten on every launch, so two identical configurations
@@ -255,7 +264,7 @@ mod tests {
         let mut p = profile();
         p.optimizations
             .rendering
-            .insert("render.entity.occlusion-culling".to_owned(), true);
+            .insert("world.chunk.lookup-cache".to_owned(), true);
         p.mods.upsert(
             ProfileMod::new(
                 ModId::new("optifine").unwrap(),
@@ -267,11 +276,11 @@ mod tests {
 
         let text = Settings::from_profile(&p).to_properties();
         assert!(
-            text.contains("opt.render.entity.occlusion-culling = false"),
+            text.contains("opt.world.chunk.lookup-cache = false"),
             "the switch is forced off: {text}"
         );
         assert!(
-            text.contains("conflict.render.entity.occlusion-culling = OptiFine:"),
+            text.contains("conflict.world.chunk.lookup-cache = OptiFine:"),
             "and the reason travels with it: {text}"
         );
         // The unfocused-window policy has nothing to do with OptiFine and must survive.
@@ -289,24 +298,27 @@ mod tests {
     fn rewriting_replaces_rather_than_appends() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let mut p = profile();
+        // Under Custom, where the stored answer is the answer. Under a named
+        // preset the preset decides, and both writes would say the same thing.
+        p.optimizations.preset = OptimizationPreset::Custom;
         p.optimizations
             .rendering
-            .insert("render.font.batching".to_owned(), true);
+            .insert("input.unfocused-fps-cap".to_owned(), true);
         Settings::from_profile(&p)
             .write_to(directory.path())
             .unwrap();
 
         p.optimizations
             .rendering
-            .insert("render.font.batching".to_owned(), false);
+            .insert("input.unfocused-fps-cap".to_owned(), false);
         let written = Settings::from_profile(&p)
             .write_to(directory.path())
             .unwrap();
 
         let text = std::fs::read_to_string(&written).expect("read back");
-        assert!(text.contains("opt.render.font.batching = false"));
+        assert!(text.contains("opt.input.unfocused-fps-cap = false"));
         assert!(
-            !text.contains("opt.render.font.batching = true"),
+            !text.contains("opt.input.unfocused-fps-cap = true"),
             "the previous launch's value survived"
         );
     }

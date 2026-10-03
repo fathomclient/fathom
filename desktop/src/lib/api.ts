@@ -289,6 +289,16 @@ export interface OptimizationRow {
   evidence: string | null;
   /** Whether flipping this would change anything. */
   canToggle: boolean;
+  /** Whether the launcher is where this is controlled at all. */
+  control: 'switch' | 'automatic' | 'inGame';
+}
+
+/** Work the registry describes and nothing implements yet. Never switchable. */
+export interface PlannedRow {
+  id: string;
+  name: string;
+  summary: string;
+  readiness: string;
 }
 
 export interface OptimizationGroup {
@@ -333,8 +343,8 @@ export interface PerformanceView {
   presets: PresetOption[];
   groups: OptimizationGroup[];
   module: ModuleStatus;
-  /** Catalogue entries with no implementation yet. They have no row. */
-  planned: number;
+  /** Planned work, by name. Derived from the registry, never a hand-kept number. */
+  planned: PlannedRow[];
   summary: string;
   /** Null until somebody runs a benchmark in game. */
   benchmark: BenchmarkSummary | null;
@@ -814,8 +824,8 @@ const FIXTURE_PERFORMANCE: PerformanceView = {
     detail: 'Java settings still apply.',
     version: '0.2.0',
   },
-  planned: 14,
-  summary: '5 available',
+  planned: [],
+  summary: '0 active',
   benchmark: null,
   benchmarkCount: 0,
   videoLimits: null,

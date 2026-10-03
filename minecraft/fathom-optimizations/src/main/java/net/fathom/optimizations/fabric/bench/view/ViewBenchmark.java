@@ -444,6 +444,13 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         startY = player.y;
         startZ = player.z;
         startYaw = player.yaw;
+        if (Boolean.getBoolean("fathom.view.packIconCheck")) {
+            // Scans the resource pack folder the way the pack screen does, which
+            // loads every pack's icon -- so the icon downscale can be seen working
+            // in a running game. Before the warm-up, never inside a window.
+            client.getResourcePackLoader().initResourcePacks();
+            runNotes.add("Resource pack folder scanned for the pack icon check.");
+        }
         fathomBuild = net.fathom.optimizations.fabric.diag.BuildId.describe();
         probePairNanos = ViewProbe.calibrate(1_000_000);
         System.out.println(String.format(Locale.ROOT,

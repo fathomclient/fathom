@@ -63,6 +63,68 @@ public final class Optimization {
         LAUNCHER
     }
 
+    /**
+     * Where a player would look for it. One vocabulary for the Hub, the
+     * launcher and the exported registry, so the three cannot file the same
+     * optimization under different headings.
+     */
+    public enum Group {
+        RENDERING("Rendering"),
+        CHUNKS("Chunks"),
+        ENTITIES("Entities"),
+        MEMORY("Memory"),
+        FRAMES("Frames and input"),
+        HUD("HUD and interface"),
+        RESOURCES("Resources");
+
+        private final String label;
+
+        Group(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
+        }
+    }
+
+    /**
+     * How a player turns it on or off -- or whether they do at all.
+     *
+     * <p>The difference matters to the launcher: a switch on something the
+     * launcher cannot actually switch is the "toggle that changes nothing" this
+     * project keeps removing. {@link #AUTOMATIC} gets no switch because it is
+     * always right to have it; {@link #IN_GAME} gets none in the launcher
+     * because its setting lives in a Fathom module and is changed in the Hub.
+     */
+    public enum Control {
+        /** A launcher switch, sent to the game in the config bridge. */
+        SWITCH,
+        /** Always on where it applies. No decision to offer. */
+        AUTOMATIC,
+        /** Part of an in-game module's settings, changed from the Hub. */
+        IN_GAME
+    }
+
+    /**
+     * How far the implementation has got. Derived, never declared, so an entry
+     * cannot claim to run in the game without the flags that say it does.
+     */
+    public enum Status {
+        /** Described, not written. Never switched on by anything. */
+        PLANNED,
+        /** Logic in {@code core/}, unit-tested, with no hook into the game. */
+        CORE_WRITTEN,
+        /**
+         * Hooked into the game and shipped in the jar, but not yet seen doing
+         * its job in a running client. "It compiles and the hook applies" and
+         * "it did the right thing in Minecraft" are different claims.
+         */
+        IN_MODULE,
+        /** Hooked into the game and observed applying in a running 1.8.9. */
+        RUNS_IN_GAME
+    }
+
     private final OptimizationId id;
     private final String name;
     private final String description;
@@ -75,8 +137,11 @@ public final class Optimization {
     private final Evidence evidence;
     private final boolean implementedInCore;
     private final boolean runsInGame;
+    private final boolean inModule;
     private final boolean defaultOnWhenMeasured;
     private final List<String> references;
+    private final Group group;
+    private final Control control;
 
     private Optimization(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id");
@@ -91,8 +156,11 @@ public final class Optimization {
         this.evidence = builder.evidence;
         this.implementedInCore = builder.implementedInCore;
         this.runsInGame = builder.runsInGame;
+        this.inModule = builder.inModule;
         this.defaultOnWhenMeasured = builder.defaultOnWhenMeasured;
         this.references = Collections.unmodifiableList(new ArrayList<String>(builder.references));
+        this.group = Objects.requireNonNull(builder.group, "group");
+        this.control = builder.control;
 
         if (defaultOnWhenMeasured && !category.mayDefaultOn()) {
             throw new IllegalArgumentException(
@@ -223,6 +291,35 @@ public final class Optimization {
     }
 
     /** Whether this optimization's code lives in this mod at all. */
+    public Group group() {
+        return group;
+    }
+
+    public Control control() {
+        return control;
+    }
+
+    public Status status() {
+        if (runsInGame) {
+            return Status.RUNS_IN_GAME;
+        }
+        if (inModule) {
+            return Status.IN_MODULE;
+        }
+        return implementedInCore ? Status.CORE_WRITTEN : Status.PLANNED;
+    }
+
+    /** The conflict that stands this down when {@code mod} is installed, or null. */
+    public Conflict standsDownFor(String mod) {
+        for (Conflict conflict : conflicts) {
+            if (conflict.resolution() == Conflict.Resolution.DISABLE_OURS
+                    && conflict.with().equalsIgnoreCase(mod)) {
+                return conflict;
+            }
+        }
+        return null;
+    }
+
     public boolean isGameSide() {
         return surface == Surface.GAME;
     }
@@ -271,8 +368,11 @@ public final class Optimization {
         private Evidence evidence;
         private boolean implementedInCore;
         private boolean runsInGame;
+        private boolean inModule;
         private boolean defaultOnWhenMeasured;
         private final List<String> references = new ArrayList<String>();
+        private Group group;
+        private Control control = Control.SWITCH;
 
         private Builder(OptimizationId id) {
             this.id = id;
@@ -338,6 +438,13 @@ public final class Optimization {
          * call. Set only where a hook exists, because it is what the interface
          * gates a switch on.
          */
+        /** Hooked in and shipped; not yet observed working in a running game. */
+        public Builder inModule() {
+            this.implementedInCore = true;
+            this.inModule = true;
+            return this;
+        }
+
         public Builder runsInGame() {
             this.implementedInCore = true;
             this.runsInGame = true;
@@ -357,6 +464,23 @@ public final class Optimization {
          */
         public Builder defaultOnWhenMeasured() {
             this.defaultOnWhenMeasured = true;
+            return this;
+        }
+
+        public Builder group(Group group) {
+            this.group = group;
+            return this;
+        }
+
+        /** No switch: always on where it applies. */
+        public Builder automatic() {
+            this.control = Control.AUTOMATIC;
+            return this;
+        }
+
+        /** Set in an in-game module's settings rather than by a launcher switch. */
+        public Builder inGameSetting() {
+            this.control = Control.IN_GAME;
             return this;
         }
 

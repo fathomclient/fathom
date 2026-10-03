@@ -39,8 +39,8 @@ import net.fathom.optimizations.core.registry.SwitchBoard;
  * <pre>
  * schema = 1
  * preset = safe
- * opt.render.font.batching = true
- * opt.render.entity.occlusion-culling = false
+ * opt.render.font.metrics-cache = true
+ * opt.world.chunk.lookup-cache = false
  * </pre>
  *
  * <h2>What it refuses to do</h2>

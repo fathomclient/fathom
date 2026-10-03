@@ -19,13 +19,14 @@
 //! settings screen, which is the defect the module milestone spent its length
 //! removing.
 //!
-//! # Why the list is here and not in the catalogue
+//! # Where the list comes from
 //!
-//! `mods/catalog.rs` records *that* `OptiFine` and Fathom conflict, in prose, as
-//! a fact about the two projects. This records *which switches* that costs,
-//! which is a fact about our own optimization ids — they are declared in
-//! `optimizations/mod.rs`, they change when we implement something new, and a
-//! list of them belongs beside them. A test checks every id here exists.
+//! The game module's registry. Each entry there declares the mods that stand
+//! it down and what goes wrong if both run (`Conflict.disableOurs` in Java),
+//! and the exported `registry.json` carries that here. This file used to keep
+//! its own hand-written copy, and the two drifted: it never learned that the
+//! chunk lookup cache is skipped under OptiFine, so the Performance page said
+//! it was running when it was not.
 //!
 //! # Why the launcher decides and not the module
 //!
@@ -39,78 +40,6 @@ use std::collections::BTreeMap;
 
 use crate::mods::ModId;
 use crate::profiles::Profile;
-
-/// Everything Fathom stands down from when `OptiFine` is installed.
-///
-/// Each entry is an optimization id from [`crate::optimizations::GAME`] and the
-/// reason, written to be read by somebody who did not choose this.
-///
-/// The set is the intersection of "what `OptiFine` rewrites" and "what we
-/// patch": its renderer replaces font drawing, entity rendering, chunk building
-/// and tile entity rendering wholesale. Frame caps, memory and resource
-/// handling are untouched by it and stay on.
-const OPTIFINE_OVERLAP: &[(&str, &str)] = &[
-    (
-        "render.font.batching",
-        "OptiFine replaces the font renderer, so batching ours would draw through a path that is \
-         no longer there.",
-    ),
-    (
-        "render.font.metrics-cache",
-        "OptiFine computes glyph widths differently. A cache of vanilla's answers would be a \
-         cache of the wrong numbers.",
-    ),
-    (
-        "render.hud.quad-batching",
-        "OptiFine draws the HUD through its own path.",
-    ),
-    (
-        "render.entity.model-batching",
-        "OptiFine rewrites entity rendering.",
-    ),
-    (
-        "render.tile-entity.batching",
-        "OptiFine rewrites tile entity rendering.",
-    ),
-    (
-        "render.tile-entity.double-render-fix",
-        "OptiFine fixes this itself.",
-    ),
-    (
-        "render.entity.occlusion-culling",
-        "OptiFine has its own entity culling, and running both means entities culled twice by \
-         two sets of rules — which is how a mob goes missing.",
-    ),
-    (
-        "render.chunk.rebuild-priority",
-        "OptiFine rebuilds chunks on its own schedule.",
-    ),
-    (
-        "render.chunk.skip-redundant-rebuilds",
-        "OptiFine decides what needs rebuilding.",
-    ),
-    (
-        "render.chunk.frustum-false-negative-fix",
-        "OptiFine has its own frustum test, so patching vanilla's changes nothing and risks \
-         disagreeing with it.",
-    ),
-    (
-        "render.chunk.worker-pool-sizing",
-        "OptiFine sizes its own chunk workers.",
-    ),
-    (
-        "render.particle.brightness-cache",
-        "OptiFine changes particle lighting.",
-    ),
-];
-
-/// The mod ids whose presence stands Fathom down, and what it costs.
-fn overlaps_for(id: &str) -> &'static [(&'static str, &'static str)] {
-    match id {
-        "optifine" => OPTIFINE_OVERLAP,
-        _ => &[],
-    }
-}
 
 /// One optimization that was switched off, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,17 +81,21 @@ impl Standdown {
 pub fn for_profile(profile: &Profile) -> Vec<Standdown> {
     let mut out = Vec::new();
     for entry in profile.mods.enabled() {
-        let overlaps = overlaps_for(entry.id.as_str());
-        if overlaps.is_empty() {
-            continue;
-        }
         let name = display_name(&entry.id);
-        for (optimization, detail) in overlaps {
-            out.push(Standdown {
-                optimization: (*optimization).to_owned(),
-                because_of: name.clone(),
-                detail: (*detail).to_owned(),
-            });
+        for optimization in super::game() {
+            // Matched on the id as well as the display name: the registry
+            // writes "OptiFine", and a jar the catalogue does not recognise is
+            // still filed under the id `optifine`.
+            let conflict = optimization
+                .conflict_with(&name)
+                .or_else(|| optimization.conflict_with(entry.id.as_str()));
+            if let Some(conflict) = conflict {
+                out.push(Standdown {
+                    optimization: optimization.id.to_owned(),
+                    because_of: name.clone(),
+                    detail: conflict.detail.to_owned(),
+                });
+            }
         }
     }
     out
@@ -213,27 +146,30 @@ mod tests {
     }
 
     #[test]
-    fn every_optimization_named_here_actually_exists() {
-        // The list is written by hand against ids declared elsewhere. Without
-        // this, a rename in `optimizations/mod.rs` would silently stop
-        // disabling something, and the failure mode is a broken renderer under
-        // OptiFine that nobody can explain.
-        for (id, _) in OPTIFINE_OVERLAP {
-            assert!(
-                crate::optimizations::find(id).is_some(),
-                "{id} is not an optimization"
-            );
-        }
-    }
-
-    #[test]
-    fn optifine_stands_our_renderer_patches_down() {
+    fn optifine_stands_down_exactly_what_the_registry_says() {
         let standdowns = for_profile(&profile_with("optifine", true));
-        assert_eq!(standdowns.len(), OPTIFINE_OVERLAP.len());
+        let declared: Vec<&str> = crate::optimizations::game()
+            .iter()
+            .filter(|o| o.conflict_with("OptiFine").is_some())
+            .map(|o| o.id)
+            .collect();
+        assert_eq!(standdowns.len(), declared.len());
+        assert!(standdowns.iter().all(|s| s.because_of == "OptiFine"));
+        // The one this rewrite exists for: skipped in game under OptiFine, and
+        // for years described as running by this page.
         assert!(standdowns
             .iter()
+            .any(|s| s.optimization == "world.chunk.lookup-cache"));
+    }
+
+    /// "OptiFine shaders" is a different condition from "OptiFine installed",
+    /// and must not be read as one.
+    #[test]
+    fn a_shaders_conflict_is_not_an_optifine_conflict() {
+        let standdowns = for_profile(&profile_with("optifine", true));
+        assert!(!standdowns
+            .iter()
             .any(|s| s.optimization == "render.entity.occlusion-culling"));
-        assert!(standdowns.iter().all(|s| s.because_of == "OptiFine"));
     }
 
     #[test]
@@ -264,13 +200,13 @@ mod tests {
     #[test]
     fn the_headline_is_the_sentence_the_brief_asked_for() {
         let standdowns = for_profile(&profile_with("optifine", true));
-        let culling = standdowns
+        let cache = standdowns
             .iter()
-            .find(|s| s.optimization == "render.entity.occlusion-culling")
+            .find(|s| s.optimization == "world.chunk.lookup-cache")
             .unwrap();
         assert_eq!(
-            culling.headline("Entity occlusion culling"),
-            "Fathom Entity occlusion culling was disabled for OptiFine compatibility."
+            cache.headline("Chunk lookup cache"),
+            "Fathom Chunk lookup cache was disabled for OptiFine compatibility."
         );
     }
 }

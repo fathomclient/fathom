@@ -349,6 +349,11 @@
                       label={row.name}
                       onChange={(value) => toggle(row.id, value)}
                     />
+                  {:else if row.running}
+                    <!-- Running, and not the launcher's to switch: always on, or
+                         set in the Hub's Performance layer. Said in words
+                         rather than with a switch that would change nothing. -->
+                    <span class="control-note">{row.status}</span>
                   {/if}
                 </svelte:fragment>
 
@@ -371,13 +376,15 @@
         </Section>
       {/each}
     </div>
-    {#if view.planned > 0}
-      <!-- Not rows: an entry nobody has implemented has nothing to switch, and
-           listing them dimmed under "Needs module" read as the module missing. -->
-      <p class="planned">
-        {view.planned} more {view.planned === 1 ? 'optimization is' : 'optimizations are'} planned.
-        They appear here once the module implements them.
-      </p>
+    {#if view.planned.length > 0}
+      <!-- Named, not counted. "14 more planned" was a number nobody could check;
+           this is the registry's own list of work it describes and does not yet
+           do, each with what it is for. No switches: there is nothing to switch. -->
+      <Section label="Planned" summary="Not built yet" collapsible open={false}>
+        {#each view.planned as item}
+          <Row title={item.name} detail={item.summary} badge={item.readiness} tone="neutral" compact dimmed />
+        {/each}
+      </Section>
     {/if}
   </Page>
 {/if}
@@ -425,10 +432,11 @@
   /* Tighter than the page's default section spacing, and with a hairline
      between each: six collapsed categories 22px apart with nothing between
      them read as loose labels rather than as a list. */
-  .planned {
-    margin: var(--space-4) 0 0;
+  /* What a row that has no switch says instead: its state, quietly. */
+  .control-note {
     font-size: var(--type-caption-size);
     color: var(--color-text-secondary);
+    white-space: nowrap;
   }
 
   .groups {

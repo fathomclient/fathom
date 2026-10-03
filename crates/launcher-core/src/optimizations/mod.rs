@@ -2,45 +2,44 @@
 //!
 //! # Where this comes from
 //!
-//! `minecraft/fathom-optimizations` holds the real registry, in Java, as
-//! `OptimizationRegistry`. Its own documentation says the launcher is what
-//! reads it "to show a user what is available, what it would cost them, and
-//! what it conflicts with". This module is the launcher's side of that: the
-//! same catalogue, in the same order, with the same ids.
+//! The game module's `OptimizationRegistry` (Java) is the one source. It is
+//! written to `assets/optimizations/registry.json` by `gradle exportRegistry`,
+//! and that file is compiled in here. A core test on the Java side fails when
+//! the checked-in file is stale, so the launcher cannot describe a catalogue the
+//! game does not have.
 //!
-//! It is written out by hand rather than generated, and that is a deliberate
-//! trade with a cost attached. Generating it would mean the Java module has to
-//! be built before the launcher can be, which would make a Rust developer
-//! install a JDK to compile a window. The cost is that the two can drift, so
-//! [`tests`] checks every id here against the Java source file, and fails if
-//! either side gains or loses an entry.
+//! This used to be a hand-written copy of the Java list with a test that only
+//! compared ids. Everything else drifted: names, status, and which mods stand
+//! an entry down. The launcher said the chunk lookup cache ran under OptiFine
+//! while the game skipped it. The file is the fix for that class of bug, not
+//! just that instance.
+//!
+//! The two JVM flags are the one part that stays here: the launcher passes
+//! them itself, so they are the launcher's facts, not the module's.
 //!
 //! # The honest part
 //!
-//! Nothing here claims a frame rate. The Java registry is explicit that
-//! **nothing is enabled by default**, that the evidence it has is isolated
-//! microbenchmarks rather than in-game measurement, and that the Fabric layer
-//! has never been compiled. So:
-//!
-//! - The two JVM options are [`Status::Active`]. They are command-line flags
-//!   the launcher passes to Java, they are covered by tests in
-//!   `minecraft_runtime::jvm_args`, and they work whether or not any mod is
-//!   installed.
-//! - Every game-side optimization is [`Status::RequiresModule`], because the
-//!   module jar is not built and not shipped. Five of them have working core
-//!   logic behind them; that is recorded as [`Readiness`], and it is still not
-//!   the same as doing anything for a player today.
-//!
-//! A UI built on this can therefore say what is true, which is the only reason
-//! to have the type at all.
+//! - [`Status::Active`] means the module hooks it into the game. Nothing else
+//!   is ever switched on, by any preset.
+//! - [`Status::Planned`] is a described problem with no implementation. It is
+//!   listed as planned and never offered a switch.
+//! - [`Control`] says whether the launcher can switch it at all: some entries
+//!   are always on, and some are set from an in-game module's own settings.
 
 pub mod benchmarks;
 pub mod bridge;
 pub mod conflicts;
 
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use crate::profiles::{OptimizationPreset, Profile};
+
+/// The registry the game module exports, compiled in.
+const REGISTRY_JSON: &str = include_str!("../../../../assets/optimizations/registry.json");
+
+/// The export format this launcher reads. Must match `RegistryJson.SCHEMA`.
+const REGISTRY_SCHEMA: u32 = 1;
 
 /// Where an optimization sits on the risk scale, mirroring Java's `Category`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -79,19 +78,17 @@ impl Category {
 /// is lying — politely, and with a nice interface, but lying.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
-    /// Working today. The launcher does this itself.
+    /// Implemented: the launcher applies it, or the module hooks it into the game.
     Active,
-    /// Implemented nowhere yet, or implemented in `core/` but with no Mixin
-    /// hooking it to the game. The module exists and loads; these entries are
-    /// the ones it does not act on.
-    RequiresModule,
+    /// Described, not built. Never switched on by anything.
+    Planned,
 }
 
 impl Status {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Active => "Active",
-            Self::RequiresModule => "Needs module",
+            Self::Planned => "Planned",
         }
     }
 }
@@ -99,32 +96,19 @@ impl Status {
 /// How far the implementation has actually got, behind the status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Readiness {
-    /// Runs now.
+    /// Runs now. Only the JVM flags, which the launcher applies itself.
     Working,
     /// The logic exists in `core/` and is unit-tested, but nothing hooks it to
-    /// the game yet. The Fabric layer compiles now, so this is a missing Mixin
-    /// rather than a missing toolchain.
+    /// the game yet.
     CoreWritten,
-    /// Implemented in the module, remapped against the real 1.8.9 mappings and
-    /// shipped in the jar -- but never observed in a running game.
+    /// Hooked in and shipped in the jar -- but never observed in a running game.
     ///
-    /// A separate state from `Working` on purpose. "It compiles and its unit
-    /// tests pass" and "it does the right thing in Minecraft" are different
-    /// claims, and collapsing them is exactly the kind of quiet overstatement
-    /// this enum exists to prevent.
+    /// A separate state from `RunsInGame` on purpose. "It compiles and the hook
+    /// applies" and "it does the right thing in Minecraft" are different
+    /// claims, and collapsing them is the quiet overstatement this exists to
+    /// prevent.
     InModule,
     /// Observed applying inside a running Minecraft 1.8.9.
-    ///
-    /// Earned by launching the game with `injectors.defaultRequire = 1`, which
-    /// makes a Mixin that fails to inject crash at class load instead of being
-    /// skipped. Reaching the title screen is therefore positive evidence that
-    /// every injector applied, rather than the absence of an error message --
-    /// which is what the previous `defaultRequire = 0` gave, and what let a
-    /// Mixin targeting a method that does not exist sit broken for a milestone.
-    ///
-    /// Still NOT a claim about frame rate. What this states is "the code runs
-    /// in the game and produces correct output"; what fraction of a frame it
-    /// saves has not been measured in a real client.
     RunsInGame,
     /// A registry entry with a described problem and no implementation.
     Planned,
@@ -135,7 +119,7 @@ impl Readiness {
         match self {
             Self::Working => "Implemented",
             Self::CoreWritten => "Core written, not hooked up",
-            Self::InModule => "In the module, unverified in game",
+            Self::InModule => "In the module, not yet seen in game",
             Self::RunsInGame => "Verified running in game",
             Self::Planned => "Planned",
         }
@@ -151,7 +135,20 @@ pub enum Surface {
     Game,
 }
 
-/// The grouping shown on the Performance page.
+/// How a player turns it on or off -- or whether they do at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    /// A launcher switch, sent to the game in the config bridge.
+    Switch,
+    /// Always on where it applies. No decision to offer.
+    Automatic,
+    /// Part of an in-game module's settings, changed from the Hub. The
+    /// launcher shows it and says where it is set, and offers no switch it
+    /// cannot honour.
+    InGame,
+}
+
+/// The grouping the registry files each entry under.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Group {
     Rendering,
@@ -159,16 +156,18 @@ pub enum Group {
     Entities,
     Memory,
     Frames,
+    Hud,
     Resources,
 }
 
 impl Group {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Rendering,
         Self::Chunks,
         Self::Entities,
         Self::Memory,
         Self::Frames,
+        Self::Hud,
         Self::Resources,
     ];
 
@@ -179,9 +178,18 @@ impl Group {
             Self::Entities => "Entities",
             Self::Memory => "Memory",
             Self::Frames => "Frames and input",
+            Self::Hud => "HUD and interface",
             Self::Resources => "Resources",
         }
     }
+}
+
+/// Another mod whose presence stands an entry down, and what goes wrong.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Conflict {
+    /// The mod's display name as the registry writes it: `OptiFine`.
+    pub with: &'static str,
+    pub detail: &'static str,
 }
 
 /// One catalogue entry.
@@ -197,108 +205,179 @@ pub struct Optimization {
     pub surface: Surface,
     pub status: Status,
     pub readiness: Readiness,
-    /// What we actually measured, or `None` where we measured nothing. Never a
-    /// frame-rate claim: no in-game benchmark has been run.
+    pub control: Control,
+    /// What we actually measured, or `None` where we measured nothing.
     pub evidence: Option<&'static str>,
+    /// Mods that stand this down when installed.
+    pub conflicts: &'static [Conflict],
 }
 
 impl Optimization {
-    /// Whether the user can meaningfully turn this on today.
-    pub const fn is_actionable(&self) -> bool {
-        matches!(self.status, Status::Active)
+    /// Whether the launcher can meaningfully switch it today: implemented, and
+    /// controlled by a launcher switch rather than always-on or set in game.
+    pub fn is_actionable(&self) -> bool {
+        self.status == Status::Active && self.control == Control::Switch
+    }
+
+    /// Implemented, whoever controls it.
+    pub fn is_implemented(&self) -> bool {
+        self.status == Status::Active
+    }
+
+    /// The conflict that stands this down when `mod_name` is installed.
+    pub fn conflict_with(&self, mod_name: &str) -> Option<&'static Conflict> {
+        self.conflicts
+            .iter()
+            .find(|conflict| conflict.with.eq_ignore_ascii_case(mod_name))
     }
 }
 
-macro_rules! entry {
-    ($id:literal, $name:literal, $group:ident, $category:ident, $surface:ident,
-     $status:ident, $readiness:ident, $evidence:expr, $summary:literal) => {
-        Optimization {
-            id: $id,
-            name: $name,
-            summary: $summary,
-            group: Group::$group,
-            category: Category::$category,
-            surface: Surface::$surface,
-            status: Status::$status,
-            readiness: Readiness::$readiness,
-            evidence: $evidence,
-        }
-    };
+/// The two JVM flags, which the launcher applies itself.
+pub const JAVA: &[Optimization] = &[
+    Optimization {
+        id: "jvm.disable-explicit-gc",
+        name: "Suppress explicit garbage collection",
+        summary: "Vanilla asks the JVM to collect garbage every time you change world. \
+                  -XX:+DisableExplicitGC makes it a no-op.",
+        group: Group::Memory,
+        category: Category::Safe,
+        surface: Surface::Java,
+        status: Status::Active,
+        readiness: Readiness::Working,
+        control: Control::Switch,
+        evidence: Some("Neutralises the System.gc() vanilla calls on world load, which otherwise stalls the client for seconds."),
+        conflicts: &[],
+    },
+    Optimization {
+        id: "jvm.compile-huge-methods",
+        name: "Compile oversized methods",
+        summary: "On this version, nothing. HotSpot will not compile methods over 8000 bytes, and \
+                  1.8.9 has one -- a startup recipe constructor. Lifting the limit compiles that one \
+                  method and reserves a larger code cache for it. Left switchable for other versions.",
+        group: Group::Memory,
+        category: Category::Optional,
+        surface: Surface::Java,
+        status: Status::Active,
+        readiness: Readiness::Working,
+        control: Control::Switch,
+        evidence: Some("Measured on 1.8.9: exactly one method in the game exceeds the 8000-byte limit -- RecipeDispatcher.<init> at 8296 bytes, which registers crafting recipes once during startup. No render-path method is near the limit, so there is no frame-time effect to gain."),
+        conflicts: &[],
+    },
+];
+
+/// The game-side catalogue, from the registry the module exports.
+pub fn game() -> &'static [Optimization] {
+    static GAME: OnceLock<Vec<Optimization>> = OnceLock::new();
+    GAME.get_or_init(|| parse_registry(REGISTRY_JSON))
 }
 
-/// The two JVM flags, which are the only optimizations that do anything today.
-pub const JAVA: &[Optimization] = &[
-    entry!(
-        "jvm.disable-explicit-gc",
-        "Suppress explicit garbage collection",
-        Memory, Safe, Java, Active, Working,
-        Some("Neutralises the System.gc() vanilla calls on world load, which otherwise stalls the client for seconds."),
-        "Vanilla asks the JVM to collect garbage every time you change world. \
-         -XX:+DisableExplicitGC makes it a no-op."
-    ),
-    entry!(
-        "jvm.compile-huge-methods",
-        "Compile oversized methods",
-        Memory, Optional, Java, Active, Working,
-        Some("Measured on 1.8.9: exactly one method in the game exceeds the 8000-byte limit -- RecipeDispatcher.<init> at 8296 bytes, which registers crafting recipes once during startup. No render-path method is near the limit, so there is no frame-time effect to gain."),
-        "On this version, nothing. HotSpot will not compile methods over 8000 bytes, and \
-         1.8.9 has one -- a startup recipe constructor. Lifting the limit compiles that one \
-         method and reserves a larger code cache for it. Left switchable for other versions."
-    ),
-];
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RegistryFile {
+    schema: u32,
+    optimizations: Vec<RegistryEntry>,
+}
 
-/// The game-side catalogue, mirroring `OptimizationRegistry.Entries.all()`.
-pub const GAME: &[Optimization] = &[
-    entry!("render.font.batching", "Batched font rendering", Rendering, Safe, Game, RequiresModule, CoreWritten,
-        Some("A 240-glyph line issues 3 draw calls instead of 240, vertex-for-vertex identical to the unbatched path."),
-        "Vanilla issues one draw call per glyph. Batching a text run into one buffer turns a line of chat from dozens of calls into one."),
-    entry!("render.font.metrics-cache", "Font metrics caching", Rendering, Safe, Game, Active, RunsInGame,
-        Some("235 strings of a busy server's frame: 14.3us recomputed against 1.8us memoised (-87%). At 5% churn -67%. At 50% churn the difference is inside the noise floor; at 100% churn it is 53% slower. Zero width mismatches at every churn level."),
-        "Character width lookups are recomputed every frame. Caching them is output-identical as long as the cache clears on resource reload."),
-    entry!("render.hud.quad-batching", "Batched HUD and GUI quads", Rendering, Safe, Game, RequiresModule, Planned, None,
-        "Quads sharing a texture are collected into one buffer instead of being submitted one at a time."),
-    entry!("render.entity.model-batching", "Batched entity and item models", Entities, Safe, Game, RequiresModule, Planned, None,
-        "Entity and item models sharing render state are drawn together."),
-    entry!("render.tile-entity.batching", "Tile entity batching", Rendering, Safe, Game, RequiresModule, Planned, None,
-        "Chests, signs and banners sharing a texture are grouped rather than drawn individually."),
-    entry!("render.tile-entity.double-render-fix", "Fix double-rendered tile entities", Rendering, Safe, Game, RequiresModule, Planned, None,
-        "Vanilla draws some tile entities twice in the same frame. Drawing them once is both faster and correct."),
-    entry!("render.entity.occlusion-culling", "Entity occlusion culling", Entities, Optional, Game, RequiresModule, CoreWritten, None,
-        "Skip entities hidden behind terrain. Changes what is drawn, so a wrong answer means a missing mob."),
-    entry!("render.chunk.rebuild-priority", "Prioritised chunk rebuilds", Chunks, Safe, Game, RequiresModule, Planned, None,
-        "Rebuild the chunks you are looking at before the ones behind you."),
-    entry!("render.chunk.skip-redundant-rebuilds", "Skip redundant chunk rebuilds", Chunks, Safe, Game, RequiresModule, Planned, None,
-        "A rebuild that cannot change the mesh does not need to run."),
-    entry!("render.chunk.frustum-false-negative-fix", "Fix invisible chunks", Chunks, Optional, Game, RequiresModule, Planned, None,
-        "MC-63020 and MC-70850: vanilla's frustum test discards chunks that are actually on screen."),
-    entry!("cpu.allocation.hot-path-reduction", "Reduce hot-path allocation", Rendering, Safe, Game, Active, RunsInGame,
-        Some("Interleaved in-game A/B in the development world: allocation while panning 51.8 -> 23.4 MB/s and while moving 203 -> 132 MB/s, with fewer collections. The six-direction array clones fell from 1890 MB to 91 MB over a profiled run."),
-        "Vanilla clones the six-direction array at the top of loops in light queries and chunk visibility. Those loops only read it, so they share one copy. Output-identical."),
-    entry!("world.chunk.lookup-cache", "Chunk lookup cache", Chunks, Safe, Game, Active, RunsInGame,
-        Some("Toggled alone in four interleaved in-game blocks with alternating order: mean frame time 6.5-9.9% lower and p99 lower in every block. Chunk lookups fell from 14.3% to 5.1% of render-thread CPU samples."),
-        "Light queries and entity rendering resolve chunks through a hash lookup many times a frame. The client thread remembers recent lookups and clears them whenever a chunk loads or unloads."),
-    entry!("memory.world-change-gc", "Remove world-change collection", Memory, Safe, Game, Active, RunsInGame,
-        Some("The in-game half of the JVM flag above, for the paths a flag cannot reach. Joining the development world ran three forced full collections (22-24 ms each on its small heap); with this on, the first runs and the next two are skipped."),
-        "The same explicit collection as the JVM flag, removed at its source rather than suppressed."),
-    entry!("resources.pack-icon-downscale", "Downscale resource pack icons", Resources, Safe, Game, RequiresModule, CoreWritten,
-        Some("Pack icons are loaded at full resolution and drawn at 32x32; downscaling on load cuts the memory held for them."),
-        "A 512x512 pack icon is kept in memory at full size to be drawn as a thumbnail."),
-    entry!("input.mc-67665-look-vector", "Fix stale look vector", Frames, Safe, Game, RequiresModule, Planned, None,
-        "MC-67665: the look vector used for interaction can be a frame behind what you see."),
-    entry!("input.frame-limiter-accuracy", "Accurate frame limiter", Frames, Safe, Game, RequiresModule, Planned, None,
-        "Vanilla's frame cap overshoots and undershoots. A more accurate limiter makes a capped frame rate steadier."),
-    entry!("input.unfocused-fps-cap", "Cap frame rate when unfocused", Frames, Safe, Game, Active, InModule,
-        Some("Exact rather than measured, because it is arithmetic: while enabled and unfocused the module returns the smaller of vanilla's own answer and the configured background limit. What that frees on a given machine has not been measured."),
-        "Vanilla renders at full speed into a window you have alt-tabbed away from. This optional policy caps only the unfocused window and changes nothing while it has focus."),
-    entry!("render.chunk.worker-pool-sizing", "Size the chunk worker pool", Chunks, Experimental, Game, RequiresModule, Planned, None,
-        "Match the chunk build thread count to the machine rather than a fixed guess."),
-    entry!("render.particle.brightness-cache", "Cache particle brightness", Rendering, Optional, Game, RequiresModule, Planned, None,
-        "Particle brightness is recomputed per particle per frame. Caching it can change lighting slightly."),
-];
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RegistryEntry {
+    id: String,
+    name: String,
+    description: String,
+    group: String,
+    category: String,
+    control: String,
+    status: String,
+    evidence: Option<RegistryEvidence>,
+    #[serde(default)]
+    conflicts: Vec<RegistryConflict>,
+}
+
+#[derive(serde::Deserialize)]
+struct RegistryEvidence {
+    summary: String,
+}
+
+#[derive(serde::Deserialize)]
+struct RegistryConflict {
+    with: String,
+    resolution: String,
+    detail: String,
+}
+
+/// Parse the exported registry. Leaked once, for the life of the process: the
+/// catalogue is a constant that happens to be read from a file, and `'static`
+/// strings keep every caller as simple as the hand-written array was.
+///
+/// Panics on a malformed file. It is compiled in and checked by tests on both
+/// sides, so a parse failure is a build defect, not a runtime condition.
+fn parse_registry(json: &str) -> Vec<Optimization> {
+    fn leak(value: String) -> &'static str {
+        Box::leak(value.into_boxed_str())
+    }
+
+    #[allow(clippy::expect_used)]
+    let file: RegistryFile =
+        serde_json::from_str(json).expect("assets/optimizations/registry.json is valid");
+    assert_eq!(
+        file.schema, REGISTRY_SCHEMA,
+        "the compiled-in registry has a schema this launcher does not read"
+    );
+
+    file.optimizations
+        .into_iter()
+        .map(|entry| {
+            let (status, readiness) = match entry.status.as_str() {
+                "RUNS_IN_GAME" => (Status::Active, Readiness::RunsInGame),
+                "IN_MODULE" => (Status::Active, Readiness::InModule),
+                "CORE_WRITTEN" => (Status::Planned, Readiness::CoreWritten),
+                _ => (Status::Planned, Readiness::Planned),
+            };
+            let conflicts: Vec<Conflict> = entry
+                .conflicts
+                .into_iter()
+                .filter(|conflict| conflict.resolution == "DISABLE_OURS")
+                .map(|conflict| Conflict {
+                    with: leak(conflict.with),
+                    detail: leak(conflict.detail),
+                })
+                .collect();
+            Optimization {
+                id: leak(entry.id),
+                name: leak(entry.name),
+                summary: leak(entry.description),
+                group: match entry.group.as_str() {
+                    "CHUNKS" => Group::Chunks,
+                    "ENTITIES" => Group::Entities,
+                    "MEMORY" => Group::Memory,
+                    "FRAMES" => Group::Frames,
+                    "HUD" => Group::Hud,
+                    "RESOURCES" => Group::Resources,
+                    _ => Group::Rendering,
+                },
+                category: match entry.category.as_str() {
+                    "SAFE" => Category::Safe,
+                    "OPTIONAL" => Category::Optional,
+                    _ => Category::Experimental,
+                },
+                surface: Surface::Game,
+                status,
+                readiness,
+                control: match entry.control.as_str() {
+                    "AUTOMATIC" => Control::Automatic,
+                    "IN_GAME" => Control::InGame,
+                    _ => Control::Switch,
+                },
+                evidence: entry.evidence.map(|evidence| leak(evidence.summary)),
+                conflicts: Box::leak(conflicts.into_boxed_slice()),
+            }
+        })
+        .collect()
+}
 
 /// Everything, Java first.
 pub fn all() -> Vec<Optimization> {
-    JAVA.iter().chain(GAME.iter()).copied().collect()
+    JAVA.iter().chain(game().iter()).copied().collect()
 }
 
 pub fn in_group(group: Group) -> Vec<Optimization> {
@@ -307,6 +386,11 @@ pub fn in_group(group: Group) -> Vec<Optimization> {
 
 pub fn find(id: &str) -> Option<Optimization> {
     all().into_iter().find(|o| o.id == id)
+}
+
+/// Described, not built: what the Performance page lists as planned work.
+pub fn planned() -> Vec<Optimization> {
+    all().into_iter().filter(|o| o.status == Status::Planned).collect()
 }
 
 /// How many optimizations are doing something right now.
@@ -354,7 +438,7 @@ pub fn enabled_for(profile: &Profile, optimization: &Optimization) -> bool {
 }
 
 pub fn active_count() -> usize {
-    all().iter().filter(|o| o.is_actionable()).count()
+    all().iter().filter(|o| o.is_implemented()).count()
 }
 
 // ---------------------------------------------------------------------------
@@ -544,7 +628,7 @@ mod tests {
         ] {
             let profile = profile_with(preset);
             let settings = bridge::Settings::from_profile(&profile);
-            for optimization in GAME {
+            for optimization in game().iter().filter(|o| o.control == Control::Switch) {
                 // Conflict stand-downs are the one legitimate difference, and
                 // this profile has no mods, so there are none here.
                 let told = settings.switches.get(optimization.id).copied();
@@ -558,33 +642,19 @@ mod tests {
         }
     }
 
+    /// The compiled-in registry is the game module's, parsed whole.
+    ///
+    /// The Java side's `RegistryTests` fails when the checked-in file is stale;
+    /// this checks the other half -- that the launcher reads every entry it
+    /// contains, with nothing dropped by a parse it did not understand.
     #[test]
-    fn the_catalogue_matches_the_java_registry() {
-        let source = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../minecraft/fathom-optimizations/src/main/java/net/fathom/",
-            "optimizations/core/registry/OptimizationRegistry.java"
-        );
-        let Ok(java) = std::fs::read_to_string(source) else {
-            // The Java module is optional in a source checkout.
-            return;
-        };
-
-        let mut in_java: Vec<&str> = java
-            .split("Optimization.builder(\"")
-            .skip(1)
-            .filter_map(|rest| rest.split('"').next())
-            .collect();
-        in_java.sort_unstable();
-
-        let mut in_rust: Vec<&str> = GAME.iter().map(|o| o.id).collect();
-        in_rust.sort_unstable();
-
-        assert_eq!(
-            in_rust, in_java,
-            "the Rust catalogue and the Java registry disagree about which \
-             optimizations exist"
-        );
+    fn the_registry_file_is_read_whole() {
+        let declared = REGISTRY_JSON.matches("\"id\":").count();
+        assert_eq!(game().len(), declared, "an entry in registry.json was not read");
+        assert!(!game().is_empty());
+        for optimization in game() {
+            assert_eq!(optimization.surface, Surface::Game, "{}", optimization.id);
+        }
     }
 
     /// The claim the Performance page is built on.
@@ -598,7 +668,7 @@ mod tests {
     /// only numbers we have are from an isolated microbenchmark.
     #[test]
     fn no_game_entry_claims_more_than_it_has_earned() {
-        for optimization in GAME {
+        for optimization in game() {
             assert_ne!(
                 optimization.readiness,
                 Readiness::Working,
@@ -617,7 +687,7 @@ mod tests {
                     optimization.id
                 ),
                 // Not implemented, so it must not claim to be.
-                Status::RequiresModule => assert!(
+                Status::Planned => assert!(
                     !matches!(
                         optimization.readiness,
                         Readiness::InModule | Readiness::RunsInGame

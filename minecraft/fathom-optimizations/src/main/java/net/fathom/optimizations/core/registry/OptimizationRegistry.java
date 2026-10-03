@@ -118,48 +118,22 @@ public final class OptimizationRegistry {
                             + " fighting it: the user chose to install OptiFine.");
         }
 
-        private static Conflict polypatcher(String what) {
-            return Conflict.disableOurs(
-                    "PolyPatcher",
-                    "PolyPatcher covers " + what + " as well. Where a user has chosen it,"
-                            + " Fathom defers rather than double-patching the same methods.");
-        }
-
         static List<Optimization> all() {
             List<Optimization> out = new ArrayList<Optimization>();
 
-            // -- rendering: draw call reduction ----------------------------
-            out.add(Optimization.builder("render.font.batching")
-                    .name("Batched font rendering")
-                    .description(
-                            "Vanilla issues one draw call per glyph. Batching a text run into a"
-                                    + " single buffer turns a line of chat from dozens of calls"
-                                    + " into one.")
-                    .category(Category.SAFE)
-                    .basis(Basis.VANILLA_ANALYSIS)
-                    .expectedBenefit(
-                            "Expected to be the largest 2D win on text-heavy screens. The draw-call"
-                                    + " reduction is measured; the frame-time effect is not.")
-                    .defaultOnWhenMeasured()
-                    .implementedInCore()
-                    .evidence(Evidence.isolated(
-                            "opt-2026-08-26-quad-batching",
-                            "A 240-glyph line spanning two font pages issues 3 draw calls instead"
-                                    + " of 240, with a vertex stream compared element by element"
-                                    + " against the unbatched path and found identical. That is the"
-                                    + " mechanism working, not a frame-time result."))
-                    .conflict(optifine("its font paths"))
-                    .conflict(polypatcher("font rendering"))
-                    .reference("docs/research/performance.md §2.1")
-                    .reference("docs/performance/benchmarks.md — opt-2026-08-26-quad-batching")
-                    .build());
+            // The catalogue after the 2026-10-02 audit. Every entry here either
+            // runs, or is planned work that survived review. What was removed,
+            // merged or replaced, and why, is in
+            // docs/performance/optimization-registry.md.
 
+            // -- rendering -------------------------------------------------
             out.add(Optimization.builder("render.font.metrics-cache")
                     .name("Font metrics caching")
                     .description(
                             "Character width lookups are recomputed per frame. Caching them is"
                                     + " output-identical as long as the cache is invalidated on"
                                     + " resource reload and language change.")
+                    .group(Optimization.Group.RENDERING)
                     .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
                     .expectedBenefit(
@@ -180,130 +154,106 @@ public final class OptimizationRegistry {
                     .reference("docs/performance/benchmarks.md — bench-2026-08-26-text-metrics")
                     .build());
 
-            out.add(Optimization.builder("render.hud.quad-batching")
-                    .name("Batched HUD and GUI quads")
+            // -- entities --------------------------------------------------
+            out.add(Optimization.builder("render.nametag.replay")
+                    .name("Fast nametags")
                     .description(
-                            "Quads sharing a texture are collected into one buffer instead of"
-                                    + " being submitted individually.")
+                            "Vanilla draws a nametag a glyph at a time, twice. Each distinct"
+                                    + " label is recorded once and replayed, with the same glyphs"
+                                    + " in the same places.")
+                    .group(Optimization.Group.ENTITIES)
                     .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
-                    .expectedBenefit("Expected to help HUD-heavy scenes. Unmeasured.")
-                    .defaultOnWhenMeasured()
-                    .conflict(optifine("HUD drawing"))
-                    .reference("docs/research/performance.md §2.2")
-                    .build());
-
-            out.add(Optimization.builder("render.entity.model-batching")
-                    .name("Batched entity and item model rendering")
-                    .description("Entity and item models sharing state are drawn together.")
-                    .category(Category.SAFE)
-                    .basis(Basis.VANILLA_ANALYSIS)
-                    .expectedBenefit("Expected to help entity-dense scenes. Unmeasured.")
-                    .defaultOnWhenMeasured()
-                    .conflict(optifine("entity rendering"))
-                    .reference("docs/research/performance.md §2.4")
-                    .build());
-
-            out.add(Optimization.builder("render.tile-entity.batching")
-                    .name("Tile entity batching by texture")
-                    .description("Tile entities sharing a texture are grouped into one draw.")
-                    .category(Category.SAFE)
-                    .basis(Basis.VANILLA_ANALYSIS)
-                    .expectedBenefit("Expected to help builds with many tile entities. Unmeasured.")
-                    .defaultOnWhenMeasured()
-                    .reference("docs/research/performance.md §2.5")
-                    .build());
-
-            out.add(Optimization.builder("render.tile-entity.double-render-fix")
-                    .name("Fix double-rendered tile entities")
-                    .description(
-                            "Some special tile entities are drawn twice per frame. Drawing them"
-                                    + " once is a straightforward defect fix.")
-                    .category(Category.SAFE)
-                    .basis(Basis.THIRD_PARTY_PROBLEM_STATEMENT)
-                    .expectedBenefit("Halves the cost of the affected tile entities. Unmeasured.")
-                    .defaultOnWhenMeasured()
-                    .reference("docs/research/performance.md §2.5")
-                    .reference(
-                            "Problem identified by PolyPatcher's changelog. No code read or"
-                                    + " reused; the fix is our own reading of vanilla.")
-                    .build());
-
-            // -- rendering: culling ----------------------------------------
-            out.add(Optimization.builder("render.entity.occlusion-culling")
-                    .name("Entity occlusion culling")
-                    .description(
-                            "Skip entities fully hidden behind geometry. Must exempt nametags,"
-                                    + " ender dragons and withers, and must never reveal anything"
-                                    + " vanilla hides. Only the refusal half is written: the rules"
-                                    + " that say an entity must be drawn whatever an occlusion"
-                                    + " test concluded. There is no occlusion test yet, so this"
-                                    + " cannot currently make anything faster and is not claimed"
-                                    + " to.")
-                    .category(Category.OPTIONAL)
-                    .implementedInCore()
-                    .basis(Basis.THIRD_PARTY_PROBLEM_STATEMENT)
+                    .inGameSetting()
+                    .runsInGame()
                     .expectedBenefit(
-                            "Expected to be very large in lobbies with hundreds of armour stands."
-                                    + " Unmeasured, and breaks visibly if the culling test is"
-                                    + " wrong.")
-                    .conflict(Conflict.disableOurs(
-                            "OptiFine shaders",
-                            "PolyPatcher documents that entity culling and OptiFine shaders"
-                                    + " cannot be made compatible. Shaders present is a hard gate:"
-                                    + " culling is off, not merely adjusted."))
-                    .reference("docs/research/performance.md §2.4")
-                    .reference("docs/research/security-model.md §9 — must not reveal hidden things")
+                            "Largest where many named players or armour stands are in view.")
+                    .evidence(Evidence.inGame(
+                            "performance-layer-2026-09-22",
+                            "Isolated on a populated server lobby: 0.155 ms/frame median paired"
+                                    + " saving with 33 labels a frame, 18 of 20 pairs, sign test"
+                                    + " p = 0.0004. Eight test strings were pixel-identical to"
+                                    + " vanilla."))
+                    .reference("docs/performance/performance-layer-2026-09-22.md")
                     .build());
 
-            // -- rendering: chunks -----------------------------------------
-            out.add(Optimization.builder("render.chunk.rebuild-priority")
-                    .name("Prioritised chunk rebuild queue")
+            out.add(Optimization.builder("render.entity.distance-limit")
+                    .name("Entity draw distance")
                     .description(
-                            "Rebuild nearby and in-view chunks first. Reorders work rather than"
-                                    + " throttling it, so nothing is deferred indefinitely.")
-                    .category(Category.SAFE)
-                    .basis(Basis.VANILLA_ANALYSIS)
-                    .expectedBenefit("Expected to remove most join-stutter. Unmeasured.")
-                    .defaultOnWhenMeasured()
-                    .reference("docs/research/performance.md §2.3")
-                    .build());
-
-            out.add(Optimization.builder("render.chunk.skip-redundant-rebuilds")
-                    .name("Skip rebuilds that cannot change the mesh")
-                    .description(
-                            "A block update that cannot alter the rendered geometry should not"
-                                    + " trigger a rebuild.")
-                    .category(Category.SAFE)
-                    .basis(Basis.VANILLA_ANALYSIS)
-                    .expectedBenefit("Expected to cut rebuild counts substantially. Unmeasured.")
-                    .defaultOnWhenMeasured()
-                    .reference("docs/research/performance.md §2.3")
-                    .build());
-
-            out.add(Optimization.builder("render.chunk.frustum-false-negative-fix")
-                    .name("Fix invisible chunks (MC-63020 / MC-70850)")
-                    .description(
-                            "Vanilla's frustum culling has false negatives that make chunks"
-                                    + " disappear. Fixing it is a correctness win that costs"
-                                    + " performance.")
+                            "Entities past a set distance are not drawn. Players are never"
+                                    + " limited inside 48 blocks, and the game still simulates"
+                                    + " everything it would have.")
+                    .group(Optimization.Group.ENTITIES)
                     .category(Category.OPTIONAL)
-                    .basis(Basis.MOJANG_BUG)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .inGameSetting()
+                    .runsInGame()
                     .expectedBenefit(
-                            "Negative for frame rate, positive for correctness. A trade that"
-                                    + " belongs to the user, not to us.")
-                    .reference("Mojang bug reports MC-63020, MC-70850")
-                    .reference("docs/research/performance.md §2.3")
+                            "Workload-dependent: large in lobbies full of distant armour stands,"
+                                    + " nothing where everything is close.")
+                    .evidence(Evidence.inGame(
+                            "performance-layer-2026-09-22",
+                            "Isolated in a lobby with 52 distant armour stands: 0.060 ms/frame"
+                                    + " median paired saving, 14 of 20 pairs (p = 0.115) -- not"
+                                    + " consistent enough for a standalone claim. The distance"
+                                    + " test itself cost 0.010 ms/frame."))
+                    .reference("docs/performance/performance-layer-2026-09-22.md")
                     .build());
 
-            // -- CPU --------------------------------------------------------
+            out.add(Optimization.builder("render.tile-entity.distance-limit")
+                    .name("Tile entity draw distance")
+                    .description(
+                            "Chests, signs, skulls and banners past a set distance are not drawn."
+                                    + " Beacons, end portals and pistons are never limited.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.OPTIONAL)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .inGameSetting()
+                    .runsInGame()
+                    .expectedBenefit(
+                            "Engaged in testing (3 of 68 tile entities culled a frame) but never"
+                                    + " isolated, so no frame-time claim is made.")
+                    .reference("docs/performance/performance-layer-2026-09-22.md")
+                    .build());
+
+            // -- HUD -------------------------------------------------------
+            out.add(Optimization.builder("render.hud.caching")
+                    .name("HUD caching")
+                    .description(
+                            "Fathom's HUD widgets that have not changed since the last frame are"
+                                    + " replayed from a recording instead of drawn again, and slow"
+                                    + " readouts such as the clock and ping are redrawn 20 times a"
+                                    + " second. Replaces the planned quad batching: Fathom's"
+                                    + " widgets already batch their quads.")
+                    .group(Optimization.Group.HUD)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .inGameSetting()
+                    .runsInGame()
+                    .expectedBenefit(
+                            "Most of what Fathom's own HUD costs a frame, in every scene.")
+                    .evidence(Evidence.inGame(
+                            "view-2026-10-02-hud-steady",
+                            "Replaying unchanged realtime widgets, A/B'd in the view benchmark"
+                                    + " (3 interleaved rounds, OptiFine on): -0.026 ms/frame"
+                                    + " looking at the sky, -0.027 at the ground, -0.029 with 48"
+                                    + " players in view; Fathom's HUD fell from 0.042 to 0.027"
+                                    + " ms/frame. Keystrokes and CPS pixel-identical in every"
+                                    + " scene."))
+                    .reference("docs/performance/view-direction-2026-10-02.md")
+                    .build());
+
+            // -- CPU and memory --------------------------------------------
             out.add(Optimization.builder("cpu.allocation.hot-path-reduction")
                     .name("Reduce allocation on hot paths")
                     .description(
                             "Vanilla clones the six-direction array at the top of loops in"
                                     + " per-block light queries, light updates and the per-frame"
                                     + " chunk visibility search. Those loops only read it, so they"
-                                    + " share one copy instead. Output-identical.")
+                                    + " share one copy instead. Output-identical. With OptiFine,"
+                                    + " only the light-query part applies: OptiFine rewrites the"
+                                    + " visibility search.")
+                    .group(Optimization.Group.MEMORY)
                     .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
                     .runsInGame()
@@ -331,6 +281,7 @@ public final class OptimizationRegistry {
                                     + " remembers the last few chunks it looked up; the cache is"
                                     + " cleared whenever a chunk loads or unloads, so it always"
                                     + " returns what the lookup would.")
+                    .group(Optimization.Group.CHUNKS)
                     .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
                     .runsInGame()
@@ -345,15 +296,23 @@ public final class OptimizationRegistry {
                                     + " alternating ABBA/BAAB order: mean frame time 6.5-9.9% lower"
                                     + " in every block, p99 lower in every block. Profiler: chunk"
                                     + " lookups fell from 14.3% to 5.1% of render-thread samples."))
+                    // Not a structural conflict -- OptiFine does not patch the
+                    // chunk provider -- but a measured absence of benefit.
+                    .conflict(Conflict.disableOurs(
+                            "OptiFine",
+                            "With OptiFine installed it measured no benefit: A/B'd in the view"
+                                    + " benchmark (2026-10-02) it moved nothing outside the noise,"
+                                    + " so it is not applied there."))
                     .reference("docs/performance/gameplay-optimization-2026-09.md")
+                    .reference("docs/performance/view-direction-2026-10-02.md")
                     .build());
 
-            // -- memory -----------------------------------------------------
             out.add(Optimization.builder("memory.world-change-gc")
                     .name("Remove System.gc() on world change")
                     .description(
                             "Vanilla calls System.gc() when changing worlds, which stops the"
                                     + " client for as long as a full collection takes.")
+                    .group(Optimization.Group.MEMORY)
                     .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
                     .expectedBenefit(
@@ -387,16 +346,20 @@ public final class OptimizationRegistry {
                                     + " its author saved it and kept for the session, though the"
                                     + " resource pack screen never draws one larger than 32"
                                     + " pixels. Downscaling to 64 on load frees the difference.")
+                    .group(Optimization.Group.RESOURCES)
                     .category(Category.SAFE)
                     .surface(Surface.GAME)
                     .basis(Basis.THIRD_PARTY_PROBLEM_STATEMENT)
                     .expectedBenefit(
                             "Frees video memory in proportion to how many packs are installed and"
                                     + " how carelessly their icons were exported. Costs nothing at"
-                                    + " frame time either way — this is a memory optimization and"
+                                    + " frame time either way -- this is a memory optimization and"
                                     + " should not be expected to move FPS.")
                     .defaultOnWhenMeasured()
-                    .implementedInCore()
+                    // Observed in a running 1.8.9 with OptiFine (2026-10-02): a
+                    // 512x512 test icon was uploaded at 64x64, 1,032,192 bytes
+                    // smaller. The memory figures below are arithmetic, not timing.
+                    .runsInGame()
                     .evidence(Evidence.isolated(
                             "opt-2026-08-26-pack-icons",
                             "Arithmetic over a plausible 40-pack folder: 12 MB of video memory"
@@ -410,38 +373,7 @@ public final class OptimizationRegistry {
                     .reference("docs/performance/benchmarks.md — opt-2026-08-26-pack-icons")
                     .build());
 
-            // -- input ------------------------------------------------------
-            out.add(Optimization.builder("input.mc-67665-look-vector")
-                    .name("Fix MC-67665 look-vector staleness")
-                    .description(
-                            "The reported 1.8 'input lag' is a one-frame-stale look vector, not"
-                                    + " input latency. Mojang fixed it in a later version.")
-                    .category(Category.SAFE)
-                    .basis(Basis.MOJANG_BUG)
-                    .expectedBenefit(
-                            "Removes a frame of apparent aim latency. Perceptual; hard to measure"
-                                    + " with frame timing alone, which is a limitation the"
-                                    + " methodology document records.")
-                    .defaultOnWhenMeasured()
-                    .reference("Mojang bug report MC-67665")
-                    .reference("docs/research/performance.md §6.1")
-                    .build());
-
-            out.add(Optimization.builder("input.frame-limiter-accuracy")
-                    .name("Accurate frame limiter")
-                    .description(
-                            "Vanilla's FPS cap busy-waits imprecisely, producing uneven frame"
-                                    + " pacing at capped rates.")
-                    .category(Category.SAFE)
-                    .basis(Basis.VANILLA_ANALYSIS)
-                    .expectedBenefit(
-                            "Expected to reduce frame time variance at a cap without changing"
-                                    + " average FPS. Exactly the thing percentile metrics exist to"
-                                    + " show. Unmeasured.")
-                    .defaultOnWhenMeasured()
-                    .reference("docs/research/performance.md §6.3")
-                    .build());
-
+            // -- frames and input ------------------------------------------
             out.add(Optimization.builder("input.unfocused-fps-cap")
                     .name("Cap frame rate when unfocused")
                     .description(
@@ -451,6 +383,7 @@ public final class OptimizationRegistry {
                                             .UNFOCUSED_CAP
                                     + " frames per second while the window does not have focus,"
                                     + " and changes nothing while it does.")
+                    .group(Optimization.Group.FRAMES)
                     .category(Category.SAFE)
                     .basis(Basis.VANILLA_ANALYSIS)
                     .runsInGame()
@@ -470,34 +403,72 @@ public final class OptimizationRegistry {
                     .reference("FATHOM_MODS_AND_LICENSING.md — idle/unfocused FPS cap")
                     .build());
 
-            // -- experimental ----------------------------------------------
-            out.add(Optimization.builder("render.chunk.worker-pool-sizing")
-                    .name("Size the chunk worker pool to the machine")
+            // -- planned ---------------------------------------------------
+            // What is left after the audit: real problems, not yet solved,
+            // each needing work that does not belong in a cleanup pass.
+            out.add(Optimization.builder("render.entity.occlusion-culling")
+                    .name("Entity occlusion culling")
                     .description(
-                            "1.8's worker count is conservative for modern core counts. Sizing it"
-                                    + " to the actual machine is a one-line change with a"
-                                    + " hardware-dependent effect.")
+                            "Skip entities fully hidden behind geometry. Must exempt nametags,"
+                                    + " ender dragons and withers, and must never reveal anything"
+                                    + " vanilla hides. Only the refusal half is written: the rules"
+                                    + " that say an entity must be drawn whatever an occlusion"
+                                    + " test concluded. There is no occlusion test yet, so this"
+                                    + " cannot currently make anything faster and is not claimed"
+                                    + " to.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.OPTIONAL)
+                    .implementedInCore()
+                    .basis(Basis.THIRD_PARTY_PROBLEM_STATEMENT)
+                    .expectedBenefit(
+                            "The view benchmark measured 23 us per armoured player drawn, so a"
+                                    + " crowd behind a wall is real work. Breaks visibly if the"
+                                    + " test is wrong, which is why it needs its own research.")
+                    .conflict(Conflict.disableOurs(
+                            "OptiFine shaders",
+                            "PolyPatcher documents that entity culling and OptiFine shaders"
+                                    + " cannot be made compatible. Shaders present is a hard gate:"
+                                    + " culling is off, not merely adjusted."))
+                    .reference("docs/research/performance.md §2.4")
+                    .reference("docs/research/security-model.md §9 — must not reveal hidden things")
+                    .build());
+
+            out.add(Optimization.builder("render.chunk.rebuild-scheduling")
+                    .name("Chunk rebuild scheduling")
+                    .description(
+                            "Without OptiFine, 1.8.9 rebuilds chunks on two worker threads in"
+                                    + " queue order, so nearby and in-view chunks can wait behind"
+                                    + " distant ones. Merges three earlier ideas: prioritising"
+                                    + " rebuilds, skipping ones that cannot change the mesh, and"
+                                    + " sizing the worker pool.")
+                    .group(Optimization.Group.CHUNKS)
                     .category(Category.EXPERIMENTAL)
                     .basis(Basis.VANILLA_ANALYSIS)
                     .expectedBenefit(
-                            "Expected to help chunk loading on many-core machines and to do"
-                                    + " nothing, or harm, on few-core ones. Hardware-dependent by"
-                                    + " construction, which is why it is EXPERIMENTAL.")
+                            "Chunk-loading latency when joining and moving, not steady frame"
+                                    + " time: the view benchmark saw no rebuilds at all once a"
+                                    + " view settled. Needs a chunk-loading benchmark before it"
+                                    + " can be built honestly.")
+                    .conflict(Conflict.disableOurs(
+                            "OptiFine",
+                            "OptiFine already schedules rebuilds and sizes its worker pool to"
+                                    + " the CPU (up to five threads)."))
                     .reference("docs/research/performance.md §2.3")
                     .build());
 
-            out.add(Optimization.builder("render.particle.brightness-cache")
-                    .name("Cache particle brightness")
+            out.add(Optimization.builder("input.frame-limiter-accuracy")
+                    .name("Accurate frame limiter")
                     .description(
-                            "Particles re-query lighting every frame. Caching it means they do"
-                                    + " not re-light as they drift, which is visible if you look"
-                                    + " for it.")
-                    .category(Category.OPTIONAL)
-                    .basis(Basis.THIRD_PARTY_PROBLEM_STATEMENT)
+                            "Vanilla's FPS cap busy-waits imprecisely, producing uneven frame"
+                                    + " pacing at capped rates.")
+                    .group(Optimization.Group.FRAMES)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
                     .expectedBenefit(
-                            "Expected to help particle-heavy scenes. Not output-identical, hence"
-                                    + " OPTIONAL rather than SAFE.")
-                    .reference("docs/research/performance.md §2.6")
+                            "Expected to reduce frame time variance at a cap without changing"
+                                    + " average FPS. Only matters with a frame cap set; Fathom"
+                                    + " profiles default to uncapped.")
+                    .reference("docs/research/performance.md §6.3")
                     .build());
 
             return out;

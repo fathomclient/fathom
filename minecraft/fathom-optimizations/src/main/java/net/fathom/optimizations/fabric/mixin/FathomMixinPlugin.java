@@ -93,10 +93,10 @@ public final class FathomMixinPlugin implements IMixinConfigPlugin {
      * turns out to conflict it will crash and be added, with a note saying so —
      * that is a better outcome than disabling it on a guess.
      */
-    private static final String[] INCOMPATIBLE_WITH_OPTIFINE = {
-        "WorldRendererDirectionsMixin",
-        "ChunkVisibilityDirectionsMixin",
-        "ClientChunkProviderMixin",
+    private static final String[][] INCOMPATIBLE_WITH_OPTIFINE = {
+        {"WorldRendererDirectionsMixin", "OptiFine rewrites its target"},
+        {"ChunkVisibilityDirectionsMixin", "OptiFine rewrites its target"},
+        {"ClientChunkProviderMixin", "measured no benefit with OptiFine installed"},
     };
 
     /**
@@ -155,10 +155,11 @@ public final class FathomMixinPlugin implements IMixinConfigPlugin {
         if (!OPTIFINE_PRESENT) {
             return true;
         }
-        for (String incompatible : INCOMPATIBLE_WITH_OPTIFINE) {
+        for (String[] skipped : INCOMPATIBLE_WITH_OPTIFINE) {
+            String incompatible = skipped[0];
             if (mixinClassName.endsWith(incompatible)) {
                 System.out.println(
-                        "[Fathom] Skipping " + incompatible + ": OptiFine rewrites its target.");
+                        "[Fathom] Skipping " + incompatible + ": " + skipped[1] + ".");
                 return false;
             }
         }

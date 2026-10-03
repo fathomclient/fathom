@@ -1,487 +1,205 @@
 # Optimization registry
 
-Every optimization this project intends to make, and every JVM question it
+Every optimization Fathom makes or plans to make, and every JVM question it
 intends to answer.
 
-**The tables below are generated from `OptimizationRegistry`, `Experiments` and
-`Scenarios` in `minecraft/fathom-optimizations`.** They are not maintained by
-hand: a hand-maintained copy of a code catalogue is a copy that drifts. §8 says
-how to regenerate them.
+**There is one registry: `OptimizationRegistry` in `minecraft/fathom-optimizations`.**
+`gradle exportRegistry` writes it to `assets/optimizations/registry.json`; the
+launcher compiles that file in, and a core test (`RegistryTests`) fails when the
+checked-in copy is stale. §1-§3 below are generated from the same file by
+`python tools/gen-registry-doc.py`. Do not edit between the markers.
 
----
+<!-- generated:start -->
 
-## 1. Nothing here is on
+## 1. Where things stand
 
-All **18** entries are off by default. **5** of them now have a
-tested implementation in `core` and **4** carry real measurements —
-and none of that promotes anything, because all of the evidence is *isolated*:
-microbenchmarks and draw-call counts, taken without the game running.
-
-That gate is enforced in code, not by discipline:
-
-```java
-public boolean defaultEnabled() {
-    return measuredInGame() && defaultOnWhenMeasured;
-}
-```
-
-`Evidence.Level.ISOLATED` does not satisfy `measuredInGame()`. Only a run of the
-game in a named scenario under `benchmark-methodology.md` does, and none has been
-possible: the Fabric layer of this module has never been compiled.
-
-The distinction is the whole point. A boolean `measured` flag could not tell
-"we timed this function in a loop" from "we ran the game and the frame times
-moved", and collapsing the two is how a 66% microbenchmark win becomes a
-"66% more FPS" line in a changelog. A test asserts that no entry claims in-game
-evidence, so a change that promotes something on the strength of a microbenchmark
-fails the build rather than shipping.
-
-Several entries are marked `defaultOnWhenMeasured()` — they are the ones we
-*expect* to promote once the numbers exist. Expecting is not knowing, and the two
-are stored in different fields.
-
-`docs/performance/optimizations.md` §7 says what would change this, per entry.
-
-| Class | Count | May ever default on? |
-|---|---|---|
-| Safe | 14 | Yes, once measured **in the game** |
-| Optional | 3 | No — the user chooses |
-| Experimental | 1 | No — hardware-dependent by construction |
+**13** entries: **10** implemented and hooked into the game, **3** planned. **9** carry a measurement, **5** of them taken in a running game.
 
 | Status | Count |
 |---|---|
-| Logic written in `core` and tested | 5 of 18 |
-| Carrying an isolated measurement | 4 of 18 |
-| Carrying an in-game measurement | **0 of 18** |
-| Wired into the running game | **0 of 18** |
-
----
+| Runs in game | 10 |
+| In the module, not yet seen in game | 0 |
+| Core written, not hooked up | 1 |
+| Planned | 2 |
 
 ## 2. The register
 
-| ID | Name | Class | Default | Code | Evidence | Basis |
-|---|---|---|---|---|---|---|
-| `render.font.batching` | Batched font rendering | Safe | Off | core | isolated (`opt-2026-08-26-quad-batching`) | our reading of vanilla |
-| `render.font.metrics-cache` | Font metrics caching | Safe | Off | core | isolated (`bench-2026-08-26-text-metrics`) | our reading of vanilla |
-| `render.hud.quad-batching` | Batched HUD and GUI quads | Safe | Off | — | **none** | our reading of vanilla |
-| `render.entity.model-batching` | Batched entity and item model rendering | Safe | Off | — | **none** | our reading of vanilla |
-| `render.tile-entity.batching` | Tile entity batching by texture | Safe | Off | — | **none** | our reading of vanilla |
-| `render.tile-entity.double-render-fix` | Fix double-rendered tile entities | Safe | Off | — | **none** | third-party problem statement (no code read) |
-| `render.entity.occlusion-culling` | Entity occlusion culling | Optional | Off | core | **none** | third-party problem statement (no code read) |
-| `render.chunk.rebuild-priority` | Prioritised chunk rebuild queue | Safe | Off | — | **none** | our reading of vanilla |
-| `render.chunk.skip-redundant-rebuilds` | Skip rebuilds that cannot change the mesh | Safe | Off | — | **none** | our reading of vanilla |
-| `render.chunk.frustum-false-negative-fix` | Fix invisible chunks (MC-63020 / MC-70850) | Optional | Off | — | **none** | Mojang bug report |
-| `cpu.allocation.hot-path-reduction` | Reduce allocation on hot paths | Safe | Off | — | **none** | our reading of vanilla |
-| `memory.world-change-gc` | Remove System.gc() on world change | Safe | Off | core | isolated (`bench-2026-08-26-explicit-gc`) | our reading of vanilla |
-| `resources.pack-icon-downscale` | Downscale resource pack icons | Safe | Off | core | isolated (`opt-2026-08-26-pack-icons`) | third-party problem statement (no code read) |
-| `input.mc-67665-look-vector` | Fix MC-67665 look-vector staleness | Safe | Off | — | **none** | Mojang bug report |
-| `input.frame-limiter-accuracy` | Accurate frame limiter | Safe | Off | — | **none** | our reading of vanilla |
-| `input.unfocused-fps-cap` | Cap frame rate when unfocused | Safe | Off | — | **none** | our reading of vanilla |
-| `render.chunk.worker-pool-sizing` | Size the chunk worker pool to the machine | Experimental | Off | — | **none** | our reading of vanilla |
-| `render.particle.brightness-cache` | Cache particle brightness | Optional | Off | — | **none** | third-party problem statement (no code read) |
-
-Every entry has an **id**, a **name**, a **description**, a **default state**, a
-**risk class**, **compatibility requirements**, and **known conflicts** — the
-fields the milestone brief requires. Ids are permanent: a user's saved
-configuration refers to them, so renaming one would silently reset their choice.
-
-Each is **individually switchable**, always. Presets (§4) are a bulk assignment
-over the same per-id switches, never a separate mechanism — a design where
-presets were primary could not express "the Safe preset, but without this one
-thing", which is exactly what someone debugging a graphics problem needs.
-
----
+| ID | Name | Group | Class | Status | Control | Evidence | Stood down by |
+|---|---|---|---|---|---|---|---|
+| `render.font.metrics-cache` | Font metrics caching | Rendering | Safe | Runs in game | Launcher switch | isolated (`bench-2026-08-26-text-metrics`) | OptiFine |
+| `render.nametag.replay` | Fast nametags | Entities | Safe | Runs in game | Set in game (Hub) | in-game (`performance-layer-2026-09-22`) | — |
+| `render.entity.distance-limit` | Entity draw distance | Entities | Optional | Runs in game | Set in game (Hub) | in-game (`performance-layer-2026-09-22`) | — |
+| `render.tile-entity.distance-limit` | Tile entity draw distance | Entities | Optional | Runs in game | Set in game (Hub) | **none** | — |
+| `render.hud.caching` | HUD caching | HUD and interface | Safe | Runs in game | Set in game (Hub) | in-game (`view-2026-10-02-hud-steady`) | — |
+| `cpu.allocation.hot-path-reduction` | Reduce allocation on hot paths | Memory | Safe | Runs in game | Launcher switch | in-game (`perf-2026-09-14-ab`) | — |
+| `world.chunk.lookup-cache` | Chunk lookup cache | Chunks | Safe | Runs in game | Launcher switch | in-game (`perf-2026-09-14-ab`) | OptiFine |
+| `memory.world-change-gc` | Remove System.gc() on world change | Memory | Safe | Runs in game | Launcher switch | isolated (`bench-2026-08-26-explicit-gc`) | — |
+| `resources.pack-icon-downscale` | Downscale resource pack icons | Resources | Safe | Runs in game | Launcher switch | isolated (`opt-2026-08-26-pack-icons`) | — |
+| `input.unfocused-fps-cap` | Cap frame rate when unfocused | Frames and input | Safe | Runs in game | Launcher switch | isolated (`opt-2026-09-04-frame-caps`) | — |
+| `render.entity.occlusion-culling` | Entity occlusion culling | Entities | Optional | Core written, not hooked up | Launcher switch | **none** | OptiFine shaders |
+| `render.chunk.rebuild-scheduling` | Chunk rebuild scheduling | Chunks | Experimental | Planned | Launcher switch | **none** | OptiFine |
+| `input.frame-limiter-accuracy` | Accurate frame limiter | Frames and input | Safe | Planned | Launcher switch | **none** | — |
 
 ## 3. Every entry in full
 
-#### `render.font.batching` — Batched font rendering
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | logic in `core`, tested; not wired into the game |
-| Evidence | isolated (`opt-2026-08-26-quad-batching`) |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-Vanilla issues one draw call per glyph. Batching a text run into a single buffer turns a line of chat from dozens of calls into one.
-
-**Expected benefit.** Expected to be the largest 2D win on text-heavy screens. The draw-call reduction is measured; the frame-time effect is not.
-
-**Why this default.** Off by default: measured only in isolation (opt-2026-08-26-quad-batching). That establishes the implementation works and is not slower than what it replaces; it does not establish that the game got faster, and only an in-game run does that.
-
-**What we measured.** A 240-glyph line spanning two font pages issues 3 draw calls instead of 240, with a vertex stream compared element by element against the unbatched path and found identical. That is the mechanism working, not a frame-time result. (`opt-2026-08-26-quad-batching`)
-
-**Known conflicts.**
-
-- **OptiFine** (ours off) — OptiFine rewrites large parts of the renderer, including its font paths. Fathom turns this off when OptiFine is present rather than fighting it: the user chose to install OptiFine.
-- **PolyPatcher** (ours off) — PolyPatcher covers font rendering as well. Where a user has chosen it, Fathom defers rather than double-patching the same methods.
-
-**References.** docs/research/performance.md §2.1. docs/performance/benchmarks.md — opt-2026-08-26-quad-batching.
-
 #### `render.font.metrics-cache` — Font metrics caching
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | logic in `core`, tested; not wired into the game |
-| Evidence | isolated (`bench-2026-08-26-text-metrics`) |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
 
 Character width lookups are recomputed per frame. Caching them is output-identical as long as the cache is invalidated on resource reload and language change.
 
-**Expected benefit.** Measured 66-86% faster than recomputing, for the measurement work alone, at realistic churn. Unknown as a fraction of a frame.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Rendering.
+- **Expected benefit:** Measured 66-86% faster than recomputing, for the measurement work alone, at realistic churn. Unknown as a fraction of a frame.
+- **Measured** (isolated, `bench-2026-08-26-text-metrics`): One frame of a busy server's text (235 strings, 11,528 characters): 12.9 us to recompute, 1.8 us cached with a static corpus and 5.2 us with 5% of strings new each frame. At 50% churn the difference falls inside the noise floor, and at 100% the cache is 47% slower.
+- **Stood down by OptiFine:** OptiFine rewrites large parts of the renderer, including its font paths. Fathom turns this off when OptiFine is present rather than fighting it: the user chose to install OptiFine.
 
-**Why this default.** Off by default: measured only in isolation (bench-2026-08-26-text-metrics). That establishes the implementation works and is not slower than what it replaces; it does not establish that the game got faster, and only an in-game run does that.
+#### `render.nametag.replay` — Fast nametags
 
-**What we measured.** One frame of a busy server's text (235 strings, 11,528 characters): 12.9 us to recompute, 1.8 us cached with a static corpus and 5.2 us with 5% of strings new each frame. At 50% churn the difference falls inside the noise floor, and at 100% the cache is 47% slower. (`bench-2026-08-26-text-metrics`)
+Vanilla draws a nametag a glyph at a time, twice. Each distinct label is recorded once and replayed, with the same glyphs in the same places.
 
-**Known conflicts.**
+- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Safe. **Group:** Entities.
+- **Expected benefit:** Largest where many named players or armour stands are in view.
+- **Measured** (in-game, `performance-layer-2026-09-22`): Isolated on a populated server lobby: 0.155 ms/frame median paired saving with 33 labels a frame, 18 of 20 pairs, sign test p = 0.0004. Eight test strings were pixel-identical to vanilla.
 
-- **OptiFine** (ours off) — OptiFine rewrites large parts of the renderer, including its font paths. Fathom turns this off when OptiFine is present rather than fighting it: the user chose to install OptiFine.
+#### `render.entity.distance-limit` — Entity draw distance
 
-**References.** docs/research/performance.md §2.1. docs/performance/benchmarks.md — bench-2026-08-26-text-metrics.
+Entities past a set distance are not drawn. Players are never limited inside 48 blocks, and the game still simulates everything it would have.
 
-#### `render.hud.quad-batching` — Batched HUD and GUI quads
+- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Optional. **Group:** Entities.
+- **Expected benefit:** Workload-dependent: large in lobbies full of distant armour stands, nothing where everything is close.
+- **Measured** (in-game, `performance-layer-2026-09-22`): Isolated in a lobby with 52 distant armour stands: 0.060 ms/frame median paired saving, 14 of 20 pairs (p = 0.115) -- not consistent enough for a standalone claim. The distance test itself cost 0.010 ms/frame.
 
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
+#### `render.tile-entity.distance-limit` — Tile entity draw distance
 
-Quads sharing a texture are collected into one buffer instead of being submitted individually.
+Chests, signs, skulls and banners past a set distance are not drawn. Beacons, end portals and pistons are never limited.
 
-**Expected benefit.** Expected to help HUD-heavy scenes. Unmeasured.
+- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Optional. **Group:** Entities.
+- **Expected benefit:** Engaged in testing (3 of 68 tile entities culled a frame) but never isolated, so no frame-time claim is made.
+- **Measured:** nothing yet.
 
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
+#### `render.hud.caching` — HUD caching
 
-**Known conflicts.**
+Fathom's HUD widgets that have not changed since the last frame are replayed from a recording instead of drawn again, and slow readouts such as the clock and ping are redrawn 20 times a second. Replaces the planned quad batching: Fathom's widgets already batch their quads.
 
-- **OptiFine** (ours off) — OptiFine rewrites large parts of the renderer, including HUD drawing. Fathom turns this off when OptiFine is present rather than fighting it: the user chose to install OptiFine.
-
-**References.** docs/research/performance.md §2.2.
-
-#### `render.entity.model-batching` — Batched entity and item model rendering
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-Entity and item models sharing state are drawn together.
-
-**Expected benefit.** Expected to help entity-dense scenes. Unmeasured.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**Known conflicts.**
-
-- **OptiFine** (ours off) — OptiFine rewrites large parts of the renderer, including entity rendering. Fathom turns this off when OptiFine is present rather than fighting it: the user chose to install OptiFine.
-
-**References.** docs/research/performance.md §2.4.
-
-#### `render.tile-entity.batching` — Tile entity batching by texture
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-Tile entities sharing a texture are grouped into one draw.
-
-**Expected benefit.** Expected to help builds with many tile entities. Unmeasured.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**References.** docs/research/performance.md §2.5.
-
-#### `render.tile-entity.double-render-fix` — Fix double-rendered tile entities
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | third-party problem statement (no code read) |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-Some special tile entities are drawn twice per frame. Drawing them once is a straightforward defect fix.
-
-**Expected benefit.** Halves the cost of the affected tile entities. Unmeasured.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**References.** docs/research/performance.md §2.5. Problem identified by PolyPatcher's changelog. No code read or reused; the fix is our own reading of vanilla..
-
-#### `render.entity.occlusion-culling` — Entity occlusion culling
-
-| | |
-|---|---|
-| Class | Optional |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | logic in `core`, tested; not wired into the game |
-| Evidence | **none** |
-| Basis | third-party problem statement (no code read) |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-Skip entities fully hidden behind geometry. Must exempt nametags, ender dragons and withers, and must never reveal anything vanilla hides. Only the refusal half is written: the rules that say an entity must be drawn whatever an occlusion test concluded. There is no occlusion test yet, so this cannot currently make anything faster and is not claimed to.
-
-**Expected benefit.** Expected to be very large in lobbies with hundreds of armour stands. Unmeasured, and breaks visibly if the culling test is wrong.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**Known conflicts.**
-
-- **OptiFine shaders** (ours off) — PolyPatcher documents that entity culling and OptiFine shaders cannot be made compatible. Shaders present is a hard gate: culling is off, not merely adjusted.
-
-**References.** docs/research/performance.md §2.4. docs/research/security-model.md §9 — must not reveal hidden things.
-
-#### `render.chunk.rebuild-priority` — Prioritised chunk rebuild queue
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-Rebuild nearby and in-view chunks first. Reorders work rather than throttling it, so nothing is deferred indefinitely.
-
-**Expected benefit.** Expected to remove most join-stutter. Unmeasured.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**References.** docs/research/performance.md §2.3.
-
-#### `render.chunk.skip-redundant-rebuilds` — Skip rebuilds that cannot change the mesh
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-A block update that cannot alter the rendered geometry should not trigger a rebuild.
-
-**Expected benefit.** Expected to cut rebuild counts substantially. Unmeasured.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**References.** docs/research/performance.md §2.3.
-
-#### `render.chunk.frustum-false-negative-fix` — Fix invisible chunks (MC-63020 / MC-70850)
-
-| | |
-|---|---|
-| Class | Optional |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | Mojang bug report |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-Vanilla's frustum culling has false negatives that make chunks disappear. Fixing it is a correctness win that costs performance.
-
-**Expected benefit.** Negative for frame rate, positive for correctness. A trade that belongs to the user, not to us.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**References.** Mojang bug reports MC-63020, MC-70850. docs/research/performance.md §2.3.
+- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Safe. **Group:** HUD and interface.
+- **Expected benefit:** Most of what Fathom's own HUD costs a frame, in every scene.
+- **Measured** (in-game, `view-2026-10-02-hud-steady`): Replaying unchanged realtime widgets, A/B'd in the view benchmark (3 interleaved rounds, OptiFine on): -0.026 ms/frame looking at the sky, -0.027 at the ground, -0.029 with 48 players in view; Fathom's HUD fell from 0.042 to 0.027 ms/frame. Keystrokes and CPS pixel-identical in every scene.
 
 #### `cpu.allocation.hot-path-reduction` — Reduce allocation on hot paths
 
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
+Vanilla clones the six-direction array at the top of loops in per-block light queries, light updates and the per-frame chunk visibility search. Those loops only read it, so they share one copy instead. Output-identical. With OptiFine, only the light-query part applies: OptiFine rewrites the visibility search.
 
-Vanilla allocates short-lived objects in per-frame and per-tick paths. Removing them reduces GC pressure without changing behaviour.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Memory.
+- **Expected benefit:** The clones were 22% of the render thread's allocation in a sampled run. Together with the chunk lookup cache, an interleaved in-game A/B cut allocation 55% while panning and 35% while moving, with 5-8% lower mean frame time in those scenes.
+- **Measured** (in-game, `perf-2026-09-14-ab`): Interleaved ABBA run in the development world, switches toggled within one session: pan 51.8 -> 23.4 MB/s allocated and 6 -> 3 collections; moving 203 -> 132 MB/s. Profiler: the six-direction clones fell from 1890 MB to 91 MB over the run.
 
-**Expected benefit.** Expected to reduce allocation rate and therefore GC frequency. Unmeasured; the instrumentation to measure it is what this milestone builds.
+#### `world.chunk.lookup-cache` — Chunk lookup cache
 
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
+Every light query resolves its chunk through a hash lookup, and particles ask for light every frame. The client thread remembers the last few chunks it looked up; the cache is cleared whenever a chunk loads or unloads, so it always returns what the lookup would.
 
-**References.** docs/research/performance.md §3.2.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Chunks.
+- **Expected benefit:** The hash lookup was the hottest method on the render thread (28% of CPU samples) in a scene with torches. Largest where particles and entities are drawn.
+- **Measured** (in-game, `perf-2026-09-14-ab`): Toggled alone, four consecutive interleaved blocks standing still in alternating ABBA/BAAB order: mean frame time 6.5-9.9% lower in every block, p99 lower in every block. Profiler: chunk lookups fell from 14.3% to 5.1% of render-thread samples.
+- **Stood down by OptiFine:** With OptiFine installed it measured no benefit: A/B'd in the view benchmark (2026-10-02) it moved nothing outside the noise, so it is not applied there.
 
 #### `memory.world-change-gc` — Remove System.gc() on world change
 
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | logic in `core`, tested; not wired into the game |
-| Evidence | isolated (`bench-2026-08-26-explicit-gc`) |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
 Vanilla calls System.gc() when changing worlds, which stops the client for as long as a full collection takes.
 
-**Expected benefit.** Removes a stall of roughly a quarter of a second per world change on the reference machine, and more on a larger live set. The JVM flag -XX:+DisableExplicitGC achieves the same thing without a mod, and the launcher already passes it; this covers the case where it was not passed.
-
-**Why this default.** Off by default: measured only in isolation (bench-2026-08-26-explicit-gc). That establishes the implementation works and is not slower than what it replaces; it does not establish that the game got faster, and only an in-game run does that.
-
-**What we measured.** A forced full collection under a synthetic 512 MB live set costs a median 226 ms with G1 and 926 ms with ParallelGC, the collector every unmodded 1.8.9 player is running. -XX:+DisableExplicitGC removes it entirely: zero collections performed, 0.0 ms. Synthetic workload, not Minecraft. (`bench-2026-08-26-explicit-gc`)
-
-**References.** docs/research/performance.md §4. docs/performance/benchmarks.md — bench-2026-08-26-explicit-gc. docs/performance/optimization-registry.md — experiment jvm.explicit-gc.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Memory.
+- **Expected benefit:** Removes a stall of roughly a quarter of a second per world change on the reference machine, and more on a larger live set. The JVM flag -XX:+DisableExplicitGC achieves the same thing without a mod, and the launcher already passes it; this covers the case where it was not passed.
+- **Measured** (isolated, `bench-2026-08-26-explicit-gc`): A forced full collection under a synthetic 512 MB live set costs a median 226 ms with G1 and 926 ms with ParallelGC, the collector every unmodded 1.8.9 player is running. -XX:+DisableExplicitGC removes it entirely: zero collections performed, 0.0 ms. Synthetic workload, not Minecraft.
 
 #### `resources.pack-icon-downscale` — Downscale resource pack icons
 
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | logic in `core`, tested; not wired into the game |
-| Evidence | isolated (`opt-2026-08-26-pack-icons`) |
-| Basis | third-party problem statement (no code read) |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
 Every installed pack's pack.png is uploaded at whatever resolution its author saved it and kept for the session, though the resource pack screen never draws one larger than 32 pixels. Downscaling to 64 on load frees the difference.
 
-**Expected benefit.** Frees video memory in proportion to how many packs are installed and how carelessly their icons were exported. Costs nothing at frame time either way — this is a memory optimization and should not be expected to move FPS.
-
-**Why this default.** Off by default: measured only in isolation (opt-2026-08-26-pack-icons). That establishes the implementation works and is not slower than what it replaces; it does not establish that the game got faster, and only an in-game run does that.
-
-**What we measured.** Arithmetic over a plausible 40-pack folder: 12 MB of video memory above what the screen samples, and 4.2 MB for a single 1024x1024 icon. Exact rather than estimated, because RGBA8 texture size is a calculation and not a measurement. (`opt-2026-08-26-pack-icons`)
-
-**References.** docs/research/performance.md §4.1. Problem identified by MemoryFix's README and by PolyPatcher's feature list. No code read or reused.. docs/performance/benchmarks.md — opt-2026-08-26-pack-icons.
-
-#### `input.mc-67665-look-vector` — Fix MC-67665 look-vector staleness
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | Mojang bug report |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-The reported 1.8 'input lag' is a one-frame-stale look vector, not input latency. Mojang fixed it in a later version.
-
-**Expected benefit.** Removes a frame of apparent aim latency. Perceptual; hard to measure with frame timing alone, which is a limitation the methodology document records.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**References.** Mojang bug report MC-67665. docs/research/performance.md §6.1.
-
-#### `input.frame-limiter-accuracy` — Accurate frame limiter
-
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
-
-Vanilla's FPS cap busy-waits imprecisely, producing uneven frame pacing at capped rates.
-
-**Expected benefit.** Expected to reduce frame time variance at a cap without changing average FPS. Exactly the thing percentile metrics exist to show. Unmeasured.
-
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
-
-**References.** docs/research/performance.md §6.3.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Resources.
+- **Expected benefit:** Frees video memory in proportion to how many packs are installed and how carelessly their icons were exported. Costs nothing at frame time either way -- this is a memory optimization and should not be expected to move FPS.
+- **Measured** (isolated, `opt-2026-08-26-pack-icons`): Arithmetic over a plausible 40-pack folder: 12 MB of video memory above what the screen samples, and 4.2 MB for a single 1024x1024 icon. Exact rather than estimated, because RGBA8 texture size is a calculation and not a measurement.
 
 #### `input.unfocused-fps-cap` — Cap frame rate when unfocused
 
-| | |
-|---|---|
-| Class | Safe |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
+Vanilla renders at full speed into a window you have alt-tabbed away from. This caps it at 30 frames per second while the window does not have focus, and changes nothing while it does.
 
-Render fewer frames when the window is not focused.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Frames and input.
+- **Expected benefit:** Frees the GPU and CPU when the game is in the background. No effect on focused performance, by construction: the cap is only consulted while the window is unfocused.
+- **Measured** (isolated, `opt-2026-09-04-frame-caps`): Arithmetic rather than a measurement, and exact because of it: the policy returns the minimum of vanilla's own answer and the cap, so the frames drawn while unfocused fall from whatever the machine managed to 10 per second. What that frees on any given machine has not been measured.
 
-**Expected benefit.** Frees the GPU and CPU when the game is in the background. No effect on focused performance.
+#### `render.entity.occlusion-culling` — Entity occlusion culling
 
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
+Skip entities fully hidden behind geometry. Must exempt nametags, ender dragons and withers, and must never reveal anything vanilla hides. Only the refusal half is written: the rules that say an entity must be drawn whatever an occlusion test concluded. There is no occlusion test yet, so this cannot currently make anything faster and is not claimed to.
 
-**References.** docs/research/performance.md §6.5.
+- **Status:** Core written, not hooked up. **Control:** Launcher switch. **Class:** Optional. **Group:** Entities.
+- **Expected benefit:** The view benchmark measured 23 us per armoured player drawn, so a crowd behind a wall is real work. Breaks visibly if the test is wrong, which is why it needs its own research.
+- **Measured:** nothing yet.
+- **Stood down by OptiFine shaders:** PolyPatcher documents that entity culling and OptiFine shaders cannot be made compatible. Shaders present is a hard gate: culling is off, not merely adjusted.
 
-#### `render.chunk.worker-pool-sizing` — Size the chunk worker pool to the machine
+#### `render.chunk.rebuild-scheduling` — Chunk rebuild scheduling
 
-| | |
-|---|---|
-| Class | Experimental |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | our reading of vanilla |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
+Without OptiFine, 1.8.9 rebuilds chunks on two worker threads in queue order, so nearby and in-view chunks can wait behind distant ones. Merges three earlier ideas: prioritising rebuilds, skipping ones that cannot change the mesh, and sizing the worker pool.
 
-1.8's worker count is conservative for modern core counts. Sizing it to the actual machine is a one-line change with a hardware-dependent effect.
+- **Status:** Planned. **Control:** Launcher switch. **Class:** Experimental. **Group:** Chunks.
+- **Expected benefit:** Chunk-loading latency when joining and moving, not steady frame time: the view benchmark saw no rebuilds at all once a view settled. Needs a chunk-loading benchmark before it can be built honestly.
+- **Measured:** nothing yet.
+- **Stood down by OptiFine:** OptiFine already schedules rebuilds and sizes its worker pool to the CPU (up to five threads).
 
-**Expected benefit.** Expected to help chunk loading on many-core machines and to do nothing, or harm, on few-core ones. Hardware-dependent by construction, which is why it is EXPERIMENTAL.
+#### `input.frame-limiter-accuracy` — Accurate frame limiter
 
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
+Vanilla's FPS cap busy-waits imprecisely, producing uneven frame pacing at capped rates.
 
-**References.** docs/research/performance.md §2.3.
+- **Status:** Planned. **Control:** Launcher switch. **Class:** Safe. **Group:** Frames and input.
+- **Expected benefit:** Expected to reduce frame time variance at a cap without changing average FPS. Only matters with a frame cap set; Fathom profiles default to uncapped.
+- **Measured:** nothing yet.
 
-#### `render.particle.brightness-cache` — Cache particle brightness
+<!-- generated:end -->
 
-| | |
-|---|---|
-| Class | Optional |
-| Surface | In-game (Mixin) |
-| Default | Off |
-| Implemented | **not written** |
-| Evidence | **none** |
-| Basis | third-party problem statement (no code read) |
-| Compatibility | Minecraft 1.8.9 · legacy-fabric · Java 8+ |
+---
 
-Particles re-query lighting every frame. Caching it means they do not re-light as they drift, which is visible if you look for it.
+## 3a. The 2026-10-02 audit
 
-**Expected benefit.** Expected to help particle-heavy scenes. Not output-identical, hence OPTIONAL rather than SAFE.
+The launcher used to say **"14 more optimizations planned"**. The number came
+from the launcher's own hand-written copy of the catalogue (`launcher-core`
+`optimizations/mod.rs`): the count of game-side entries whose status was not
+`Active`. The Java registry held the same 19 game-side entries. Neither had a
+way to say whether a planned idea was still a good one, and the copy had
+drifted from the game (it reported the chunk lookup cache as running under
+OptiFine, which the game skips). The browser preview's fixture also hard-coded
+`planned: 14`.
 
-**Why this default.** Off by default: not yet measured. Nothing is promoted before it has been benchmarked, whatever its risk class.
+Each of the 14 was reviewed against measurement — the view-direction profile
+(`view-direction-2026-10-02.md`) and the performance-layer A/B
+(`performance-layer-2026-09-22.md`) — and against what OptiFine already does,
+read from the classes OptiFabric actually patches.
 
-**References.** docs/research/performance.md §2.6.
+| Planned entry | Decision | Why |
+|---|---|---|
+| `render.font.batching` | **Remove** | OptiFine patches `TextRenderer`, so it was stood down in every OptiFine profile; text measured 0.012-0.021 ms a frame in total; the fast nametag path already replays the text that mattered (nametags). The core `QuadBatcher` stays for its tests. |
+| `render.hud.quad-batching` | **Replace** with `render.hud.caching` | Fathom's widgets already batch their quads (`QuadBatch`). What the profile found was redrawing unchanged widgets every frame; replaying them saved 0.026-0.029 ms in every scene. |
+| `render.entity.model-batching` | **Remove** | Invasive (every entity renderer), and OptiFine patches `LivingEntityRenderer`, `ModelPart` and the armour layers. Entity cost (23 us per armoured player) is real and is carried by occlusion culling instead. |
+| `render.tile-entity.batching` | **Remove** | Block-entity drawing measured 0.0001-0.0003 ms a frame in every scene. OptiFine patches the dispatcher. |
+| `render.tile-entity.double-render-fix` | **Remove** | Same measurement: nothing to save. |
+| `render.entity.occlusion-culling` | **Keep (planned)** | Valid target: a crowd behind a wall is 23 us a player. Needs an occlusion test that is cheaper than what it saves and never hides a visible entity — its own research. |
+| `render.chunk.rebuild-priority` | **Merge** into `render.chunk.rebuild-scheduling` | Chunk-loading latency, not steady frames (the profile saw zero rebuilds in settled views). OptiFine already schedules rebuilds. Needs a chunk-loading benchmark. |
+| `render.chunk.skip-redundant-rebuilds` | **Merge** into `render.chunk.rebuild-scheduling` | As above: invalidations measured 0-0.06 a frame in settled views. |
+| `render.chunk.worker-pool-sizing` | **Merge** into `render.chunk.rebuild-scheduling` | Vanilla 1.8.9 does use exactly two workers (`ChunkBuilder.<init>`), but OptiFine replaces that with a CPU-scaled pool of up to five. Only non-OptiFine profiles could gain. |
+| `render.chunk.frustum-false-negative-fix` | **Remove** | Not an optimization: it costs frame time by design, and OptiFine has its own frustum test. |
+| `resources.pack-icon-downscale` | **Implement** | Small, isolated, real (memory, not frame time). Hooked in this pass (`ResourcePackIconMixin`). |
+| `input.mc-67665-look-vector` | **Remove** | Not a performance optimization, and changing which block a click targets belongs in a deliberate gameplay feature, not here. |
+| `input.frame-limiter-accuracy` | **Keep (planned)** | Valid for capped frame rates. Fathom profiles default to uncapped, so it waits behind measured work. |
+| `render.particle.brightness-cache` | **Remove** | The light lookup it would cache measured as no bottleneck under OptiFine (the chunk lookup cache A/B moved particles 0.6%). Particle drawing is 0.25 us a particle, and the real particle problem is the 3 ms tick spike, which is simulation. |
+
+**Added** — real, running features that were missing from the registry, all
+from the in-game performance layer: `render.nametag.replay`,
+`render.entity.distance-limit`, `render.tile-entity.distance-limit`, and
+`render.hud.caching`.
+
+**Result:** 14 planned → **3 valid planned** (occlusion culling, rebuild
+scheduling, frame limiter). 1 implemented this pass, 1 replaced by an
+implemented module, 3 merged into one, 7 removed.
+
+The launcher no longer shows a count. It lists the planned entries by name, with
+how far each has got, and shows every implemented one with a truthful status:
+**On**, **Off**, **Off with OptiFine**, **Set in game**, **Automatic**, or
+**Needs the game module**.
 
 ---
 
@@ -741,13 +459,9 @@ Where an optimization corresponds to a known Mojang bug — `MC-67665`,
 
 ## 8. Regenerating this document
 
-The tables come from the code:
-
 ```bash
-cd minecraft/fathom-optimizations
-javac -d build/classes $(find src/main/java/net/fathom/optimizations/core -name '*.java')
-javac -cp build/classes -d build/classes ../../tools/GenRegistryDoc.java
-java -cp build/classes GenRegistryDoc
+cd minecraft/fathom-optimizations && gradle exportRegistry   # registry -> assets/optimizations/registry.json
+python tools/gen-registry-doc.py                             # registry.json -> §1-§3 of this file
 ```
 
 If a table here disagrees with the code, the code is right and this file is

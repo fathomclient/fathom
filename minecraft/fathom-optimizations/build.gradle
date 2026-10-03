@@ -426,6 +426,7 @@ def coreSuites = [
         'net.fathom.optimizations.core.AccountTests',
         'net.fathom.optimizations.core.BenchmarkTests',
         'net.fathom.optimizations.core.ViewTests',
+        'net.fathom.optimizations.core.RegistryTests',
 ]
 
 def coreTest = tasks.register('coreTest') {
@@ -443,6 +444,17 @@ def coreTest = tasks.register('coreTest') {
 }
 
 tasks.named('check').configure { dependsOn coreTest }
+
+// The optimization registry, written for the launcher to compile in. The Java
+// registry is the one source; RegistryTests fails when this file is stale.
+tasks.register('exportRegistry', JavaExec) {
+    group = 'fathom'
+    description = 'Writes assets/optimizations/registry.json from OptimizationRegistry.'
+    dependsOn tasks.named('classes')
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.core.registry.RegistryJson'
+    args file('../../assets/optimizations/registry.json').absolutePath
+}
 
 // Graphite + Instrument assets shared by the launcher and the game: the grain
 // tile and -- with -PbackdropSource=<capture.png> -- the processed backdrop.

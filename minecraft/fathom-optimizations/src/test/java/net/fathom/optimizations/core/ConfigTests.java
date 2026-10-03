@@ -64,25 +64,25 @@ public final class ConfigTests {
 
     private static void aSwitchIsApplied() {
         Properties values = new Properties();
-        values.setProperty("opt.render.font.batching", "true");
+        values.setProperty("opt.input.unfocused-fps-cap", "true");
         SwitchBoard board = LauncherConfig.of(values).apply(OptimizationRegistry.standard());
 
-        check(board.isEnabled("render.font.batching"), "the switch was not applied");
+        check(board.isEnabled("input.unfocused-fps-cap"), "the switch was not applied");
         check(
-                board.state(OptimizationId.of("render.font.batching")).chosenByUser(),
+                board.state(OptimizationId.of("input.unfocused-fps-cap")).chosenByUser(),
                 "a launcher switch represents a user's decision and must be recorded as one");
         pass("a switch from the launcher is applied as a user decision");
     }
 
     private static void anUnknownOptimizationIsIgnoredNotFatal() {
         Properties values = new Properties();
-        values.setProperty("opt.render.font.batching", "true");
+        values.setProperty("opt.input.unfocused-fps-cap", "true");
         values.setProperty("opt.not.a.real.optimization", "true");
 
         LauncherConfig config = LauncherConfig.of(values);
         SwitchBoard board = config.apply(OptimizationRegistry.standard());
 
-        check(board.isEnabled("render.font.batching"), "a valid switch was dropped");
+        check(board.isEnabled("input.unfocused-fps-cap"), "a valid switch was dropped");
         check(!config.lastComplaints().isEmpty(), "an unknown id should be recorded");
         pass("an unknown optimization is ignored, and the rest of the file still applies");
     }
@@ -97,11 +97,11 @@ public final class ConfigTests {
         check(LauncherConfig.parseBoolean(null) == null, "null should be rejected");
 
         Properties values = new Properties();
-        values.setProperty("opt.render.font.batching", "yes");
+        values.setProperty("opt.input.unfocused-fps-cap", "yes");
         LauncherConfig config = LauncherConfig.of(values);
         SwitchBoard board = config.apply(OptimizationRegistry.standard());
 
-        check(!board.isEnabled("render.font.batching"), "a rejected value must not enable");
+        check(!board.isEnabled("input.unfocused-fps-cap"), "a rejected value must not enable");
         check(!config.lastComplaints().isEmpty(), "a rejected value should be recorded");
         pass("a value that is not a boolean is rejected rather than silently read as off");
     }
@@ -111,13 +111,13 @@ public final class ConfigTests {
         File file = new File(directory, LauncherConfig.RELATIVE_PATH);
         check(file.getParentFile().mkdirs(), "could not create the config directory");
         // A truncated write, which is what an interrupted launcher would leave.
-        write(file, "schema = 1\nopt.render.font.batching");
+        write(file, "schema = 1\nopt.input.unfocused-fps-cap");
 
         LauncherConfig config = LauncherConfig.fromGameDirectory(directory);
         SwitchBoard board = config.apply(OptimizationRegistry.standard());
         // Properties treats a key with no separator as an empty value, which is not a
         // boolean, so the switch is rejected. The important part is that nothing threw.
-        check(!board.isEnabled("render.font.batching"), "a truncated line must not enable");
+        check(!board.isEnabled("input.unfocused-fps-cap"), "a truncated line must not enable");
         pass("a truncated file does not throw and does not enable anything");
     }
 
@@ -125,11 +125,11 @@ public final class ConfigTests {
         Properties values = new Properties();
         values.setProperty("schema", "99");
         values.setProperty("preset", "something-we-have-never-heard-of");
-        values.setProperty("opt.render.font.batching", "true");
+        values.setProperty("opt.input.unfocused-fps-cap", "true");
         values.setProperty("some.future.key", "whatever");
 
         SwitchBoard board = LauncherConfig.of(values).apply(OptimizationRegistry.standard());
-        check(board.isEnabled("render.font.batching"), "a known switch must still apply");
+        check(board.isEnabled("input.unfocused-fps-cap"), "a known switch must still apply");
         pass("a config from a newer launcher still applies the parts we understand");
     }
 
@@ -160,9 +160,9 @@ public final class ConfigTests {
                         + " Performance page.\n"
                         + "schema = 1\n"
                         + "preset = safe\n"
-                        + "opt.render.font.batching = true\n"
+                        + "opt.input.unfocused-fps-cap = true\n"
                         + "opt.render.font.metrics-cache = true\n"
-                        + "opt.render.hud.quad-batching = false\n");
+                        + "opt.input.frame-limiter-accuracy = false\n");
 
         LauncherConfig config = LauncherConfig.fromGameDirectory(directory);
         check(config.isPresent(), "the file should have been found");
@@ -170,9 +170,9 @@ public final class ConfigTests {
         check(config.preset().equals("safe"), "preset did not survive");
 
         SwitchBoard board = config.apply(OptimizationRegistry.standard());
-        check(board.isEnabled("render.font.batching"), "batching should be on");
+        check(board.isEnabled("input.unfocused-fps-cap"), "the frame cap should be on");
         check(board.isEnabled("render.font.metrics-cache"), "metrics cache should be on");
-        check(!board.isEnabled("render.hud.quad-batching"), "hud batching should be off");
+        check(!board.isEnabled("input.frame-limiter-accuracy"), "the frame limiter should be off");
         check(config.lastComplaints().isEmpty(), "a valid file should produce no complaints");
         pass("a file written by the launcher is read exactly as intended");
     }

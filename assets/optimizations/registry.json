@@ -1,0 +1,258 @@
+{
+  "schema": 1,
+  "generatedBy": "net.fathom.optimizations.core.registry.RegistryJson",
+  "optimizations": [
+    {
+      "id": "render.font.metrics-cache",
+      "name": "Font metrics caching",
+      "description": "Character width lookups are recomputed per frame. Caching them is output-identical as long as the cache is invalidated on resource reload and language change.",
+      "group": "RENDERING",
+      "groupLabel": "Rendering",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Measured 66-86% faster than recomputing, for the measurement work alone, at realistic churn. Unknown as a fraction of a frame.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "ISOLATED",
+        "runId": "bench-2026-08-26-text-metrics",
+        "summary": "One frame of a busy server's text (235 strings, 11,528 characters): 12.9 us to recompute, 1.8 us cached with a static corpus and 5.2 us with 5% of strings new each frame. At 50% churn the difference falls inside the noise floor, and at 100% the cache is 47% slower."
+      },
+      "conflicts": [
+        { "with": "OptiFine", "resolution": "DISABLE_OURS", "detail": "OptiFine rewrites large parts of the renderer, including its font paths. Fathom turns this off when OptiFine is present rather than fighting it: the user chose to install OptiFine." }
+      ]
+    },
+    {
+      "id": "render.nametag.replay",
+      "name": "Fast nametags",
+      "description": "Vanilla draws a nametag a glyph at a time, twice. Each distinct label is recorded once and replayed, with the same glyphs in the same places.",
+      "group": "ENTITIES",
+      "groupLabel": "Entities",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "IN_GAME",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Largest where many named players or armour stands are in view.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "performance-layer-2026-09-22",
+        "summary": "Isolated on a populated server lobby: 0.155 ms/frame median paired saving with 33 labels a frame, 18 of 20 pairs, sign test p = 0.0004. Eight test strings were pixel-identical to vanilla."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "render.entity.distance-limit",
+      "name": "Entity draw distance",
+      "description": "Entities past a set distance are not drawn. Players are never limited inside 48 blocks, and the game still simulates everything it would have.",
+      "group": "ENTITIES",
+      "groupLabel": "Entities",
+      "category": "OPTIONAL",
+      "surface": "GAME",
+      "control": "IN_GAME",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Workload-dependent: large in lobbies full of distant armour stands, nothing where everything is close.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "performance-layer-2026-09-22",
+        "summary": "Isolated in a lobby with 52 distant armour stands: 0.060 ms/frame median paired saving, 14 of 20 pairs (p = 0.115) -- not consistent enough for a standalone claim. The distance test itself cost 0.010 ms/frame."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "render.tile-entity.distance-limit",
+      "name": "Tile entity draw distance",
+      "description": "Chests, signs, skulls and banners past a set distance are not drawn. Beacons, end portals and pistons are never limited.",
+      "group": "ENTITIES",
+      "groupLabel": "Entities",
+      "category": "OPTIONAL",
+      "surface": "GAME",
+      "control": "IN_GAME",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Engaged in testing (3 of 68 tile entities culled a frame) but never isolated, so no frame-time claim is made.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": null,
+      "conflicts": []
+    },
+    {
+      "id": "render.hud.caching",
+      "name": "HUD caching",
+      "description": "Fathom's HUD widgets that have not changed since the last frame are replayed from a recording instead of drawn again, and slow readouts such as the clock and ping are redrawn 20 times a second. Replaces the planned quad batching: Fathom's widgets already batch their quads.",
+      "group": "HUD",
+      "groupLabel": "HUD and interface",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "IN_GAME",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Most of what Fathom's own HUD costs a frame, in every scene.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "view-2026-10-02-hud-steady",
+        "summary": "Replaying unchanged realtime widgets, A/B'd in the view benchmark (3 interleaved rounds, OptiFine on): -0.026 ms/frame looking at the sky, -0.027 at the ground, -0.029 with 48 players in view; Fathom's HUD fell from 0.042 to 0.027 ms/frame. Keystrokes and CPS pixel-identical in every scene."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "cpu.allocation.hot-path-reduction",
+      "name": "Reduce allocation on hot paths",
+      "description": "Vanilla clones the six-direction array at the top of loops in per-block light queries, light updates and the per-frame chunk visibility search. Those loops only read it, so they share one copy instead. Output-identical. With OptiFine, only the light-query part applies: OptiFine rewrites the visibility search.",
+      "group": "MEMORY",
+      "groupLabel": "Memory",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "The clones were 22% of the render thread's allocation in a sampled run. Together with the chunk lookup cache, an interleaved in-game A/B cut allocation 55% while panning and 35% while moving, with 5-8% lower mean frame time in those scenes.",
+      "defaultOn": true,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "perf-2026-09-14-ab",
+        "summary": "Interleaved ABBA run in the development world, switches toggled within one session: pan 51.8 -> 23.4 MB/s allocated and 6 -> 3 collections; moving 203 -> 132 MB/s. Profiler: the six-direction clones fell from 1890 MB to 91 MB over the run."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "world.chunk.lookup-cache",
+      "name": "Chunk lookup cache",
+      "description": "Every light query resolves its chunk through a hash lookup, and particles ask for light every frame. The client thread remembers the last few chunks it looked up; the cache is cleared whenever a chunk loads or unloads, so it always returns what the lookup would.",
+      "group": "CHUNKS",
+      "groupLabel": "Chunks",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "The hash lookup was the hottest method on the render thread (28% of CPU samples) in a scene with torches. Largest where particles and entities are drawn.",
+      "defaultOn": true,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "perf-2026-09-14-ab",
+        "summary": "Toggled alone, four consecutive interleaved blocks standing still in alternating ABBA/BAAB order: mean frame time 6.5-9.9% lower in every block, p99 lower in every block. Profiler: chunk lookups fell from 14.3% to 5.1% of render-thread samples."
+      },
+      "conflicts": [
+        { "with": "OptiFine", "resolution": "DISABLE_OURS", "detail": "With OptiFine installed it measured no benefit: A/B'd in the view benchmark (2026-10-02) it moved nothing outside the noise, so it is not applied there." }
+      ]
+    },
+    {
+      "id": "memory.world-change-gc",
+      "name": "Remove System.gc() on world change",
+      "description": "Vanilla calls System.gc() when changing worlds, which stops the client for as long as a full collection takes.",
+      "group": "MEMORY",
+      "groupLabel": "Memory",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Removes a stall of roughly a quarter of a second per world change on the reference machine, and more on a larger live set. The JVM flag -XX:+DisableExplicitGC achieves the same thing without a mod, and the launcher already passes it; this covers the case where it was not passed.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "ISOLATED",
+        "runId": "bench-2026-08-26-explicit-gc",
+        "summary": "A forced full collection under a synthetic 512 MB live set costs a median 226 ms with G1 and 926 ms with ParallelGC, the collector every unmodded 1.8.9 player is running. -XX:+DisableExplicitGC removes it entirely: zero collections performed, 0.0 ms. Synthetic workload, not Minecraft."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "resources.pack-icon-downscale",
+      "name": "Downscale resource pack icons",
+      "description": "Every installed pack's pack.png is uploaded at whatever resolution its author saved it and kept for the session, though the resource pack screen never draws one larger than 32 pixels. Downscaling to 64 on load frees the difference.",
+      "group": "RESOURCES",
+      "groupLabel": "Resources",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Frees video memory in proportion to how many packs are installed and how carelessly their icons were exported. Costs nothing at frame time either way -- this is a memory optimization and should not be expected to move FPS.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "ISOLATED",
+        "runId": "opt-2026-08-26-pack-icons",
+        "summary": "Arithmetic over a plausible 40-pack folder: 12 MB of video memory above what the screen samples, and 4.2 MB for a single 1024x1024 icon. Exact rather than estimated, because RGBA8 texture size is a calculation and not a measurement."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "input.unfocused-fps-cap",
+      "name": "Cap frame rate when unfocused",
+      "description": "Vanilla renders at full speed into a window you have alt-tabbed away from. This caps it at 30 frames per second while the window does not have focus, and changes nothing while it does.",
+      "group": "FRAMES",
+      "groupLabel": "Frames and input",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Frees the GPU and CPU when the game is in the background. No effect on focused performance, by construction: the cap is only consulted while the window is unfocused.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "ISOLATED",
+        "runId": "opt-2026-09-04-frame-caps",
+        "summary": "Arithmetic rather than a measurement, and exact because of it: the policy returns the minimum of vanilla's own answer and the cap, so the frames drawn while unfocused fall from whatever the machine managed to 10 per second. What that frees on any given machine has not been measured."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "render.entity.occlusion-culling",
+      "name": "Entity occlusion culling",
+      "description": "Skip entities fully hidden behind geometry. Must exempt nametags, ender dragons and withers, and must never reveal anything vanilla hides. Only the refusal half is written: the rules that say an entity must be drawn whatever an occlusion test concluded. There is no occlusion test yet, so this cannot currently make anything faster and is not claimed to.",
+      "group": "ENTITIES",
+      "groupLabel": "Entities",
+      "category": "OPTIONAL",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "CORE_WRITTEN",
+      "expectedBenefit": "The view benchmark measured 23 us per armoured player drawn, so a crowd behind a wall is real work. Breaks visibly if the test is wrong, which is why it needs its own research.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": null,
+      "conflicts": [
+        { "with": "OptiFine shaders", "resolution": "DISABLE_OURS", "detail": "PolyPatcher documents that entity culling and OptiFine shaders cannot be made compatible. Shaders present is a hard gate: culling is off, not merely adjusted." }
+      ]
+    },
+    {
+      "id": "render.chunk.rebuild-scheduling",
+      "name": "Chunk rebuild scheduling",
+      "description": "Without OptiFine, 1.8.9 rebuilds chunks on two worker threads in queue order, so nearby and in-view chunks can wait behind distant ones. Merges three earlier ideas: prioritising rebuilds, skipping ones that cannot change the mesh, and sizing the worker pool.",
+      "group": "CHUNKS",
+      "groupLabel": "Chunks",
+      "category": "EXPERIMENTAL",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "PLANNED",
+      "expectedBenefit": "Chunk-loading latency when joining and moving, not steady frame time: the view benchmark saw no rebuilds at all once a view settled. Needs a chunk-loading benchmark before it can be built honestly.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": null,
+      "conflicts": [
+        { "with": "OptiFine", "resolution": "DISABLE_OURS", "detail": "OptiFine already schedules rebuilds and sizes its worker pool to the CPU (up to five threads)." }
+      ]
+    },
+    {
+      "id": "input.frame-limiter-accuracy",
+      "name": "Accurate frame limiter",
+      "description": "Vanilla's FPS cap busy-waits imprecisely, producing uneven frame pacing at capped rates.",
+      "group": "FRAMES",
+      "groupLabel": "Frames and input",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "PLANNED",
+      "expectedBenefit": "Expected to reduce frame time variance at a cap without changing average FPS. Only matters with a frame cap set; Fathom profiles default to uncapped.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "evidence": null,
+      "conflicts": []
+    }
+  ]
+}

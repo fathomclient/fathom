@@ -59,6 +59,8 @@ public final class Runtime {
             net.fathom.optimizations.core.registry.OptimizationId.of("memory.world-change-gc");
     public static final net.fathom.optimizations.core.registry.OptimizationId UNFOCUSED_CAP =
             net.fathom.optimizations.core.registry.OptimizationId.of(FrameCapPolicy.UNFOCUSED_ID);
+    public static final net.fathom.optimizations.core.registry.OptimizationId PACK_ICON_DOWNSCALE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("resources.pack-icon-downscale");
 
     /**
      * Switch positions for hooks that run per block, per chunk lookup or per

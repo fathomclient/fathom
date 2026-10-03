@@ -385,7 +385,7 @@ public final class ProfileTests {
             + "preset = balanced\n"
             + "opt.render.font.metrics-cache = true\n"
             + "opt.memory.world-change-gc = false\n"
-            + "conflict.render.font.batching = OptiFine\n";
+            + "conflict.render.font.metrics-cache = OptiFine\n";
 
     static void theThreeFilesBecomeOneDefault() throws Exception {
         File game = game("fathom-features.properties", FEATURES, "fathom-hud.properties", HUD,

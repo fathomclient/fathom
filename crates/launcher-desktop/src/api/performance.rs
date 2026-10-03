@@ -11,7 +11,7 @@
 
 use serde::Serialize;
 
-use launcher_core::optimizations::{self, Category, Group, Optimization, Status};
+use launcher_core::optimizations::{self, Category, Control, Group, Optimization, Status, Surface};
 use launcher_core::profiles::{game_options, OptimizationPreset, Profile};
 use launcher_core::Launcher;
 
@@ -23,8 +23,10 @@ pub struct PerformanceView {
     pub presets: Vec<PresetOption>,
     pub groups: Vec<OptimizationGroup>,
     pub module: ModuleStatus,
-    /// Catalogue entries with no implementation yet, which have no row.
-    pub planned: usize,
+    /// Work the registry describes and nothing implements yet: named, with
+    /// what it is for, and never offered a switch. A list rather than a count,
+    /// because "14 more planned" says nothing a player can check.
+    pub planned: Vec<PlannedRow>,
     /// One line for the page header: "4 of 20 running".
     pub summary: String,
     /// The most recent measured run, if this profile has ever been benchmarked.
@@ -313,6 +315,9 @@ pub struct OptimizationRow {
     /// planned entry is decoration with a state — which is exactly the "fake
     /// toggle" the brief asks to remove.
     pub can_toggle: bool,
+    /// `switch`, `automatic` or `inGame`: whether the launcher is the place
+    /// this is controlled at all.
+    pub control: &'static str,
     pub status: String,
     pub readiness: String,
     pub category: String,
@@ -320,6 +325,17 @@ pub struct OptimizationRow {
     pub tone: &'static str,
     /// What we measured, where we measured anything. Never a frame-rate claim.
     pub evidence: Option<String>,
+}
+
+/// A planned optimization, as the page lists it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannedRow {
+    pub id: String,
+    pub name: String,
+    pub summary: String,
+    /// How far it has got: "Planned", or "Core written, not hooked up".
+    pub readiness: String,
 }
 
 /// Whether the game-side module is installed for this profile.
@@ -340,8 +356,9 @@ pub struct ModuleStatus {
 /// looking for "why is my world stuttering" does not know whether that is a
 /// chunk problem or an entity problem. This is the one place the two
 /// vocabularies meet, so the mapping is written down rather than implied.
-const PAGE_GROUPS: [(&str, &str); 6] = [
+const PAGE_GROUPS: [(&str, &str); 7] = [
     ("rendering", "Rendering"),
+    ("hud", "HUD"),
     ("memory", "Memory"),
     ("world", "World"),
     ("particles", "Particles"),
@@ -367,6 +384,7 @@ fn page_group(entry: &Optimization) -> &'static str {
         Group::Memory => "memory",
         Group::Chunks | Group::Entities => "world",
         Group::Frames => "input",
+        Group::Hud => "hud",
         Group::Resources => "advanced",
     }
 }
@@ -423,7 +441,7 @@ fn first_sentence(text: &str) -> String {
 
 pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
     let catalogue = optimizations::all();
-    let active = optimizations::active_count();
+    let module = module_status(core, profile);
     // What another installed mod already does: OptiFine, mostly. Those stay
     // listed and say why they are off, rather than offering a switch that the
     // launcher overrides at every launch.
@@ -432,8 +450,8 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
     // Only what is implemented gets a row. Every unimplemented entry used to be
     // listed too, dimmed, badged "Needs module" -- next to a card saying the
     // module was installed. It was never the module they needed; it was code
-    // nobody has written yet. They are counted at the foot of the page instead.
-    let groups = PAGE_GROUPS
+    // nobody has written yet. They are listed by name at the foot of the page instead.
+    let groups: Vec<OptimizationGroup> = PAGE_GROUPS
         .iter()
         .map(|(id, label)| {
             let rows: Vec<OptimizationRow> = catalogue
@@ -441,7 +459,16 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
                 .filter(|entry| page_group(entry) == *id && entry.status == Status::Active)
                 .map(|entry| {
                     let stood_down = standdowns.iter().find(|s| s.optimization == entry.id);
-                    let enabled = is_enabled(profile, entry);
+                    // A game-side entry runs only where the module does. The
+                    // JVM flags are the launcher's own and always apply.
+                    let unsupported = entry.surface == Surface::Game && !module.installed;
+                    let enabled = match entry.control {
+                        Control::Switch => is_enabled(profile, entry),
+                        // Not the launcher's to decide: always on, or set in
+                        // the Hub. Shown as running wherever it can run.
+                        Control::Automatic | Control::InGame => true,
+                    };
+                    let running = stood_down.is_none() && !unsupported;
                     OptimizationRow {
                         id: entry.id.to_owned(),
                         name: entry.name.to_owned(),
@@ -450,13 +477,21 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
                             Some(standdown) => format!("{} {}", entry.summary, standdown.detail),
                             None => entry.summary.to_owned(),
                         },
-                        enabled: enabled && stood_down.is_none(),
-                        running: stood_down.is_none(),
-                        can_toggle: stood_down.is_none(),
-                        status: match stood_down {
-                            Some(standdown) => format!("Off with {}", standdown.because_of),
-                            None if enabled => "On".to_owned(),
-                            None => "Off".to_owned(),
+                        enabled: enabled && running,
+                        running,
+                        can_toggle: running && entry.control == Control::Switch,
+                        control: match entry.control {
+                            Control::Switch => "switch",
+                            Control::Automatic => "automatic",
+                            Control::InGame => "inGame",
+                        },
+                        status: match (stood_down, entry.control) {
+                            (Some(standdown), _) => format!("Off with {}", standdown.because_of),
+                            (None, _) if unsupported => "Needs the game module".to_owned(),
+                            (None, Control::InGame) => "Set in game".to_owned(),
+                            (None, Control::Automatic) => "Automatic".to_owned(),
+                            (None, Control::Switch) if enabled => "On".to_owned(),
+                            (None, Control::Switch) => "Off".to_owned(),
                         },
                         readiness: entry.readiness.label().to_owned(),
                         category: entry.category.label().to_owned(),
@@ -478,6 +513,11 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
         .filter(|group| !group.rows.is_empty())
         .collect();
 
+    let active = groups
+        .iter()
+        .flat_map(|group: &OptimizationGroup| group.rows.iter())
+        .filter(|row| row.enabled)
+        .count();
     let game_directory = core.dirs_for(profile).minecraft_dir();
     let runs = launcher_core::optimizations::benchmarks::read_all(&game_directory);
 
@@ -497,9 +537,18 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
             })
             .collect(),
         groups,
-        module: module_status(core, profile),
-        planned: catalogue.iter().filter(|entry| entry.status != Status::Active).count(),
-        summary: format!("{active} available"),
+        module,
+        planned: catalogue
+            .iter()
+            .filter(|entry| entry.status == Status::Planned)
+            .map(|entry| PlannedRow {
+                id: entry.id.to_owned(),
+                name: entry.name.to_owned(),
+                summary: first_sentence(entry.summary),
+                readiness: entry.readiness.label().to_owned(),
+            })
+            .collect(),
+        summary: format!("{active} active"),
     }
 }
 
@@ -576,8 +625,13 @@ pub fn apply_preset(profile: &mut Profile, preset: OptimizationPreset) {
 
 /// Toggle one entry, which necessarily moves the profile to Custom.
 pub fn set_optimization(profile: &mut Profile, id: &str, enabled: bool) -> Result<(), String> {
-    if optimizations::find(id).is_none() {
+    let Some(entry) = optimizations::find(id) else {
         return Err(format!("unknown optimization: {id}"));
+    };
+    // Only a launcher switch is the launcher's to set. Planned work has nothing
+    // to switch, and an in-game setting would be a value nothing reads.
+    if !entry.is_actionable() {
+        return Err(format!("{} is not switched from the launcher", entry.name));
     }
     // Expand the preset before overwriting one key, so that switching one thing
     // off a Balanced profile keeps everything else Balanced had, rather than
@@ -625,8 +679,8 @@ mod tests {
             let actionable = entry.is_actionable();
             assert_eq!(
                 actionable,
-                entry.status == Status::Active,
-                "{} disagrees with itself about whether it runs",
+                entry.status == Status::Active && entry.control == Control::Switch,
+                "{} disagrees with itself about whether it can be switched",
                 entry.id
             );
             if !actionable {
