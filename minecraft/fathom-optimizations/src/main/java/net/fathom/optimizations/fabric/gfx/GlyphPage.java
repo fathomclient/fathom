@@ -126,14 +126,16 @@ final class GlyphPage {
         this.context = new FontRenderContext(null, true, true);
         Arrays.fill(asciiKerning, Float.NaN);
 
-        BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = probe.createGraphics();
-        graphics.setFont(font);
-        java.awt.FontMetrics metrics = graphics.getFontMetrics();
+        // The face's own metrics, unrounded. FontMetrics answers in whole
+        // pixels, each rounded on its own at the rasterised size, so every
+        // type and every scale carried a different half-pixel error into
+        // centring: two labels in two equal controls sat at different heights.
+        // Layout works in the true values; only the baseline a line is finally
+        // drawn on is rounded, once, by the renderer.
+        java.awt.font.LineMetrics metrics = font.getLineMetrics("Hg", context);
         this.ascent = metrics.getAscent();
         this.descent = metrics.getDescent();
-        this.lineHeight = metrics.getHeight();
-        graphics.dispose();
+        this.lineHeight = metrics.getAscent() + metrics.getDescent() + metrics.getLeading();
 
         for (char c = FIRST; c <= LAST; c++) {
             Glyph glyph = glyph(c);

@@ -61,6 +61,30 @@ public final class UiScale {
         return clamp(automatic * wanted, MIN_SCALE, MAX_SCALE);
     }
 
+    /**
+     * The smallest logical canvas a Fathom screen is laid out for: the Hub's
+     * 1040x600 frame and the game margin on each side. A larger scale than
+     * one that leaves this much room made the Hub's rail run into its page
+     * and its page run off the window.
+     */
+    public static final float SCREEN_MIN_WIDTH = 1040f + 2f * 16f;
+    public static final float SCREEN_MIN_HEIGHT = 600f + 2f * 16f;
+
+    /**
+     * The preference a screen is drawn at: what the user asked for, lowered
+     * just enough for the canvas to stay at least {@link #SCREEN_MIN_WIDTH} by
+     * {@link #SCREEN_MIN_HEIGHT}. Never raised, and never below
+     * {@link #MIN_PREFERENCE}. For screens only; the HUD keeps the preference.
+     */
+    public static float fittingPreference(int framebufferWidth, int framebufferHeight, float preference) {
+        float automatic = Math.max(1, framebufferHeight) / REFERENCE_HEIGHT;
+        float fits = Math.min(Math.max(1, framebufferWidth) / SCREEN_MIN_WIDTH,
+                Math.max(1, framebufferHeight) / SCREEN_MIN_HEIGHT);
+        float ceiling = fits / automatic;
+        float wanted = clamp(preference, MIN_PREFERENCE, MAX_PREFERENCE);
+        return Math.max(MIN_PREFERENCE, Math.min(wanted, ceiling));
+    }
+
     /** Device pixels per logical unit. */
     public float scale() {
         return scale;

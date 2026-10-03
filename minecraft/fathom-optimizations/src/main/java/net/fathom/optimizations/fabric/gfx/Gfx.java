@@ -77,11 +77,14 @@ public final class Gfx {
     public static float begin(MinecraftClient client, float scalePreference) {
         screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
         GlRenderer active = renderer(client);
-        active.setLowercase(false);
+        // Screens follow the launcher's capitalization, the HUD editor included;
+        // the HUD itself, drawn through beginOverlay, keeps its own.
+        active.setLowercase(!net.fathom.optimizations.fabric.menu.MenuScenes.standardCapitalization());
         active.setHighQuality(net.fathom.optimizations.fabric.Runtime.highQualityUi());
         float delta = clock().advance(System.nanoTime());
         FRAMES.begin();
-        active.beginFrame(scalePreference);
+        active.beginFrame(net.fathom.optimizations.core.ui.UiScale.fittingPreference(
+                client.width, client.height, scalePreference));
         return delta;
     }
 
@@ -207,6 +210,9 @@ public final class Gfx {
         if (active.inFrame()) {
             return null;
         }
+        // The HUD keeps its own capitalization. Set every frame: the renderer
+        // is shared, and the last screen frame may have left lowercase on.
+        active.setLowercase(false);
         active.setHighQuality(net.fathom.optimizations.fabric.Runtime.highQualityUi());
         active.beginFrame(scalePreference);
         return active;

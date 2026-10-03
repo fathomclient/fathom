@@ -50,6 +50,8 @@ public final class UiTests {
         theScaleIsClampedAtBothEnds();
         aScaleThatBarelyMovedIsNotWorthRebuildingFor();
         logicalAndDeviceAreInverses();
+        aScreenScaleLeavesRoomForTheHub();
+        twoLabelsInEqualBoxesShareABaseline();
 
         // -- clock ------------------------------------------------------------
         aStallDoesNotTeleportAnimations();
@@ -754,6 +756,44 @@ public final class UiTests {
      * fits without depending on a font file being present, and the code under
      * test only ever asks this object how wide something is.
      */
+    /**
+     * At 1080p the largest preference would put the canvas at 853x480 and
+     * the Hub's rail into its page; a screen is capped to a scale that fits
+     * the Hub's frame, and a preference that already fits is left alone.
+     */
+    static void aScreenScaleLeavesRoomForTheHub() {
+        float capped = net.fathom.optimizations.core.ui.UiScale.fittingPreference(1920, 1080, 1.5f);
+        float scale = net.fathom.optimizations.core.ui.UiScale.scaleFor(1080, capped);
+        check(1920f / scale >= net.fathom.optimizations.core.ui.UiScale.SCREEN_MIN_WIDTH - 0.01f,
+                "the canvas is wide enough at 1080p, largest preference");
+        check(1080f / scale >= net.fathom.optimizations.core.ui.UiScale.SCREEN_MIN_HEIGHT - 0.01f,
+                "and tall enough");
+        check(net.fathom.optimizations.core.ui.UiScale.fittingPreference(1920, 1080, 1f) == 1f,
+                "a preference that fits is not changed");
+        check(net.fathom.optimizations.core.ui.UiScale.fittingPreference(2560, 1080, 0.65f) == 0.65f,
+                "nor is a small one on an ultrawide");
+        pass("a screen scale leaves room for the Hub");
+    }
+
+    /** The one centring rule: different sizes in equal boxes land on one optical centre. */
+    static void twoLabelsInEqualBoxesShareABaseline() {
+        Renderer ui = new FakeRenderer();
+        Type a = new Type(13f, Type.Weight.REGULAR);
+        Type b = new Type(15f, Type.Weight.SEMIBOLD);
+        float centreA = net.fathom.optimizations.core.ui.layout.TextStack.baseline(ui, 10f, 36f, a)
+                - (ui.ascent(a) - ui.descent(a)) / 2f;
+        float centreB = net.fathom.optimizations.core.ui.layout.TextStack.baseline(ui, 10f, 36f, b)
+                - (ui.ascent(b) - ui.descent(b)) / 2f;
+        check(Math.abs(centreA - 28f) < 0.001f && Math.abs(centreB - 28f) < 0.001f,
+                "both lines are centred on the box's middle, got " + centreA + " and " + centreB);
+        net.fathom.optimizations.core.ui.layout.TextStack stack = new net.fathom.optimizations.core.ui.layout.TextStack();
+        stack.begin(ui, 0f);
+        stack.line(a, 1.4f);
+        stack.gap(4f);
+        check(stack.y() == Math.round(13f * 1.4f) + 4f, "a stack walks the line boxes it reserves");
+        pass("two labels in equal boxes share a baseline");
+    }
+
     static class FakeRenderer implements Renderer {
         static final float PER_CHARACTER = 6f;
 

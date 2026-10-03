@@ -127,6 +127,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     private static boolean announced;
 
     private final Controls controls = new Controls();
+    /** Lines of text in line boxes; one, reused every frame. */
+    private final net.fathom.optimizations.core.ui.layout.TextStack stack =
+            new net.fathom.optimizations.core.ui.layout.TextStack();
+    /** The launcher's Play label: 15/600. Made once, not per frame. */
+    private static final Type PRIMARY_TYPE = new Type(GraphiteTokens.TYPE_PRIMARY_SIZE, Type.Weight.SEMIBOLD);
     private final Pointer pointer = new Pointer();
     private Transition transition;
     private int captureFrames;
@@ -288,6 +293,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         if (accountOpen) {
             accountPanel(ui);
         }
+        // The top layer: tooltips (and any popover), over the account panel.
+        // This screen registered tooltips -- "Quit game" -- and never drew them.
+        controls.drawOverlays(ui);
 
         ui.popTransform();
         ui.popAlpha();
@@ -385,20 +393,20 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         Graphite.surface(ui, card, Graphite.R_PANEL, Graphite.Material.STANDARD, true);
         float x = card.x + CARD_PAD;
         float inner = card.width - CARD_PAD * 2f;
-        float y = card.y + CARD_PAD;
-
+        // The heading block, in the same line boxes cardHeight reserved.
         Type eyebrow = Graphite.floor(ui, Graphite.CAPTION);
-        ui.text("CURRENT INSTALLATION", x, y + ui.ascent(eyebrow) + 1f, eyebrow, Graphite.TEXT_SECONDARY);
-        y += line(Graphite.CAPTION, 1.4f) + 6f;
-
         Type title = Graphite.floor(ui, Graphite.TITLE);
-        ui.text(Text.fit(ui, installationName(), title, inner), x, y + ui.ascent(title) + 2f, title, Graphite.TEXT);
-        y += line(Graphite.TITLE, 1.3f) + 4f;
-
         Type small = Graphite.floor(ui, Graphite.SMALL);
-        ui.text(minecraftVersion() + " · " + loaderName(), x, y + ui.ascent(small) + 2f, small,
+        stack.begin(ui, card.y + CARD_PAD);
+        ui.text("CURRENT INSTALLATION", x, stack.line(Graphite.CAPTION, 1.4f, eyebrow), eyebrow,
                 Graphite.TEXT_SECONDARY);
-        y += line(Graphite.SMALL, 1.4f) + 18f;
+        stack.gap(6f);
+        ui.text(Text.fit(ui, installationName(), title, inner), x, stack.line(Graphite.TITLE, 1.3f, title), title,
+                Graphite.TEXT);
+        stack.gap(4f);
+        ui.text(minecraftVersion() + " · " + loaderName(), x, stack.line(Graphite.SMALL, 1.4f, small), small,
+                Graphite.TEXT_SECONDARY);
+        float y = stack.gap(18f).y();
 
         // Singleplayer is the Play of the title screen: the bright primary.
         Rect primary = new Rect(x, y, PRIMARY_WIDTH, PRIMARY_HEIGHT);
@@ -470,10 +478,12 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                         + line(Graphite.UI, 1.4f), Graphite.HAIRLINE);
             }
             float room = column - (index == 0 ? 12f : 24f);
-            ui.text(Text.fit(ui, facts[index][0], label, room), cx, y + ui.ascent(label) + 1f, label,
-                    Graphite.TEXT_TERTIARY);
-            ui.text(Text.fit(ui, facts[index][1], value, room), cx,
-                    y + line(Graphite.CAPTION, 1.4f) + 3f + ui.ascent(value) + 2f, value, Graphite.TEXT);
+            stack.begin(ui, y);
+            ui.text(Text.fit(ui, facts[index][0], label, room), cx, stack.line(Graphite.CAPTION, 1.4f, label),
+                    label, Graphite.TEXT_TERTIARY);
+            stack.gap(3f);
+            ui.text(Text.fit(ui, facts[index][1], value, room), cx, stack.line(Graphite.UI, 1.4f, value),
+                    value, Graphite.TEXT);
         }
     }
 
@@ -503,7 +513,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             } else {
                 ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, fill);
             }
-            type = Graphite.floor(ui, new Type(GraphiteTokens.TYPE_PRIMARY_SIZE, Type.Weight.SEMIBOLD));
+            type = Graphite.floor(ui, PRIMARY_TYPE);
             ink = working ? Graphite.TEXT_SECONDARY : GraphiteTokens.COLOR_ACTION_TEXT;
         } else {
             Graphite.surface(ui, area, radius, Graphite.Material.LIGHT, state.hover, state.press, 0f, false);
@@ -592,25 +602,32 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         Type data = Graphite.floor(ui, Graphite.DATA_S);
         float textX = face.right() + GraphiteTokens.SPACE_3;
         float room = panel.right() - pad - textX;
+        // Name, kind and id as one block, centred on the head the way the
+        // launcher's account row centres its text column.
+        float block = net.fathom.optimizations.core.ui.layout.TextStack.lineBox(Graphite.HEADING, 1.3f)
+                + net.fathom.optimizations.core.ui.layout.TextStack.lineBox(Graphite.SMALL, 1.3f)
+                + net.fathom.optimizations.core.ui.layout.TextStack.lineBox(Graphite.DATA_S, 1.3f);
+        stack.begin(ui, face.centreY() - block / 2f);
         keepCase(ui, true);
         ui.text(Text.fit(ui, name.isEmpty() ? "Not signed in" : name, title, room), textX,
-                y + ui.ascent(title) + 2f, title, Graphite.TEXT);
+                stack.line(Graphite.HEADING, 1.3f, title), title, Graphite.TEXT);
         keepCase(ui, false);
-        ui.text(Text.fit(ui, accountKind(), small, room), textX, y + 22f + ui.ascent(small), small,
+        ui.text(Text.fit(ui, accountKind(), small, room), textX, stack.line(Graphite.SMALL, 1.3f, small), small,
                 Graphite.TEXT_SECONDARY);
-        ui.text(Text.fit(ui, shortUuid(current), data, room), textX, y + 38f + ui.ascent(data), data,
+        ui.text(Text.fit(ui, shortUuid(current), data, room), textX, stack.line(Graphite.DATA_S, 1.3f, data), data,
                 Graphite.TEXT_TERTIARY);
         y += 48f + pad;
         Graphite.hairline(ui, x, x + inner, y);
         y += 1f + pad;
 
         Type label = Graphite.floor(ui, Graphite.CAPTION);
-        ui.text("Other accounts", x, y + ui.ascent(label) + 1f, label, Graphite.TEXT_SECONDARY);
+        ui.text("Other accounts", x, stack.begin(ui, y).line(Graphite.CAPTION, 1.4f, label), label,
+                Graphite.TEXT_SECONDARY);
         y += line(Graphite.CAPTION, 1.4f) + GraphiteTokens.SPACE_2;
 
         Type rowType = Graphite.floor(ui, Graphite.UI);
         if (others.isEmpty()) {
-            ui.text("None yet. Add one below.", x, y + (row + ui.ascent(small) - ui.descent(small)) / 2f, small,
+            ui.text("None yet. Add one below.", x, Graphite.baseline(ui, new Rect(x, y, inner, row), small), small,
                     Graphite.TEXT_TERTIARY);
             y += row + GraphiteTokens.SPACE_1;
         }

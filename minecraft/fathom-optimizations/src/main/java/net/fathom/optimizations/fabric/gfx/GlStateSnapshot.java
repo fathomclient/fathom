@@ -22,7 +22,7 @@ final class GlStateSnapshot {
      * Driver queries one capture makes. Counted by hand against the body of
      * {@link #captureInto}; it is a diagnostic figure, not a contract.
      */
-    private static final int QUERIES = 24;
+    private static final int QUERIES = 25;
 
     /** Reused query storage. Every capture runs on Minecraft's render thread. */
     private static final IntBuffer INT_QUERY = BufferUtils.createIntBuffer(16);
@@ -54,6 +54,7 @@ final class GlStateSnapshot {
     private boolean shadersSupported;
     private int program;
     private int matrixMode;
+    private int shadeModel;
     private final float[] colour = new float[4];
     private boolean restored;
     private boolean captured;
@@ -116,6 +117,7 @@ final class GlStateSnapshot {
         shadersSupported = GLX.areShadersSupported();
         program = shadersSupported ? GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) : 0;
         matrixMode = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
+        shadeModel = GL11.glGetInteger(GL11.GL_SHADE_MODEL);
         readFloats(GL11.GL_CURRENT_COLOR, colour);
 
         // Snapshot the matrices themselves, not merely the selected stack.
@@ -176,6 +178,8 @@ final class GlStateSnapshot {
             GlStateManager.bindTexture(activeTexture2d);
             setTexture(activeTextureEnabled);
         }
+        // Through GlStateManager, whose cached value the game's own draws trust.
+        GlStateManager.shadeModel(shadeModel);
         setBlend(blend);
         GlStateManager.blendFuncSeparate(blendSrcRgb, blendDstRgb, blendSrcAlpha, blendDstAlpha);
         setDepth(depth);

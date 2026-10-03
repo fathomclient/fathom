@@ -249,7 +249,7 @@ final class ProfilesSection implements Section {
             controls.textField(ui, "profiles.rename", nameRow, renameText, true);
         } else {
             ui.text(Text.fit(ui, profile.name(), Type.SECTION, inner.width), inner.x,
-                    nameRow.centreY() - ui.lineHeight(Type.SECTION) / 2f + ui.ascent(Type.SECTION),
+                    Controls.baseline(ui, nameRow, Type.SECTION),
                     Type.SECTION, Skin.TEXT);
         }
         cursor = nameRow.bottom() + Skin.S2;

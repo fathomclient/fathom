@@ -93,7 +93,15 @@ public final class Glow {
         if (strength <= 0.001f) {
             return;
         }
-        ui.shadow(button.x, button.y, button.right(), button.bottom(), radius,
-                GraphiteTokens.GLOW_HALO_BLUR * 0.6f, at(GraphiteTokens.GLOW_HALO_ALPHA * strength));
+        // The launcher's `box-shadow: 0 0 24px -6px`: the falloff starts 6dp
+        // inside the button's edge (the negative spread) and runs half the
+        // blur, so the light reaches about 6dp past the shape. This used to
+        // ignore the spread and run 14dp out -- past the 12dp gap to the
+        // next button, whose translucent glass then showed it, as if the
+        // primary were bleeding into its neighbour.
+        float inset = Math.max(0f, -GraphiteTokens.GLOW_HALO_SPREAD);
+        float reach = GraphiteTokens.GLOW_HALO_BLUR / 2f;
+        ui.shadow(button.x + inset, button.y + inset, button.right() - inset, button.bottom() - inset,
+                Math.max(0f, radius - inset), reach, at(GraphiteTokens.GLOW_HALO_ALPHA * strength));
     }
 }

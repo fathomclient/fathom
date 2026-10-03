@@ -637,6 +637,12 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 : selected + " selected — arrows nudge, Shift-arrows by ten, Tab for the next, "
                         + "Delete switches it off";
         float room = picker.x - cursor - Skin.S4;
+        if (note.isEmpty() && Text.overflows(ui, hint, Type.BODY, room)) {
+            // The short form rather than the long one cut off mid-word.
+            hint = selected == null
+                    ? "Drag to move, corner to resize, scroll to fade."
+                    : selected + " selected — arrows nudge, Tab for the next";
+        }
         if (room > 80f) {
             ui.text(Text.fit(ui, note.isEmpty() ? hint : note, Type.BODY, room), cursor,
                     Controls.baseline(ui, row, Type.BODY), Type.BODY,

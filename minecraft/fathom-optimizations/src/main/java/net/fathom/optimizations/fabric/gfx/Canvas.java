@@ -90,7 +90,8 @@ public final class Canvas {
         int fbWidth = framebufferWidth(client);
         int fbHeight = framebufferHeight(client);
         SCALE.set(mode, fbWidth, fbHeight,
-                MinecraftGuiSize.get(client).scaleFactor(), Runtime.uiScale());
+                MinecraftGuiSize.get(client).scaleFactor(),
+                net.fathom.optimizations.core.ui.UiScale.fittingPreference(fbWidth, fbHeight, Runtime.uiScale()));
 
         NanoVgGlGuard taken = NanoVgGlGuard.open(fbWidth, fbHeight);
         try {

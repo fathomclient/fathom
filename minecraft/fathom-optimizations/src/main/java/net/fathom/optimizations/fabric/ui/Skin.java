@@ -334,6 +334,22 @@ public final class Skin {
         return RoundedGeometry.radius(semanticRadius, area.width, area.height);
     }
 
+    /**
+     * The launcher's control radius (12dp), clamped to the shape: buttons,
+     * fields, dropdowns, rows and segmented tracks. Pills are for switches,
+     * slider thumbs, badges and round icon buttons, as in the launcher; a
+     * button drawn as a pill beside one drawn at 12dp was the in-game
+     * interface's most visible inconsistency.
+     */
+    public static float control(Rect area) {
+        return radius(R_CONTROL, area);
+    }
+
+    /** A selection inside a control's track: the segment radius (10dp), concentric with {@link #control}. */
+    public static float segment(Rect area) {
+        return radius(R_SMALL, area);
+    }
+
     /** A true pill is always half the shorter dimension, never a magic radius. */
     public static float pill(Rect area) {
         return RoundedGeometry.pill(area.width, area.height);

@@ -99,6 +99,13 @@ public final class Scroller {
             emphasis.set(0f, now);
             return;
         }
+        // A hairline at each edge content is cut off at: rows sliced through
+        // by the clip read as a rendering fault, a rule above them reads as
+        // "this continues". Every scrolling list gets it from here.
+        float maximum = contentHeight - viewportHeight;
+        net.fathom.optimizations.fabric.ui.VisualEffects.scrollEdgeFade(ui, viewport,
+                offset > 0.5f, offset < maximum - 0.5f);
+
         float width = 4f;
         float x = viewport.right() - width;
 

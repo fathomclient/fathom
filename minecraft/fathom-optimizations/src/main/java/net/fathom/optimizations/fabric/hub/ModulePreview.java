@@ -7,6 +7,7 @@ import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.ui.Skin;
+import net.fathom.optimizations.fabric.ui.Controls;
 
 /**
  * A live picture of what a module's settings currently produce.
@@ -51,7 +52,7 @@ interface ModulePreview {
             String chosen = module.choice(CrosshairPresets.STYLE, "Cross");
             if ("Vanilla".equals(chosen)) {
                 ui.text("Minecraft's own crosshair", area.x + Skin.S3,
-                        area.centreY() + ui.ascent(Type.SMALL) / 2f, Type.SMALL, Skin.TEXT_MUTED);
+                        Controls.baseline(ui, area, Type.SMALL), Type.SMALL, Skin.TEXT_MUTED);
                 return;
             }
 

@@ -900,7 +900,8 @@ final class ModsSection implements Section {
                 text.x, text.y + context.ui().ascent(Type.BODY), Type.BODY, Skin.TEXT_MUTED);
         String note = compactBadge(open);
         if (!note.isEmpty()) {
-            context.ui().text(note, text.x, text.y + 27f + context.ui().ascent(Type.CAPTION),
+            context.ui().text(note, text.x, Controls.stackDetail(context.ui(), text.y, Type.BODY, Type.CAPTION)
+                    + Controls.STACK_GAP,
                     Type.CAPTION, unmet(open) ? Skin.WARN : Skin.TEXT_FAINT);
         }
         y = intro.bottom();

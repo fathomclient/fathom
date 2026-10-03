@@ -119,7 +119,9 @@ public final class Runtime {
      */
     public static float uiScale() {
         FathomHud current = hud();
-        return current == null ? 1f : current.prefs().uiScale();
+        float preference = current == null ? 1f : current.prefs().uiScale();
+        return net.fathom.optimizations.fabric.diag.UiTour.ACTIVE
+                ? net.fathom.optimizations.fabric.diag.UiTour.scale(preference) : preference;
     }
 
     /** Whether antialiased framebuffer-sized Fathom geometry is enabled. */
@@ -299,6 +301,9 @@ public final class Runtime {
         // The performance layer's hooks read plain statics; this refreshes them
         // when a setting changed, and resets the per-frame nametag budget.
         net.fathom.optimizations.fabric.perf.PerfLayer.frame();
+        if (net.fathom.optimizations.fabric.diag.UiTour.ACTIVE) {
+            net.fathom.optimizations.fabric.diag.UiTour.frame(net.minecraft.client.MinecraftClient.getInstance());
+        }
         // The probe first: it rolls the per-frame section totals into the
         // worst-frame figure, and a session that ended mid-frame should still
         // see the frame it was in.

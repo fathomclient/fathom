@@ -2,6 +2,7 @@ package net.fathom.optimizations.fabric.ui;
 
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.Text;
+import net.fathom.optimizations.core.ui.layout.TextStack;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 
@@ -57,14 +58,20 @@ public final class FathomComponents {
                 Skin.RIM_TOP_DENSE, Skin.RIM_EDGE_DENSE);
     }
 
+    /** A page heading's title line, its gap included. */
+    public static final float HEADING_TITLE_BOX = 30f;
+    /** The supporting sentence's line under it. */
+    public static final float HEADING_SUBTITLE_BOX = 22f;
+
     /** Consistent page heading and optional supporting sentence. */
     public static Rect sectionHeader(Renderer ui, Rect area, String title, String subtitle) {
-        float height = subtitle == null || subtitle.isEmpty() ? 30f : 52f;
+        float height = subtitle == null || subtitle.isEmpty() ? HEADING_TITLE_BOX
+                : HEADING_TITLE_BOX + HEADING_SUBTITLE_BOX;
         Rect heading = area.top(height);
-        ui.text(title, heading.x, heading.y + ui.ascent(Type.SECTION), Type.SECTION, Skin.TEXT);
+        ui.text(title, heading.x, TextStack.firstLine(ui, heading.y, Type.SECTION), Type.SECTION, Skin.TEXT);
         if (subtitle != null && !subtitle.isEmpty()) {
             ui.text(Text.fit(ui, subtitle, Type.SMALL, heading.width), heading.x,
-                    heading.y + 30f + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_MUTED);
+                    TextStack.firstLine(ui, heading.y + HEADING_TITLE_BOX, Type.SMALL), Type.SMALL, Skin.TEXT_MUTED);
         }
         return heading;
     }

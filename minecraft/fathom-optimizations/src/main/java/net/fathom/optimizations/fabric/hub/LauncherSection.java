@@ -75,10 +75,13 @@ final class LauncherSection implements Section {
         int dot = state == LauncherBridge.State.READY
                 ? Skin.GOOD
                 : (state == LauncherBridge.State.CLOSED ? Skin.WARN : Skin.TEXT_DISABLED);
-        ui.rounded(inner.x, inner.y + 5f, inner.x + 9f, inner.y + 14f, 4.5f, dot);
-        ui.text(label(state), inner.x + 18f, inner.y + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
-        ui.text(Text.fit(ui, bridge.detail(), Type.SMALL, inner.width - 18f), inner.x + 18f,
-                inner.y + 24f + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
+        // The dot centred on the title's line; title over detail by the shared stack.
+        float dotCentre = inner.y + ui.lineHeight(Type.ROW_TITLE) / 2f;
+        ui.rounded(inner.x, dotCentre - 4.5f, inner.x + 9f, dotCentre + 4.5f, 4.5f, dot);
+        float textX = inner.x + 9f + Skin.S2;
+        ui.text(label(state), textX, Controls.stackTitle(ui, inner.y, Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
+        ui.text(Text.fit(ui, bridge.detail(), Type.SMALL, inner.right() - textX), textX,
+                Controls.stackDetail(ui, inner.y, Type.ROW_TITLE, Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
 
         // -- actions ----------------------------------------------------------
         Rect actions = area.belowTop(84f + Skin.S5).top(Skin.H_MD);

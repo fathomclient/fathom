@@ -448,11 +448,11 @@ public final class Controls {
 
     /** The baseline that centres a line of type in a box, optically. */
     public static float baseline(Renderer ui, Rect area, Type type) {
-        return area.y + (area.height + ui.ascent(type) - ui.descent(type)) / 2f;
+        return net.fathom.optimizations.core.ui.layout.TextStack.baseline(ui, area, type);
     }
 
     public static float baseline(Renderer ui, float y, float height, Type type) {
-        return y + (height + ui.ascent(type) - ui.descent(type)) / 2f;
+        return net.fathom.optimizations.core.ui.layout.TextStack.baseline(ui, y, height, type);
     }
 
     /*
@@ -576,7 +576,7 @@ public final class Controls {
         // launcher's bright primary and the label kept the old dark-button colour.
         int text = !enabled ? Skin.TEXT_DISABLED : Tokens.COLOR_PROMINENT_TEXT;
         if (enabled) {
-            Glow.halo(ui, area, Skin.pill(area), 1f + 0.5f * s.hover);
+            Glow.halo(ui, area, Skin.control(area), 1f + 0.5f * s.hover);
         }
         button(ui, s, area, face, edge, text, label, true);
         return s.clicked;
@@ -600,7 +600,7 @@ public final class Controls {
      */
     public boolean recessedAction(Renderer ui, String id, Rect area, String label, boolean enabled) {
         State s = state(id, area, enabled);
-        float radius = Skin.pill(area);
+        float radius = Skin.control(area);
         int face = !enabled
                 ? Skin.FILL_DISABLED
                 : Skin.mix(Skin.mix(Skin.RECESSED, Skin.SURFACE_HOVER, s.hover), Skin.BACKGROUND, s.press);
@@ -635,7 +635,7 @@ public final class Controls {
      */
     public boolean back(Renderer ui, String id, Rect area, String label) {
         State s = state(id, area, true);
-        float round = Skin.pill(area);
+        float round = Skin.control(area);
         int face = Skin.mix(Skin.mix(Skin.fade(Skin.FILL_HOVER, 0f), Skin.FILL_HOVER, s.hover),
                 Skin.FILL_PRESSED, s.press);
         ui.rounded(area.x, area.y, area.right(), area.bottom(), round, face);
@@ -724,7 +724,7 @@ public final class Controls {
         // is felt as contact without making neighbouring controls appear to move.
         // Press is a denser face, never a scale or a sink: moving the label by
         // a fraction of a pixel re-snapped its glyphs and made the text jump.
-        float radius = Skin.pill(area);
+        float radius = Skin.control(area);
         ui.pushTransform(0f, 0f);
         if (signature && s.enabled) {
             // The primary action: one flat bright neutral face. No gradient,
@@ -771,11 +771,11 @@ public final class Controls {
         float on = active(s, current);
         float hover = s.hover * (1f - on);
         if (hover > 0.01f || on > 0.01f) {
-            ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.pill(row),
+            ui.rounded(row.x, row.y, row.right(), row.bottom(), Skin.control(row),
                     Skin.mix(Skin.scaleAlpha(Skin.SURFACE_HOVER, hover), Skin.ELEVATED, on));
         }
         if (on > 0.01f) {
-            ui.rim(row.x, row.y, row.right(), row.bottom(), Skin.pill(row),
+            ui.rim(row.x, row.y, row.right(), row.bottom(), Skin.control(row),
                     Skin.scaleAlpha(Skin.EDGE_ELEVATED, on));
         }
         float iconSize = Graphite.ICON_INLINE;
@@ -850,7 +850,7 @@ public final class Controls {
         }
         // The launcher's segmented control: a light glass track, and the
         // selection a denser neutral pill with a stronger rim. No colour.
-        float outerRadius = Skin.pill(area);
+        float outerRadius = Skin.control(area);
         ui.rounded(area.x, area.y, area.right(), area.bottom(), outerRadius, Tokens.CONTROL_FILL_FAINT);
         ui.rim(area.x, area.y, area.right(), area.bottom(), outerRadius, Skin.EDGE_SURFACE);
 
@@ -866,7 +866,7 @@ public final class Controls {
         mark.to(selected, now);
         float markX = area.x + segment * mark.value(now);
         Rect markArea = new Rect(markX + 2f, area.y + 2f, segment - 4f, area.height - 4f);
-        float innerRadius = Skin.pill(markArea);
+        float innerRadius = Skin.segment(markArea);
         surface(ui, markX + 2f, area.y + 2f, markX + segment - 2f, area.bottom() - 2f,
                 innerRadius, Skin.ELEVATED);
         ui.rim(markX + 2f, area.y + 2f, markX + segment - 2f, area.bottom() - 2f,
@@ -934,8 +934,8 @@ public final class Controls {
         float pan = scrolls ? pan(id, box, total, selectedX, selectedWidth) : 0f;
 
         // One quiet light-glass track; the categories inside are text until chosen.
-        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.pill(box), Tokens.CONTROL_FILL_FAINT);
-        ui.rim(box.x, box.y, box.right(), box.bottom(), Skin.pill(box),
+        ui.rounded(box.x, box.y, box.right(), box.bottom(), Skin.control(box), Tokens.CONTROL_FILL_FAINT);
+        ui.rim(box.x, box.y, box.right(), box.bottom(), Skin.control(box),
                 Skin.EDGE_SURFACE);
         ui.clip(box.x, box.y, box.right(), box.bottom());
 
@@ -959,7 +959,7 @@ public final class Controls {
         float drawnWidth = markWidth.value(now);
         Rect activeMark = Rect.of(drawnX + 2f, box.y + 2f,
                 drawnX + drawnWidth - 2f, box.bottom() - 2f);
-        float innerRadius = Skin.pill(activeMark);
+        float innerRadius = Skin.segment(activeMark);
         // A rounded pill that slides between categories; its travel is the motion.
         ui.rounded(activeMark.x, activeMark.y, activeMark.right(), activeMark.bottom(),
                 innerRadius, Skin.ELEVATED);
@@ -1083,7 +1083,7 @@ public final class Controls {
 
         int face = Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, Math.max(s.hover, spin)),
                 Skin.RECESSED, s.press);
-        float radius = Skin.pill(area);
+        float radius = Skin.control(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
         int edge = Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, Math.max(s.hover, spin));
         ui.rim(area.x, area.y, area.right(), area.bottom(), radius, edge);
@@ -1174,7 +1174,7 @@ public final class Controls {
         float listen = active(s, listening);
         int face = Skin.mix(Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, s.hover), Skin.BACKGROUND, s.press),
                 Skin.ELEVATED, listen);
-        float radius = Skin.pill(area);
+        float radius = Skin.control(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
         // The recessed rim the stepper and text field wear, so a key reads as
         // a field at rest and not as loose type. Waiting for a key is input
@@ -1199,7 +1199,7 @@ public final class Controls {
         Rect down = new Rect(area.x, area.y, button, area.height);
         Rect up = new Rect(area.right() - button, area.y, button, area.height);
 
-        float radius = Skin.pill(area);
+        float radius = Skin.control(area);
         ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, Skin.RECESSED);
         ui.rim(area.x, area.y, area.right(), area.bottom(), radius, Skin.EDGE_RECESSED);
         ui.textCentred(value, area.centreX(), baseline(ui, area, Type.BODY_STRONG), Type.BODY_STRONG, Skin.TEXT);
@@ -1226,7 +1226,7 @@ public final class Controls {
         float edit = active(s, editing);
         int face = Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, s.hover * (1f - edit)), Skin.BACKGROUND,
                 s.press);
-        float radius = Skin.pill(area);
+        float radius = Skin.control(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
         if (edit > 0.01f) {
             // Editing is focus: the launcher's field wears the signal ring.
@@ -1337,11 +1337,11 @@ public final class Controls {
         float hover = slot.hover.value(now);
         float mark = slot.active.value(now);
         if (hover > 0.01f || mark > 0.01f) {
-            ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.pill(area),
+            ui.rounded(area.x, area.y, area.right(), area.bottom(), Skin.control(area),
                     Skin.mix(Skin.scaleAlpha(Skin.SURFACE_HOVER, hover), Skin.ELEVATED, mark));
         }
         if (mark > 0.01f) {
-            ui.rim(area.x, area.y, area.right(), area.bottom(), Skin.pill(area),
+            ui.rim(area.x, area.y, area.right(), area.bottom(), Skin.control(area),
                     Skin.scaleAlpha(Skin.EDGE_ELEVATED, mark));
         }
     }

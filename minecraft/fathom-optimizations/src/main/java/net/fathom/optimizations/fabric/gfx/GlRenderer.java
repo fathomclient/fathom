@@ -286,6 +286,12 @@ public final class GlRenderer implements Renderer {
             GlStateManager.disableDepthTest();
             GlStateManager.depthMask(false);
             GlStateManager.disableCull();
+            // Every gradient here is vertex colours blended across a quad. The
+            // game leaves GL_FLAT on, which paints each quad in one of its
+            // vertices' colours instead: a rounded gradient became flat bands
+            // with a hard step where its corner strips began -- the sheen on
+            // every pane stopped short of the pane's foot, as a dark band.
+            GlStateManager.shadeModel(GL11.GL_SMOOTH);
             GlStateManager.enableTexture();
             GlStateManager.color(1f, 1f, 1f, 1f);
             inheritedState = snapshot;

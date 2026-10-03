@@ -452,7 +452,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             Type small = Graphite.floor(ui, Graphite.SMALL);
             float x = panel.x + Graphite.wordmarkWidth(ui, cap) + Graphite.S6;
             ui.text(Text.fit(ui, restart + " needs a restart", small, editHud.x - x - Graphite.S4),
-                    x, centre + ui.ascent(small) / 2f, small, Graphite.TEXT_SECONDARY);
+                    x, net.fathom.optimizations.core.ui.layout.TextStack.centredOn(ui, centre, small), small,
+                    Graphite.TEXT_SECONDARY);
         }
     }
 
