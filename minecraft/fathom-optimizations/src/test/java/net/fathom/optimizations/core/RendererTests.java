@@ -45,6 +45,12 @@ public final class RendererTests {
         ligaturesFollowCss();
         trackingIsPartOfAType();
         materialsAreTheLaunchersCss();
+        rowsPlaceChildrenFromPaddingsAndGaps();
+        growSharesWhatIsLeft();
+        justifyAndAlign();
+        aScrollViewportClampsItsOffset();
+        floatingBoxesStayOnScreen();
+        anUnchangedTreeIsNotLaidOutAgain();
 
         System.out.println();
         System.out.println(passed + " passed, 0 failed");
@@ -256,6 +262,129 @@ public final class RendererTests {
         String text = String.format(Locale.ROOT, "%.2f", value);
         text = text.replaceAll("0+$", "").replaceAll("\\.$", "");
         return text;
+    }
+
+    // -----------------------------------------------------------------------
+    // Layout
+    // -----------------------------------------------------------------------
+
+    private static final net.fathom.optimizations.core.ui.render.Renderer UI = new UiTests.FakeRenderer();
+
+    private static void at(net.fathom.optimizations.core.ui.layout.Box box, float x, float y, float w, float h) {
+        net.fathom.optimizations.core.ui.layout.Rect r = box.rect();
+        check(close(r.x, x, 0.01f) && close(r.y, y, 0.01f) && close(r.width, w, 0.01f) && close(r.height, h, 0.01f),
+                box.id + " at " + x + "," + y + " " + w + "x" + h + ", was " + r);
+    }
+
+    static void rowsPlaceChildrenFromPaddingsAndGaps() {
+        net.fathom.optimizations.core.ui.layout.Box row =
+                net.fathom.optimizations.core.ui.layout.Box.row("row").padding(24f, 10f, 12f, 10f).gap(12f);
+        net.fathom.optimizations.core.ui.layout.Box a = row.add(net.fathom.optimizations.core.ui.layout.Box.fixed("a", 64f, 14f));
+        net.fathom.optimizations.core.ui.layout.Box b = row.add(net.fathom.optimizations.core.ui.layout.Box.fixed("b", 36f, 36f));
+        row.layout(UI, 0f, 0f, 400f, 56f);
+        // Stretch is the default across: a fixed height stays fixed.
+        at(a, 24f, 10f, 64f, 14f);
+        at(b, 24f + 64f + 12f, 10f, 36f, 36f);
+        net.fathom.optimizations.core.ui.layout.Box column =
+                net.fathom.optimizations.core.ui.layout.Box.column("column").padding(6f).gap(4f);
+        net.fathom.optimizations.core.ui.layout.Box first = column.add(net.fathom.optimizations.core.ui.layout.Box.fixed("1", 36f, 36f));
+        net.fathom.optimizations.core.ui.layout.Box second = column.add(net.fathom.optimizations.core.ui.layout.Box.fixed("2", 36f, 36f));
+        column.layout(UI, 12f, 60f, 48f, 300f);
+        at(first, 18f, 66f, 36f, 36f);
+        at(second, 18f, 106f, 36f, 36f);
+        pass("rows and columns place children from paddings and gaps");
+    }
+
+    static void growSharesWhatIsLeft() {
+        net.fathom.optimizations.core.ui.layout.Box row = net.fathom.optimizations.core.ui.layout.Box.row("row");
+        net.fathom.optimizations.core.ui.layout.Box fixed = row.add(net.fathom.optimizations.core.ui.layout.Box.fixed("fixed", 100f, 10f));
+        net.fathom.optimizations.core.ui.layout.Box one = row.add(net.fathom.optimizations.core.ui.layout.Box.column("one").width(0f).grow(1f));
+        net.fathom.optimizations.core.ui.layout.Box two = row.add(net.fathom.optimizations.core.ui.layout.Box.column("two").width(0f).grow(2f));
+        row.layout(UI, 0f, 0f, 400f, 20f);
+        at(fixed, 0f, 0f, 100f, 10f);
+        at(one, 100f, 0f, 100f, 20f);
+        at(two, 200f, 0f, 200f, 20f);
+        pass("grow shares what is left, in proportion");
+    }
+
+    static void justifyAndAlign() {
+        net.fathom.optimizations.core.ui.layout.Box row = net.fathom.optimizations.core.ui.layout.Box.row("row")
+                .justify(net.fathom.optimizations.core.ui.layout.Box.Align.BETWEEN)
+                .align(net.fathom.optimizations.core.ui.layout.Box.Align.CENTRE);
+        net.fathom.optimizations.core.ui.layout.Box a = row.add(net.fathom.optimizations.core.ui.layout.Box.fixed("a", 10f, 10f));
+        net.fathom.optimizations.core.ui.layout.Box b = row.add(net.fathom.optimizations.core.ui.layout.Box.fixed("b", 10f, 20f));
+        net.fathom.optimizations.core.ui.layout.Box c = row.add(net.fathom.optimizations.core.ui.layout.Box.fixed("c", 10f, 10f));
+        row.layout(UI, 0f, 0f, 100f, 40f);
+        at(a, 0f, 15f, 10f, 10f);
+        at(b, 45f, 10f, 10f, 20f);
+        at(c, 90f, 15f, 10f, 10f);
+        net.fathom.optimizations.core.ui.layout.Box end = net.fathom.optimizations.core.ui.layout.Box.column("end")
+                .padding(104f, 0f, 0f, 40f).justify(net.fathom.optimizations.core.ui.layout.Box.Align.END)
+                .align(net.fathom.optimizations.core.ui.layout.Box.Align.START);
+        net.fathom.optimizations.core.ui.layout.Box card = end.add(net.fathom.optimizations.core.ui.layout.Box.fixed("card", 440f, 248f));
+        end.layout(UI, 0f, 0f, 1280f, 720f);
+        at(card, 104f, 432f, 440f, 248f);
+        pass("justify and align: between, centre, end -- the launcher's Home card lands at 104,432");
+    }
+
+    static void aScrollViewportClampsItsOffset() {
+        net.fathom.optimizations.core.ui.layout.Box list =
+                net.fathom.optimizations.core.ui.layout.Box.column("list").scroll(true);
+        for (int index = 0; index < 8; index++) {
+            list.add(net.fathom.optimizations.core.ui.layout.Box.column("row" + index).height(56f));
+        }
+        list.scrollTo(1000f);
+        list.layout(UI, 0f, 0f, 400f, 300f);
+        check(close(list.scrollRange(), 8 * 56f - 300f, 0.01f), "the range is the overflow: " + list.scrollRange());
+        check(close(list.scrollOffset(), list.scrollRange(), 0.01f), "the offset is clamped to it");
+        at(list.find("row0"), 0f, -(8 * 56f - 300f), 400f, 56f);
+        check(list.isClip(), "a viewport clips");
+        pass("a scroll viewport moves its rows and clamps its offset");
+    }
+
+    static void floatingBoxesStayOnScreen() {
+        net.fathom.optimizations.core.ui.layout.Box screen = net.fathom.optimizations.core.ui.layout.Box.stack("screen");
+        net.fathom.optimizations.core.ui.layout.Box bar = screen.add(net.fathom.optimizations.core.ui.layout.Box.column("bar")
+                .padding(1000f, 10f, 12f, 0f).align(net.fathom.optimizations.core.ui.layout.Box.Align.END));
+        net.fathom.optimizations.core.ui.layout.Box anchor = bar.add(net.fathom.optimizations.core.ui.layout.Box.fixed("anchor", 110f, 36f));
+        net.fathom.optimizations.core.ui.layout.Box panel = screen.addFloating(
+                net.fathom.optimizations.core.ui.layout.Box.fixed("panel", 300f, 200f), anchor,
+                net.fathom.optimizations.core.ui.layout.Box.Place.BELOW_END, 8f);
+        screen.layout(UI, 0f, 0f, 1280f, 720f);
+        at(anchor, 1158f, 10f, 110f, 36f);
+        at(panel, 1268f - 300f, 54f, 300f, 200f);
+        // Near the bottom, below would leave the screen: it goes above instead.
+        net.fathom.optimizations.core.ui.layout.Box low = net.fathom.optimizations.core.ui.layout.Box.stack("low");
+        net.fathom.optimizations.core.ui.layout.Box lowBar = low.add(net.fathom.optimizations.core.ui.layout.Box.column("lowbar")
+                .padding(20f, 650f, 0f, 0f).align(net.fathom.optimizations.core.ui.layout.Box.Align.START));
+        net.fathom.optimizations.core.ui.layout.Box lowAnchor = lowBar.add(net.fathom.optimizations.core.ui.layout.Box.fixed("lowanchor", 100f, 36f));
+        net.fathom.optimizations.core.ui.layout.Box menu = low.addFloating(
+                net.fathom.optimizations.core.ui.layout.Box.fixed("menu", 200f, 160f), lowAnchor,
+                net.fathom.optimizations.core.ui.layout.Box.Place.BELOW_START, 6f);
+        low.layout(UI, 0f, 0f, 1280f, 720f);
+        at(menu, 20f, 650f - 6f - 160f, 200f, 160f);
+        pass("floating boxes sit against their anchor, flipped and kept on screen");
+    }
+
+    static void anUnchangedTreeIsNotLaidOutAgain() {
+        net.fathom.optimizations.core.ui.layout.Box root = net.fathom.optimizations.core.ui.layout.Box.column("root");
+        net.fathom.optimizations.core.ui.layout.TextLeaf label =
+                net.fathom.optimizations.core.ui.layout.TextLeaf.of("label", new Type(13f, Type.Weight.REGULAR), 16f);
+        root.add(label.box());
+        label.set("balanced");
+        root.layout(UI, 0f, 0f, 400f, 100f);
+        int after = root.layouts();
+        for (int frame = 0; frame < 100; frame++) {
+            label.set("balanced");
+            root.layout(UI, 0f, 0f, 400f, 100f);
+        }
+        check(root.layouts() == after, "a hundred unchanged frames, no layout");
+        label.set("maximum fps");
+        root.layout(UI, 0f, 0f, 400f, 100f);
+        check(root.layouts() == after + 1, "a changed string lays it out once");
+        root.layout(UI, 0f, 0f, 500f, 100f);
+        check(root.layouts() == after + 2, "so does a changed size");
+        pass("an unchanged tree is not laid out again");
     }
 
     // -----------------------------------------------------------------------

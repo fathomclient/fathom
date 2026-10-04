@@ -157,6 +157,8 @@ public final class SdfRenderer implements UiCanvas {
     private int alphaOverflow;
     private int layer = Layer.SURFACE;
     private final int[] layerStack = new int[MAX_DEPTH];
+    /** The clip each pushed layer replaced: floating layers start unclipped. */
+    private final float[] layerClips = new float[MAX_DEPTH * 4];
     private int layerDepth;
     private int layerOverflow;
     private int imbalanceReports;
@@ -714,6 +716,27 @@ public final class SdfRenderer implements UiCanvas {
     }
 
     @Override
+    public void radial(float left, float top, float right, float bottom, float radius,
+            float centreX, float centreY, float radiusX, float radiusY, int argb, float stop) {
+        int colour = tint(argb);
+        if (Colour.invisible(colour) || right <= left || bottom <= top || radiusX <= 0f || radiusY <= 0f) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float rad = deviceSize(radius);
+        shape(l, t, r, b, rad, rad, rad, rad, stop, SdfShaders.KIND_RADIAL);
+        pExtra0 = deviceSize(radiusX);
+        pExtra1 = deviceSize(radiusY);
+        // uv is the centre, relative to the box's own centre.
+        float cx = deviceX(centreX) - (l + r) * 0.5f;
+        float cy = deviceY(centreY) - (t + b) * 0.5f;
+        quad(l - 1f, t - 1f, r + 1f, b + 1f, cx, cy, cx, cy, colour, colour, ANY);
+    }
+
+    @Override
     public void bloom(float centreX, float centreY, float radius, int argb) {
         int colour = tint(argb);
         if (Colour.invisible(colour) || !(radius > 0f)) {
@@ -1115,6 +1138,9 @@ public final class SdfRenderer implements UiCanvas {
         clipStack[base + 2] = clipRight;
         clipStack[base + 3] = clipBottom;
         clipDepth++;
+        if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED) {
+            net.fathom.optimizations.core.ui.render.GeometryDebug.clip(this, left, top, right, bottom);
+        }
         // Whole pixels, as a scissor box was: a list's edge is crisp.
         clipLeft = Math.max(clipLeft, Math.round(deviceX(left)));
         clipTop = Math.max(clipTop, Math.round(deviceY(top)));
@@ -1231,8 +1257,22 @@ public final class SdfRenderer implements UiCanvas {
             layerOverflow++;
             return;
         }
+        int at = layerDepth * 4;
+        layerClips[at] = clipLeft;
+        layerClips[at + 1] = clipTop;
+        layerClips[at + 2] = clipRight;
+        layerClips[at + 3] = clipBottom;
         layerStack[layerDepth++] = layer;
         layer = next;
+        if (next >= Layer.FLOATING) {
+            // A popover, a tooltip or a dialog belongs to the screen, not to
+            // the list it was opened from: like a portal in a page, it is not
+            // cut by its opener's clip.
+            clipLeft = -NO_CLIP;
+            clipTop = -NO_CLIP;
+            clipRight = NO_CLIP;
+            clipBottom = NO_CLIP;
+        }
     }
 
     @Override
@@ -1245,6 +1285,11 @@ public final class SdfRenderer implements UiCanvas {
             return;
         }
         layer = layerStack[--layerDepth];
+        int at = layerDepth * 4;
+        clipLeft = layerClips[at];
+        clipTop = layerClips[at + 1];
+        clipRight = layerClips[at + 2];
+        clipBottom = layerClips[at + 3];
     }
 
     @Override

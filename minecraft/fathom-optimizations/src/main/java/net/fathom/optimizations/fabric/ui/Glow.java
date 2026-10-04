@@ -63,8 +63,9 @@ public final class Glow {
      * the capsule. A rounded fade cannot leave the shape.
      */
     public static void sheen(Renderer ui, Rect pane, float radius) {
-        ui.gradient(pane.x, pane.y, pane.right(), pane.bottom(), radius,
-                at(GraphiteTokens.GLOW_SHEEN_ALPHA), at(0f));
+        // --glow-sheen: radial-gradient(120% 90% at 50% 0%, accent, transparent 68%).
+        ui.radial(pane.x, pane.y, pane.right(), pane.bottom(), radius, pane.centreX(), pane.y,
+                pane.width * 1.2f, pane.height * 0.9f, at(GraphiteTokens.GLOW_SHEEN_ALPHA), 0.68f);
     }
 
     /**
@@ -79,7 +80,9 @@ public final class Glow {
         if (strength <= 0.001f) {
             return;
         }
-        ui.rounded(row.x, row.y, row.right(), row.bottom(), radius,
+        // --glow-selected: 0 0 18px -2px, the accent at 14% -- light around
+        // the current item, never a coloured fill on it.
+        ui.boxShadow(row.x, row.y, row.right(), row.bottom(), radius, 18f, -2f, 0f, 0f,
                 at(GraphiteTokens.GLOW_SELECTED_ALPHA * strength));
     }
 
@@ -99,9 +102,8 @@ public final class Glow {
         // ignore the spread and run 14dp out -- past the 12dp gap to the
         // next button, whose translucent glass then showed it, as if the
         // primary were bleeding into its neighbour.
-        float inset = Math.max(0f, -GraphiteTokens.GLOW_HALO_SPREAD);
-        float reach = GraphiteTokens.GLOW_HALO_BLUR / 2f;
-        ui.shadow(button.x + inset, button.y + inset, button.right() - inset, button.bottom() - inset,
-                Math.max(0f, radius - inset), reach, at(GraphiteTokens.GLOW_HALO_ALPHA * strength));
+        // --glow-halo: 0 10px 24px -6px, exactly.
+        ui.boxShadow(button.x, button.y, button.right(), button.bottom(), radius, GraphiteTokens.GLOW_HALO_BLUR,
+                GraphiteTokens.GLOW_HALO_SPREAD, 0f, 10f, at(GraphiteTokens.GLOW_HALO_ALPHA * strength));
     }
 }

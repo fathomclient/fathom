@@ -389,6 +389,10 @@ public final class Controls {
     }
 
     public State state(String id, Rect area, boolean enabled) {
+        if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED && hitSpace != null) {
+            net.fathom.optimizations.core.ui.render.GeometryDebug.hit(hitSpace, area.x, area.y, area.right(),
+                    area.bottom());
+        }
         State state;
         if (stateCursor == statePool.size()) {
             state = new State();
@@ -1391,11 +1395,14 @@ public final class Controls {
         float shown = popoverMotion.opacity(now);
         if (visibleOverlay != null && shown > 0.001f) {
             boolean interactive = current != null;
+            // Above every surface and control, whenever it is drawn.
+            ui.pushLayer(net.fathom.optimizations.core.ui.render.Layer.POPOVER);
             if (visibleOverlay.swatches) {
                 drawSwatches(ui, visibleOverlay, shown, interactive);
             } else {
                 drawList(ui, visibleOverlay, shown, interactive);
             }
+            ui.popLayer();
         }
         if (current != null && inputEnabled && pointer != null && pointer.pressed(0) && !overlayBlocking) {
             openId = null;
@@ -1403,7 +1410,9 @@ public final class Controls {
         if (current == null && popoverMotion.settled(now)) {
             visibleOverlay = null;
         }
+        ui.pushLayer(net.fathom.optimizations.core.ui.render.Layer.TOOLTIP);
         drawTooltip(ui);
+        ui.popLayer();
     }
 
     private void drawTooltip(Renderer ui) {

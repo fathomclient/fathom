@@ -79,24 +79,34 @@ public final class Graphite {
     // Type: the specification's roles
     // -----------------------------------------------------------------------
 
-    public static final Type TITLE = role(GraphiteTokens.TYPE_TITLE_SIZE, GraphiteTokens.TYPE_TITLE_WEIGHT, false);
-    public static final Type HEADING = role(GraphiteTokens.TYPE_HEADING_SIZE, GraphiteTokens.TYPE_HEADING_WEIGHT, false);
-    public static final Type UI = role(GraphiteTokens.TYPE_UI_SIZE, GraphiteTokens.TYPE_UI_WEIGHT, false);
-    public static final Type BODY = role(GraphiteTokens.TYPE_BODY_SIZE, GraphiteTokens.TYPE_BODY_WEIGHT, false);
-    public static final Type SMALL = role(GraphiteTokens.TYPE_SMALL_SIZE, GraphiteTokens.TYPE_SMALL_WEIGHT, false);
-    public static final Type CAPTION = role(GraphiteTokens.TYPE_CAPTION_SIZE, GraphiteTokens.TYPE_CAPTION_WEIGHT, false);
-    public static final Type DATA_L = role(GraphiteTokens.TYPE_DATA_L_SIZE, GraphiteTokens.TYPE_DATA_L_WEIGHT, true);
-    public static final Type DATA_M = role(GraphiteTokens.TYPE_DATA_M_SIZE, GraphiteTokens.TYPE_DATA_M_WEIGHT, true);
-    public static final Type DATA_S = role(GraphiteTokens.TYPE_DATA_S_SIZE, GraphiteTokens.TYPE_DATA_S_WEIGHT, true);
+    public static final Type TITLE = role(GraphiteTokens.TYPE_TITLE_SIZE, GraphiteTokens.TYPE_TITLE_WEIGHT, false,
+            GraphiteTokens.TYPE_TITLE_TRACKING);
+    public static final Type HEADING = role(GraphiteTokens.TYPE_HEADING_SIZE, GraphiteTokens.TYPE_HEADING_WEIGHT, false,
+            GraphiteTokens.TYPE_HEADING_TRACKING);
+    public static final Type UI = role(GraphiteTokens.TYPE_UI_SIZE, GraphiteTokens.TYPE_UI_WEIGHT, false,
+            GraphiteTokens.TYPE_UI_TRACKING);
+    public static final Type BODY = role(GraphiteTokens.TYPE_BODY_SIZE, GraphiteTokens.TYPE_BODY_WEIGHT, false,
+            GraphiteTokens.TYPE_BODY_TRACKING);
+    public static final Type SMALL = role(GraphiteTokens.TYPE_SMALL_SIZE, GraphiteTokens.TYPE_SMALL_WEIGHT, false,
+            GraphiteTokens.TYPE_SMALL_TRACKING);
+    public static final Type CAPTION = role(GraphiteTokens.TYPE_CAPTION_SIZE, GraphiteTokens.TYPE_CAPTION_WEIGHT, false,
+            GraphiteTokens.TYPE_CAPTION_TRACKING);
+    public static final Type DATA_L = role(GraphiteTokens.TYPE_DATA_L_SIZE, GraphiteTokens.TYPE_DATA_L_WEIGHT, true,
+            GraphiteTokens.TYPE_DATA_L_TRACKING);
+    public static final Type DATA_M = role(GraphiteTokens.TYPE_DATA_M_SIZE, GraphiteTokens.TYPE_DATA_M_WEIGHT, true,
+            GraphiteTokens.TYPE_DATA_M_TRACKING);
+    public static final Type DATA_S = role(GraphiteTokens.TYPE_DATA_S_SIZE, GraphiteTokens.TYPE_DATA_S_WEIGHT, true,
+            GraphiteTokens.TYPE_DATA_S_TRACKING);
 
-    private static Type role(float size, int weight, boolean mono) {
+    private static Type role(float size, int weight, boolean mono, float tracking) {
         Type.Weight face;
         if (mono) {
             face = weight >= 500 ? Type.Weight.MONO_MEDIUM : Type.Weight.MONO_REGULAR;
         } else {
             face = weight >= 600 ? Type.Weight.SEMIBOLD : weight >= 500 ? Type.Weight.MEDIUM : Type.Weight.REGULAR;
         }
-        return new Type(size, face);
+        // The launcher's letter-spacing for the role, in ems.
+        return new Type(size, face, tracking);
     }
 
     /** The 9-device-pixel floor: below it a role is held at 9px, never smaller. */
@@ -135,18 +145,25 @@ public final class Graphite {
 
     /** The four densities of one neutral glass. */
     public enum Material {
-        CLEAR(GraphiteTokens.MATERIAL_CLEAR_FILL, GraphiteTokens.MATERIAL_CLEAR_RIM, GraphiteTokens.MATERIAL_CLEAR_SHADOW),
-        LIGHT(GraphiteTokens.MATERIAL_LIGHT_FILL, GraphiteTokens.MATERIAL_LIGHT_RIM, GraphiteTokens.MATERIAL_LIGHT_SHADOW),
-        STANDARD(GraphiteTokens.MATERIAL_STANDARD_FILL, GraphiteTokens.MATERIAL_STANDARD_RIM, GraphiteTokens.MATERIAL_STANDARD_SHADOW),
-        DENSE(GraphiteTokens.MATERIAL_DENSE_FILL, GraphiteTokens.MATERIAL_DENSE_RIM, GraphiteTokens.MATERIAL_DENSE_SHADOW);
+        CLEAR(GraphiteTokens.MATERIAL_CLEAR_FILL, GraphiteTokens.MATERIAL_CLEAR_RIM,
+                GraphiteTokens.MATERIAL_CLEAR_BLUR, GraphiteTokens.MATERIAL_CLEAR_SHADOW),
+        LIGHT(GraphiteTokens.MATERIAL_LIGHT_FILL, GraphiteTokens.MATERIAL_LIGHT_RIM,
+                GraphiteTokens.MATERIAL_LIGHT_BLUR, GraphiteTokens.MATERIAL_LIGHT_SHADOW),
+        STANDARD(GraphiteTokens.MATERIAL_STANDARD_FILL, GraphiteTokens.MATERIAL_STANDARD_RIM,
+                GraphiteTokens.MATERIAL_STANDARD_BLUR, GraphiteTokens.MATERIAL_STANDARD_SHADOW),
+        DENSE(GraphiteTokens.MATERIAL_DENSE_FILL, GraphiteTokens.MATERIAL_DENSE_RIM,
+                GraphiteTokens.MATERIAL_DENSE_BLUR, GraphiteTokens.MATERIAL_DENSE_SHADOW);
 
         public final int fill;
         public final int rim;
+        /** {@code blur()} behind it, CSS pixels. */
+        public final float blur;
         public final boolean shadowAllowed;
 
-        Material(int fill, int rim, boolean shadowAllowed) {
+        Material(int fill, int rim, float blur, boolean shadowAllowed) {
             this.fill = fill;
             this.rim = rim;
+            this.blur = blur;
             this.shadowAllowed = shadowAllowed;
         }
 
@@ -169,12 +186,10 @@ public final class Graphite {
         if (shadow && material.shadowAllowed) {
             shadow(ui, area, radius);
         }
-        // Glass, as the launcher's panes are: the blurred scene under the tint,
-        // when the screen captured one this frame (captureFrost).
-        if (material != Material.CLEAR
-                && ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
-            ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).frost(
-                    area.x, area.y, area.right(), area.bottom(), radius);
+        // Glass, as the launcher's Graphite panes are:
+        // backdrop-filter: blur(<material>) saturate(1.12).
+        if (material.blur > 0f) {
+            ui.glass(area.x, area.y, area.right(), area.bottom(), radius, material.blur, GLASS_SATURATE, 1f);
         }
         int fill = material.fill;
         if (selected > 0.001f) {
@@ -224,12 +239,13 @@ public final class Graphite {
      * 8dp lower and fades over the outer half of the 24dp blur.
      */
     public static void shadow(Renderer ui, Rect area, float radius) {
-        float drop = GraphiteTokens.SHADOW_Y;
-        float feather = GraphiteTokens.SHADOW_BLUR / 2f;
-        ui.shadow(area.x + feather * 0.25f, area.y + drop, area.right() - feather * 0.25f,
-                area.bottom() + drop * 0.25f, radius, feather,
-                Colour.scaleAlpha(GraphiteTokens.COLOR_SHADOW, 0.5f));
+        // --g-elevation: 0 8px 24px rgba(0, 0, 0, 0.35), as a box-shadow.
+        ui.boxShadow(area.x, area.y, area.right(), area.bottom(), radius, GraphiteTokens.SHADOW_BLUR, 0f, 0f,
+                GraphiteTokens.SHADOW_Y, GraphiteTokens.COLOR_SHADOW);
     }
+
+    /** The Graphite panes' {@code saturate()}, after the blur. */
+    private static final float GLASS_SATURATE = 1.12f;
 
     /**
      * An item inside a surface: the hover overlay, the selected overlay and --

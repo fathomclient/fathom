@@ -12,7 +12,9 @@ import net.fathom.optimizations.core.input.KeybindCaptureState;
 import net.fathom.optimizations.core.ui.anim.Motion;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.anim.Transition;
+import net.fathom.optimizations.core.ui.layout.Box;
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.TextLeaf;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
@@ -85,7 +87,8 @@ import net.fathom.optimizations.generated.GraphiteTokens;
  * edges. The LWJGL keyboard queue is drained here once per rendered frame too,
  * so capture, Escape and text entry do not wait for the 20 TPS loop.
  */
-public final class FathomHubScreen extends Screen implements FathomScreen {
+public final class FathomHubScreen extends Screen implements FathomScreen,
+        net.fathom.optimizations.fabric.gfx.LaidOut {
 
     private static final String SEARCH_ID = "hub.search";
 
@@ -138,6 +141,36 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
     private Rect panel = new Rect(0f, 0f, 0f, 0f);
 
+    // -- the frame as a layout tree: built when the sections are, laid out
+    //    again only when the window, the scale or the restart note changes.
+    private final Box root = Box.column("hub").justify(Box.Align.CENTRE).align(Box.Align.CENTRE);
+    private final Box frame = Box.column("hub.frame");
+    private final Box headerRow = Box.row("hub.header");
+    private final Box wordmarkBox = Box.leaf("hub.wordmark", new Box.Measure() {
+        @Override
+        public float width(Renderer ui) {
+            return Graphite.wordmarkWidth(ui, GraphiteTokens.WORDMARK_CAP_GAME);
+        }
+
+        @Override
+        public float height(Renderer ui, float width) {
+            return GraphiteTokens.WORDMARK_CAP_GAME;
+        }
+    });
+    private final TextLeaf restartNote = TextLeaf.of("hub.restart", Graphite.SMALL, 16f);
+    private final TextLeaf editLabel = TextLeaf.of("hub.hud-editor.label", Graphite.UI, 16f);
+    private final Box editHudBox = Box.row("hub.hud-editor");
+    private final Box editIconBox = Box.fixed("hub.hud-editor.icon", Graphite.ICON_INLINE, Graphite.ICON_INLINE);
+    private final Box closeBox = Box.fixed("hub.close", Graphite.CONTROL_COMPACT, Graphite.CONTROL_COMPACT);
+    private final Box railBox = Box.column("hub.rail");
+    private final Box railRule = Box.column("hub.rail.rule").height(1f);
+    private final Box[] telemetryRows = new Box[2];
+    private final Box contentBox = Box.column("hub.content").grow(1f);
+    private Box[] railItems = new Box[0];
+    private String[] railIds = new String[0];
+    private String[] railSelectedIds = new String[0];
+    private boolean built;
+
     public FathomHubScreen(FathomHud hud) {
         this.hud = hud;
     }
@@ -146,6 +179,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private String startAt;
 
     /** Open on the section titled {@code title} (Quick, Mods, Performance...). */
+    @Override
+    public Box layoutRoot() {
+        return built ? root : null;
+    }
+
     /** A section the UI tour's measurement selects on the next frame, as a rail click would; -1 for none. */
     private int scriptedSection = -1;
 
@@ -382,12 +420,80 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
      * with a 16dp game-menu margin; the extra width on a wider one stays
      * backdrop.
      */
-    private void layout(Renderer ui) {
-        float margin = GraphiteTokens.LAYOUT_GAME_MARGIN;
-        float width = Math.min(FRAME_WIDTH, ui.width() - margin * 2f);
-        float height = Math.min(FRAME_HEIGHT, ui.height() - margin * 2f);
-        panel = new Rect((ui.width() - width) / 2f, (ui.height() - height) / 2f, width, height);
+    /**
+     * The frame: a header row (wordmark, the restart note, Edit HUD and
+     * Close), then the rail and the page side by side. Built once the sections
+     * exist; Mockup B's measurements, from paddings and gaps.
+     */
+    private void buildTree() {
+        built = true;
+        headerRow.height(RAIL_ITEM).gap(Graphite.S2).align(Box.Align.CENTRE);
+        headerRow.add(wordmarkBox);
+        headerRow.add(Box.column("hub.header.gap").width(Graphite.S6));
+        headerRow.add(restartNote.box().grow(1f));
+        editHudBox.height(Graphite.CONTROL_COMPACT).padding(Graphite.S3, 0f, Graphite.S3, 0f).gap(Graphite.S2)
+                .align(Box.Align.CENTRE);
+        editHudBox.add(editIconBox);
+        editHudBox.add(editLabel.box());
+        headerRow.add(editHudBox);
+        headerRow.add(closeBox);
+        frame.add(headerRow);
+        frame.add(Box.column("hub.header.after").height(RAIL_TOP - RAIL_ITEM));
+
+        Box body = Box.row("hub.body").grow(1f).align(Box.Align.START);
+        railBox.width(RAIL_WIDTH).padding(Graphite.S2).gap(RAIL_GAP).align(Box.Align.STRETCH);
+        int count = sections.size();
+        railItems = new Box[count];
+        railIds = new String[count];
+        railSelectedIds = new String[count];
+        for (int index = 0; index < count; index++) {
+            railIds[index] = "rail." + index;
+            railSelectedIds[index] = "rail." + index + "#selected";
+            railItems[index] = Box.column(railIds[index]).height(RAIL_ITEM);
+            railBox.add(railItems[index]);
+        }
+        // The divider and the telemetry: S2 under the last item, S2 under the rule.
+        railBox.add(Box.column("hub.rail.rule.before").height(Graphite.S2 - RAIL_GAP * 2f));
+        railBox.add(railRule);
+        railBox.add(Box.column("hub.rail.rule.after").height(Graphite.S2 - RAIL_GAP * 2f));
+        Box telemetry = Box.column("hub.telemetry");
+        for (int line = 0; line < telemetryRows.length; line++) {
+            telemetryRows[line] = Box.column("hub.telemetry." + line).height(TELEMETRY_LINE)
+                    .padding(4f, 0f, 0f, 0f);
+            telemetry.add(telemetryRows[line]);
+        }
+        railBox.add(telemetry);
+        body.add(railBox);
+        body.add(Box.column("hub.body.gap").width(CONTENT_X - RAIL_WIDTH));
+        body.add(contentBox);
+        frame.add(body);
+        root.add(frame);
+        editLabel.set("Edit HUD");
     }
+
+    private void layout(Renderer ui) {
+        if (!built) {
+            buildTree();
+        }
+        float margin = GraphiteTokens.LAYOUT_GAME_MARGIN;
+        frame.size(Math.min(FRAME_WIDTH, ui.width() - margin * 2f), Math.min(FRAME_HEIGHT, ui.height() - margin * 2f));
+        String restart = context.restartNote();
+        restartNote.set(restart == null ? "" : restartNoteText(restart));
+        root.layout(ui, 0f, 0f, ui.width(), ui.height());
+        panel = frame.rect();
+    }
+
+    /** "<module> needs a restart", kept until the module changes. */
+    private String restartNoteText(String module) {
+        if (!module.equals(restartFor)) {
+            restartFor = module;
+            restartText = module + " needs a restart";
+        }
+        return restartText;
+    }
+
+    private String restartFor = "";
+    private String restartText = "";
 
     private void draw(Renderer ui) {
         float now = Gfx.clock().seconds();
@@ -403,11 +509,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         // it read as a pale haze the launcher does not have.
         Graphite.captureFrost(ui);
         header(ui);
-        Rect rail = new Rect(panel.x, panel.y + RAIL_TOP, RAIL_WIDTH, railHeight());
-        rail(ui, rail);
-        Rect content = Rect.of(panel.x + Math.min(CONTENT_X, panel.width * 0.2f), panel.y + RAIL_TOP,
-                panel.right(), panel.bottom());
-        content(ui, content);
+        rail(ui, railBox.rect());
+        content(ui, contentBox.rect());
 
         // Popovers last, and inside the composition's transform.
         controls.drawOverlays(ui);
@@ -422,14 +525,13 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
      */
     private void header(Renderer ui) {
         float cap = GraphiteTokens.WORDMARK_CAP_GAME;
-        float centre = panel.y + 18f;
-        Graphite.wordmark(ui, panel.x, centre - cap / 2f, cap);
+        Rect mark = wordmarkBox.rect();
+        Graphite.wordmark(ui, mark.x, mark.y, cap);
 
         // The launcher's window controls: a round 32dp target, secondary ink
         // that comes up to full strength under the pointer, a denser veil
         // while pressed, and its name after the tooltip delay.
-        float compact = Graphite.CONTROL_COMPACT;
-        Rect close = new Rect(panel.right() - compact, panel.y + 2f, compact, compact);
+        Rect close = closeBox.rect();
         Controls.State closeState = controls.state("hub.close", close, true);
         Graphite.overlay(ui, close, Graphite.R_CONTROL, Math.max(closeState.hover, closeState.press * 1.6f), 0f);
         ui.icon(Icon.CLOSE, close.centreX() - Graphite.ICON_INLINE / 2f,
@@ -442,32 +544,20 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
 
         // Edit HUD: a secondary capsule with the HUD-editor glyph, as the
         // launcher draws an action with an icon.
-        Type label = Graphite.floor(ui, Graphite.UI);
-        String edit = "Edit HUD";
-        float editIcon = Graphite.ICON_INLINE;
-        float editWidth = ui.measure(edit, label) + editIcon + Graphite.S2 + Graphite.S3 * 2f;
-        Rect editHud = new Rect(close.x - Graphite.S2 - editWidth, close.y, editWidth, compact);
+        Rect editHud = editHudBox.rect();
         Controls.State editState = controls.state("hub.hud-editor", editHud, true);
         Graphite.surface(ui, editHud, Graphite.R_CONTROL, Graphite.Material.LIGHT,
                 editState.hover, editState.press, 0f, false);
-        ui.icon(Icon.MOVE, editHud.x + Graphite.S3, editHud.centreY() - editIcon / 2f, editIcon,
-                Graphite.TEXT_SECONDARY);
-        ui.text(edit, editHud.x + Graphite.S3 + editIcon + Graphite.S2, Graphite.baseline(ui, editHud, label),
-                label, Graphite.TEXT);
+        Rect editIcon = editIconBox.rect();
+        ui.icon(Icon.MOVE, editIcon.x, editIcon.y, editIcon.width, Graphite.TEXT_SECONDARY);
+        editLabel.draw(ui, Graphite.TEXT);
         controls.focusRing(ui, editState, editHud, Graphite.R_CONTROL);
         if (editState.clicked) {
             context.editHud();
         }
 
         // A module that needs a restart says so, quietly, beside the wordmark.
-        String restart = context.restartNote();
-        if (restart != null) {
-            Type small = Graphite.floor(ui, Graphite.SMALL);
-            float x = panel.x + Graphite.wordmarkWidth(ui, cap) + Graphite.S6;
-            ui.text(Text.fit(ui, restart + " needs a restart", small, editHud.x - x - Graphite.S4),
-                    x, net.fathom.optimizations.core.ui.layout.TextStack.centredOn(ui, centre, small), small,
-                    Graphite.TEXT_SECONDARY);
-        }
+        restartNote.draw(ui, Graphite.TEXT_SECONDARY);
     }
 
     private float railHeight() {
@@ -487,13 +577,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         float now = Gfx.clock().seconds();
         Graphite.surface(ui, rail, Graphite.R_PANEL, Graphite.Material.LIGHT, false);
         Type label = Graphite.floor(ui, Graphite.UI);
-        float y = rail.y + Graphite.S2;
         for (int index = 0; index < sections.size(); index++) {
             Section section = sections.get(index);
-            Rect item = new Rect(rail.x + Graphite.S2, y, rail.width - Graphite.S2 * 2f, RAIL_ITEM);
+            Rect item = railItems[index].rect();
             boolean selected = index == current;
-            Controls.State state = controls.state("rail." + index, item, true);
-            float on = controls.towards("rail." + index + "#selected", selected, GraphiteTokens.MOTION_FAST);
+            Controls.State state = controls.state(railIds[index], item, true);
+            float on = controls.towards(railSelectedIds[index], selected, GraphiteTokens.MOTION_FAST);
             // Concentric with the rail: its 18 radius less its 8dp padding is
             // the small radius (10), which is what an item inside a panel is.
             Graphite.overlay(ui, item, Graphite.R_SEGMENT, state.hover * (1f - on), on);
@@ -516,17 +605,15 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
                 context.keybindCapture().cancel();
                 sections.get(current).opened(context);
             }
-            y += RAIL_ITEM + RAIL_GAP;
         }
         scriptedSection = -1;
-        y += Graphite.S2 - RAIL_GAP;
-        Graphite.hairline(ui, rail.x + Graphite.S2, rail.right() - Graphite.S2, y);
-        y += 1f + Graphite.S2;
-        telemetry(ui, rail.x + Graphite.S2 + 4f, y, now);
+        Rect rule = railRule.rect();
+        Graphite.hairline(ui, rule.x, rule.right(), rule.y);
+        telemetry(ui, now);
     }
 
     /** Frame rate and memory, 4 Hz, in Data S. The dot is signal only while live. */
-    private void telemetry(Renderer ui, float x, float y, float now) {
+    private void telemetry(Renderer ui, float now) {
         if (telemetryAt < 0f || now - telemetryAt >= 0.25f) {
             telemetryAt = now;
             telemetryFps = Math.round(Gfx.frames().fps()) + " FPS";
@@ -539,14 +626,14 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
         int value = live ? Graphite.TEXT : Graphite.TEXT_SECONDARY;
         Type data = Graphite.floor(ui, Graphite.DATA_S);
         float dot = 6f;
-        String[] lines = {telemetryFps, telemetryMemory};
-        for (int line = 0; line < lines.length; line++) {
-            Rect row = new Rect(x, y + line * TELEMETRY_LINE, 150f, TELEMETRY_LINE);
+        for (int line = 0; line < telemetryRows.length; line++) {
+            Rect row = telemetryRows[line].content();
             if (live) {
                 ui.rounded(row.x, row.centreY() - dot / 2f, row.x + dot, row.centreY() + dot / 2f,
                         dot / 2f, Graphite.SIGNAL);
             }
-            ui.text(lines[line], row.x + dot + Graphite.S2, Graphite.baseline(ui, row, data), data, value);
+            ui.text(line == 0 ? telemetryFps : telemetryMemory, row.x + dot + Graphite.S2,
+                    Graphite.baseline(ui, row, data), data, value);
         }
     }
 

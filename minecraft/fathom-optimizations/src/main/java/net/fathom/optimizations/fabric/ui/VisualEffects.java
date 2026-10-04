@@ -127,10 +127,9 @@ public final class VisualEffects {
     public static void glass(Renderer ui, Rect area, float radius, int fill, int rimTop, int rimEdge) {
         // Frosted, as the launcher's glass is, when the screen captured its
         // scene this frame (GlRenderer.captureFrost).
-        if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
-            ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).frost(
-                    area.x, area.y, area.right(), area.bottom(), radius);
-        }
+        ui.glass(area.x, area.y, area.right(), area.bottom(), radius,
+                net.fathom.optimizations.generated.GraphiteTokens.MATERIAL_STANDARD_BLUR,
+                1.12f, 1f);
         ui.rounded(area.x, area.y, area.right(), area.bottom(), radius, fill);
         ui.rim(area.x, area.y, area.right(), area.bottom(), radius, Skin.mix(rimEdge, rimTop, 0.35f));
     }

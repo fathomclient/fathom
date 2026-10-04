@@ -1,13 +1,12 @@
 package net.fathom.optimizations.core.ui.anim;
 
 /**
- * A small allocation-free damped spring for scroll and accent movement.
+ * A small allocation-free damped spring, for scrolling.
  *
  * <p>The analytical damped-oscillator solution makes the result depend on
  * elapsed time rather than frame count and remains stable when FPS is low.
- * Normal movement uses critical damping and cannot cross its target. The
- * {@link #accent(float)} factory is the only intentional overshooting variant
- * and is reserved for small markers, never panels or text.
+ * {@link #smooth} is critically damped and cannot cross its target: the
+ * interface has no bouncing anything.
  */
 public final class Spring {
 
@@ -23,11 +22,6 @@ public final class Spring {
     /** A critically damped spring suitable for scrolling and bounded values. */
     public static Spring smooth(float initial) {
         return new Spring(initial, Timing.PANEL, 1f, false);
-    }
-
-    /** A restrained spring for a small navigation or selection accent. */
-    public static Spring accent(float initial) {
-        return new Spring(initial, Timing.NAVIGATION, 0.84f, true);
     }
 
     public Spring(float initial, float responseSeconds, float dampingRatio, boolean overshoot) {
@@ -65,7 +59,7 @@ public final class Spring {
             value = target + (before + impulse) * envelope;
             velocity = (velocity - omega * impulse) * envelope;
         } else {
-            // Exact under-damped solution, used only by accent().
+            // Exact under-damped solution, for a spring built with a damping ratio below 1.
             float damped = omega * damping;
             float frequency = omega * (float) Math.sqrt(1f - damping * damping);
             float envelope = (float) Math.exp(-damped * delta);

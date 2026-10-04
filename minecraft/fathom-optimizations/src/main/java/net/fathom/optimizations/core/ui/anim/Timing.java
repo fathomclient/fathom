@@ -1,49 +1,54 @@
 package net.fathom.optimizations.core.ui.anim;
 
-import net.fathom.optimizations.generated.FathomTheme;
+import net.fathom.optimizations.generated.FathomTheme.Tokens;
 
 /**
- * The small, named set of durations used by every Fathom-owned interface.
+ * The interface's durations: the launcher's motion tokens
+ * ({@code system.motion} in the theme manifest, {@code --motion-*} in its
+ * CSS), and nothing else.
  *
- * <p>Names describe intent rather than a particular component. A new control
- * should choose the closest existing intent instead of adding another almost
- * identical duration. Values are seconds because the animation clock is
- * monotonic wall time, never Minecraft ticks or rendered frames.
+ * <p>Six durations, each named for what moves, all between 90 and 200ms:
+ * fast, clean and understated, and the same in the game as in the launcher.
+ * The names below are the interface's intents mapped onto them; a new control
+ * picks the closest intent and never invents a seventh number. Values are
+ * seconds of monotonic wall time -- never ticks or frames -- so a transition
+ * takes as long at 30 fps as at 300.
+ *
+ * <p>Curves: {@link Ease.Curve#STANDARD} (the launcher's
+ * {@code --ease-standard}, cubic-bezier(0.2, 0.8, 0.2, 1)) for anything
+ * arriving or changing state, {@link Ease.Curve#EXIT} for anything leaving.
+ * No springs that overshoot, no reversed entrances standing in for exits.
  */
 public final class Timing {
 
-    /** Pointer entering a control: deliberately quicker than leaving it. */
-    public static final float HOVER_IN = 0.090f;
-    /** Pointer leaving a control: enough tail to avoid flicker, never floaty. */
-    public static final float HOVER_OUT = 0.130f;
-    /** The tactile down/up response of a button. */
-    public static final float PRESS = FathomTheme.MOTION_PRESS;
-    /** Toggle knobs, slider progress and other binary state changes. */
-    public static final float TOGGLE = FathomTheme.MOTION_TOGGLE;
-    /** Tabs, segmented markers and navigation selection. */
-    public static final float NAVIGATION = 0.190f;
-    /** Moving between a browser and one dedicated detail page. */
-    public static final float DETAIL = 0.155f;
-    /** Ordinary component and status transitions. */
-    public static final float STANDARD = FathomTheme.MOTION_NORMAL;
-    /** Drawers and modal panels. */
-    public static final float PANEL = FathomTheme.MOTION_DRAWER;
-    /** A full Fathom screen arriving. */
-    public static final float SCREEN_ENTER = FathomTheme.MOTION_HUB;
-    /** A full Fathom screen leaving; intentionally faster than entry. */
-    public static final float SCREEN_EXIT = FathomTheme.MOTION_HUB_CLOSE;
-    /** The in-game hub settles quickly enough to stay attached to the key press. */
-    public static final float HUB_ENTER = 0.185f;
-    /** Hub energy retracts faster than its structural arrival. */
-    public static final float HUB_EXIT = 0.145f;
-    /** Tooltip opacity after its dwell delay has elapsed. */
-    public static final float TOOLTIP = 0.120f;
-    /** Delay between adjacent rows in a deliberately staggered entrance. */
-    public static final float STAGGER = FathomTheme.MOTION_STAGGER;
-    /** Module-card arrival after a category switch. */
-    public static final float CARD_ENTER = 0.150f;
-    /** Tight card-grid stagger; fourteen cards still finish in under 0.4 seconds. */
-    public static final float CARD_STAGGER = 0.018f;
+    /** The pointer arriving at or leaving a control (--motion-hover). */
+    public static final float HOVER_IN = Tokens.MOTION_HOVER;
+    public static final float HOVER_OUT = Tokens.MOTION_HOVER;
+    /** A button going down and coming back up (--motion-press). */
+    public static final float PRESS = Tokens.MOTION_PRESS;
+    /** Toggles, sliders and other binary state (--motion-state). */
+    public static final float TOGGLE = Tokens.MOTION_STATE;
+    /** Tabs, segmented markers, the current section's mark (--motion-state). */
+    public static final float NAVIGATION = Tokens.MOTION_STATE;
+    /** Moving between a list and one detail page (--motion-page). */
+    public static final float DETAIL = Tokens.MOTION_PAGE;
+    /** Ordinary component and status transitions (--motion-state). */
+    public static final float STANDARD = Tokens.MOTION_STATE;
+    /** Popovers, menus and panels appearing (--motion-surface). */
+    public static final float PANEL = Tokens.MOTION_SURFACE;
+    /** A screen arriving (--motion-page). */
+    public static final float SCREEN_ENTER = Tokens.MOTION_PAGE;
+    /** And leaving (--motion-exit). */
+    public static final float SCREEN_EXIT = Tokens.MOTION_EXIT;
+    public static final float HUB_ENTER = Tokens.MOTION_PAGE;
+    public static final float HUB_EXIT = Tokens.MOTION_EXIT;
+    /** A tooltip fading in once it is due (--motion-hover). */
+    public static final float TOOLTIP = Tokens.MOTION_HOVER;
+    /** Between successive items of one entrance (--motion-stagger). */
+    public static final float STAGGER = Tokens.MOTION_STAGGER;
+    /** A card of a grid arriving (--motion-surface). */
+    public static final float CARD_ENTER = Tokens.MOTION_SURFACE;
+    public static final float CARD_STAGGER = Tokens.MOTION_STAGGER;
 
     private Timing() {}
 }

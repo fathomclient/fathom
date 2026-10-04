@@ -21,7 +21,9 @@ import net.fathom.optimizations.core.hud.Sensitivity;
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Motion;
 import net.fathom.optimizations.core.ui.anim.Timing;
+import net.fathom.optimizations.core.ui.layout.Box;
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.TextLeaf;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
@@ -371,40 +373,49 @@ final class ModsSection implements Section {
 
     private void browser(HubContext context, Rect area) {
         Renderer ui = context.ui();
-        Rect search = new Rect(area.x, area.y, 320f, TOOLBAR_HEIGHT);
-        graphiteSearch(context, search);
-        Rect filters = new Rect(search.right() + TOOLBAR_GAP, area.y, 222f, TOOLBAR_HEIGHT);
-        graphiteFilters(context, filters);
+        if (!toolbarBuilt) {
+            buildToolbar();
+        }
+        toolbarBox.layout(ui, area.x, area.y, area.width, TOOLBAR_HEIGHT);
+        graphiteSearch(context, searchBox.rect());
+        graphiteFilters(context, filtersBox.rect());
 
-        Rect body = Rect.of(area.x, area.y + TOOLBAR_HEIGHT + TOOLBAR_GAP, area.right(), area.bottom());
+        float bodyTop = area.y + TOOLBAR_HEIGHT + TOOLBAR_GAP;
         List<FathomModule> cards = visible(context);
-        Rect group = new Rect(body.x, body.y, body.width, body.height);
+        syncRows(cards);
+        Rect group = groupRect(area.x, bodyTop, area.width, area.bottom() - bodyTop);
         Graphite.surface(ui, group, Graphite.R_PANEL, Graphite.Material.STANDARD, true);
-        Rect viewport = group.inset(LIST_PAD);
-        float contentHeight = cards.size() * MODULE_ROW;
-        float offset = scroller.offset(context.delta(), contentHeight, viewport.height);
+        float viewX = area.x + LIST_PAD;
+        float viewY = bodyTop + LIST_PAD;
+        float viewWidth = area.width - LIST_PAD * 2f;
+        float viewHeight = area.bottom() - bodyTop - LIST_PAD * 2f;
+        // Laid out unscrolled, once per change; scrolling is a translation.
+        listBox.layout(ui, viewX, viewY, viewWidth, listed.size() * MODULE_ROW);
+        float contentHeight = listed.size() * MODULE_ROW;
+        float offset = scroller.offset(context.delta(), contentHeight, viewHeight);
 
-        ui.clip(viewport.x, viewport.y, viewport.right(), viewport.bottom());
-        for (int index = 0; index < cards.size(); index++) {
-            Rect card = new Rect(viewport.x,
-                    viewport.y + index * MODULE_ROW - offset,
-                    viewport.width, MODULE_ROW);
-            if (card.bottom() < viewport.y || card.y > viewport.bottom()) {
+        ui.clip(viewX, viewY, viewX + viewWidth, viewY + viewHeight);
+        ui.pushTransform(0f, -offset);
+        for (int index = 0; index < listed.size(); index++) {
+            ModRow row = listed.get(index);
+            Rect card = row.box.rect();
+            if (card.bottom() - offset < viewY || card.y - offset > viewY + viewHeight) {
                 continue;
             }
             float arrival = Ease.sample(context.now(), cardsEnteredAt,
                     index * Timing.CARD_STAGGER, Timing.CARD_ENTER, Ease.Curve.STANDARD);
             ui.pushAlpha(arrival);
             ui.pushTransform(0f, (1f - arrival) * GraphiteTokens.MOTION_TRAVEL);
-            moduleTile(context, cards.get(index), card, index == cards.size() - 1);
+            moduleTile(context, row, index == listed.size() - 1);
             ui.popTransform();
             ui.popAlpha();
         }
+        ui.popTransform();
         ui.unclip();
-        graphiteScrollbar(ui, viewport, offset, contentHeight, context.now());
+        graphiteScrollbar(ui, viewX, viewY, viewWidth, viewHeight, offset, contentHeight, context.now());
 
         if (cards.isEmpty()) {
-            empty(context, viewport);
+            empty(context, new Rect(viewX, viewY, viewWidth, viewHeight));
         }
     }
 
@@ -449,25 +460,13 @@ final class ModsSection implements Section {
     private void graphiteFilters(HubContext context, Rect area) {
         Renderer ui = context.ui();
         Graphite.surface(ui, area, Graphite.R_CONTROL, Graphite.Material.LIGHT, false);
-        int enabled = 0;
-        for (FathomModule module : modules) {
-            if (module.enabled()) {
-                enabled++;
-            }
-        }
-        String[] labels = {
-                "All " + modules.size(),
-                "On " + enabled,
-                "Off " + (modules.size() - enabled)
-        };
-        float inset = FathomTheme.Metrics.SEGMENT_INSET;
-        float cellWidth = (area.width - inset * 2f) / labels.length;
+        labelFilters();
+        String[] labels = filterLabels;
         Type uiType = Graphite.floor(ui, Graphite.UI);
         for (int index = 0; index < labels.length; index++) {
-            Rect cell = new Rect(area.x + inset + index * cellWidth, area.y + inset,
-                    cellWidth, area.height - inset * 2f);
-            Controls.State state = context.controls().state("mods.state." + index, cell, true);
-            float selected = context.controls().towards("mods.state." + index + "#on",
+            Rect cell = filterCells[index].rect();
+            Controls.State state = context.controls().state(FILTER_IDS[index], cell, true);
+            float selected = context.controls().towards(FILTER_ON_IDS[index],
                     stateFilter == index, GraphiteTokens.MOTION_FAST);
             Graphite.segment(ui, cell, state.hover * (1f - selected), selected);
             int ink = net.fathom.optimizations.core.ui.Colour.mix(
@@ -484,16 +483,15 @@ final class ModsSection implements Section {
     }
 
     /** One row in the shared glass group. The switch owns only its own hitbox. */
-    private void moduleTile(HubContext context, FathomModule feature, Rect area, boolean last) {
+    private void moduleTile(HubContext context, ModRow row, boolean last) {
         Renderer ui = context.ui();
         Controls controls = context.controls();
+        FathomModule feature = row.module;
+        Rect area = row.box.rect();
         boolean visuallyEnabled = feature.enabled() || FORCE_ENABLED_QA;
 
-        Rect toggle = new Rect(area.right() - Graphite.S4 - Graphite.SWITCH_W,
-                area.centreY() - Graphite.SWITCH_H / 2f,
-                Graphite.SWITCH_W, Graphite.SWITCH_H);
-        Controls.State switchState = controls.state("mod.toggle." + feature.id(), toggle,
-                feature.switchable());
+        Rect toggle = row.toggle.rect();
+        Controls.State switchState = controls.state(row.toggleId, toggle, feature.switchable());
         if (switchState.clicked) {
             context.setFeatureEnabled(feature, !feature.enabled());
             visibleSearch = null;
@@ -502,42 +500,30 @@ final class ModsSection implements Section {
 
         // Keep the parent tile out from under the switch so one pointer gesture
         // cannot both toggle the module and open its page.
-        Rect tileHit = new Rect(area.x, area.y,
-                Math.max(0f, toggle.x - Graphite.S2 - area.x), area.height);
-        Controls.State tile = controls.state("mod.tile." + feature.id(), tileHit, true);
+        Rect tileHit = row.tileHit(toggle.x - Graphite.S2);
+        Controls.State tile = controls.state(row.tileId, tileHit, true);
         boolean selected = false;
         Graphite.overlay(ui, area, Graphite.R_CONTROL, tile.hover, tile.press * 0.5f);
 
-        float mark = GraphiteTokens.SIZE_MOD_ICON;
-        Graphite.modMark(ui, new Rect(area.x + Graphite.S4, area.centreY() - mark / 2f, mark, mark),
-                Icon.of(feature.icon()), visuallyEnabled ? 1f : 0f, selected ? 0f : tile.hover);
+        Graphite.modMark(ui, row.mark.rect(), row.icon(), visuallyEnabled ? 1f : 0f, selected ? 0f : tile.hover);
 
-        float textX = area.x + Graphite.S4 + mark + Graphite.S3;
-        // Room stops short of the chevron slot, so names line up whether or not
-        // a row opens a page.
-        float textRoom = Math.max(0f, toggle.x - Graphite.S3 * 2f - FathomTheme.Metrics.ICON_INLINE - textX);
-        Type title = Graphite.floor(ui, Graphite.UI);
-        Type description = Graphite.floor(ui, Graphite.SMALL);
-        float stack = Controls.stackTop(ui, area, title, description);
-        ui.text(Text.fit(ui, feature.name(), title, textRoom), textX,
-                Controls.stackTitle(ui, stack, title), title, Graphite.TEXT);
-        ui.text(Text.fit(ui, feature.description(), description, textRoom), textX,
-                Controls.stackDetail(ui, stack, title, description), description, Graphite.TEXT_SECONDARY);
+        // The text column stops short of the chevron slot, so names line up
+        // whether or not a row opens a page.
+        row.title.draw(ui, Graphite.TEXT);
+        row.description.draw(ui, Graphite.TEXT_SECONDARY);
 
         if (feature.switchable()) {
-            float on = controls.towards("mod.toggle." + feature.id() + "#on",
-                    visuallyEnabled, GraphiteTokens.MOTION_FAST);
+            float on = controls.towards(row.toggleOnId, visuallyEnabled, GraphiteTokens.MOTION_FAST);
             Graphite.switchControl(ui, toggle, on, true);
         }
 
         boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
         if (configurable) {
             // A page opens to the right of the switch: say so, quietly.
-            float chevron = FathomTheme.Metrics.ICON_INLINE;
-            ui.icon(Icon.CHEVRON_RIGHT, toggle.x - Graphite.S3 - chevron,
-                    Math.round(area.centreY() - chevron / 2f), chevron,
+            Rect chevron = row.chevron.rect();
+            ui.icon(Icon.CHEVRON_RIGHT, chevron.x, chevron.y, chevron.width,
                     Colour.mix(Graphite.TEXT_TERTIARY, Graphite.TEXT_SECONDARY, tile.hover));
-            controls.tooltip(tile, tileHit, "Open " + feature.name() + " settings");
+            controls.tooltip(tile, tileHit, row.tooltip);
         }
         if (tile.clicked && configurable && !switchState.clicked) {
             openTab(context, feature);
@@ -547,12 +533,34 @@ final class ModsSection implements Section {
         }
     }
 
+    private Rect groupCache = new Rect(0f, 0f, 0f, 0f);
+
+    /** The list's glass group, kept while it stays put. */
+    private Rect groupRect(float x, float y, float w, float h) {
+        Rect cached = groupCache;
+        if (cached.x != x || cached.y != y || cached.width != w || cached.height != h) {
+            groupCache = new Rect(x, y, w, h);
+        }
+        return groupCache;
+    }
+
+    private Rect viewportCache = new Rect(0f, 0f, 0f, 0f);
+
+    private Rect scrollViewport(float x, float y, float w, float h) {
+        Rect cached = viewportCache;
+        if (cached.x != x || cached.y != y || cached.width != w || cached.height != h) {
+            viewportCache = new Rect(x, y, w, h);
+        }
+        return viewportCache;
+    }
+
     /** Four-device-pixel thumb; no track and no warm legacy scrollbar. */
-    private void graphiteScrollbar(Renderer ui, Rect viewport, float offset,
-            float contentHeight, float now) {
-        if (contentHeight <= viewport.height || contentHeight <= 0f) {
+    private void graphiteScrollbar(Renderer ui, float viewX, float viewY, float viewWidth, float viewHeight,
+            float offset, float contentHeight, float now) {
+        if (contentHeight <= viewHeight || contentHeight <= 0f) {
             return;
         }
+        Rect viewport = scrollViewport(viewX, viewY, viewWidth, viewHeight);
         // The shared scrollbar geometry: 4 wide, 3 in from the edge, 20%, and
         // (as `Scroller` does) both ends kept out of the panel's corners.
         float endInset = Math.min(Skin.R_SMALL, viewport.height / 2f);
@@ -1357,6 +1365,7 @@ final class ModsSection implements Section {
         if (search.equals(visibleSearch) && stateFilter == visibleStateFilter) {
             return visibleModules;
         }
+        visibleRevision++;
         visibleModules.clear();
         for (FathomModule feature : context.features().matching(context.search())) {
             if (stateFilter == 1 && !feature.enabled()) continue;
@@ -1370,5 +1379,151 @@ final class ModsSection implements Section {
 
     private static float clamp(float value, float low, float high) {
         return value < low ? low : (value > high ? high : value);
+    }
+
+    // -----------------------------------------------------------------------
+    // The list, retained
+    // -----------------------------------------------------------------------
+
+    /** Bumped whenever the visible modules change: the rows are rebuilt for it. */
+    private int visibleRevision;
+    private int listedRevision = -1;
+    /** The list as laid out: one row per visible module, top to bottom, unscrolled. */
+    private final Box listBox = Box.column("mods.rows");
+    private final Box toolbarBox = Box.row("mods.toolbar");
+    private final Box searchBox = Box.fixed("mods.search", 320f, TOOLBAR_HEIGHT);
+    private final Box filtersBox = Box.fixed("mods.filters", 222f, TOOLBAR_HEIGHT);
+    private final Box[] filterCells = new Box[3];
+    private boolean toolbarBuilt;
+    private final java.util.Map<FathomModule, ModRow> rowModels =
+            new java.util.IdentityHashMap<FathomModule, ModRow>();
+    private final List<ModRow> listed = new ArrayList<ModRow>();
+    /** "All 15", "On 5", "Off 10": rebuilt when the counts change, not every frame. */
+    private final String[] filterLabels = new String[3];
+    private int labelledTotal = -1;
+    private int labelledOn = -1;
+    private static final String[] FILTER_IDS = {"mods.state.0", "mods.state.1", "mods.state.2"};
+    private static final String[] FILTER_ON_IDS = {"mods.state.0#on", "mods.state.1#on", "mods.state.2#on"};
+
+    /**
+     * One module's row: its boxes, and the strings its controls are named by,
+     * made once -- the list used to build three ids and a tooltip per row per
+     * frame.
+     */
+    private static final class ModRow {
+        final FathomModule module;
+        final String toggleId;
+        final String toggleOnId;
+        final String tileId;
+        final String tooltip;
+        final Box box;
+        final Box mark;
+        final TextLeaf title;
+        final TextLeaf description;
+        final Box chevron;
+        final Box toggle;
+
+        ModRow(FathomModule module) {
+            this.module = module;
+            toggleId = "mod.toggle." + module.id();
+            toggleOnId = toggleId + "#on";
+            tileId = "mod.tile." + module.id();
+            tooltip = "Open " + module.name() + " settings";
+            // [mark] 12 [name / description] 12 [chevron] 12 [switch], 16 in
+            // from either edge, centred in the row.
+            box = Box.row("mod.row." + module.id()).height(MODULE_ROW)
+                    .padding(Graphite.S4, 0f, Graphite.S4, 0f).gap(Graphite.S3).align(Box.Align.CENTRE);
+            mark = Box.fixed("mod.mark." + module.id(), GraphiteTokens.SIZE_MOD_ICON, GraphiteTokens.SIZE_MOD_ICON);
+            Box text = Box.column("mod.text." + module.id()).width(0f).grow(1f).gap(Controls.STACK_GAP)
+                    .justify(Box.Align.CENTRE);
+            title = TextLeaf.of("mod.title." + module.id(), Graphite.UI, Graphite.UI.size() * 1.3f);
+            description = TextLeaf.of("mod.description." + module.id(), Graphite.SMALL,
+                    Graphite.SMALL.size() * 1.3f);
+            title.set(module.name());
+            description.set(module.description());
+            text.add(title.box());
+            text.add(description.box());
+            chevron = Box.fixed("mod.chevron." + module.id(), FathomTheme.Metrics.ICON_INLINE,
+                    FathomTheme.Metrics.ICON_INLINE);
+            toggle = Box.fixed("mod.switch." + module.id(), Graphite.SWITCH_W, Graphite.SWITCH_H);
+            box.add(mark);
+            box.add(text);
+            box.add(chevron);
+            box.add(toggle);
+        }
+
+        private Icon icon;
+        private Rect hit;
+        private Rect hitFor;
+        private float hitRight = Float.NaN;
+
+        Icon icon() {
+            if (icon == null) {
+                icon = Icon.of(module.icon());
+            }
+            return icon;
+        }
+
+        /** The tile's hitbox -- the row up to the switch -- kept until the row moves. */
+        Rect tileHit(float right) {
+            Rect area = box.rect();
+            if (hitFor != area || right != hitRight) {
+                hitFor = area;
+                hitRight = right;
+                hit = new Rect(area.x, area.y, Math.max(0f, right - area.x), area.height);
+            }
+            return hit;
+        }
+    }
+
+    /** Rebuild the list's rows when, and only when, the visible modules changed. */
+    private void syncRows(List<FathomModule> cards) {
+        if (listedRevision == visibleRevision) {
+            return;
+        }
+        listedRevision = visibleRevision;
+        listBox.children().clear();
+        listBox.invalidate();
+        listed.clear();
+        for (FathomModule module : cards) {
+            ModRow row = rowModels.get(module);
+            if (row == null) {
+                row = new ModRow(module);
+                rowModels.put(module, row);
+            }
+            listBox.add(row.box);
+            listed.add(row);
+        }
+    }
+
+    private void buildToolbar() {
+        toolbarBuilt = true;
+        toolbarBox.height(TOOLBAR_HEIGHT).gap(TOOLBAR_GAP);
+        toolbarBox.add(searchBox);
+        float inset = FathomTheme.Metrics.SEGMENT_INSET;
+        Box cells = Box.row("mods.filters.cells").padding(inset);
+        for (int index = 0; index < 3; index++) {
+            filterCells[index] = Box.column(FILTER_IDS[index]).width(0f).grow(1f);
+            cells.add(filterCells[index]);
+        }
+        filtersBox.axis(Box.Axis.STACK);
+        filtersBox.add(cells);
+        toolbarBox.add(filtersBox);
+    }
+
+    private void labelFilters() {
+        int enabled = 0;
+        for (FathomModule module : modules) {
+            if (module.enabled()) {
+                enabled++;
+            }
+        }
+        if (modules.size() != labelledTotal || enabled != labelledOn) {
+            labelledTotal = modules.size();
+            labelledOn = enabled;
+            filterLabels[0] = "All " + labelledTotal;
+            filterLabels[1] = "On " + enabled;
+            filterLabels[2] = "Off " + (labelledTotal - enabled);
+        }
     }
 }

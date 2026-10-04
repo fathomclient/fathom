@@ -192,6 +192,19 @@ public interface Renderer {
             float sourceAspect) {
     }
 
+    /**
+     * CSS {@code radial-gradient(radiusX radiusY at centre, colour,
+     * transparent stop)} as an element's background: an ellipse of colour
+     * fading linearly to nothing at {@code stop} of its radii, clipped to the
+     * rounded box. The launcher's sheen and its pointer spotlight.
+     *
+     * @param centreX the gradient's centre, logical units, not relative
+     * @param stop    where it reaches transparent, 0-1 of the radii
+     */
+    default void radial(float left, float top, float right, float bottom, float radius,
+            float centreX, float centreY, float radiusX, float radiusY, int argb, float stop) {
+    }
+
     // -----------------------------------------------------------------------
     // Layers
     // -----------------------------------------------------------------------

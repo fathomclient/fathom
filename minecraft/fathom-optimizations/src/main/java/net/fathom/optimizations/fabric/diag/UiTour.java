@@ -146,6 +146,10 @@ public final class UiTour {
                     trim(scale), client.width, client.height);
             ScreenshotUtils.saveScreenshot(client.runDirectory, name, client.width, client.height,
                     client.getFramebuffer());
+            if (Boolean.getBoolean("fathom.uiTour.geometry")
+                    && client.currentScreen instanceof net.fathom.optimizations.fabric.gfx.LaidOut) {
+                dumpGeometry(name, ((net.fathom.optimizations.fabric.gfx.LaidOut) client.currentScreen).layoutRoot());
+            }
         }
         System.setProperty("fathom.qaAccountOpen", "false");
         opened = false;
@@ -290,6 +294,23 @@ public final class UiTour {
         }
         System.out.println("[Fathom] UI tour: unknown step '" + step + "', skipped.");
         return false;
+    }
+
+    /** Every box of the screen's layout, one line each, for comparison with the launcher's. */
+    private static void dumpGeometry(String shot, net.fathom.optimizations.core.ui.layout.Box root) {
+        if (root == null) {
+            return;
+        }
+        final StringBuilder out = new StringBuilder();
+        root.visit(new net.fathom.optimizations.core.ui.layout.Box.Visitor() {
+            @Override
+            public void box(net.fathom.optimizations.core.ui.layout.Box box, int depth) {
+                net.fathom.optimizations.core.ui.layout.Rect r = box.rect();
+                out.append(String.format(Locale.ROOT, "[Fathom] geometry %s %s %.2f %.2f %.2f %.2f%n",
+                        shot, box.id, r.x, r.y, r.width, r.height));
+            }
+        });
+        System.out.print(out);
     }
 
     private static void plan() {

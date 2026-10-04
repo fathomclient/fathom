@@ -175,6 +175,7 @@ public final class Gfx {
         if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED
                 && (glOpen || vectorOpen || compositorOpen) && screenRenderer != null) {
             screenRenderer.pushLayer(net.fathom.optimizations.core.ui.render.Layer.DEBUG);
+            net.fathom.optimizations.fabric.diag.UiDebug.draw(screenRenderer, compositor);
             net.fathom.optimizations.core.ui.render.GeometryDebug.drawAndClear(screenRenderer);
             screenRenderer.popLayer();
         }

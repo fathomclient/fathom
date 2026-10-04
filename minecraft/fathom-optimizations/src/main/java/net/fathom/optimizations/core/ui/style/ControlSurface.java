@@ -28,6 +28,9 @@ public final class ControlSurface {
     public static final int SWITCH_KNOB = Tokens.CONTROL_SWITCH_KNOB;
     public static final int SWITCH_KNOB_ON = Tokens.CONTROL_SWITCH_KNOB_ON;
 
+    /** {@code --press-scale}: what a pressed control shrinks to (theme: motion.press-scale). */
+    public static final float PRESS_SCALE = 0.985f;
+
     private ControlSurface() {}
 
     /** {@code background-color: fill; box-shadow: var(--control-rim)} -- or the strong rim. */

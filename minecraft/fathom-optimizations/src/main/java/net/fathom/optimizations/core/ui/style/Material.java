@@ -89,6 +89,38 @@ public final class Material {
         rims(ui, left, top, right, bottom, radius);
     }
 
+    /** {@code .material-interactive}: the veil a hover lays over the tint. */
+    public static final int VEIL_HOVER = 0x0FFFFFFF;
+    /** And the darker one a press does. */
+    public static final int VEIL_PRESS = 0x1404090C;
+
+    /**
+     * The material as an interactive control ({@code .material-interactive}):
+     * its veil -- an inset shadow filling the whole shape, between the
+     * background and the rims -- is light under the pointer and dark while
+     * pressed. The press's 0.985 scale is the caller's transform.
+     */
+    public void paintInteractive(Renderer ui, float left, float top, float right, float bottom, float radius,
+            float hover, float press, boolean elevated) {
+        if (elevated) {
+            shadow.paint(ui, left, top, right, bottom, radius);
+        }
+        ui.glass(left, top, right, bottom, radius, blur, saturate, brightness);
+        ui.rounded(left, top, right, bottom, radius, tint);
+        if (hover > 0.001f) {
+            ui.rounded(left, top, right, bottom, radius, scale(VEIL_HOVER, hover * (1f - press)));
+        }
+        if (press > 0.001f) {
+            ui.rounded(left, top, right, bottom, radius, scale(VEIL_PRESS, press));
+        }
+        rims(ui, left, top, right, bottom, radius);
+    }
+
+    private static int scale(int argb, float amount) {
+        int alpha = Math.round((argb >>> 24) * Math.max(0f, Math.min(1f, amount)));
+        return (alpha << 24) | (argb & 0xFFFFFF);
+    }
+
     /** The three inset rims alone. */
     public void rims(Renderer ui, float left, float top, float right, float bottom, float radius) {
         float px = ui.pixel();

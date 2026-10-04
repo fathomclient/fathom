@@ -24,11 +24,17 @@ import java.util.Locale;
  */
 public final class GeometryDebug {
 
-    public static final boolean ENABLED = Boolean.getBoolean("fathom.debugGeometry");
+    public static final boolean ENABLED = Boolean.getBoolean("fathom.debugGeometry")
+            || Boolean.getBoolean("fathom.uiDebug");
 
     private static final int RIM = 0;
     private static final int SEGMENT = 1;
     private static final int ICON = 2;
+    private static final int HIT = 3;
+    private static final int CLIP = 4;
+
+    private static final int HIT_INK = 0xC0FF4D6D;
+    private static final int CLIP_INK = 0xD0FFA640;
 
     private static final int CAPACITY = 768;
     private static final float[] BOXES = new float[CAPACITY * 6];
@@ -55,6 +61,16 @@ public final class GeometryDebug {
     /** An icon was drawn in a {@code size} box. */
     public static void icon(Renderer ui, float x, float y, float size) {
         record(ui, ICON, x, y, x + size, y + size, 0f, 0f);
+    }
+
+    /** A control's hitbox, as the pointer is tested against it. */
+    public static void hit(Renderer ui, float left, float top, float right, float bottom) {
+        record(ui, HIT, left, top, right, bottom, 0f, 0f);
+    }
+
+    /** A clip rectangle as pushed. */
+    public static void clip(Renderer ui, float left, float top, float right, float bottom) {
+        record(ui, CLIP, left, top, right, bottom, 0f, 0f);
     }
 
     private static void record(Renderer ui, int kind, float left, float top, float right, float bottom,
@@ -102,6 +118,14 @@ public final class GeometryDebug {
             float h = b - t;
             float radius = RoundedGeometry.radius(BOXES[at + 4], w, h);
             boolean pill = radius > 0f && Math.abs(radius - Math.min(w, h) / 2f) < 0.51f;
+            if (KINDS[index] == HIT) {
+                ui.outline(l, t, r, b, 0f, px, HIT_INK);
+                continue;
+            }
+            if (KINDS[index] == CLIP) {
+                ui.outline(l - px, t - px, r + px, b + px, 0f, px * 2f, CLIP_INK);
+                continue;
+            }
             String label;
             boolean off;
             if (KINDS[index] == ICON) {

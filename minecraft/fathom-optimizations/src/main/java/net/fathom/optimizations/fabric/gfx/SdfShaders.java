@@ -25,7 +25,7 @@ import org.lwjgl.opengl.GL20;
  * next thing drawn and nothing has to flush to change it.
  *
  * <p>Kinds ({@code a_params.y}): 0 shape, 1 text, 2 mask (icons), 3 image,
- * 4 glass, 5 shadow, 6 bloom, 7 image mask (the wordmark).
+ * 4 glass, 5 shadow, 6 bloom, 7 image mask (the wordmark), 8 radial gradient.
  *
  * <h2>The blur program</h2>
  *
@@ -52,6 +52,7 @@ final class SdfShaders {
     static final float KIND_SHADOW = 5f;
     static final float KIND_BLOOM = 6f;
     static final float KIND_IMAGE_MASK = 7f;
+    static final float KIND_RADIAL = 8f;
 
     /** Taps per side the blur program can take; enough for sigma 10 at its resolution. */
     static final int BLUR_TAPS = 16;
@@ -218,8 +219,15 @@ final class SdfShaders {
             + "    float t = clamp(length(v_local) / max(v_half.x, 0.001), 0.0, 1.0);\n"
             + "    float f = 1.0 - t;\n"
             + "    colour = premul(v_fill) * (f * f);\n"
-            + "  } else {\n"
+            + "  } else if (kind < 7.5) {\n"
             + "    colour = premul(v_fill) * texture2D(u_image, v_uv).a;\n"
+            + "  } else {\n"
+            // CSS radial-gradient(rx ry at c, colour, transparent stop): v_uv
+            // is the centre, v_params.zw the radii, v_params.x the stop;
+            // clipped to the element's rounded box, as a background is.
+            + "    float t = length((v_local - v_uv) / max(v_params.zw, vec2(0.001)));\n"
+            + "    float a = clamp(1.0 - t / max(v_params.x, 0.001), 0.0, 1.0);\n"
+            + "    colour = premul(v_fill) * a * cover(roundBox(v_local, v_half, v_radii));\n"
             + "  }\n"
             + "  gl_FragColor = colour * clipCover;\n"
             + "}\n";
