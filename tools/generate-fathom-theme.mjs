@@ -295,6 +295,41 @@ function resolve(system, value) {
   return found;
 }
 
+/**
+ * A CSS box-shadow list as numbers: `[{inset, x, y, blur, spread, colour}]`.
+ * Lengths must be plain px by now.
+ */
+function shadowParts(value) {
+  const parts = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of String(value)) {
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) {
+      parts.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts.map((part) => {
+    const inset = /(^|\s)inset(\s|$)/.test(part);
+    const colourMatch = part.match(/(rgba?\([^)]*\)|#[0-9a-f]{6}|transparent)/i);
+    let col = colourMatch ? colourMatch[1] : 'rgba(0, 0, 0, 1)';
+    if (col === 'transparent') col = 'rgba(0, 0, 0, 0)';
+    const lengths = part.replace(colourMatch ? colourMatch[1] : '', '').replace('inset', '')
+      .trim().split(/\s+/).filter(Boolean).map((token) => {
+        const calc = token.match(/^calc\(-1\*?(\d+)px\)$/);
+        if (calc) return -Number(calc[1]);
+        return Number(token.replace('px', ''));
+      });
+    const [x = 0, y = 0, blur = 0, spread = 0] = lengths;
+    return {inset, x, y, blur, spread, colour: col};
+  });
+}
+
 function rgba(hex, alpha) {
   const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
   if (!match) throw new Error(`Expected #rrggbb, got ${hex}`);
@@ -357,6 +392,41 @@ function systemJava(system) {
     out.push(`        public static final int ${prefix}_RIM_TOP = ${colour(rgba(light, level.rim.top))};`);
     out.push(`        public static final int ${prefix}_RIM_EDGE = ${colour(rgba(light, level.rim.edge))};`);
     out.push(`        public static final int ${prefix}_RIM_SHADE = ${colour(rgba(shade, level.rim.shade))};`);
+    // The launcher's own glass, for a renderer that blurs: the tint over the
+    // blur, the backdrop filter, and which elevation shadow it casts.
+    out.push(`        public static final int ${prefix}_TINT = ${colour(level.tint)};`);
+    out.push(`        public static final float ${prefix}_BLUR = ${Number(level.blur).toFixed(3)}f;`);
+    out.push(`        public static final float ${prefix}_SATURATE = ${Number(level.saturate ?? 1).toFixed(3)}f;`);
+    out.push(`        public static final float ${prefix}_BRIGHTNESS = ${Number(level.brightness ?? 1).toFixed(3)}f;`);
+    out.push(`        public static final String ${prefix}_SHADOW = "${level.shadow}";`);
+  }
+  out.push('');
+  // Elevation shadows, as numbers: CSS box-shadow lists, parsed. A list's
+  // first outer shadow is the shadow; an inset in it is the lip.
+  for (const [name, value] of Object.entries(system.shadow)) {
+    const parts = shadowParts(value);
+    const outer = parts.find((part) => !part.inset) ?? {x: 0, y: 0, blur: 0, spread: 0, colour: 'rgba(0, 0, 0, 0)'};
+    const prefix = `SHADOW_${javaName(name)}`;
+    out.push(`        public static final float ${prefix}_X = ${outer.x.toFixed(3)}f;`);
+    out.push(`        public static final float ${prefix}_Y = ${outer.y.toFixed(3)}f;`);
+    out.push(`        public static final float ${prefix}_BLUR = ${outer.blur.toFixed(3)}f;`);
+    out.push(`        public static final float ${prefix}_SPREAD = ${outer.spread.toFixed(3)}f;`);
+    out.push(`        public static final int ${prefix}_COLOUR = ${colour(outer.colour)};`);
+    const inset = parts.find((part) => part.inset);
+    if (inset) {
+      out.push(`        public static final float ${prefix}_INSET_Y = ${inset.y.toFixed(3)}f;`);
+      out.push(`        public static final int ${prefix}_INSET_COLOUR = ${colour(inset.colour)};`);
+    }
+  }
+  // The control rims, which are inset shadow lists too: a top highlight and
+  // an even edge, one hairline each.
+  for (const name of ['rim', 'rim-strong']) {
+    const parts = shadowParts(system.control[name].replace(/var\(--hairline\)/g, '1px'));
+    const top = parts.find((part) => part.inset && part.y > 0 && part.spread === 0);
+    const edge = parts.find((part) => part.inset && part.y === 0 && part.spread > 0);
+    const prefix = `CONTROL_${javaName(name)}`;
+    out.push(`        public static final int ${prefix}_TOP = ${colour(top ? top.colour : 'rgba(0, 0, 0, 0)')};`);
+    out.push(`        public static final int ${prefix}_EDGE = ${colour(edge ? edge.colour : 'rgba(0, 0, 0, 0)')};`);
   }
   out.push('');
   // Flat control fills: what a control inside a pane is made of. The launcher's

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Text metrics proof</title>
+<!--
+  Development only (Vite's dev server; not in the build). Chromium shapes
+  Geist with HarfBuzz -- advances and GPOS kerning -- and this page writes
+  what it measures, at 100px, as JSON into #out. The game's FontAtlas must
+  measure the same strings the same width: RendererTests reads the result,
+  committed as src/test/resources/text-metrics.json.
+
+    msedge --headless --dump-dom http://localhost:5173/proof/metrics.html
+-->
+<script type="module" src="./metrics.ts"></script>
+</head>
+<body>
+<pre id="out">pending</pre>
+</body>
+</html>

@@ -115,6 +115,113 @@ public interface Renderer {
     default void bloom(float centreX, float centreY, float radius, int argb) {
     }
 
+    /**
+     * A filled rectangle with a radius for each corner, top left first and
+     * clockwise. The default rounds every corner with the largest.
+     */
+    default void rounded(float left, float top, float right, float bottom,
+            float topLeft, float topRight, float bottomRight, float bottomLeft, int argb) {
+        rounded(left, top, right, bottom,
+                Math.max(Math.max(topLeft, topRight), Math.max(bottomRight, bottomLeft)), argb);
+    }
+
+    /**
+     * A filled, bordered box in one primitive: the fill under the whole
+     * shape, the border over its outer {@code borderWidth} -- CSS's
+     * {@code background} and {@code border} on one element.
+     */
+    default void box(float left, float top, float right, float bottom, float radius,
+            int fillArgb, int borderArgb, float borderWidth) {
+        rounded(left, top, right, bottom, radius, fillArgb);
+        if (borderWidth > 0f) {
+            outline(left, top, right, bottom, radius, borderWidth, borderArgb);
+        }
+    }
+
+    /**
+     * CSS {@code box-shadow}, exactly: the shape grown by {@code spread},
+     * moved by the offset and blurred by a Gaussian of standard deviation
+     * {@code blur / 2}, painted only outside the shape itself.
+     */
+    default void boxShadow(float left, float top, float right, float bottom, float radius,
+            float blur, float spread, float offsetX, float offsetY, int argb) {
+        shadow(left + offsetX - spread, top + offsetY - spread, right + offsetX + spread,
+                bottom + offsetY + spread, radius + spread, blur, argb);
+    }
+
+    /**
+     * Frosted glass: what is behind the interface, blurred by a Gaussian of
+     * standard deviation {@code blur}, in a rounded rectangle. Draw the
+     * material's tint and rim over it. Returns false, drawing nothing, on a
+     * renderer or a frame without a backdrop.
+     */
+    default boolean glass(float left, float top, float right, float bottom, float radius, float blur) {
+        return glass(left, top, right, bottom, radius, blur, 1f, 1f);
+    }
+
+    /**
+     * Glass with CSS's {@code saturate()} and {@code brightness()} after the
+     * blur, as the launcher's materials have.
+     */
+    default boolean glass(float left, float top, float right, float bottom, float radius, float blur,
+            float saturate, float brightness) {
+        return false;
+    }
+
+    /**
+     * CSS's inset {@code box-shadow} without blur: inside the shape, outside
+     * the same shape shrunk by {@code spread} and moved by the offset. A
+     * hairline offset down is a pane's top highlight; a spread with no offset
+     * is an even inner ring. Lengths are logical; pass multiples of
+     * {@link #pixel()} for device hairlines.
+     */
+    default void inset(float left, float top, float right, float bottom, float radius,
+            float offsetX, float offsetY, float spread, int argb) {
+        if (spread > 0f && offsetX == 0f && offsetY == 0f) {
+            outline(left, top, right, bottom, radius, spread, argb);
+        }
+    }
+
+    /**
+     * A texture -- the game's, by its GL name -- cover-cropped into a rounded
+     * rectangle ({@code object-fit: cover}).
+     *
+     * @param sourceAspect the texture's width over its height
+     */
+    default void image(int texture, float left, float top, float right, float bottom, float radius,
+            float sourceAspect) {
+    }
+
+    // -----------------------------------------------------------------------
+    // Layers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Draw into {@code layer} (a {@link Layer} constant) until
+     * {@link #popLayer}. What is drawn in a higher layer is above everything
+     * in a lower one, whenever either was drawn.
+     */
+    default void pushLayer(int layer) {
+    }
+
+    default void popLayer() {
+    }
+
+    /** The layer being drawn into. */
+    default int layer() {
+        return Layer.SURFACE;
+    }
+
+    /**
+     * Text drawn until {@link #popKeepCase} keeps its own case, where the
+     * interface is otherwise lowercase: names, legal text.
+     */
+    default void pushKeepCase() {
+    }
+
+    default void popKeepCase() {
+    }
+
     // -----------------------------------------------------------------------
     // Text
     // -----------------------------------------------------------------------

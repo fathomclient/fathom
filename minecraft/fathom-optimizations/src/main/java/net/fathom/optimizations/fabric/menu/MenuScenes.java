@@ -255,20 +255,23 @@ public final class MenuScenes {
             vector.imageCover(scene.image, area.x, area.y, area.right(), area.bottom(), radius, 1f);
             return vector.imageState(scene.image) == ImageRef.State.READY;
         }
-        if (ui instanceof GlRenderer) {
+        if (ui instanceof GlRenderer && !TEXTURES.containsKey(scene.id)) {
             // A first-use upload binds a raw GL texture. Flush geometry queued
-            // against the renderer atlas before that bind so a freshly opened
-            // scene picker cannot render its preceding rounded controls with
-            // the thumbnail texture. Cached thumbnails need no extra flush.
-            if (!TEXTURES.containsKey(scene.id)) {
-                ((GlRenderer) ui).flush();
-            }
-            int texture = texture(scene);
-            if (texture > 0) {
+            // against the old renderer's atlas before that bind so a freshly
+            // opened scene picker cannot render its preceding rounded controls
+            // with the thumbnail texture. The compositor records and draws
+            // later, so it needs no flush.
+            ((GlRenderer) ui).flush();
+        }
+        int texture = texture(scene);
+        if (texture > 0) {
+            if (ui instanceof GlRenderer) {
                 ((GlRenderer) ui).image(texture, area.x, area.y, area.right(), area.bottom(),
                         radius, SOURCE_ASPECT, backdrop);
-                return true;
+            } else {
+                ui.image(texture, area.x, area.y, area.right(), area.bottom(), radius, SOURCE_ASPECT);
             }
+            return true;
         }
         return false;
     }

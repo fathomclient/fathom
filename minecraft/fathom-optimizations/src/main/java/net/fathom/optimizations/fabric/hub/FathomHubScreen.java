@@ -146,6 +146,19 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
     private String startAt;
 
     /** Open on the section titled {@code title} (Quick, Mods, Performance...). */
+    /** A section the UI tour's measurement selects on the next frame, as a rail click would; -1 for none. */
+    private int scriptedSection = -1;
+
+    /** Select section {@code index} next frame exactly as clicking its rail item does. Development only. */
+    public void scriptSection(int index) {
+        scriptedSection = index;
+    }
+
+    /** How many sections the rail lists. */
+    public int sectionCount() {
+        return sections.size();
+    }
+
     public FathomHubScreen startingAt(String title) {
         startAt = title;
         return this;
@@ -494,7 +507,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             ui.icon(section.icon(), item.x + lead, Skin.snap(ui, item.centreY() - glyph / 2f), glyph, ink);
             ui.text(section.title(), item.x + lead + glyph + Graphite.S3,
                     Graphite.baseline(ui, item, label), label, ink);
-            if (state.clicked && !selected) {
+            if ((state.clicked || index == scriptedSection) && !selected) {
                 previous = current;
                 current = index;
                 pageSwap.set(0f, now);
@@ -505,6 +518,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen {
             }
             y += RAIL_ITEM + RAIL_GAP;
         }
+        scriptedSection = -1;
         y += Graphite.S2 - RAIL_GAP;
         Graphite.hairline(ui, rail.x + Graphite.S2, rail.right() - Graphite.S2, y);
         y += 1f + Graphite.S2;

@@ -172,8 +172,8 @@ public final class Graphite {
         // Glass, as the launcher's panes are: the blurred scene under the tint,
         // when the screen captured one this frame (captureFrost).
         if (material != Material.CLEAR
-                && ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
-            ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).frost(
+                && ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
+            ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).frost(
                     area.x, area.y, area.right(), area.bottom(), radius);
         }
         int fill = material.fill;
@@ -202,8 +202,8 @@ public final class Graphite {
      * before anything that should not show through the glass.
      */
     public static void captureFrost(Renderer ui) {
-        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
-            ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).captureFrost();
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
+            ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).captureFrost();
         }
     }
 
@@ -364,8 +364,8 @@ public final class Graphite {
      * the word set plainly rather than nothing.
      */
     public static float wordmark(Renderer ui, float x, float y, float capHeight) {
-        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
-            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).wordmark(x, y, capHeight, TEXT);
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
+            return ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).wordmark(x, y, capHeight, TEXT);
         }
         ui.text(GraphiteTokens.WORDMARK_TEXT, x, y + capHeight, UI.at(capHeight * 1.4f), TEXT);
         return ui.measure(GraphiteTokens.WORDMARK_TEXT, UI.at(capHeight * 1.4f));
@@ -379,8 +379,8 @@ public final class Graphite {
      * @return its width
      */
     public static float lockup(Renderer ui, float x, float y, float capHeight) {
-        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
-            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).lockup(x, y, capHeight, TEXT,
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
+            return ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).lockup(x, y, capHeight, TEXT,
                     net.fathom.optimizations.generated.FathomTheme.Tokens.BRAND_PLANE_INK);
         }
         return wordmark(ui, x, y, capHeight);
@@ -388,16 +388,16 @@ public final class Graphite {
 
     /** The lockup's height, the mark's, at an ascender height. */
     public static float lockupHeight(Renderer ui, float capHeight) {
-        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
-            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).lockupHeight(capHeight);
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
+            return ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).lockupHeight(capHeight);
         }
         return capHeight;
     }
 
     /** The wordmark's width at an ascender height, without drawing it. */
     public static float wordmarkWidth(Renderer ui, float capHeight) {
-        if (ui instanceof net.fathom.optimizations.fabric.gfx.GlRenderer) {
-            return ((net.fathom.optimizations.fabric.gfx.GlRenderer) ui).wordmarkWidth(capHeight);
+        if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
+            return ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).wordmarkWidth(capHeight);
         }
         return ui.measure(GraphiteTokens.WORDMARK_TEXT, UI.at(capHeight * 1.4f));
     }

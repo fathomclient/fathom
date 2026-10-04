@@ -55,7 +55,7 @@ import net.fathom.optimizations.generated.Wordmark;
  * back, so a screen that throws halfway through cannot leave the game with
  * blending off.
  */
-public final class GlRenderer implements Renderer {
+public final class GlRenderer implements UiCanvas {
 
     private static final int MAX_DEPTH = 32;
     private static final int LOGGED_IMBALANCES = 5;
@@ -640,6 +640,18 @@ public final class GlRenderer implements Renderer {
         maskCorner(r - rad, t, rad, false, true, cover, notch.x, notch.y, notch.size);
         maskCorner(l, b - rad, rad, true, false, cover, notch.x, notch.y, notch.size);
         maskCorner(r - rad, b - rad, rad, false, false, cover, notch.x, notch.y, notch.size);
+    }
+
+    @Override
+    public void image(int textureId, float left, float top, float right, float bottom, float radius,
+            float sourceAspect) {
+        image(textureId, left, top, right, bottom, radius, sourceAspect, 0);
+    }
+
+    @Override
+    public boolean glass(float left, float top, float right, float bottom, float radius, float blur,
+            float saturate, float brightness) {
+        return frost(left, top, right, bottom, radius);
     }
 
     /**

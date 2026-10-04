@@ -138,6 +138,11 @@ final class GlStateSnapshot {
         return this;
     }
 
+    /** The framebuffer that was bound when this was captured. */
+    int framebuffer() {
+        return framebuffer;
+    }
+
     void restore() {
         if (restored || !captured) {
             return;

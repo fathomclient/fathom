@@ -25,6 +25,16 @@ import net.fathom.optimizations.core.ui.anim.Clock;
 public final class Gfx {
 
     private static GlRenderer renderer;
+    /** The interface compositor; null until a screen first opens, or when the GPU cannot run it. */
+    private static SdfRenderer compositor;
+    /**
+     * Which renderer screens use: {@code sdf} (the compositor, the default),
+     * {@code gl} (the coverage-texture renderer it replaces, kept for the HUD
+     * and as the fallback) or {@code nanovg} (the development backend).
+     * Development A/B comparisons only.
+     */
+    private static final String SCREEN_RENDERER = System.getProperty("fathom.uiRenderer", "sdf");
+    private static boolean compositorOpen;
     private static Clock clock;
     private static final Frames FRAMES = new Frames();
     /** Menu background isolation runs every frame; retain its snapshot too. */
@@ -75,6 +85,7 @@ public final class Gfx {
     private static long screenProbe;
 
     public static float begin(MinecraftClient client, float scalePreference) {
+        net.fathom.optimizations.fabric.diag.UiProfile.frameBegin();
         screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
         GlRenderer active = renderer(client);
         // Screens follow the launcher's capitalization, the HUD editor included;
@@ -106,10 +117,28 @@ public final class Gfx {
      */
     public static net.fathom.optimizations.core.ui.render.Renderer beginScreen(
             MinecraftClient client, float scalePreference) {
-        if (vectorOpen || glOpen) {
+        if (vectorOpen || glOpen || compositorOpen) {
             throw new IllegalStateException("a Fathom screen frame is already open");
         }
-        if (!FORCE_GL_RENDERER) {
+        if (!FORCE_GL_RENDERER && "sdf".equals(SCREEN_RENDERER)) {
+            SdfRenderer sdf = compositor(client);
+            if (sdf != null) {
+                net.fathom.optimizations.fabric.diag.UiProfile.frameBegin();
+                screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
+                sdf.setLowercase(!net.fathom.optimizations.fabric.menu.MenuScenes.standardCapitalization());
+                if (sdf.beginFrame(net.fathom.optimizations.core.ui.UiScale.fittingPreference(
+                        client.width, client.height, scalePreference))) {
+                    screenDelta = clock().advance(System.nanoTime());
+                    FRAMES.begin();
+                    compositorOpen = true;
+                    screenRenderer = sdf;
+                    return sdf;
+                }
+                net.fathom.optimizations.core.instrument.Probe.stop(
+                        net.fathom.optimizations.core.instrument.Probe.Section.SCREEN, screenProbe);
+            }
+        }
+        if (!FORCE_GL_RENDERER && "nanovg".equals(SCREEN_RENDERER)) {
             net.fathom.optimizations.core.ui.render.FathomRenderer vector =
                     Canvas.begin(client, net.fathom.optimizations.core.ui.render.FrameScale.Mode.FATHOM);
             if (vector != null) {
@@ -144,10 +173,27 @@ public final class Gfx {
     public static void endScreen() {
         // Developer-only (-Dfathom.debugGeometry=true): the frame's boxes, on top.
         if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED
-                && (glOpen || vectorOpen) && screenRenderer != null) {
+                && (glOpen || vectorOpen || compositorOpen) && screenRenderer != null) {
+            screenRenderer.pushLayer(net.fathom.optimizations.core.ui.render.Layer.DEBUG);
             net.fathom.optimizations.core.ui.render.GeometryDebug.drawAndClear(screenRenderer);
+            screenRenderer.popLayer();
         }
         screenRenderer = null;
+        if (compositorOpen) {
+            compositorOpen = false;
+            try {
+                compositor.endFrame();
+                net.fathom.optimizations.fabric.ui.HoverLatency.frameRendered(clock().frames());
+            } finally {
+                net.fathom.optimizations.core.instrument.Probe.stop(
+                        net.fathom.optimizations.core.instrument.Probe.Section.SCREEN, screenProbe);
+                screenProbe = 0L;
+                FRAMES.end();
+                net.fathom.optimizations.fabric.diag.UiProfile.frameEnd(
+                        compositor.stats().draws, compositor.stats().quads);
+            }
+            return;
+        }
         if (glOpen) {
             glOpen = false;
             end();
@@ -183,6 +229,10 @@ public final class Gfx {
                     net.fathom.optimizations.core.instrument.Probe.Section.SCREEN, screenProbe);
             screenProbe = 0L;
             FRAMES.end();
+            if (renderer != null) {
+                net.fathom.optimizations.fabric.diag.UiProfile.frameEnd(
+                        renderer.stats().draws, renderer.stats().quads);
+            }
         }
     }
 
@@ -255,8 +305,33 @@ public final class Gfx {
         }
     }
 
+    /** The compositor, created the first time a screen opens; null when this GPU cannot run it. */
+    public static SdfRenderer compositor(MinecraftClient client) {
+        if (compositor == null && SdfRenderer.supported()) {
+            compositor = new SdfRenderer(client);
+        }
+        return compositor == null || compositor.failed() ? null : compositor;
+    }
+
+    /** The compositor if one exists. Never creates one. */
+    public static SdfRenderer peekCompositor() {
+        return compositor;
+    }
+
+    /** The renderer the current or last screen frame drew with, for diagnostics. */
+    public static String screenBackend() {
+        if (compositor != null && !compositor.failed() && "sdf".equals(SCREEN_RENDERER) && !FORCE_GL_RENDERER) {
+            return compositor.describe();
+        }
+        return "GL coverage renderer";
+    }
+
     /** Throw away every texture — for a resource reload. */
     public static void dispose() {
+        if (compositor != null) {
+            compositor.dispose();
+            compositor = null;
+        }
         // NanoVG may be the only backend a session created. Dispose both
         // resource owners so fonts, images and the vector context cannot leak.
         Canvas.dispose();

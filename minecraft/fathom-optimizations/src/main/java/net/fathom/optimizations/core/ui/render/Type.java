@@ -52,23 +52,43 @@ public final class Type {
 
     private final float size;
     private final Weight weight;
+    private final float tracking;
 
     public Type(float size, Weight weight) {
+        this(size, weight, 0f);
+    }
+
+    /**
+     * @param tracking CSS {@code letter-spacing} in ems: space added after
+     *     every character, as the launcher's type roles set it
+     */
+    public Type(float size, Weight weight, float tracking) {
         if (size <= 0f) {
             throw new IllegalArgumentException("type has to have a size");
         }
         this.size = size;
         this.weight = weight == null ? Weight.REGULAR : weight;
+        this.tracking = tracking == tracking ? tracking : 0f;
     }
 
     /** The same type at another size. */
     public Type at(float newSize) {
-        return new Type(newSize, weight);
+        return new Type(newSize, weight, tracking);
     }
 
     /** The same size at another weight. */
     public Type weighing(Weight newWeight) {
-        return new Type(size, newWeight);
+        return new Type(size, newWeight, tracking);
+    }
+
+    /** The same type with another letter-spacing, in ems. */
+    public Type tracked(float ems) {
+        return new Type(size, weight, ems);
+    }
+
+    /** Letter-spacing in ems; 0 for the font's own spacing. */
+    public float tracking() {
+        return tracking;
     }
 
     /** In logical units. */
@@ -89,12 +109,12 @@ public final class Type {
             return false;
         }
         Type that = (Type) other;
-        return that.size == size && that.weight == weight;
+        return that.size == size && that.weight == weight && that.tracking == tracking;
     }
 
     @Override
     public int hashCode() {
-        return Float.floatToIntBits(size) * 31 + weight.hashCode();
+        return (Float.floatToIntBits(size) * 31 + weight.hashCode()) * 31 + Float.floatToIntBits(tracking);
     }
 
     @Override

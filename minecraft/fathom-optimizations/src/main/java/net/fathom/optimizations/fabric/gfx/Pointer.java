@@ -52,6 +52,26 @@ public final class Pointer {
         }
     }
 
+    /*
+     * Scripted input for the UI tour's measurements (development only): a
+     * pointer position in logical units, NaN for the real mouse, and wheel
+     * notches to deliver on the next poll.
+     */
+    private static float scriptedX = Float.NaN;
+    private static float scriptedY = Float.NaN;
+    private static int scriptedWheel;
+
+    /** Drive the pointer from a script; NaN hands it back to the mouse. */
+    public static void script(float logicalX, float logicalY) {
+        scriptedX = logicalX;
+        scriptedY = logicalY;
+    }
+
+    /** Wheel notches for the next poll, positive away from the user. */
+    public static void scriptWheel(int notches) {
+        scriptedWheel += notches;
+    }
+
     private float x;
     private float y;
     private float previousX;
@@ -84,6 +104,10 @@ public final class Pointer {
             // not wherever the desktop cursor happened to be.
             x = QA_POINTER[0];
             y = QA_POINTER[1];
+        }
+        if (scriptedX == scriptedX) {
+            x = scriptedX;
+            y = scriptedY;
         }
         if (started && (x != previousX || y != previousY)) {
             pointerEventNs = System.nanoTime();
@@ -119,6 +143,10 @@ public final class Pointer {
         if (net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE) {
             // The scripted benchmark's scrolling phase, and nothing otherwise.
             wheel += net.fathom.optimizations.fabric.bench.PerfBench.benchWheelNotches() * WHEEL_DELTA;
+        }
+        if (scriptedWheel != 0) {
+            wheel += scriptedWheel * WHEEL_DELTA;
+            scriptedWheel = 0;
         }
         started = true;
     }

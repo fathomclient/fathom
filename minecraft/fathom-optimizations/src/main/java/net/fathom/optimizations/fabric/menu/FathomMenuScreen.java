@@ -534,8 +534,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             texture = AccountHead.texture(account.launcherRoot(), uuid);
         }
         float radius = face.width / 2f;
-        if (texture > 0 && ui instanceof GlRenderer) {
-            ((GlRenderer) ui).roundedImage(texture, face.x, face.y, face.right(), face.bottom(), radius);
+        if (texture > 0 && ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
+            ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).roundedImage(
+                    texture, face.x, face.y, face.right(), face.bottom(), radius);
         } else {
             ui.rounded(face.x, face.y, face.right(), face.bottom(), radius, 0x2EFFFFFF);
             Type initial = Graphite.floor(ui, Graphite.CAPTION.weighing(Type.Weight.SEMIBOLD)
@@ -799,12 +800,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
     }
 
     private static void keepCase(Renderer ui, boolean on) {
-        if (ui instanceof GlRenderer) {
-            if (on) {
-                ((GlRenderer) ui).pushKeepCase();
-            } else {
-                ((GlRenderer) ui).popKeepCase();
-            }
+        if (on) {
+            ui.pushKeepCase();
+        } else {
+            ui.popKeepCase();
         }
     }
 

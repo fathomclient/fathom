@@ -27,6 +27,13 @@ import net.fathom.optimizations.fabric.menu.FathomMenuScreen;
  *   <li>{@code hud-editor};
  *   <li>{@code world} -- join {@code -Dfathom.uiTour.world}. Steps after it run
  *       in the world: {@code pause}, {@code hub:<Section>}, {@code hud}.
+ *   <li>{@code measure:<kind>[:seconds]} -- profile the screen the previous
+ *       step opened ({@link UiProfile}) while a script drives it: {@code idle}
+ *       (pointer parked), {@code hover} (pointer sweeping the screen),
+ *       {@code scroll} (wheel, both ways), {@code pages} (Hub sections in turn,
+ *       as rail clicks), {@code typing} (Hub search, typed and erased),
+ *       {@code openclose} (the Hub opened and closed in turn). One line per
+ *       step in the log; no screenshot.
  * </ul>
  *
  * <p>The steps before {@code world} run at every scale in
@@ -56,6 +63,8 @@ public final class UiTour {
     private static long openedAt;
     private static boolean opened;
     private static boolean started;
+    /** Appended to shot names after a {@code text:} step. */
+    private static String tag = "";
 
     private UiTour() {}
 
@@ -91,6 +100,25 @@ public final class UiTour {
         }
         String step = planSteps.get(at);
         float scale = planScales.get(at).floatValue();
+        if (step.startsWith("text:")) {
+            // Development: text weight parameters for the shots that follow,
+            // which carry them in their names.
+            String[] values = step.substring(5).split("/");
+            net.fathom.optimizations.fabric.gfx.SdfRenderer.tuneText(Float.parseFloat(values[0]),
+                    Float.parseFloat(values[1]), Float.parseFloat(values[2]));
+            tag = "-" + step.substring(5).replace('/', '_');
+            at++;
+            return;
+        }
+        if (step.startsWith("measure:")) {
+            if (scale == scale) {
+                scaleOverride = scale;
+            }
+            if (measure(client, step, scale)) {
+                at++;
+            }
+            return;
+        }
         if (!opened) {
             if (scale == scale) {
                 scaleOverride = scale;
@@ -112,9 +140,9 @@ public final class UiTour {
             return;
         }
         if (!world) {
-            String name = String.format(Locale.ROOT, "tour-%s%s-s%s-%dx%d.png",
+            String name = String.format(Locale.ROOT, "tour-%s%s%s-s%s-%dx%d.png",
                     client.world != null && step.startsWith("hub:") ? "world-" : "",
-                    step.replace(':', '-').toLowerCase(Locale.ROOT),
+                    step.replace(':', '-').toLowerCase(Locale.ROOT), tag,
                     trim(scale), client.width, client.height);
             ScreenshotUtils.saveScreenshot(client.runDirectory, name, client.width, client.height,
                     client.getFramebuffer());
@@ -122,6 +150,89 @@ public final class UiTour {
         System.setProperty("fathom.qaAccountOpen", "false");
         opened = false;
         at++;
+    }
+
+    private static long measureStartedAt;
+    private static boolean measuring;
+    private static int measureTick;
+
+    /** One frame of a measurement step; true when it has finished. */
+    private static boolean measure(MinecraftClient client, String step, float scale) {
+        String[] parts = step.split(":");
+        String kind = parts.length > 1 ? parts[1] : "idle";
+        float seconds = parts.length > 2 ? Float.parseFloat(parts[2]) : 4f;
+        long now = System.nanoTime();
+        if (!measuring) {
+            measuring = true;
+            measureTick = 0;
+            measureStartedAt = now;
+            String screen = client.currentScreen == null ? "none" : client.currentScreen.getClass().getSimpleName();
+            UiProfile.start(String.format(Locale.ROOT, "%s %s%s s%s %dx%d", kind, screen,
+                    client.world != null ? " (world)" : "", trim(scale), client.width, client.height));
+        }
+        float t = (now - measureStartedAt) / 1e9f;
+        measureTick++;
+        float width = 1280f;
+        float height = 720f;
+        net.fathom.optimizations.core.ui.render.Renderer drawing =
+                net.fathom.optimizations.fabric.gfx.Gfx.peekCompositor() != null
+                        ? net.fathom.optimizations.fabric.gfx.Gfx.peekCompositor()
+                        : net.fathom.optimizations.fabric.gfx.Gfx.peek();
+        if (drawing != null) {
+            width = drawing.width();
+            height = drawing.height();
+        }
+        if ("idle".equals(kind)) {
+            net.fathom.optimizations.fabric.gfx.Pointer.script(-1000f, -1000f);
+        } else if ("hover".equals(kind)) {
+            // A slow Lissajous over the whole screen: every control is entered and left.
+            float x = width * (0.5f + 0.48f * (float) Math.sin(t * 1.3f));
+            float y = height * (0.5f + 0.46f * (float) Math.sin(t * 2.1f + 0.7f));
+            net.fathom.optimizations.fabric.gfx.Pointer.script(x, y);
+        } else if ("scroll".equals(kind)) {
+            net.fathom.optimizations.fabric.gfx.Pointer.script(width * 0.55f, height * 0.55f);
+            if (measureTick % 4 == 0) {
+                net.fathom.optimizations.fabric.gfx.Pointer.scriptWheel(((int) (t / 1.0f)) % 2 == 0 ? -1 : 1);
+            }
+        } else if ("pages".equals(kind)) {
+            net.fathom.optimizations.fabric.gfx.Pointer.script(-1000f, -1000f);
+            if (client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen
+                    && measureTick % 30 == 0) {
+                net.fathom.optimizations.fabric.hub.FathomHubScreen hub =
+                        (net.fathom.optimizations.fabric.hub.FathomHubScreen) client.currentScreen;
+                hub.scriptSection((measureTick / 30) % hub.sectionCount());
+            }
+        } else if ("typing".equals(kind)) {
+            net.fathom.optimizations.fabric.gfx.Pointer.script(-1000f, -1000f);
+            if (client.currentScreen instanceof net.fathom.optimizations.fabric.gfx.FathomScreen
+                    && measureTick % 6 == 0) {
+                String word = "render";
+                int phase = (measureTick / 6) % (word.length() * 2);
+                net.fathom.optimizations.fabric.gfx.FathomScreen screen =
+                        (net.fathom.optimizations.fabric.gfx.FathomScreen) client.currentScreen;
+                if (phase < word.length()) {
+                    screen.handleFathomKey(word.charAt(phase), 0);
+                } else {
+                    screen.handleFathomKey((char) 0, org.lwjgl.input.Keyboard.KEY_BACK);
+                }
+            }
+        } else if ("openclose".equals(kind)) {
+            net.fathom.optimizations.fabric.gfx.Pointer.script(-1000f, -1000f);
+            if (measureTick % 40 == 0) {
+                if (client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen) {
+                    ((net.fathom.optimizations.fabric.hub.FathomHubScreen) client.currentScreen).beginClose();
+                } else {
+                    FathomNavigation.openHub(client, Runtime.hud(), "Mods");
+                }
+            }
+        }
+        if (t < seconds) {
+            return false;
+        }
+        UiProfile.stop();
+        net.fathom.optimizations.fabric.gfx.Pointer.script(Float.NaN, Float.NaN);
+        measuring = false;
+        return true;
     }
 
     private static boolean open(MinecraftClient client, String step) {
@@ -146,6 +257,11 @@ public final class UiTour {
         }
         if (step.startsWith("hub:")) {
             FathomNavigation.openHub(client, Runtime.hud(), step.substring(4));
+            return true;
+        }
+        if ("proof".equals(step)) {
+            // The compositor's proof scene (development only).
+            FathomNavigation.push(client, new net.fathom.optimizations.fabric.gfx.RendererProofScreen());
             return true;
         }
         if ("hud-editor".equals(step)) {

@@ -428,6 +428,7 @@ def coreSuites = [
         'net.fathom.optimizations.core.ViewTests',
         'net.fathom.optimizations.core.RegistryTests',
         'net.fathom.optimizations.core.PacingTests',
+        'net.fathom.optimizations.core.RendererTests',
 ]
 
 def coreTest = tasks.register('coreTest') {
@@ -469,6 +470,30 @@ tasks.register('graphiteAssets', JavaExec) {
     mainClass = 'net.fathom.optimizations.tools.GraphiteAssets'
     args = [rootProject.projectDir.toPath().resolve('../..').normalize().toString(),
             project.findProperty('backdropSource')?.toString() ?: '']
+}
+
+// The interface's glyph atlas: multi-channel distance fields of Geist and
+// Geist Mono, with their metrics and GPOS kerning. Offline; the output under
+// assets/fathom/font/atlas is committed and the game only reads it.
+tasks.register('uiFontAtlas', JavaExec) {
+    group = 'fathom'
+    description = 'Regenerates assets/fathom/font/atlas from the shipped font files.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.tools.font.UiFontAtlas'
+    args = [file('src/main/resources/assets/fathom/font').absolutePath]
+}
+
+// Proves the committed atlas: fresh against the fonts, and every glyph
+// reconstructed as the shader does matches the outline's exact coverage.
+tasks.register('uiFontAtlasCheck', JavaExec) {
+    group = 'verification'
+    description = 'Checks assets/fathom/font/atlas against the fonts, glyph by glyph.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.tools.font.FontAtlasCheck'
+    args = [file('src/main/resources/assets/fathom/font').absolutePath,
+            project.findProperty('montage')?.toString() ?: '']
 }
 
 // The NanoVG backend is not on the game classpath, so nothing else compiles it.
