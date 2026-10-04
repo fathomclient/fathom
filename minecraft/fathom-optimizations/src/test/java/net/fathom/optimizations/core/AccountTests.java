@@ -17,6 +17,8 @@ public final class AccountTests {
         aSignedInAnswerCarriesTheProfile();
         anAnswerThatDoesNotLookLikeAProfileIsNotShown();
         everyOtherStateParses();
+        everySignInPhaseParses();
+        aSignInStatusNeverCarriesMoreThanItShould();
         placeholdersAreRecognised();
 
         System.out.println();
@@ -58,6 +60,41 @@ public final class AccountTests {
         check(failed.message.startsWith("This Microsoft account"), "the reason: " + failed.message);
         check(LauncherBridge.Account.parse("no busy").status == LauncherBridge.Account.Status.BUSY, "busy");
         pass("signing in, signed out, failed and busy parse");
+    }
+
+    /** The add-account attempt, phase by phase, as the panel follows it. */
+    static void everySignInPhaseParses() {
+        check(LauncherBridge.SignInStatus.parse("ok idle").phase == LauncherBridge.SignInStatus.Phase.IDLE, "idle");
+        check(LauncherBridge.SignInStatus.parse("ok starting").phase == LauncherBridge.SignInStatus.Phase.STARTING,
+                "starting");
+        LauncherBridge.SignInStatus waiting = LauncherBridge.SignInStatus.parse("ok waiting ABCD-1234 1");
+        check(waiting.phase == LauncherBridge.SignInStatus.Phase.WAITING, "waiting");
+        check("ABCD-1234".equals(waiting.code) && waiting.browserOpened, "the code, and the browser opened");
+        check(!LauncherBridge.SignInStatus.parse("ok waiting ABCD1234 0").browserOpened, "the browser did not open");
+        check(LauncherBridge.SignInStatus.parse("ok verifying").phase == LauncherBridge.SignInStatus.Phase.VERIFYING,
+                "verifying");
+        LauncherBridge.SignInStatus done = LauncherBridge.SignInStatus.parse(
+                "ok signed-in 069a79f444e94726a5befca90e38aaf5 Notch");
+        check(done.phase == LauncherBridge.SignInStatus.Phase.SIGNED_IN && "Notch".equals(done.name), "signed in");
+        LauncherBridge.SignInStatus failed = LauncherBridge.SignInStatus.parse(
+                "ok failed This Microsoft account does not own Minecraft: Java Edition.");
+        check(failed.phase == LauncherBridge.SignInStatus.Phase.FAILED
+                && failed.message.startsWith("This Microsoft account"), "failed, with its reason");
+        check(LauncherBridge.SignInStatus.parse("ok cancelled").phase
+                == LauncherBridge.SignInStatus.Phase.CANCELLED, "cancelled");
+        check(LauncherBridge.SignInStatus.parse("no busy").phase == LauncherBridge.SignInStatus.Phase.BUSY, "busy");
+        check(LauncherBridge.SignInStatus.parse("no unknown command").phase
+                == LauncherBridge.SignInStatus.Phase.UNSUPPORTED, "an older launcher");
+        pass("every sign-in phase parses");
+    }
+
+    /** A code that is not a code is dropped, and a profile that is not one is refused. */
+    static void aSignInStatusNeverCarriesMoreThanItShould() {
+        check(LauncherBridge.SignInStatus.parse("ok waiting <script> 1").code.isEmpty(), "no markup as a code");
+        check(LauncherBridge.SignInStatus.parse("ok signed-in not-a-uuid Notch") == null, "no fake profile");
+        check(LauncherBridge.SignInStatus.parse("ok something-new") == null, "nothing unknown");
+        check(LauncherBridge.SignInStatus.parse("garbage") == null, "nothing malformed");
+        pass("a sign-in status never carries more than it should");
     }
 
     static void placeholdersAreRecognised() {

@@ -94,6 +94,15 @@ pub enum Command {
     /// button starts, and bring its window forward. When an account is already
     /// signed in, only shows it.
     SignIn,
+    /// Start a Microsoft sign-in that adds an account, whoever is signed in
+    /// already -- the launcher's own "Add another Microsoft account". `SignIn`
+    /// only shows an existing account, which made the game's Add button a no-op.
+    AddAccount,
+    /// The phase of the current or last sign-in attempt: what the game shows
+    /// while the player is on Microsoft's page. Never a token.
+    SignInStatus,
+    /// Abandon the sign-in under way, as the launcher's own Cancel does.
+    CancelSignIn,
     /// Who is signed in: the public profile, or the state of the sign-in.
     Account,
     /// Public profiles remembered by the launcher, for the in-game picker.
@@ -128,6 +137,9 @@ impl Command {
             "focus" => Some(Command::Focus),
             "diagnostics" => Some(Command::Diagnostics),
             "sign-in" if rest.is_empty() => Some(Command::SignIn),
+            "add-account" if rest.is_empty() => Some(Command::AddAccount),
+            "sign-in-status" if rest.is_empty() => Some(Command::SignInStatus),
+            "cancel-sign-in" if rest.is_empty() => Some(Command::CancelSignIn),
             "account" if rest.is_empty() => Some(Command::Account),
             "accounts" if rest.is_empty() => Some(Command::Accounts),
             "switch-account" if is_account_id(rest) => {
@@ -504,6 +516,10 @@ mod tests {
     #[test]
     fn only_the_known_commands_parse() {
         assert_eq!(Command::parse("sign-in"), Some(Command::SignIn));
+        assert_eq!(Command::parse("add-account"), Some(Command::AddAccount));
+        assert_eq!(Command::parse("sign-in-status"), Some(Command::SignInStatus));
+        assert_eq!(Command::parse("cancel-sign-in"), Some(Command::CancelSignIn));
+        assert_eq!(Command::parse("add-account someone@example.com"), None);
         assert_eq!(Command::parse("account"), Some(Command::Account));
         assert_eq!(Command::parse("accounts"), Some(Command::Accounts));
         assert_eq!(

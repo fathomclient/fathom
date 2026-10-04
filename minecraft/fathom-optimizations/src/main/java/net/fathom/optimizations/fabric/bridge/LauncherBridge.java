@@ -209,6 +209,31 @@ public final class LauncherBridge {
         return answer.startsWith("ok") ? answer.substring(2).trim() : answer;
     }
 
+    /**
+     * Ask the launcher to add a Microsoft account -- a new sign-in whoever is
+     * signed in already. Same answers as {@link #signIn}; a launcher too old
+     * to know the verb answers {@code "no unknown command"}.
+     */
+    public String addAccount() {
+        String answer = send("add-account");
+        if (answer == null) {
+            return null;
+        }
+        return answer.startsWith("ok") ? answer.substring(2).trim() : answer;
+    }
+
+    /** The current or last sign-in attempt, or null when the launcher did not answer. */
+    public SignInStatus signInStatus() {
+        String answer = send("sign-in-status");
+        return answer == null ? null : SignInStatus.parse(answer);
+    }
+
+    /** Abandon the sign-in under way. */
+    public boolean cancelSignIn() {
+        String answer = send("cancel-sign-in");
+        return answer != null && answer.startsWith("ok");
+    }
+
     /** Who the launcher has signed in, or null when it did not answer. */
     public Account account() {
         String answer = send("account");
@@ -512,6 +537,74 @@ public final class LauncherBridge {
             }
             if ("signed-out".equals(word)) {
                 return new Account(Status.SIGNED_OUT, "", "", "", "");
+            }
+            return null;
+        }
+    }
+
+    /**
+     * One sign-in attempt, as the launcher reports it. Never a token: the
+     * phase, the short code Microsoft asks people to type (the launcher shows
+     * it on screen too), the public profile once it is done, or a sentence.
+     */
+    public static final class SignInStatus {
+        public enum Phase { IDLE, STARTING, WAITING, VERIFYING, SIGNED_IN, FAILED, CANCELLED, BUSY, UNSUPPORTED }
+
+        public final Phase phase;
+        public final String code;
+        public final boolean browserOpened;
+        public final String uuid;
+        public final String name;
+        public final String message;
+
+        SignInStatus(Phase phase, String code, boolean browserOpened, String uuid, String name, String message) {
+            this.phase = phase;
+            this.code = code;
+            this.browserOpened = browserOpened;
+            this.uuid = uuid;
+            this.name = name;
+            this.message = message;
+        }
+
+        private static SignInStatus of(Phase phase) {
+            return new SignInStatus(phase, "", false, "", "", "");
+        }
+
+        public static SignInStatus parse(String line) {
+            String text = line.trim();
+            if (text.startsWith("no")) {
+                return of("unknown command".equals(text.substring(2).trim()) ? Phase.UNSUPPORTED : Phase.BUSY);
+            }
+            if (!text.startsWith("ok")) {
+                return null;
+            }
+            String[] words = text.substring(2).trim().split(" ", 3);
+            String word = words.length > 0 ? words[0] : "";
+            if ("idle".equals(word)) {
+                return of(Phase.IDLE);
+            }
+            if ("starting".equals(word)) {
+                return of(Phase.STARTING);
+            }
+            if ("waiting".equals(word)) {
+                String code = words.length > 1 && words[1].matches("[A-Z0-9-]{4,16}") ? words[1] : "";
+                boolean opened = words.length > 2 && "1".equals(words[2]);
+                return new SignInStatus(Phase.WAITING, code, opened, "", "", "");
+            }
+            if ("verifying".equals(word)) {
+                return of(Phase.VERIFYING);
+            }
+            if ("signed-in".equals(word) && words.length == 3
+                    && words[1].matches("[0-9a-f]{32}") && words[2].matches("[A-Za-z0-9_]{1,16}")) {
+                return new SignInStatus(Phase.SIGNED_IN, "", false, words[1], words[2], "");
+            }
+            if ("failed".equals(word)) {
+                String reason = text.substring(2).trim().substring("failed".length()).trim();
+                return new SignInStatus(Phase.FAILED, "", false, "", "",
+                        reason.length() > 160 ? reason.substring(0, 160) : reason);
+            }
+            if ("cancelled".equals(word)) {
+                return of(Phase.CANCELLED);
             }
             return null;
         }

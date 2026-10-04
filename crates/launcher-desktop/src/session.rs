@@ -601,6 +601,15 @@ fn serve_bridge(app: &tauri::AppHandle, command: bridge::Command) -> bridge::Rep
             Ok(word) => bridge::Reply::Ok(word.to_owned()),
             Err(reason) => bridge::Reply::No(one_line(&reason)),
         },
+        bridge::Command::AddAccount => match crate::signin::add_from_game(app) {
+            Ok(word) => bridge::Reply::Ok(word.to_owned()),
+            Err(reason) => bridge::Reply::No(one_line(&reason)),
+        },
+        bridge::Command::SignInStatus => sign_in_status_reply(app),
+        bridge::Command::CancelSignIn => match crate::signin::cancel(app) {
+            Ok(_) => bridge::Reply::ok(),
+            Err(reason) => bridge::Reply::No(one_line(&reason)),
+        },
         bridge::Command::Account => account_reply(app),
         bridge::Command::Accounts => accounts_reply(app),
         bridge::Command::SwitchAccount(id) => match crate::signin::switch_account(app, id) {
@@ -648,6 +657,61 @@ fn account_reply(app: &tauri::AppHandle) -> bridge::Reply {
             one_line(progress.failure.as_deref().unwrap_or("Sign-in failed."))
         )),
         _ => bridge::Reply::Ok("signed-out".to_owned()),
+    }
+}
+
+/// The phase of the current or last sign-in attempt, for the game's account
+/// panel while the player is on Microsoft's page.
+///
+/// `ok idle`, `ok starting`, `ok waiting <code> <browser 1|0>`, `ok verifying`,
+/// `ok signed-in <uuid> <name>`, `ok failed <sentence>` or `ok cancelled`. The
+/// device code is the short one Microsoft shows people to type -- the launcher
+/// shows it on screen too -- and nothing else here is secret: no token, no
+/// email. Unlike `account`, it describes *this attempt*, so a cancelled "add
+/// another account" is reported as cancelled and not as whoever was already
+/// signed in.
+fn sign_in_status_reply(app: &tauri::AppHandle) -> bridge::Reply {
+    use crate::api::auth::AuthPhase;
+    let state = app.state::<State>();
+    let progress = state.auth.progress();
+    match progress.phase {
+        AuthPhase::Idle => bridge::Reply::Ok("idle".to_owned()),
+        AuthPhase::Restoring | AuthPhase::Starting => bridge::Reply::Ok("starting".to_owned()),
+        AuthPhase::Waiting => {
+            let code = progress
+                .user_code
+                .as_deref()
+                .filter(|code| code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+                .unwrap_or("");
+            bridge::Reply::Ok(format!(
+                "waiting {} {}",
+                if code.is_empty() { "-" } else { code },
+                if progress.browser_opened { 1 } else { 0 }
+            ))
+        }
+        AuthPhase::Verifying => bridge::Reply::Ok("verifying".to_owned()),
+        AuthPhase::SignedIn => {
+            let Ok(core) = state.core.try_lock() else {
+                return bridge::Reply::No("busy".to_owned());
+            };
+            match core.account().filter(|account| account.signed_in) {
+                Some(account) if is_username(&account.name) => {
+                    bridge::Reply::Ok(format!("signed-in {} {}", account.id, account.name))
+                }
+                _ => bridge::Reply::Ok("idle".to_owned()),
+            }
+        }
+        AuthPhase::Failed => bridge::Reply::Ok(format!(
+            "failed {}",
+            one_line(
+                progress
+                    .failure
+                    .as_deref()
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or(&progress.headline)
+            )
+        )),
+        AuthPhase::Cancelled => bridge::Reply::Ok("cancelled".to_owned()),
     }
 }
 

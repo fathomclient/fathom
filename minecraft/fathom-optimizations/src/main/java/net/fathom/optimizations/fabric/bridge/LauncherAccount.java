@@ -41,6 +41,29 @@ public final class LauncherAccount {
     }
 
     /** How long a sign-in is watched before giving up. Microsoft's codes last 15 minutes. */
+    /**
+     * One "add an account" attempt, as the account panel shows it. Separate
+     * from {@link Phase}, which is who the launcher has signed in: adding a
+     * second account and cancelling must read "cancelled", not "signed in as"
+     * whoever was already there.
+     */
+    public enum Attempt {
+        NONE,
+        /** Asking the launcher, which asks Microsoft for a code and opens the page. */
+        OPENING,
+        /** Microsoft's page is open; the player is signing in there. */
+        WAITING,
+        /** Microsoft said yes; Xbox, XSTS and the Minecraft entitlement are being checked. */
+        VERIFYING,
+        DONE,
+        FAILED,
+        CANCELLED;
+
+        public boolean active() {
+            return this == OPENING || this == WAITING || this == VERIFYING;
+        }
+    }
+
     private static final long WATCH_MILLIS = 16L * 60L * 1000L;
     private static final long POLL_MILLIS = 1000L;
     /** How long to wait for a launcher that is being started. */
@@ -60,6 +83,9 @@ public final class LauncherAccount {
     private volatile boolean working;
     /** A press that arrived while a quick check was still running. */
     private volatile boolean signInQueued;
+    private volatile Attempt attempt = Attempt.NONE;
+    private volatile String attemptCode = "";
+    private volatile boolean attemptBrowserOpened;
     private volatile long lastCheck;
 
     private LauncherAccount(File gameDirectory) {
@@ -119,6 +145,192 @@ public final class LauncherAccount {
     }
 
     /** Fathom's data directory, where the launcher keeps the account's head. */
+    public Attempt attempt() {
+        return attempt;
+    }
+
+    /** Forget an attempt that has ended, so a panel opened later starts clean. */
+    public void clearFinishedAttempt() {
+        if (!attempt.active()) {
+            attempt = Attempt.NONE;
+        }
+    }
+
+    /** The code Microsoft's page asks for, while {@link Attempt#WAITING}; empty otherwise. */
+    public String attemptCode() {
+        return attempt == Attempt.WAITING ? attemptCode : "";
+    }
+
+    /** Whether the launcher managed to open Microsoft's page in a browser. */
+    public boolean attemptBrowserOpened() {
+        return attemptBrowserOpened;
+    }
+
+    /**
+     * Add a Microsoft account through the launcher: its own "Add another
+     * Microsoft account". The launcher asks Microsoft for a code and opens
+     * Microsoft's page in the browser; credentials are only ever typed there,
+     * and no token reaches this process. The panel follows the attempt from
+     * {@link #attempt}, which changes on this click -- before any answer.
+     */
+    public void addAccount() {
+        if (attempt.active() && !signInQueued) {
+            say("Already signing in. Finish on Microsoft's page, or cancel.");
+            return;
+        }
+        attempt = Attempt.OPENING;
+        attemptCode = "";
+        attemptBrowserOpened = false;
+        say("Opening Microsoft's sign-in page…");
+        if (working) {
+            // A menu-open check is mid-flight; add straight after it.
+            signInQueued = true;
+            return;
+        }
+        run(new Runnable() {
+            @Override
+            public void run() {
+                bridge.refresh();
+                if (bridge.state() == LauncherBridge.State.ABSENT) {
+                    fail("This game cannot reach the Fathom launcher. Open it and add the account there.");
+                    return;
+                }
+                if (bridge.state() == LauncherBridge.State.UNSUPPORTED) {
+                    fail("This Fathom launcher is a different version. Add the account there.");
+                    return;
+                }
+                if (bridge.state() != LauncherBridge.State.READY) {
+                    say("Starting Fathom to sign in…");
+                    if (!bridge.open()) {
+                        fail("Fathom could not be started. Open it and add the account there.");
+                        return;
+                    }
+                    if (!waitForLauncher()) {
+                        fail("Fathom did not start in time. Open it and add the account there.");
+                        return;
+                    }
+                }
+                String answer = bridge.addAccount();
+                if (answer != null && answer.startsWith("no")
+                        && "unknown command".equals(answer.substring(2).trim())) {
+                    // An older launcher: it can only sign in when nobody is.
+                    answer = bridge.signIn();
+                    if ("signed-in".equals(answer)) {
+                        bridge.open();
+                        fail("This launcher adds accounts from its own window, which is now open.");
+                        return;
+                    }
+                }
+                if (answer == null) {
+                    fail("Fathom did not answer. Open it and add the account there.");
+                    return;
+                }
+                if (answer.startsWith("no")) {
+                    String reason = answer.substring(2).trim();
+                    fail("busy".equals(reason) ? "Fathom is busy for a moment. Try again."
+                            : reason.isEmpty() ? "Fathom could not start the sign-in." : reason);
+                    return;
+                }
+                follow();
+            }
+        });
+    }
+
+    /** Abandon the attempt under way. Its own thread: the attempt's thread is busy following it. */
+    public void cancelAttempt() {
+        if (!attempt.active()) {
+            return;
+        }
+        final File game = bridge.gameDirectory();
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                // A bridge of its own; LauncherBridge is not shared across threads.
+                LauncherBridge separate = new LauncherBridge(game);
+                if (!separate.cancelSignIn()) {
+                    say("Fathom did not answer. Cancel the sign-in there.");
+                }
+            }
+        }, "fathom-account-cancel");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /** Follow the launcher's sign-in until it ends, one way or another. */
+    private void follow() {
+        long started = System.currentTimeMillis();
+        long until = started + WATCH_MILLIS;
+        while (System.currentTimeMillis() < until) {
+            LauncherBridge.SignInStatus status = bridge.signInStatus();
+            if (status == null) {
+                fail("Fathom closed before the sign-in finished. Nothing was saved.");
+                return;
+            }
+            switch (status.phase) {
+                case UNSUPPORTED:
+                    // An older launcher: fall back to watching who is signed in.
+                    phase = Phase.SIGNING_IN;
+                    watch();
+                    attempt = phase == Phase.SIGNED_IN ? Attempt.DONE
+                            : phase == Phase.FAILED ? Attempt.FAILED : Attempt.CANCELLED;
+                    return;
+                case BUSY:
+                    break;
+                case STARTING:
+                    attempt = Attempt.OPENING;
+                    break;
+                case WAITING:
+                    if (attempt != Attempt.WAITING || !attemptCode.equals(status.code)) {
+                        attemptCode = status.code;
+                        attemptBrowserOpened = status.browserOpened;
+                        attempt = Attempt.WAITING;
+                        say(status.browserOpened
+                                ? "Finish signing in on Microsoft's page in your browser."
+                                : "Your browser did not open. Go to microsoft.com/link and enter the code.");
+                    }
+                    break;
+                case VERIFYING:
+                    if (attempt != Attempt.VERIFYING) {
+                        attempt = Attempt.VERIFYING;
+                        say("Checking the account owns Minecraft…");
+                    }
+                    break;
+                case SIGNED_IN:
+                    saved = bridge.accounts();
+                    poll();
+                    attempt = Attempt.DONE;
+                    say("Added " + status.name + ".");
+                    return;
+                case FAILED:
+                    fail(status.message.isEmpty() ? "Sign-in did not finish. Nothing was saved." : status.message);
+                    return;
+                case CANCELLED:
+                    attempt = Attempt.CANCELLED;
+                    say("Sign-in was cancelled. Nothing was saved.");
+                    return;
+                case IDLE:
+                default:
+                    // Idle straight after the request is the launcher not having
+                    // begun yet; idle later means the attempt was dropped.
+                    if (System.currentTimeMillis() - started > 5000L) {
+                        attempt = Attempt.CANCELLED;
+                        say("The sign-in stopped. Nothing was saved.");
+                        return;
+                    }
+                    break;
+            }
+            if (!sleep(POLL_MILLIS)) {
+                return;
+            }
+        }
+        fail("Microsoft's sign-in took too long. Try again.");
+    }
+
+    private void fail(String message) {
+        attempt = Attempt.FAILED;
+        say(message);
+    }
+
     public File launcherRoot() {
         return bridge.launcherRoot();
     }
@@ -185,74 +397,6 @@ public final class LauncherAccount {
                 say("Switching accounts…");
                 watch();
                 saved = bridge.accounts();
-            }
-        });
-    }
-
-    /**
-     * Start signing in through the launcher.
-     *
-     * <p>Visible straight away in the game's account panel. The launcher opens
-     * Microsoft's page and this sets a notice saying so. When the launcher is
-     * closed it is started, and the sign-in follows once it answers.
-     */
-    public void signIn() {
-        if (working) {
-            if (phase == Phase.SIGNING_IN) {
-                say("Signing in with Microsoft in Fathom…");
-            } else {
-                // A menu-open check is mid-flight; run the sign-in straight after.
-                signInQueued = true;
-            }
-            return;
-        }
-        run(new Runnable() {
-            @Override
-            public void run() {
-                bridge.refresh();
-                if (bridge.state() == LauncherBridge.State.ABSENT) {
-                    say("Open the Fathom launcher to sign in. This game cannot reach it.");
-                    return;
-                }
-                if (bridge.state() == LauncherBridge.State.UNSUPPORTED) {
-                    say("This Fathom launcher is a different version. Sign in there.");
-                    return;
-                }
-                if (bridge.state() != LauncherBridge.State.READY) {
-                    say("Starting Fathom to sign in…");
-                    if (!bridge.open()) {
-                        say("Fathom could not be started. Open it and sign in there.");
-                        return;
-                    }
-                    if (!waitForLauncher()) {
-                        say("Fathom did not start in time. Open it and sign in there.");
-                        return;
-                    }
-                }
-                String answer = bridge.signIn();
-                if (answer == null) {
-                    say("Fathom did not answer. Open it and sign in there.");
-                    return;
-                }
-                if (answer.startsWith("no")) {
-                    String reason = answer.substring(2).trim();
-                    if ("busy".equals(reason)) {
-                        say("Fathom is busy for a moment. Press Sign in again.");
-                        return;
-                    }
-                    say(reason.isEmpty() ? "Fathom could not start the sign-in." : reason);
-                    phase = Phase.FAILED;
-                    return;
-                }
-                if ("signed-in".equals(answer)) {
-                    poll();
-                    say(name.isEmpty() ? "Already signed in. Fathom is showing the account."
-                            : "Fathom is signed in as " + name + ".");
-                    return;
-                }
-                phase = Phase.SIGNING_IN;
-                say("Continue in your browser. Microsoft's sign-in page is open.");
-                watch();
             }
         });
     }
@@ -348,12 +492,15 @@ public final class LauncherAccount {
                 try {
                     body.run();
                 } catch (RuntimeException unexpected) {
+                    if (attempt.active()) {
+                        attempt = Attempt.FAILED;
+                    }
                     say("Sign-in could not continue. Try again from Fathom.");
                 } finally {
                     working = false;
                     if (signInQueued) {
+                        addAccount();
                         signInQueued = false;
-                        signIn();
                     }
                 }
             }

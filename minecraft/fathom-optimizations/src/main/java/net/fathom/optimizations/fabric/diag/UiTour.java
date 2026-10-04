@@ -134,6 +134,16 @@ public final class UiTour {
             client.setScreen(new FathomMenuScreen());
             return true;
         }
+        if ("account-add".equals(step)) {
+            // The panel, with Add pressed: what the attempt's state looks like.
+            if (inWorld) {
+                return false;
+            }
+            System.setProperty("fathom.qaAccountOpen", "true");
+            client.setScreen(new FathomMenuScreen());
+            net.fathom.optimizations.fabric.bridge.LauncherAccount.get(client.runDirectory).addAccount();
+            return true;
+        }
         if (step.startsWith("hub:")) {
             FathomNavigation.openHub(client, Runtime.hud(), step.substring(4));
             return true;

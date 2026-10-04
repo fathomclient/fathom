@@ -87,6 +87,26 @@ pub fn from_game(app: &tauri::AppHandle) -> Result<&'static str, String> {
     start(app).map(|_| "started")
 }
 
+/// What the in-game "Add an account" asks for: a new Microsoft sign-in, the
+/// launcher's own "Add another Microsoft account", whoever is signed in now.
+///
+/// `from_game` answers "signed-in" and starts nothing when an account exists,
+/// which is right for "Sign in" and made "Add an account" do nothing at all.
+/// The device-code flow opens Microsoft's own page in the browser; nothing is
+/// typed into Fathom. Returns `started`, or `signing-in` when one is already
+/// under way.
+pub fn add_from_game(app: &tauri::AppHandle) -> Result<&'static str, String> {
+    if app.state::<State>().auth.progress().active {
+        return Ok("signing-in");
+    }
+    // Tried first, never waited for: the game waits a quarter of a second, and
+    // a launch holding the lock is "busy", which the game says and retries.
+    if app.state::<State>().core.try_lock().is_err() {
+        return Err("busy".to_owned());
+    }
+    start(app).map(|_| "started")
+}
+
 /// Bring the main window forward. Posted to the main thread.
 fn raise(app: &tauri::AppHandle) {
     let handle = app.clone();

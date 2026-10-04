@@ -334,6 +334,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
         if (pill.clicked) {
             accountOpen = !accountOpen;
             if (accountOpen && account != null) {
+                account.clearFinishedAttempt();
                 account.check();
             }
         }
@@ -572,9 +573,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
                 && account.phase() == LauncherAccount.Phase.SIGNED_IN;
 
         float row = GraphiteTokens.SIZE_CONTROL;
+        float status = statusHeight();
         float height = pad + 48f + pad + 1f + pad + line(Graphite.CAPTION, 1.4f) + GraphiteTokens.SPACE_2
                 + Math.max(1, others.size()) * (row + GraphiteTokens.SPACE_1)
-                + GraphiteTokens.SPACE_2 + row + (pendingSwitch ? row + GraphiteTokens.SPACE_2 : 0f) + pad;
+                + GraphiteTokens.SPACE_2 + row + (pendingSwitch ? row + GraphiteTokens.SPACE_2 : 0f)
+                + (status > 0f ? status + GraphiteTokens.SPACE_2 : 0f) + pad;
         Rect panel = new Rect(accountPill.right() - width, accountPill.bottom() + GraphiteTokens.SPACE_2,
                 width, height);
 
@@ -670,16 +673,71 @@ public final class FathomMenuScreen extends Screen implements FathomScreen {
             y += row + GraphiteTokens.SPACE_2;
         }
 
+        // Where the attempt is: what the launcher and Microsoft are doing now.
+        if (status > 0f) {
+            drawStatus(ui, new Rect(x, y, inner, status));
+            y += status + GraphiteTokens.SPACE_2;
+        }
+
+        // Add, Cancel while Microsoft's page is open, Try again after a failure.
+        LauncherAccount.Attempt attempt = account == null ? LauncherAccount.Attempt.NONE : account.attempt();
         Rect add = new Rect(x, y, inner, row);
         Controls.State addState = controls.state("account.add", add, !closing && account != null);
         Graphite.surface(ui, add, Graphite.R_CONTROL, Graphite.Material.LIGHT, addState.hover, addState.press, 0f,
                 false);
-        String notice = account == null ? null : account.notice();
-        ui.textCentred(Text.fit(ui, notice != null && account.working() ? notice : "Add an account", rowType,
-                add.width - GraphiteTokens.SPACE_4), add.centreX(), Graphite.baseline(ui, add, rowType), rowType,
-                Graphite.TEXT);
+        String action = attempt.active() ? "Cancel sign-in"
+                : attempt == LauncherAccount.Attempt.FAILED ? "Try again" : "Add an account";
+        ui.textCentred(Text.fit(ui, action, rowType, add.width - GraphiteTokens.SPACE_4), add.centreX(),
+                Graphite.baseline(ui, add, rowType), rowType, Graphite.TEXT);
         if (addState.clicked) {
-            account.signIn();
+            if (attempt.active()) {
+                account.cancelAttempt();
+            } else {
+                account.addAccount();
+            }
+        }
+    }
+
+    /** Lines of the attempt's status: the sentence, and the code while Microsoft's page asks for it. */
+    private float statusHeight() {
+        if (account == null || account.attempt() == LauncherAccount.Attempt.NONE || account.notice() == null) {
+            return 0f;
+        }
+        float lines = net.fathom.optimizations.core.ui.layout.TextStack.lineBox(Graphite.SMALL, 1.4f) * 2f;
+        if (!account.attemptCode().isEmpty()) {
+            lines += GraphiteTokens.SPACE_1 + net.fathom.optimizations.core.ui.layout.TextStack.lineBox(
+                    Graphite.DATA_L, 1.3f);
+        }
+        return lines;
+    }
+
+    /**
+     * The attempt, in words: opening the page, waiting for Microsoft (with the
+     * code to type), checking the Minecraft entitlement, done, or what went
+     * wrong. Failure is in the warning ink; nothing here is a token.
+     */
+    private void drawStatus(Renderer ui, Rect area) {
+        LauncherAccount.Attempt attempt = account.attempt();
+        Type small = Graphite.floor(ui, Graphite.SMALL);
+        int ink = attempt == LauncherAccount.Attempt.FAILED ? net.fathom.optimizations.fabric.ui.Skin.WARN
+                : attempt == LauncherAccount.Attempt.DONE ? Graphite.TEXT : Graphite.TEXT_SECONDARY;
+        java.util.List<String> lines = Text.wrap(ui, account.notice(), small, area.width);
+        stack.begin(ui, area.y);
+        for (int index = 0; index < 2; index++) {
+            float baseline = stack.line(Graphite.SMALL, 1.4f, small);
+            if (index < lines.size()) {
+                String text = index == 1 && lines.size() > 2
+                        ? Text.fit(ui, lines.get(1) + " " + lines.get(2), small, area.width) : lines.get(index);
+                ui.text(text, area.x, baseline, small, ink);
+            }
+        }
+        String code = account.attemptCode();
+        if (!code.isEmpty()) {
+            stack.gap(GraphiteTokens.SPACE_1);
+            Type data = Graphite.floor(ui, Graphite.DATA_L);
+            keepCase(ui, true);
+            ui.text(code, area.x, stack.line(Graphite.DATA_L, 1.3f, data), data, Graphite.TEXT);
+            keepCase(ui, false);
         }
     }
 
