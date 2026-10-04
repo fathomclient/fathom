@@ -27,7 +27,8 @@ import net.fathom.optimizations.core.hud.Widget;
 import net.fathom.optimizations.core.module.ClientPrefs;
 import net.fathom.optimizations.core.module.SessionName;
 import net.fathom.optimizations.fabric.gfx.Gfx;
-import net.fathom.optimizations.fabric.gfx.GlRenderer;
+import net.fathom.optimizations.fabric.gfx.SdfRenderer;
+import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
 
 /**
@@ -449,10 +450,10 @@ public final class FathomHud {
                 }
             }
             if (ViewProbe.REQUESTED) ViewProbe.enter(ViewSection.FATHOM_HUD_OWN);
-            GlRenderer opened = null;
+            Renderer opened = null;
             try {
                 if (needsFathom) {
-                    opened = Gfx.beginOverlay(
+                    opened = Gfx.beginHudOverlay(
                             client, net.fathom.optimizations.fabric.Runtime.uiScale());
                     HudFont fathom = fathomFont(client, screenWidth, vanilla, opened);
                     for (int index = 0; index < drawing.size(); index++) {
@@ -464,7 +465,7 @@ public final class FathomHud {
                     }
                 }
             } finally {
-                Gfx.endOverlay(opened);
+                Gfx.endHudOverlay(opened);
             }
             if (ViewProbe.REQUESTED) ViewProbe.exit(ViewSection.FATHOM_HUD_OWN);
         }
@@ -605,9 +606,9 @@ public final class FathomHud {
      * is a renderer that has never opened a frame and so has no glyph sheets.
      */
     private HudFont fathomFont(
-            MinecraftClient client, int screenWidth, TextRenderer fallback, GlRenderer opened) {
-        GlRenderer renderer = opened != null ? opened : Gfx.peek();
-        if (renderer == null || !renderer.inFrame()) {
+            MinecraftClient client, int screenWidth, TextRenderer fallback, Renderer opened) {
+        Renderer renderer = opened != null ? opened : Gfx.activeRenderer();
+        if (renderer == null) {
             return HudFonts.vanilla(fallback);
         }
         return HudFonts.fathom(renderer, mcToLogical(client, screenWidth, renderer));
@@ -621,7 +622,7 @@ public final class FathomHud {
      * same thing for its grid and its handles; it is here because the HUD needs
      * it whether or not the editor is open.
      */
-    private static float mcToLogical(MinecraftClient client, int screenWidth, GlRenderer renderer) {
+    private static float mcToLogical(MinecraftClient client, int screenWidth, Renderer renderer) {
         return (client.width / (float) Math.max(1, screenWidth))
                 / Math.max(0.0001f, renderer.scale());
     }
@@ -649,6 +650,12 @@ public final class FathomHud {
         // client vanish from the second frame onwards.
         GlStateManager.translate(box.x, box.y, 0f);
         GlStateManager.scale(scale, scale, 1f);
+        Renderer activeUi = Gfx.activeRenderer();
+        boolean sdfTransform = activeUi instanceof SdfRenderer;
+        if (sdfTransform) {
+            float logical = mcToLogical(client, screenWidth, activeUi);
+            activeUi.pushTransform(box.x * logical, box.y * logical, scale, 0f, 0f);
+        }
         GlStateManager.enableBlend();
         try {
             if (renderer.visible(client)) {
@@ -661,9 +668,9 @@ public final class FathomHud {
             // The batch is drawn wherever the modelview happens to be at the
             // moment it flushes, so a queue that outlived its widget would draw
             // the last one's text at the next one's position.
-            GlRenderer active = Gfx.peek();
-            if (active != null && active.inFrame()) {
-                active.flush();
+            Gfx.flushHudOverlay();
+            if (sdfTransform) {
+                activeUi.popTransform();
             }
             // A widget that throws must not leave the matrix stack unbalanced: the
             // next thing to draw would be the rest of the game.

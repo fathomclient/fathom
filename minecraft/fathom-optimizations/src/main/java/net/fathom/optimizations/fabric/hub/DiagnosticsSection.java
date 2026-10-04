@@ -13,8 +13,8 @@ import net.fathom.optimizations.core.instrument.ReportStore;
 import net.fathom.optimizations.core.instrument.Session;
 import net.fathom.optimizations.core.module.LaunchSession;
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.Box;
 import net.fathom.optimizations.core.ui.layout.Text;
-import net.fathom.optimizations.core.ui.render.FrameRenderer;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
@@ -22,6 +22,7 @@ import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.bench.Capture;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.GlRenderer;
+import net.fathom.optimizations.fabric.gfx.SdfRenderer;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.ui.Skin;
 import net.fathom.optimizations.fabric.ui.Graphite;
@@ -61,6 +62,26 @@ final class DiagnosticsSection implements Section {
 
     private final Scroller scroller = new Scroller();
     private String note = "";
+    private final Box page = Box.column("diagnostics.page");
+    private final Box toolbarSlot = Box.stack("diagnostics.toolbar");
+    private final Box toolbarAfter = Box.column("diagnostics.toolbar.after").height(Skin.S5);
+    private final Box factsViewport = Box.stack("diagnostics.facts.viewport").grow(1f);
+    private final Box factsLayout = Box.column("diagnostics.facts").scroll(true)
+            .padding(0f, 0f, Skin.S3, 0f);
+    private final Box benchBox = Box.row("diagnostics.benchmark").height(Skin.H_MD);
+    private final Box scenarioBox = Box.row("diagnostics.scenario").height(Skin.H_MD);
+    private final Box spikeBox = Box.row("diagnostics.spike").height(Skin.H_MD);
+    private final Box copyBox = Box.row("diagnostics.copy").height(Skin.H_MD);
+    private final Box saveBox = Box.row("diagnostics.save").height(Skin.H_MD);
+    private final Box launcherBox = Box.row("diagnostics.launcher").height(Skin.H_MD);
+    private final java.util.List<Box> factBoxes = new java.util.ArrayList<Box>();
+    private static final String[] SCENARIOS = scenarioNames();
+
+    DiagnosticsSection() {
+        page.add(toolbarSlot);
+        page.add(toolbarAfter);
+        page.add(factsViewport);
+    }
 
     /**
      * Whether the window kept focus for the whole run.
@@ -79,6 +100,16 @@ final class DiagnosticsSection implements Section {
 
     /** The game log, read once per open rather than per frame. */
     private List<String> gameLog = new ArrayList<String>();
+
+    private static String[] scenarioNames() {
+        java.util.List<net.fathom.optimizations.core.bench.Scenario> all =
+                net.fathom.optimizations.core.bench.Scenarios.all();
+        String[] names = new String[all.size()];
+        for (int index = 0; index < names.length; index++) {
+            names[index] = all.get(index).id();
+        }
+        return names;
+    }
 
     @Override
     public String title() {
@@ -125,7 +156,6 @@ final class DiagnosticsSection implements Section {
         Controls controls = context.controls();
         focus().sample();
 
-        Rect bar = area.top(Skin.H_MD);
         boolean recording = Runtime.session() != null;
 
         // Every button is as wide as its label needs. When the two clusters do
@@ -133,16 +163,21 @@ final class DiagnosticsSection implements Section {
         // other at fixed widths.
         float pad = Skin.S4 * 2f;
         float benchWidth = Math.max(120f, ui.measure(recording ? "Stop recording" : "Benchmark", Type.BODY_STRONG) + pad);
-        float spikeWidth = ui.measure("Renderer spike", Type.BODY_STRONG) + pad;
+        float spikeWidth = ui.measure("Renderer proof", Type.BODY_STRONG) + pad;
         float launcherWidth = ui.measure("Launcher diagnostics", Type.BODY_STRONG) + pad;
         float saveWidth = Math.max(72f, ui.measure("Save", Type.BODY_STRONG) + pad);
         float copyWidth = Math.max(72f, ui.measure("Copy", Type.BODY_STRONG) + pad);
         float leftWidth = benchWidth + Skin.S3 + 170f + Skin.S3 + spikeWidth;
         float rightWidth = launcherWidth + Skin.S2 + saveWidth + Skin.S2 + copyWidth;
-        boolean twoLines = leftWidth + Skin.S6 + rightWidth > bar.width;
-        Rect rightBar = twoLines ? new Rect(bar.x, bar.bottom() + Skin.S2, bar.width, Skin.H_MD) : bar;
+        boolean twoLines = leftWidth + Skin.S6 + rightWidth > area.width;
+        float toolbarHeight = twoLines ? Skin.H_MD * 2f + Skin.S2 : Skin.H_MD;
+        toolbarSlot.height(toolbarHeight);
+        page.layout(ui, area.x, area.y, area.width, area.height);
+        Rect bar = toolbarSlot.rect().top(Skin.H_MD);
+        Rect rightBar = twoLines ? toolbarSlot.rect().belowTop(Skin.H_MD + Skin.S2).top(Skin.H_MD) : bar;
 
-        Rect bench = new Rect(bar.x, bar.y, benchWidth, Skin.H_MD);
+        benchBox.layout(ui, bar.x, bar.y, benchWidth, Skin.H_MD);
+        Rect bench = benchBox.rect();
         if (recording
                 ? controls.danger(ui, "diag.bench", bench, "Stop recording", true)
                 : controls.primary(ui, "diag.bench", bench, "Benchmark", true)) {
@@ -152,23 +187,22 @@ final class DiagnosticsSection implements Section {
         // Which scene this run is of. Recorded into the file, because a frame
         // time without a scene is not comparable to anything -- a CPU-ceiling
         // number and a forest number differ by more than any optimization will.
-        String[] scenarios = new String[
-                net.fathom.optimizations.core.bench.Scenarios.all().size()];
         int chosenScenario = 0;
-        for (int index = 0; index < scenarios.length; index++) {
-            scenarios[index] = net.fathom.optimizations.core.bench.Scenarios.all().get(index).id();
-            if (scenarios[index].equals(scenario)) {
+        for (int index = 0; index < SCENARIOS.length; index++) {
+            if (SCENARIOS[index].equals(scenario)) {
                 chosenScenario = index;
             }
         }
-        Rect picker = new Rect(bench.right() + Skin.S3, bar.y, 170f, Skin.H_MD);
-        int picked = controls.dropdown(ui, "diag.scenario", picker, scenarios, chosenScenario);
-        if (picked != chosenScenario && picked >= 0 && picked < scenarios.length) {
-            scenario = scenarios[picked];
+        scenarioBox.layout(ui, bench.right() + Skin.S3, bar.y, 170f, Skin.H_MD);
+        Rect picker = scenarioBox.rect();
+        int picked = controls.dropdown(ui, "diag.scenario", picker, SCENARIOS, chosenScenario);
+        if (picked != chosenScenario && picked >= 0 && picked < SCENARIOS.length) {
+            scenario = SCENARIOS[picked];
         }
 
-        Rect spike = new Rect(picker.right() + Skin.S3, bar.y, spikeWidth, Skin.H_MD);
-        if (controls.secondary(ui, "diag.spike", spike, "Renderer spike", true)) {
+        spikeBox.layout(ui, picker.right() + Skin.S3, bar.y, spikeWidth, Skin.H_MD);
+        Rect spike = spikeBox.rect();
+        if (controls.secondary(ui, "diag.spike", spike, "Renderer proof", true)) {
             context.openSpike();
         }
 
@@ -178,19 +212,22 @@ final class DiagnosticsSection implements Section {
         // thing this client spent a milestone removing.
         boolean connected = Runtime.bridge() != null
                 && Runtime.bridge().state() == net.fathom.optimizations.fabric.bridge.LauncherBridge.State.READY;
-        Rect launcher = twoLines
-                ? new Rect(rightBar.x + copyWidth + Skin.S2 + saveWidth + Skin.S2, rightBar.y, launcherWidth, Skin.H_MD)
-                : rightBar.vcentreRight(0f, launcherWidth, Skin.H_MD);
+        float launcherX = twoLines ? rightBar.x + copyWidth + Skin.S2 + saveWidth + Skin.S2
+                : rightBar.right() - launcherWidth;
+        launcherBox.layout(ui, launcherX, rightBar.y, launcherWidth, Skin.H_MD);
+        Rect launcher = launcherBox.rect();
         if (controls.secondary(ui, "diag.launcher", launcher, "Launcher diagnostics", connected)) {
             note = Runtime.bridge().openDiagnostics()
                     ? "Opened in the launcher."
                     : "The launcher did not answer.";
         }
-        Rect save = new Rect(launcher.x - Skin.S2 - saveWidth, rightBar.y, saveWidth, Skin.H_MD);
+        saveBox.layout(ui, launcher.x - Skin.S2 - saveWidth, rightBar.y, saveWidth, Skin.H_MD);
+        Rect save = saveBox.rect();
         if (controls.secondary(ui, "diag.save", save, "Save", true)) {
             saveReport(context);
         }
-        Rect copy = new Rect(save.x - Skin.S2 - copyWidth, rightBar.y, copyWidth, Skin.H_MD);
+        copyBox.layout(ui, save.x - Skin.S2 - copyWidth, rightBar.y, copyWidth, Skin.H_MD);
+        Rect copy = copyBox.rect();
         if (controls.secondary(ui, "diag.copy", copy, "Copy", true)) {
             net.minecraft.client.gui.screen.Screen.setClipboard(report(context));
             note = "Copied to the clipboard.";
@@ -218,14 +255,18 @@ final class DiagnosticsSection implements Section {
                     Skin.TEXT_MUTED);
         }
 
-        Rect body = area.belowTop((twoLines ? Skin.H_MD * 2f + Skin.S2 : Skin.H_MD) + Skin.S5);
+        Rect body = factsViewport.rect();
         List<String[]> facts = facts(context);
         float contentHeight = facts.size() * FACT_ROW;
         float offset = scroller.offset(context.delta(), contentHeight, body.height);
+        syncFactBoxes(facts.size());
+        factsLayout.scrollTo(offset);
+        factsLayout.layout(ui, body.x, body.y, body.width, body.height);
+        body = factsLayout.content();
 
         ui.clip(body.x, body.y, body.right(), body.bottom());
         for (int index = 0; index < facts.size(); index++) {
-            Rect row = new Rect(body.x, body.y + index * FACT_ROW - offset, body.width - Skin.S3, FACT_ROW);
+            Rect row = factBoxes.get(index).rect();
             if (row.bottom() < body.y || row.y > body.bottom()) {
                 continue;
             }
@@ -252,6 +293,20 @@ final class DiagnosticsSection implements Section {
         }
         ui.unclip();
         scroller.rail(ui, body, context.pointer(), context.now());
+    }
+
+    private void syncFactBoxes(int count) {
+        if (factBoxes.size() == count) {
+            return;
+        }
+        factsLayout.children().clear();
+        factsLayout.invalidate();
+        factBoxes.clear();
+        for (int index = 0; index < count; index++) {
+            Box row = Box.row("diagnostics.fact." + index).height(FACT_ROW);
+            factBoxes.add(row);
+            factsLayout.add(row);
+        }
     }
 
     /**
@@ -380,13 +435,19 @@ final class DiagnosticsSection implements Section {
         out.add(fact("Fathom draw",
                 millis(frames.uiMeanMillis()) + " ms mean, p99 " + millis(frames.uiPercentileMillis(0.99f))));
         Renderer activeUi = context.ui();
-        if (activeUi instanceof FrameRenderer) {
-            out.add(fact("Backend", ((FrameRenderer) activeUi).describe()));
-        } else {
-            out.add(fact("Backend", "Fathom GL fallback"));
-        }
-        GlRenderer renderer = Gfx.peek();
-        if (!Gfx.vectorFrame() && renderer != null) {
+        out.add(fact("Backend", Gfx.screenBackend()));
+        if (activeUi instanceof SdfRenderer) {
+            SdfRenderer renderer = (SdfRenderer) activeUi;
+            SdfRenderer.Stats stats = renderer.stats();
+            out.add(fact("Geometry", stats.lastQuads + " quads in " + stats.lastDraws + " draw calls"));
+            out.add(fact("Upload", stats.lastBytes + " bytes; " + stats.lastBlurPasses + " blur passes"));
+            out.add(fact("Scale", String.format(java.util.Locale.ROOT, "%.2f", Float.valueOf(renderer.scale()))
+                    + "× on " + renderer.scaleInfo().framebufferWidth() + "×"
+                    + renderer.scaleInfo().framebufferHeight()
+                    + (context.hud().prefs().scaleIsAutomatic() ? " (automatic)" : " (" + context.hud().prefs()
+                            .scaleLabel() + ")")));
+        } else if (activeUi instanceof GlRenderer) {
+            GlRenderer renderer = (GlRenderer) activeUi;
             GlRenderer.Stats stats = renderer.stats();
             out.add(fact("Geometry", stats.lastQuads + " quads in " + stats.lastDraws + " draw calls"));
             out.add(fact("Caches", stats.glyphPages + " glyph pages, " + stats.iconEntries + " icons"));
@@ -395,14 +456,6 @@ final class DiagnosticsSection implements Section {
                     + renderer.scaleInfo().framebufferHeight()
                     + (context.hud().prefs().scaleIsAutomatic() ? " (automatic)" : " (" + context.hud().prefs()
                             .scaleLabel() + ")")));
-            out.add(fact("Animations", String.valueOf(context.controls().animationCount())));
-            // The hover path, where somebody can see it. The requirement is
-            // structural — the frame that discovers a hover is the frame that
-            // draws it — so the number to watch is frames waited, and it should
-            // read zero. Anything else is a hover queued behind something.
-            long worst = net.fathom.optimizations.fabric.ui.HoverLatency.worstFramesWaited();
-            String hover = net.fathom.optimizations.fabric.ui.HoverLatency.summary();
-            out.add(worst > 0L ? warning("Hover latency", hover) : fact("Hover latency", hover));
             if (stats.fallbackFont) {
                 out.add(warning("Typeface", "Geist missing, using a fallback"));
             }
@@ -413,8 +466,12 @@ final class DiagnosticsSection implements Section {
                     + "× on " + framebufferWidth + "×" + framebufferHeight
                     + (context.hud().prefs().scaleIsAutomatic() ? " (automatic)" : " ("
                             + context.hud().prefs().scaleLabel() + ")")));
-            out.add(fact("Animations", String.valueOf(context.controls().animationCount())));
         }
+        out.add(fact("Animations", String.valueOf(context.controls().animationCount())));
+        // The frame that discovers a hover is the frame that draws it.
+        long worst = net.fathom.optimizations.fabric.ui.HoverLatency.worstFramesWaited();
+        String hover = net.fathom.optimizations.fabric.ui.HoverLatency.summary();
+        out.add(worst > 0L ? warning("Hover latency", hover) : fact("Hover latency", hover));
 
         out.add(heading("Client"));
         out.add(fact("Features", context.features().enabledCount() + " of " + context.features().size() + " on"));

@@ -35,10 +35,7 @@ final class QuadBatch {
             return;
         }
         // Anything Fathom's renderer queued shares the same Tessellator.
-        net.fathom.optimizations.fabric.gfx.GlRenderer active = net.fathom.optimizations.fabric.gfx.Gfx.peek();
-        if (active != null && active.inFrame()) {
-            active.flush();
-        }
+        net.fathom.optimizations.fabric.gfx.Gfx.flushHudOverlay();
         Tessellator.getInstance().getBuffer().begin(7, VertexFormats.POSITION_COLOR);
         open = true;
     }

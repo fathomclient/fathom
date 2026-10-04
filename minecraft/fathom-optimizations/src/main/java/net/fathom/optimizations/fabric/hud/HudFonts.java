@@ -3,7 +3,7 @@ package net.fathom.optimizations.fabric.hud;
 import net.minecraft.client.font.TextRenderer;
 
 import net.fathom.optimizations.core.ui.render.Type;
-import net.fathom.optimizations.fabric.gfx.GlRenderer;
+import net.fathom.optimizations.core.ui.render.Renderer;
 
 /**
  * The two fonts a HUD widget can be drawn in.
@@ -35,7 +35,7 @@ public final class HudFonts {
      *
      * @param mcToLogical Fathom logical units per Minecraft scaled pixel
      */
-    public static HudFont fathom(GlRenderer renderer, float mcToLogical) {
+    public static HudFont fathom(Renderer renderer, float mcToLogical) {
         Fathom cached = lastFathom;
         if (cached == null || cached.renderer != renderer
                 || Float.floatToIntBits(cached.requestedScale) != Float.floatToIntBits(mcToLogical)) {
@@ -120,12 +120,12 @@ public final class HudFonts {
         /** Minecraft's glyph cell, in scaled pixels. The size to match. */
         private static final float CELL = 8f;
 
-        private final GlRenderer renderer;
+        private final Renderer renderer;
         private final float requestedScale;
         private final float mcToLogical;
         private final Type type;
 
-        Fathom(GlRenderer renderer, float mcToLogical) {
+        Fathom(Renderer renderer, float mcToLogical) {
             this.renderer = renderer;
             this.requestedScale = mcToLogical;
             this.mcToLogical = Math.max(0.0001f, mcToLogical);

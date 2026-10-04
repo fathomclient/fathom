@@ -72,14 +72,12 @@ public final class FathomSubsystems {
                 },
                 ""));
 
-        // NanoVG only opens a frame for a Fathom *screen*. During an in-world
-        // benchmark no screen is open, so switching it changes nothing that can
-        // be measured -- said here rather than reported as a zero cost.
+        // The compositor is selected at startup and also owns the live HUD, so
+        // it cannot be toggled safely in the middle of an automated run.
         registry.add(new ToggleSubsystem(
-                "render.nanovg", "NanoVG vector renderer", "render",
+                "render.compositor", "SDF interface compositor", "render",
                 true, false, false, null,
-                "chosen at class load from -Dfathom.forceGlRenderer, and only used "
-                        + "by Fathom screens -- not by the in-world HUD"));
+                "chosen at class load from -Dfathom.forceGlRenderer; used by Fathom screens and HUD"));
 
         registry.add(new ToggleSubsystem(
                 "render.gl-state-guard", "GL state capture around Fathom frames", "render",

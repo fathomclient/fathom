@@ -165,7 +165,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
     private final Box railBox = Box.column("hub.rail");
     private final Box railRule = Box.column("hub.rail.rule").height(1f);
     private final Box[] telemetryRows = new Box[2];
-    private final Box contentBox = Box.column("hub.content").grow(1f);
+    private final Box contentBox = Box.column("hub.content").grow(1f).alignSelf(Box.Align.STRETCH);
     private Box[] railItems = new Box[0];
     private String[] railIds = new String[0];
     private String[] railSelectedIds = new String[0];

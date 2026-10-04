@@ -12,7 +12,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.Identifier;
 
 import net.fathom.optimizations.fabric.gfx.Gfx;
-import net.fathom.optimizations.fabric.gfx.GlRenderer;
 
 /**
  * The two things a HUD widget can draw that are not a rectangle: a sprite from
@@ -41,10 +40,7 @@ final class HudGl {
 
     /** Make sure nothing of Fathom's is queued before raw drawing. */
     static void flushPending() {
-        GlRenderer active = Gfx.peek();
-        if (active != null && active.inFrame()) {
-            active.flush();
-        }
+        Gfx.flushHudOverlay();
     }
 
     /**

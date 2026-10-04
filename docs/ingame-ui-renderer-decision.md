@@ -1,4 +1,7 @@
-# The in-game UI renderer — evaluation and decision
+# The in-game UI renderer — original evaluation and decision
+
+> Historical document. The current architecture and measurements are in
+> [`ingame-ui-compositor.md`](ingame-ui-compositor.md).
 
 > **Being revisited (2026-09-12).** The project has chosen to move the in-game UI to
 > NanoVG. The foundation — an isolated LWJGL 3 backend behind the `Renderer` seam this

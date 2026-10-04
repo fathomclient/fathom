@@ -25,7 +25,6 @@ import net.fathom.optimizations.fabric.bridge.LauncherBridge;
 import net.fathom.optimizations.fabric.FathomOptimizationsClient;
 import net.fathom.optimizations.fabric.gfx.FathomScreen;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
-import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Controls;
@@ -195,19 +194,29 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     private final TextLeaf[] factLabels = new TextLeaf[3];
     private final TextLeaf[] factValues = new TextLeaf[3];
     private final TextLeaf legalLine = TextLeaf.of("legal", FACT_LABEL, 14f).keepCase(true);
-    /** Floats under the account capsule, inside the screen; its height follows its content. */
-    private final Box accountPanelBox = Box.leaf("account.panel", new Box.Measure() {
-        @Override
-        public float width(Renderer ui) {
-            return ACCOUNT_PANEL_WIDTH;
-        }
-
-        @Override
-        public float height(Renderer ui, float width) {
-            return accountPanelHeight;
-        }
-    });
-    private float accountPanelHeight;
+    /** Floats under the account capsule; its retained children determine its height. */
+    private final Box accountPanelBox = Box.column("account.panel").width(ACCOUNT_PANEL_WIDTH)
+            .padding(GraphiteTokens.SPACE_4);
+    private final Box accountIdentityBox = Box.row("account.identity").height(48f);
+    private final Box accountFaceBox = Box.fixed("account.face", 48f, 48f);
+    private final Box accountIdentityText = Box.column("account.identity.text").grow(1f);
+    private final Box accountRuleBox = Box.column("account.rule")
+            .height(GraphiteTokens.SPACE_4 + 1f + GraphiteTokens.SPACE_4);
+    private final Box accountLabelBox = Box.column("account.label")
+            .height(net.fathom.optimizations.core.ui.layout.TextStack.lineBox(Graphite.CAPTION, 1.4f)
+                    + GraphiteTokens.SPACE_2);
+    private final Box accountRowsBox = Box.column("account.rows").gap(GraphiteTokens.SPACE_1);
+    private final Box accountRowsAfter = Box.column("account.rows.after")
+            .height(GraphiteTokens.SPACE_1 + GraphiteTokens.SPACE_2);
+    private final Box accountQuitBox = Box.row("account.quit").height(GraphiteTokens.SIZE_CONTROL);
+    private final Box accountQuitAfter = Box.column("account.quit.after").height(GraphiteTokens.SPACE_2);
+    private final Box accountStatusBox = Box.column("account.status");
+    private final Box accountStatusAfter = Box.column("account.status.after").height(GraphiteTokens.SPACE_2);
+    private final Box accountAddBox = Box.row("account.add").height(GraphiteTokens.SIZE_CONTROL);
+    private final java.util.List<Box> accountRowBoxes = new java.util.ArrayList<Box>();
+    private final java.util.List<LauncherBridge.SavedAccount> accountOthers =
+            new java.util.ArrayList<LauncherBridge.SavedAccount>();
+    private final java.util.List<String> accountRowIds = new java.util.ArrayList<String>();
     private boolean built;
     private static final float ACCOUNT_PANEL_WIDTH = 300f;
     private static final String[] FACT_NAMES = {"Client", "Preset", "Hub"};
@@ -394,6 +403,19 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         root.add(legalSlot);
 
         root.addFloating(accountPanelBox, capsule, Box.Place.BELOW_END, GraphiteTokens.SPACE_2);
+        accountIdentityBox.gap(GraphiteTokens.SPACE_3).align(Box.Align.CENTRE);
+        accountIdentityBox.add(accountFaceBox);
+        accountIdentityBox.add(accountIdentityText);
+        accountPanelBox.add(accountIdentityBox);
+        accountPanelBox.add(accountRuleBox);
+        accountPanelBox.add(accountLabelBox);
+        accountPanelBox.add(accountRowsBox);
+        accountPanelBox.add(accountRowsAfter);
+        accountPanelBox.add(accountQuitBox);
+        accountPanelBox.add(accountQuitAfter);
+        accountPanelBox.add(accountStatusBox);
+        accountPanelBox.add(accountStatusAfter);
+        accountPanelBox.add(accountAddBox);
         eyebrow.set("Current installation");
         legalLine.set(LEGAL);
     }
@@ -421,11 +443,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         card.width(Math.min(CARD_WIDTH, Math.max(280f, ui.width() - CARD_LEFT - 56f)));
         accountPanelBox.hidden(!accountOpen);
         if (accountOpen) {
-            float height = accountPanelContentHeight();
-            if (height != accountPanelHeight) {
-                accountPanelHeight = height;
-                accountPanelBox.invalidate();
-            }
+            syncAccountLayout();
         }
         root.layout(ui, 0f, 0f, ui.width(), ui.height());
     }
@@ -705,16 +723,40 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
      * asks the launcher to select that account, and then offers to quit to it:
      * the next Play is as the new account.
      */
-    /** The panel's height for what it shows now. */
-    private float accountPanelContentHeight() {
-        float pad = GraphiteTokens.SPACE_4;
-        float row = GraphiteTokens.SIZE_CONTROL;
-        int others = 0;
+    /** Update the account subtree only when accounts or conditional rows changed. */
+    private void syncAccountLayout() {
         String current = compactSessionUuid();
-        if (account != null) {
-            for (LauncherBridge.SavedAccount each : account.savedAccounts()) {
+        accountOthers.clear();
+        LauncherBridge.SavedAccount[] saved = account == null ? null : account.savedAccounts();
+        if (saved != null) {
+            for (LauncherBridge.SavedAccount each : saved) {
                 if (!each.uuid.equals(current)) {
-                    others++;
+                    accountOthers.add(each);
+                }
+            }
+        }
+        boolean changed = accountRowBoxes.isEmpty() || accountRowIds.size() != accountOthers.size();
+        if (!changed) {
+            for (int index = 0; index < accountOthers.size(); index++) {
+                if (!accountOthers.get(index).uuid.equals(accountRowIds.get(index))) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (changed) {
+            accountRowsBox.children().clear();
+            accountRowsBox.invalidate();
+            accountRowBoxes.clear();
+            accountRowIds.clear();
+            int count = Math.max(1, accountOthers.size());
+            for (int index = 0; index < count; index++) {
+                String id = index < accountOthers.size() ? accountOthers.get(index).uuid : "empty";
+                Box row = Box.row("account.row." + id).height(GraphiteTokens.SIZE_CONTROL);
+                accountRowsBox.add(row);
+                accountRowBoxes.add(row);
+                if (index < accountOthers.size()) {
+                    accountRowIds.add(id);
                 }
             }
         }
@@ -722,10 +764,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         boolean pendingSwitch = !switched.isEmpty() && !switched.equalsIgnoreCase(playerName())
                 && account.phase() == LauncherAccount.Phase.SIGNED_IN;
         float status = statusHeight();
-        return pad + 48f + pad + 1f + pad + line(Graphite.CAPTION, 1.4f) + GraphiteTokens.SPACE_2
-                + Math.max(1, others) * (row + GraphiteTokens.SPACE_1)
-                + GraphiteTokens.SPACE_2 + row + (pendingSwitch ? row + GraphiteTokens.SPACE_2 : 0f)
-                + (status > 0f ? status + GraphiteTokens.SPACE_2 : 0f) + pad;
+        accountQuitBox.hidden(!pendingSwitch);
+        accountQuitAfter.hidden(!pendingSwitch);
+        accountStatusBox.hidden(status <= 0f).height(status);
+        accountStatusAfter.hidden(status <= 0f);
     }
 
     private String compactSessionUuid() {
@@ -742,20 +784,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
 
     private void accountPanel(Renderer ui) {
         float pad = GraphiteTokens.SPACE_4;
-        LauncherBridge.SavedAccount[] saved = account == null ? new LauncherBridge.SavedAccount[0]
-                : account.savedAccounts();
         String current = compactSessionUuid();
-        java.util.List<LauncherBridge.SavedAccount> others = new java.util.ArrayList<LauncherBridge.SavedAccount>();
-        for (LauncherBridge.SavedAccount each : saved) {
-            if (!each.uuid.equals(current)) {
-                others.add(each);
-            }
-        }
         String switched = account == null ? "" : account.name();
         boolean pendingSwitch = !switched.isEmpty() && !switched.equalsIgnoreCase(playerName())
                 && account.phase() == LauncherAccount.Phase.SIGNED_IN;
 
-        float row = GraphiteTokens.SIZE_CONTROL;
         float status = statusHeight();
         // Placed by the layout: under the capsule, right edges aligned, inside the screen.
         Rect panel = accountPanelBox.rect();
@@ -763,7 +796,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         // Anything outside the panel closes it; registered after the page and
         // before the panel's own controls, so neither the page nor the panel
         // sees a click that was meant for the other.
-        Controls.State outside = controls.state("account.outside", new Rect(0f, 0f, ui.width(), ui.height()),
+        Controls.State outside = controls.state("account.outside", root.rect(),
                 !closing);
         Controls.State inside = controls.state("account.inside", panel, !closing);
         if (outside.clicked && !inside.hovered && !accountPill.contains(pointer.x(), pointer.y())) {
@@ -771,18 +804,17 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         }
 
         Graphite.surface(ui, panel, Graphite.R_PANEL, Graphite.Material.DENSE, true);
-        float x = panel.x + pad;
-        float inner = panel.width - pad * 2f;
-        float y = panel.y + pad;
+        float x = accountPanelBox.content().x;
+        float inner = accountPanelBox.content().width;
 
         // Who: the head, the name, the account and its id.
-        Rect face = new Rect(x, y, 48f, 48f);
+        Rect face = accountFaceBox.rect();
         String name = playerName();
         head(ui, face, name);
         Type title = Graphite.floor(ui, Graphite.HEADING);
         Type small = Graphite.floor(ui, Graphite.SMALL);
         Type data = Graphite.floor(ui, Graphite.DATA_S);
-        float textX = face.right() + GraphiteTokens.SPACE_3;
+        float textX = accountIdentityText.rect().x;
         float room = panel.right() - pad - textX;
         // Name, kind and id as one block, centred on the head the way the
         // launcher's account row centres its text column.
@@ -798,23 +830,24 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
                 Graphite.TEXT_SECONDARY);
         ui.text(Text.fit(ui, shortUuid(current), data, room), textX, stack.line(Graphite.DATA_S, 1.3f, data), data,
                 Graphite.TEXT_TERTIARY);
-        y += 48f + pad;
+        float y = accountRuleBox.rect().centreY();
         Graphite.hairline(ui, x, x + inner, y);
-        y += 1f + pad;
 
         Type label = Graphite.floor(ui, Graphite.CAPTION);
-        ui.text("Other accounts", x, stack.begin(ui, y).line(Graphite.CAPTION, 1.4f, label), label,
+        ui.text("Other accounts", x, stack.begin(ui, accountLabelBox.rect().y)
+                .line(Graphite.CAPTION, 1.4f, label), label,
                 Graphite.TEXT_SECONDARY);
-        y += line(Graphite.CAPTION, 1.4f) + GraphiteTokens.SPACE_2;
 
         Type rowType = Graphite.floor(ui, Graphite.UI);
-        if (others.isEmpty()) {
-            ui.text("None yet. Add one below.", x, Graphite.baseline(ui, new Rect(x, y, inner, row), small), small,
+        if (accountOthers.isEmpty()) {
+            ui.text("None yet. Add one below.", x, Graphite.baseline(ui, accountRowBoxes.get(0).rect(), small), small,
                     Graphite.TEXT_TERTIARY);
-            y += row + GraphiteTokens.SPACE_1;
         }
-        for (LauncherBridge.SavedAccount other : others) {
-            Rect area = new Rect(x - GraphiteTokens.SPACE_2, y, inner + GraphiteTokens.SPACE_4, row);
+        for (int index = 0; index < accountOthers.size(); index++) {
+            LauncherBridge.SavedAccount other = accountOthers.get(index);
+            Rect rowRect = accountRowBoxes.get(index).rect();
+            Rect area = new Rect(rowRect.x - GraphiteTokens.SPACE_2, rowRect.y,
+                    rowRect.width + GraphiteTokens.SPACE_4, rowRect.height);
             Controls.State state = controls.state("account.switch." + other.uuid, area,
                     !closing && account != null && !account.working());
             Graphite.overlay(ui, area, Graphite.R_CONTROL, Math.max(state.hover, state.press), 0f);
@@ -832,13 +865,11 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
             if (state.clicked) {
                 account.switchTo(other.uuid);
             }
-            y += row + GraphiteTokens.SPACE_1;
         }
-        y += GraphiteTokens.SPACE_2;
 
         if (pendingSwitch) {
             // Selected in the launcher; the game still plays as who it started as.
-            Rect quit = new Rect(x, y, inner, row);
+            Rect quit = accountQuitBox.rect();
             if (cardButton(ui, "account.quit", quit, "Quit to play as " + switched, true)) {
                 final net.minecraft.client.MinecraftClient game = client;
                 account.openLauncher(new Runnable() {
@@ -849,18 +880,16 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
                 });
                 accountOpen = false;
             }
-            y += row + GraphiteTokens.SPACE_2;
         }
 
         // Where the attempt is: what the launcher and Microsoft are doing now.
         if (status > 0f) {
-            drawStatus(ui, new Rect(x, y, inner, status));
-            y += status + GraphiteTokens.SPACE_2;
+            drawStatus(ui, accountStatusBox.rect());
         }
 
         // Add, Cancel while Microsoft's page is open, Try again after a failure.
         LauncherAccount.Attempt attempt = account == null ? LauncherAccount.Attempt.NONE : account.attempt();
-        Rect add = new Rect(x, y, inner, row);
+        Rect add = accountAddBox.rect();
         Controls.State addState = controls.state("account.add", add, !closing && account != null);
         Graphite.surface(ui, add, Graphite.R_CONTROL, Graphite.Material.LIGHT, addState.hover, addState.press, 0f,
                 false);
@@ -1150,10 +1179,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
             client.startIntegratedServer("New World", "New World", null);
         } else if ("hud-editor".equalsIgnoreCase(target)) {
             FathomNavigation.push(client, new HudEditorScreen(Runtime.hud()));
-        } else if ("nanovg".equalsIgnoreCase(target) || "nanovg-live".equalsIgnoreCase(target)) {
-            // The renderer showcase. Development only: it needs the isolated
-            // classpath `gradle runClient -PcaptureUi=nanovg[-live]` provides.
-            client.setScreen(new net.fathom.optimizations.fabric.gfx.nanovg.RendererShowcaseScreen());
         } else {
             FathomNavigation.openHub(client, Runtime.hud());
         }

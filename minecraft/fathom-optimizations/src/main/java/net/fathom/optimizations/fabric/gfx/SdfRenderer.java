@@ -112,6 +112,8 @@ public final class SdfRenderer implements UiCanvas {
     private boolean inFrame;
     private UiScale ui = new UiScale(854, 480, 1f);
     private boolean lowercase;
+    /** User-controlled backdrop sampling; shapes and MSDF text always stay native-resolution. */
+    private boolean effectsEnabled = true;
     private int keepCase;
 
     /** Recording: per layer, the quads' ints and the draw commands over them. */
@@ -220,6 +222,10 @@ public final class SdfRenderer implements UiCanvas {
         return "Fathom SDF compositor (GLSL 1.20, MSDF text)";
     }
 
+    public void setEffectsEnabled(boolean enabled) {
+        effectsEnabled = enabled;
+    }
+
     // -----------------------------------------------------------------------
     // Frame
     // -----------------------------------------------------------------------
@@ -302,6 +308,20 @@ public final class SdfRenderer implements UiCanvas {
         }
         inFrame = false;
         reportImbalance();
+        flush();
+    }
+
+    /**
+     * Composite everything recorded so far without ending the frame.
+     *
+     * <p>Screens normally need only {@link #endFrame}. The live HUD is the
+     * exception: its SDF text is interleaved with Minecraft-owned item models
+     * and resource-pack sprites. Those draws must stay in source order, so the
+     * HUD flushes at each boundary, exactly as the old tessellator batch did.
+     * Recorded vertices are already in framebuffer coordinates; clearing the
+     * recorder here cannot invalidate the transform or clip stacks.
+     */
+    public void flush() {
         int total = recorder.totalInts();
         if (total == 0) {
             return;
@@ -339,6 +359,7 @@ public final class SdfRenderer implements UiCanvas {
             GlStateManager.bindTexture(unit1);
             GlStateManager.activeTexture(GL13.GL_TEXTURE0);
             state.restore();
+            recorder.clear();
         }
     }
 
@@ -776,7 +797,7 @@ public final class SdfRenderer implements UiCanvas {
     @Override
     public boolean glass(float left, float top, float right, float bottom, float radius, float blur,
             float saturate, float brightness) {
-        if (blur <= 0f || layer <= Layer.BACKDROP || right <= left || bottom <= top) {
+        if (!effectsEnabled || blur <= 0f || layer <= Layer.BACKDROP || right <= left || bottom <= top) {
             return false;
         }
         float l = snap(deviceX(left));

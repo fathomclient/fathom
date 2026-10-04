@@ -12,12 +12,10 @@ package net.fathom.optimizations.fabric.diag;
  * not in any GPU timing. It is the classic way a UI layer that is "obviously
  * cheap" takes a frame rate from four figures to three.
  *
- * <p>Fathom takes two such batches: {@code GlStateSnapshot} (about 24 queries)
- * when the GL renderer opens a frame, and {@code NanoVgGlGuard} (about 23) when
- * the vector renderer does. Both are correctness machinery -- Fathom borrows the
- * game's GL state and must hand it back -- so neither is simply removable. What
- * matters for the diagnosis is <em>how many times a frame</em> they run, and
- * that is a number, not an argument.
+ * <p>Fathom takes one such batch through {@code GlStateSnapshot} when either
+ * renderer submits a frame. It is correctness machinery -- Fathom borrows the
+ * game's GL state and must hand it back. What matters for diagnosis is how many
+ * times a frame it runs, and that is a number, not an argument.
  */
 public final class GlSync {
 

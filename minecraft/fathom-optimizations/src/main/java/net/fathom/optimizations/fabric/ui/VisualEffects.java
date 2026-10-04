@@ -1,7 +1,6 @@
 package net.fathom.optimizations.fabric.ui;
 
 import net.fathom.optimizations.core.ui.layout.Rect;
-import net.fathom.optimizations.core.ui.render.FathomRenderer;
 import net.fathom.optimizations.core.ui.Colour;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Shadow;
@@ -165,12 +164,8 @@ public final class VisualEffects {
     /** Coordinate overload for hot paths that already have scalar bounds. */
     public static void shadow(Renderer ui, float left, float top, float right, float bottom,
             float radius, Shadow shadow) {
-        if (ui instanceof FathomRenderer) {
-            ((FathomRenderer) ui).shadow(left, top, right, bottom, radius, shadow);
-        } else {
-            ui.shadow(left, top, right, bottom, radius,
-                    shadow.blur() * 0.6f, shadow.argb());
-        }
+        ui.boxShadow(left, top, right, bottom, radius, shadow.blur(), shadow.spread(),
+                shadow.offsetX(), shadow.offsetY(), shadow.argb());
     }
 
     private static float clamp(float value) {

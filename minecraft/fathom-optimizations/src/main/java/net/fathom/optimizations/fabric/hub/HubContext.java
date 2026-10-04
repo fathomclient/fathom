@@ -10,7 +10,7 @@ import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Pointer;
-import net.fathom.optimizations.fabric.gfx.SpikeScreen;
+import net.fathom.optimizations.fabric.gfx.RendererProofScreen;
 import net.fathom.optimizations.fabric.hud.FathomHud;
 import net.fathom.optimizations.fabric.hud.HudEditorScreen;
 import net.fathom.optimizations.fabric.ui.Controls;
@@ -203,11 +203,11 @@ public final class HubContext {
     /**
      * Open the renderer comparison screen.
      *
-     * <p>The spike the renderer was chosen with, kept rather than deleted: it is
-     * the fastest way to see what a change to the text or shape pipeline did.
+     * <p>The canonical compositor proof scene is the fastest way to see what a
+     * change to the text or shape pipeline did.
      */
     public void openSpike() {
-        FathomNavigation.push(client, new SpikeScreen());
+        FathomNavigation.push(client, new RendererProofScreen());
     }
 
     /** Close the hub — with the animation, not by vanishing. */

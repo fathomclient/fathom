@@ -19,12 +19,12 @@ import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.anim.Transition;
 import net.fathom.optimizations.core.ui.render.Icon;
+import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.gfx.FathomScreen;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.Gfx;
-import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
 import net.fathom.optimizations.fabric.gfx.Pointer;
 import net.fathom.optimizations.fabric.ui.Controls;
@@ -237,10 +237,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         // Fathom takes the GL state, because it is the game's pass.
         hud.render(client, true);
 
-        float delta = Gfx.begin(client, Runtime.uiScale());
+        Renderer ui = Gfx.beginScreen(client, Runtime.uiScale());
+        float delta = Gfx.screenDelta();
         boolean restorePrevious = false;
         try {
-            GlRenderer ui = Gfx.renderer(client);
             pointer.poll(client, ui);
             controls.begin(pointer, delta);
             mcToLogical = (client.width / (float) Math.max(1, screenWidth)) / ui.scale();
@@ -303,7 +303,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             ui.popAlpha();
             restorePrevious = transition.finished(now);
         } finally {
-            Gfx.end();
+            Gfx.endScreen();
         }
         if (restorePrevious && !FathomNavigation.back(client, this)) {
             closing = false;
@@ -408,7 +408,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
      * game is a cage; dots give the same alignment cue and leave the scene
      * visible, which is the entire reason the editor is over the game.
      */
-    private void grid(GlRenderer ui) {
+    private void grid(Renderer ui) {
         int colour = Skin.argb(0.16f, Skin.ACCENT);
         float dot = Math.max(1f, mcToLogical);
         for (int x = GRID; x < screenWidth; x += GRID) {
@@ -428,7 +428,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
      * the top when F3 is held. A widget under any of them is a widget its owner
      * will describe as "not working".
      */
-    private void safeBounds(GlRenderer ui) {
+    private void safeBounds(Renderer ui) {
         int colour = Skin.argb(0.34f, Skin.ACCENT_DEEP);
 
         // The hotbar: 182 wide plus the health and hunger rows above it. These
@@ -446,13 +446,13 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         label(ui, "F3", 4f, toLogical(80) + 4f);
     }
 
-    private void label(GlRenderer ui, String text, float x, float y) {
+    private void label(Renderer ui, String text, float x, float y) {
         ui.text(text, x, y + ui.ascent(Type.CAPTION), Type.CAPTION,
                 Skin.argb(0.68f, Skin.ACCENT));
     }
 
     /** A dashed rectangle, so it reads as a boundary rather than a box. */
-    private void dashed(GlRenderer ui, int left, int top, int right, int bottom, int colour) {
+    private void dashed(Renderer ui, int left, int top, int right, int bottom, int colour) {
         float thickness = Math.max(1f, mcToLogical);
         float dash = 8f;
         float gap = 6f;
@@ -471,7 +471,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     /** Snap guides: the signal colour, the one place the editor uses it besides focus. */
-    private void drawGuides(GlRenderer ui) {
+    private void drawGuides(Renderer ui) {
         int colour = Skin.scaleAlpha(Tokens.COLOR_SIGNAL, 0.72f);
         float thickness = Math.max(1f, mcToLogical);
         for (Snap.Guide guide : guides) {
@@ -485,7 +485,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         }
     }
 
-    private void outlines(GlRenderer ui, int mouseX, int mouseY) {
+    private void outlines(Renderer ui, int mouseX, int mouseY) {
         for (FathomHud.Positioned positioned : boxes()) {
             boolean hovered = positioned.box.contains(mouseX, mouseY);
             boolean active = positioned.widget.id().equals(dragging)
@@ -541,7 +541,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     // Chrome
     // -----------------------------------------------------------------------
 
-    private void toolbar(GlRenderer ui) {
+    private void toolbar(Renderer ui) {
         float top = ui.height() - TOOLBAR_HEIGHT;
         Rect bar = Rect.of(0f, top, ui.width(), ui.height());
         Rect row = toolbarRow(ui);
@@ -657,7 +657,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     /** The six buttons along the left of the bar, laid out once. */
-    private Rect[] toolbarButtons(GlRenderer ui) {
+    private Rect[] toolbarButtons(Renderer ui) {
         Rect row = toolbarRow(ui);
         Rect[] out = new Rect[TOOL_WIDTHS.length];
         float cursor = row.x;
@@ -669,7 +669,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     /** The profile picker, at the right of the bar. */
-    private Rect toolbarPicker(GlRenderer ui) {
+    private Rect toolbarPicker(Renderer ui) {
         return toolbarRow(ui).vcentreRight(0f, PICKER_WIDTH, toolbarRow(ui).height);
     }
 
@@ -681,7 +681,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
      * from the hotbar and the chat, which are the two places a widget is most
      * likely to be being moved to.
      */
-    private void inspector(GlRenderer ui) {
+    private void inspector(Renderer ui) {
         Widget widget = widgetNamed(selected);
         if (widget == null) {
             return;
@@ -699,7 +699,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         }
     }
 
-    private void inspectorBody(GlRenderer ui, Widget widget, Rect panel) {
+    private void inspectorBody(Renderer ui, Widget widget, Rect panel) {
         Placement placement = hud.placement(widget.id());
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
         FathomComponents.panel(ui, panel);
@@ -769,7 +769,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
     /** One labelled slider in the inspector. Bounds come from the persisted placement type. */
     private float sliderRow(
-            GlRenderer ui, Rect inner, float y, String id, String label, String value, float fraction,
+            Renderer ui, Rect inner, float y, String id, String label, String value, float fraction,
             Widget widget, boolean scale) {
         ui.text(label, inner.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
         ui.textRight(value, inner.right(), y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_MUTED);
@@ -799,7 +799,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     // Input, from the device
     // -----------------------------------------------------------------------
 
-    private void input(GlRenderer ui) {
+    private void input(Renderer ui) {
         int notches = pointer.wheelNotches();
         if (notches != 0) {
             wheel(notches);
@@ -871,7 +871,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         selected = null;
     }
 
-    private Rect toolbarRow(GlRenderer ui) {
+    private Rect toolbarRow(Renderer ui) {
         Rect bar = Rect.of(0f, ui.height() - TOOLBAR_HEIGHT, ui.width(), ui.height());
         return bar.inset(Skin.S5, 0f).vcentre(0f, bar.width - Skin.S5 * 2f, Skin.H_MD);
     }
@@ -885,7 +885,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
      * aside for a widget underneath it, even the buttons let the click past --
      * otherwise a widget parked under one of them would be just as stuck.
      */
-    private boolean toolbarOwns(GlRenderer ui, float mouseX, float mouseY) {
+    private boolean toolbarOwns(Renderer ui, float mouseX, float mouseY) {
         if (barYields) {
             return false;
         }
@@ -897,12 +897,12 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         return hud.profiles() != null && toolbarPicker(ui).contains(mouseX, mouseY);
     }
 
-    private Rect inspectorArea(GlRenderer ui) {
+    private Rect inspectorArea(Renderer ui) {
         return inspectorAt(ui, inspectorCorner);
     }
 
     /** Top right, top left, bottom right, bottom left: the order they are tried in. */
-    private Rect inspectorAt(GlRenderer ui, int corner) {
+    private Rect inspectorAt(Renderer ui, int corner) {
         float margin = Skin.S5;
         float left = corner % 2 == 0 ? ui.width() - INSPECTOR_WIDTH - margin : margin;
         float top = corner < 2 ? margin : ui.height() - TOOLBAR_HEIGHT - margin - INSPECTOR_HEIGHT;
@@ -919,7 +919,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
      * under way, so the panel never jumps away from under the pointer -- the
      * yield (it fades when a widget is worked on beneath it) covers that case.
      */
-    private void placeInspector(GlRenderer ui) {
+    private void placeInspector(Renderer ui) {
         if (dragging != null || resizing != null) {
             return;
         }

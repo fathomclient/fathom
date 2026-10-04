@@ -1,6 +1,7 @@
 package net.fathom.optimizations.fabric.hub;
 
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.Box;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
@@ -32,7 +33,40 @@ import net.fathom.optimizations.fabric.ui.Skin;
  */
 final class LauncherSection implements Section {
 
+    private static final String[] CONNECTION_ACTIONS = {
+        "Bring the launcher to the front",
+        "Choose which installation launches next",
+        "Ask what the launcher knows",
+    };
+
     private String note = "";
+    private final Box page = Box.column("launcher.page");
+    private final Box stateCard = Box.column("launcher.state").height(84f).padding(Skin.S4);
+    private final Box actionRow = Box.row("launcher.actions").height(Skin.H_MD).gap(Skin.S3);
+    private final Box openButton = Box.fixed("launcher.open", 170f, Skin.H_MD);
+    private final Box recheckButton = Box.fixed("launcher.recheck", 120f, Skin.H_MD);
+    private final Box noteBox = Box.row("launcher.note").grow(1f);
+    private final Box details = Box.column("launcher.details");
+    private final Box[] detailRows = new Box[CONNECTION_ACTIONS.length];
+
+    LauncherSection() {
+        page.add(stateCard);
+        page.add(Box.column("launcher.state.after").height(Skin.S5));
+        actionRow.add(openButton);
+        actionRow.add(recheckButton);
+        actionRow.add(noteBox);
+        page.add(actionRow);
+        page.add(Box.column("launcher.actions.after").height(Skin.S6));
+        page.add(details);
+        details.add(Box.column("launcher.details.heading").height(24f));
+        for (int index = 0; index < detailRows.length; index++) {
+            detailRows[index] = Box.row("launcher.detail." + index).height(22f);
+            details.add(detailRows[index]);
+        }
+        details.add(Box.column("launcher.details.gap").height(Skin.S3));
+        details.add(Box.column("launcher.details.security").height(22f));
+        details.add(Box.column("launcher.details.loopback").height(22f));
+    }
 
     @Override
     public String title() {
@@ -66,11 +100,12 @@ final class LauncherSection implements Section {
         Controls controls = context.controls();
         LauncherBridge bridge = Runtime.bridge();
         LauncherBridge.State state = bridge.state();
+        page.layout(ui, area.x, area.y, area.width, area.height);
 
         // -- state card -------------------------------------------------------
-        Rect card = area.top(84f);
+        Rect card = stateCard.rect();
         FathomComponents.card(ui, card, 0f, 0f);
-        Rect inner = card.inset(Skin.S4, Skin.S4);
+        Rect inner = stateCard.content();
 
         int dot = state == LauncherBridge.State.READY
                 ? Skin.GOOD
@@ -84,9 +119,9 @@ final class LauncherSection implements Section {
                 Controls.stackDetail(ui, inner.y, Type.ROW_TITLE, Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
 
         // -- actions ----------------------------------------------------------
-        Rect actions = area.belowTop(84f + Skin.S5).top(Skin.H_MD);
+        Rect actions = actionRow.rect();
         String action = state == LauncherBridge.State.READY ? "Bring to front" : "Open Fathom";
-        Rect open = new Rect(actions.x, actions.y, 170f, Skin.H_MD);
+        Rect open = openButton.rect();
         if (controls.primary(ui, "launcher.open", open, action, true)) {
             boolean was = state == LauncherBridge.State.READY;
             if (bridge.open()) {
@@ -107,31 +142,29 @@ final class LauncherSection implements Section {
                 note = "";
             }
         }
-        Rect recheck = new Rect(open.right() + Skin.S3, actions.y, 120f, Skin.H_MD);
+        Rect recheck = recheckButton.rect();
         if (controls.secondary(ui, "launcher.refresh", recheck, "Recheck", true)) {
             bridge.refresh();
             note = "";
         }
         if (!note.isEmpty()) {
-            ui.text(note, recheck.right() + Skin.S4, Controls.baseline(ui, actions, Type.BODY), Type.BODY, Skin.GOOD);
+            ui.text(note, noteBox.rect().x + Skin.S1, Controls.baseline(ui, actions, Type.BODY), Type.BODY, Skin.GOOD);
         }
 
         // -- what crosses -----------------------------------------------------
-        Rect below = area.belowTop(84f + Skin.S5 + Skin.H_MD + Skin.S6);
+        Rect below = details.rect();
         Controls.label(ui, "What this connection carries", below.x, below.y);
-        float y = below.y + 24f;
-        for (String line : new String[] {
-            "Bring the launcher to the front",
-            "Choose which installation launches next",
-            "Ask what the launcher knows",
-        }) {
+        float y = 0f;
+        for (int index = 0; index < CONNECTION_ACTIONS.length; index++) {
+            Rect detail = detailRows[index].rect();
+            String line = CONNECTION_ACTIONS[index];
+            y = detail.y;
             ui.rounded(below.x + 3f, y + 7f, below.x + 7f, y + 11f, 2f, Skin.TEXT_DISABLED);
             ui.text(line, below.x + 18f, y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_FAINT);
-            y += 22f;
         }
-        y += Skin.S3;
+        y = details.children().get(5).rect().y;
         ui.text("No token or password ever crosses it.", below.x, y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_MUTED);
-        y += 22f;
+        y = details.children().get(6).rect().y;
         ui.text(Text.fit(ui, "Loopback only, with a key that dies with this session.", Type.SMALL, below.width),
                 below.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_DISABLED);
     }

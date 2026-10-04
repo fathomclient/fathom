@@ -44,7 +44,7 @@ import com.mojang.blaze3d.platform.GlStateManager;
  * the widgets would have drawn at the moment it was recorded, pixel for pixel,
  * at any GUI scale.
  *
- * <p>Widgets drawn in Fathom's own typeface go through NanoVG, whose shaders
+ * <p>Widgets drawn in Fathom's own typeface go through the SDF compositor, whose shaders
  * and vertex arrays do not belong in a display list; they are always drawn
  * directly, and are not passed here.
  *

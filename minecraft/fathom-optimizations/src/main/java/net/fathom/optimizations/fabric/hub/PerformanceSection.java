@@ -11,6 +11,7 @@ import net.fathom.optimizations.core.registry.Preset;
 import net.fathom.optimizations.core.registry.SwitchBoard;
 import net.fathom.optimizations.core.module.ClientPrefs;
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.Box;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
@@ -54,6 +55,35 @@ final class PerformanceSection implements Section {
 
     private final Scroller scroller = new Scroller();
     private List<Row> rows;
+    private List<Optimization> cachedEngineEntries;
+    private final Box page = Box.column("performance.page");
+    private final Box metersBox = Box.row("performance.meters").height(METER).gap(Skin.S3);
+    private final Box[] meterBoxes = new Box[3];
+    private final Box interfaceLabel = Box.column("performance.interface.label");
+    private final Box interfaceBox = Box.column("performance.interface");
+    private final Box presetLabel = Box.column("performance.preset.label");
+    private final Box presetBox = Box.row("performance.preset").height(Skin.H_MD);
+    private final Box listViewport = Box.stack("performance.list.viewport").grow(1f);
+    private final Box listLayout = Box.column("performance.list").padding(Skin.S2).scroll(true);
+    private final java.util.List<Box> layerBoxes = new java.util.ArrayList<Box>();
+    private final java.util.List<Box> engineBoxes = new java.util.ArrayList<Box>();
+    private Box engineHeading;
+
+    PerformanceSection() {
+        for (int index = 0; index < meterBoxes.length; index++) {
+            meterBoxes[index] = Box.row("performance.meter." + index).grow(1f);
+            metersBox.add(meterBoxes[index]);
+        }
+        page.add(metersBox);
+        page.add(Box.column("performance.meters.after").height(Skin.S5));
+        page.add(interfaceLabel);
+        page.add(interfaceBox);
+        page.add(Box.column("performance.interface.after").height(Skin.S5));
+        page.add(presetLabel);
+        page.add(presetBox);
+        page.add(Box.column("performance.preset.after").height(Skin.S5));
+        page.add(listViewport);
+    }
 
     @Override
     public String title() {
@@ -90,7 +120,13 @@ final class PerformanceSection implements Section {
             return;
         }
 
-        meters(context, area.top(METER));
+        float labelHeight = ui.lineHeight(Type.LABEL) + Skin.S1;
+        float interfaceLine = ui.lineHeight(Type.ROW_TITLE) + ui.lineHeight(Type.SMALL);
+        interfaceLabel.height(labelHeight);
+        interfaceBox.height(interfaceLine * 2f + Skin.S3 + Skin.S3 * 2f);
+        presetLabel.height(labelHeight);
+        page.layout(ui, area.x, area.y, area.width, area.height);
+        meters(context, metersBox.rect());
 
         // Stacked on a cursor, on real line heights. Every group is a label,
         // then its control, then a gap to the next group — and each of those
@@ -98,29 +134,17 @@ final class PerformanceSection implements Section {
         // somebody nudged until a screenshot looked right. The version this
         // replaces drew the Preset label sixteen units above a rectangle whose
         // own position had already been chosen, and the two collided.
-        float cursor = area.y + METER + Skin.S5;
-        float labelHeight = ui.lineHeight(Type.LABEL) + Skin.S1;
-
-        Controls.label(ui, "Interface", area.x, cursor);
-        cursor += labelHeight;
-        float interfaceLine = ui.lineHeight(Type.ROW_TITLE) + ui.lineHeight(Type.SMALL);
+        Controls.label(ui, "Interface", interfaceLabel.rect().x, interfaceLabel.rect().y);
         // A group of its own, as on Quick: its rows' descriptions need the
         // group's glass under them to hold over a bright sky.
-        Rect interfaceGroup = new Rect(area.x, cursor, area.width,
-                interfaceLine * 2f + Skin.S3 + Skin.S3 * 2f);
+        Rect interfaceGroup = interfaceBox.rect();
         FathomComponents.panel(ui, interfaceGroup);
         qualityRow(context, interfaceGroup.inset(Skin.CARD_PADDING, Skin.S3));
-        cursor = interfaceGroup.bottom() + Skin.S5;
-
-        Controls.label(ui, "Preset", area.x, cursor);
-        cursor += labelHeight;
-        Rect presetRow = new Rect(area.x, cursor, area.width, Skin.H_MD);
+        Controls.label(ui, "Preset", presetLabel.rect().x, presetLabel.rect().y);
+        Rect presetRow = presetBox.rect();
         presets(context, switches, presetRow);
-        cursor = presetRow.bottom() + Skin.S5;
-
-        Rect body = new Rect(area.x, cursor, area.width,
-                Math.max(0f, area.bottom() - cursor));
-        List<Optimization> entries = engineEntries();
+        Rect body = listViewport.rect();
+        List<Optimization> entries = cachedEngineEntries();
         List<Row> layerRows = layerRows();
         float layerHeight = 0f;
         for (int index = 0; index < layerRows.size(); index++) {
@@ -130,29 +154,29 @@ final class PerformanceSection implements Section {
         // Every setting below the presets in one group of light glass, its
         // sub-headings inside it -- not rows loose on the background.
         FathomComponents.group(ui, body, Skin.R_CARD);
-        Rect list = body.inset(Skin.S2);
-        float offset = scroller.offset(context.delta(), contentHeight, list.height);
-        body = list;
+        syncListBoxes(layerRows, entries);
+        float innerHeight = Math.max(0f, body.height - Skin.S2 * 2f);
+        float offset = scroller.offset(context.delta(), contentHeight, innerHeight);
+        listLayout.scrollTo(offset);
+        listLayout.layout(ui, body.x, body.y, body.width, body.height);
+        body = listLayout.content();
 
         ui.clip(body.x, body.y, body.right(), body.bottom());
-        float y = body.y - offset;
         FathomModule module = PerfLayer.module();
         for (int index = 0; index < layerRows.size(); index++) {
             Row each = layerRows.get(index);
-            Rect row = new Rect(body.x, y, body.width - Skin.S3, each.height());
-            y += each.height();
+            Rect row = layerBoxes.get(index).rect();
             if (row.bottom() < body.y || row.y > body.bottom()) {
                 continue;
             }
             each.draw(context, module, row);
         }
-        Rect engineHeader = new Rect(body.x, y, body.width - Skin.S3, GROUP);
-        y += GROUP;
+        Rect engineHeader = engineHeading.rect();
         if (engineHeader.bottom() >= body.y && engineHeader.y <= body.bottom()) {
             Controls.label(ui, "Engine optimizations", engineHeader.x + Skin.S3, engineHeader.y + Skin.S3);
         }
         for (int index = 0; index < entries.size(); index++) {
-            Rect row = new Rect(body.x, y + index * ROW, body.width - Skin.S3, ROW);
+            Rect row = engineBoxes.get(index).rect();
             if (row.bottom() < body.y || row.y > body.bottom()) {
                 continue;
             }
@@ -160,6 +184,35 @@ final class PerformanceSection implements Section {
         }
         ui.unclip();
         scroller.rail(ui, body, context.pointer(), context.now());
+    }
+
+    private List<Optimization> cachedEngineEntries() {
+        if (cachedEngineEntries == null) {
+            cachedEngineEntries = engineEntries();
+        }
+        return cachedEngineEntries;
+    }
+
+    /** The catalogue is stable for the process; retain one box per row. */
+    private void syncListBoxes(List<Row> layerRows, List<Optimization> entries) {
+        if (!layerBoxes.isEmpty() || engineHeading != null) {
+            return;
+        }
+        for (int index = 0; index < layerRows.size(); index++) {
+            Box box = Box.row("performance.layer." + index).height(layerRows.get(index).height())
+                    .padding(0f, 0f, Skin.S3, 0f);
+            layerBoxes.add(box);
+            listLayout.add(box);
+        }
+        engineHeading = Box.row("performance.engine.heading").height(GROUP)
+                .padding(0f, 0f, Skin.S3, 0f);
+        listLayout.add(engineHeading);
+        for (int index = 0; index < entries.size(); index++) {
+            Box box = Box.row("performance.engine." + entries.get(index).id()).height(ROW)
+                    .padding(0f, 0f, Skin.S3, 0f);
+            engineBoxes.add(box);
+            listLayout.add(box);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -204,6 +257,7 @@ final class PerformanceSection implements Section {
 
         private final String heading;
         private final String settingId;
+        private String[] choiceOptions;
 
         private Row(String heading, String settingId) {
             this.heading = heading;
@@ -267,7 +321,11 @@ final class PerformanceSection implements Section {
                 }
                 case CHOICE: {
                     Setting.Choice choice = (Setting.Choice) setting;
-                    String[] options = choice.options().toArray(new String[0]);
+                    String[] options = choiceOptions;
+                    if (options == null) {
+                        options = choice.options().toArray(new String[choice.options().size()]);
+                        choiceOptions = options;
+                    }
                     int chosen = controls.dropdown(ui, id, control, options, choice.index());
                     if (chosen != choice.index() && chosen >= 0 && chosen < options.length) {
                         choice.set(options[chosen]);
@@ -308,10 +366,10 @@ final class PerformanceSection implements Section {
         float line = ui.lineHeight(Type.ROW_TITLE) + ui.lineHeight(Type.SMALL);
         Rect uiQuality = new Rect(area.x, area.y, area.width, line);
         float room = area.width - Controls.TOGGLE_WIDTH - Skin.S5;
-        ui.text("High quality text and shapes", uiQuality.x,
+        ui.text("Backdrop effects", uiQuality.x,
                 uiQuality.y + ui.ascent(Type.ROW_TITLE),
                 Type.ROW_TITLE, Skin.TEXT);
-        ui.text(Text.fit(ui, "Evenly spaced, sharper text and exact rounded corners. Off is faster.", Type.SMALL, room),
+        ui.text(Text.fit(ui, "Blur and colour processing behind glass. Text and corners stay native-resolution.", Type.SMALL, room),
                 uiQuality.x, uiQuality.y + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.SMALL),
                 Type.SMALL, Skin.TEXT_FAINT);
         Rect toggle = uiQuality.vcentreRight(0f, Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT);
@@ -341,13 +399,11 @@ final class PerformanceSection implements Section {
     /** Three numbers: what the game is running at, and what this menu costs. */
     private void meters(HubContext context, Rect area) {
         Gfx.Frames frames = Gfx.frames();
-        float gap = Skin.S3;
-        float cell = (area.width - gap * 2f) / 3f;
-        meter(context, new Rect(area.x, area.y, cell, area.height), "Frame rate",
+        meter(context, meterBoxes[0].rect(), "Frame rate",
                 String.valueOf(Math.round(frames.fps())), "fps");
-        meter(context, new Rect(area.x + cell + gap, area.y, cell, area.height), "Frame time",
+        meter(context, meterBoxes[1].rect(), "Frame time",
                 millis(frames.frameMeanMillis()), "ms · p99 " + millis(frames.framePercentileMillis(0.99f)));
-        meter(context, new Rect(area.x + (cell + gap) * 2f, area.y, cell, area.height), "Fathom UI",
+        meter(context, meterBoxes[2].rect(), "Fathom UI",
                 millis(frames.uiMeanMillis()), "ms of that");
     }
 
@@ -370,11 +426,6 @@ final class PerformanceSection implements Section {
 
     private void presets(HubContext context, SwitchBoard switches, Rect area) {
         Preset[] presets = Preset.values();
-        String[] labels = new String[presets.length + 1];
-        for (int index = 0; index < presets.length; index++) {
-            labels[index] = presets[index].label();
-        }
-        labels[presets.length] = "Custom";
         // The launcher's preset control: a segmented choice that says which
         // preset is in effect, and "Custom" once a switch has been changed by
         // hand. Choosing Custom changes nothing; it is where the board already is.
@@ -385,11 +436,23 @@ final class PerformanceSection implements Section {
                 selected = index;
             }
         }
-        int chosen = context.controls().segmentedNatural(context.ui(), "presets", area, labels, selected);
+        int chosen = context.controls().segmentedNatural(context.ui(), "presets", area, PRESET_LABELS, selected);
         if (chosen != selected && chosen >= 0 && chosen < presets.length) {
             switches.applyPreset(presets[chosen]);
             context.markDirty();
         }
+    }
+
+    private static final String[] PRESET_LABELS = presetLabels();
+
+    private static String[] presetLabels() {
+        Preset[] presets = Preset.values();
+        String[] labels = new String[presets.length + 1];
+        for (int index = 0; index < presets.length; index++) {
+            labels[index] = presets[index].label();
+        }
+        labels[presets.length] = "Custom";
+        return labels;
     }
 
     private void row(HubContext context, SwitchBoard switches, Optimization entry, Rect area) {

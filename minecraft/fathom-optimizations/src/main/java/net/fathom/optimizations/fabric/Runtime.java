@@ -124,7 +124,13 @@ public final class Runtime {
                 ? net.fathom.optimizations.fabric.diag.UiTour.scale(preference) : preference;
     }
 
-    /** Whether antialiased framebuffer-sized Fathom geometry is enabled. */
+    /**
+     * Whether framebuffer backdrop effects are enabled.
+     *
+     * <p>The SDF compositor always renders shapes and text at native resolution;
+     * the persisted legacy key now controls the optional blur pass instead of
+     * selecting a lower-quality text/corner path.
+     */
     // Command-line overrides are fixed for the life of the process; read them
     // once rather than through the synchronized property table every frame.
     private static final String HIGH_QUALITY_OVERRIDE = System.getProperty("fathom.highQualityUi");

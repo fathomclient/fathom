@@ -3,7 +3,7 @@ package net.fathom.optimizations.fabric.gfx;
 /**
  * A screen drawn by Fathom's renderer.
  *
- * <p>Marks the Fathom main menu, hub, HUD editor and renderer spike. The frame
+ * <p>Marks the Fathom main menu, hub, HUD editor and renderer proof scene. The frame
  * cap uses that fact for one narrow case: vanilla hard-codes 30 fps when there
  * is no world, while Fathom's interactive no-world screens should use the
  * player's configured limit.

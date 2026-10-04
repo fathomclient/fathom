@@ -23,8 +23,6 @@ import net.minecraft.client.MinecraftClient;
 import net.fathom.optimizations.core.profile.ProfileLocation;
 import net.fathom.optimizations.core.ui.BackgroundChoice;
 import net.fathom.optimizations.core.ui.layout.Rect;
-import net.fathom.optimizations.core.ui.render.FathomRenderer;
-import net.fathom.optimizations.core.ui.render.ImageRef;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.generated.BackgroundCatalog;
@@ -73,9 +71,6 @@ public final class MenuScenes {
         public final String credit;
         /** The light the interface takes while this scene shows, 0xRRGGBB. */
         public final int accent;
-        /** Interned once; asking NanoVG for a thumbnail allocates nothing. */
-        private final ImageRef image;
-
         /** The still's classpath resource: the same picture the launcher shows. */
         final String still;
 
@@ -87,7 +82,6 @@ public final class MenuScenes {
             this.gradient = false;
             this.credit = credit;
             this.still = MENU + still;
-            this.image = ImageRef.resource(this.still);
         }
 
         public boolean credited() {
@@ -239,21 +233,14 @@ public final class MenuScenes {
     /**
      * Draw a picker thumbnail through the active UI backend.
      *
-     * <p>NanoVG decodes the resource asynchronously and caches its image; the
-     * compatibility renderer keeps using the already-owned GL texture path.
-     * Keeping this bridge here prevents the menu from forcing the fallback
-     * renderer merely because one modal contains image tiles.
+     * <p>The texture is uploaded once and either renderer submits it through
+     * the same rounded-image primitive.
      *
      * @return true when an image is ready and was submitted
      */
     public static boolean thumbnail(Renderer ui, Scene scene, Rect area, float radius, int backdrop) {
         if (scene == null || scene.gradient) {
             return false;
-        }
-        if (ui instanceof FathomRenderer) {
-            FathomRenderer vector = (FathomRenderer) ui;
-            vector.imageCover(scene.image, area.x, area.y, area.right(), area.bottom(), radius, 1f);
-            return vector.imageState(scene.image) == ImageRef.State.READY;
         }
         if (ui instanceof GlRenderer && !TEXTURES.containsKey(scene.id)) {
             // A first-use upload binds a raw GL texture. Flush geometry queued

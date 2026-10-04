@@ -201,11 +201,7 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
         net.fathom.optimizations.fabric.diag.FramePerf.start();
     }
 
-    /**
-     * Resource packs can replace Minecraft's texture/font state while a Fathom
-     * renderer still owns GPU objects. Recreate both renderer backends after a
-     * reload instead of retaining stale pages, images or an isolated context.
-     */
+    /** Recreate renderer-owned textures after a resource-pack reload. */
     private static void installRendererReloadHook() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || !(client.getResourceManager() instanceof ReloadableResourceManager)) {
@@ -214,9 +210,6 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
         ((ReloadableResourceManager) client.getResourceManager()).registerListener(new ResourceReloadListener() {
             @Override
             public void reload(ResourceManager manager) {
-                // NanoVG wrappers must be dropped before the GL textures they
-                // reference. Neither backend retains stale image names across
-                // a resource-pack reload.
                 net.fathom.optimizations.fabric.gfx.Gfx.dispose();
                 net.fathom.optimizations.fabric.menu.FathomMenuScreen.disposeResources();
             }

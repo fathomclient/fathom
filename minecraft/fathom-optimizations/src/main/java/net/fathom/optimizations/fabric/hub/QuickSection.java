@@ -6,6 +6,7 @@ import net.minecraft.client.option.GameOptions;
 import net.fathom.optimizations.core.module.ClientPrefs;
 import net.fathom.optimizations.core.module.Keybind;
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.Box;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
@@ -72,6 +73,41 @@ final class QuickSection implements Section {
     /** Seven options -- Auto and six sizes -- at their natural widths. */
     private static final float SCALE_CONTROL = 372f;
 
+    /** Retained page geometry: built once, read by drawing and hit testing. */
+    private final Box page = Box.column("quick.page").gap(Skin.SECTION_GAP);
+    private final Box fathomGroup = Box.column("quick.fathom").padding(Skin.CARD_PADDING);
+    private final Box fathomLabel = Box.column("quick.fathom.label");
+    private final Box[] fathomRows = new Box[2];
+    private final Box videoGroup = Box.column("quick.video").padding(Skin.CARD_PADDING);
+    private final Box videoLabel = Box.column("quick.video.label");
+    private final Box[] videoRows = new Box[4];
+    private final Box displayGroup = Box.column("quick.display").padding(Skin.CARD_PADDING);
+    private final Box displayLabel = Box.column("quick.display.label");
+    private final Box[] displayRows = new Box[3];
+    private final Box footerBox = Box.column("quick.footer");
+
+    QuickSection() {
+        fathomGroup.add(fathomLabel);
+        for (int index = 0; index < fathomRows.length; index++) {
+            fathomRows[index] = Box.row("quick.fathom.row." + index).height(ROW);
+            fathomGroup.add(fathomRows[index]);
+        }
+        videoGroup.add(videoLabel);
+        for (int index = 0; index < videoRows.length; index++) {
+            videoRows[index] = Box.row("quick.video.row." + index).height(SLIDER_ROW);
+            videoGroup.add(videoRows[index]);
+        }
+        displayGroup.add(displayLabel);
+        for (int index = 0; index < displayRows.length; index++) {
+            displayRows[index] = Box.row("quick.display.row." + index).height(ROW);
+            displayGroup.add(displayRows[index]);
+        }
+        page.add(fathomGroup);
+        page.add(videoGroup);
+        page.add(displayGroup);
+        page.add(footerBox);
+    }
+
     @Override
     public String title() {
         return "Quick";
@@ -132,47 +168,45 @@ final class QuickSection implements Section {
                 + Skin.SECTION_GAP * 2f + footer;
         float offset = scroller.offset(context.delta(), contentHeight, area.height);
 
-        ui.clip(area.x, area.y, area.right(), area.bottom());
-        float y = area.y - offset;
-        Rect fathom = new Rect(area.x, y, width, fathomHeight);
-        FathomComponents.panel(ui, fathom);
-        Rect group = fathom.inset(groupPad, groupPad);
-        Controls.label(ui, "Fathom", group.x, group.y);
-        float rowY = group.y + labelStep;
-        rowY = hubKeyRow(context, new Rect(group.x, rowY, group.width, ROW));
-        scaleRow(context, new Rect(group.x, rowY, group.width, ROW));
+        fathomLabel.height(labelStep);
+        videoLabel.height(labelStep);
+        displayLabel.height(labelStep);
+        footerBox.height(footer);
+        page.width(width).height(contentHeight);
+        page.layout(ui, area.x, area.y - offset, width, contentHeight);
 
-        y = fathom.bottom() + Skin.SECTION_GAP;
-        Rect video = new Rect(area.x, y, width, videoHeight);
+        ui.clip(area.x, area.y, area.right(), area.bottom());
+        Rect fathom = fathomGroup.rect();
+        FathomComponents.panel(ui, fathom);
+        Controls.label(ui, "Fathom", fathomGroup.content().x, fathomGroup.content().y);
+        hubKeyRow(context, fathomRows[0].rect());
+        scaleRow(context, fathomRows[1].rect());
+
+        Rect video = videoGroup.rect();
         FathomComponents.panel(ui, video);
-        group = video.inset(groupPad, groupPad);
-        Controls.label(ui, "Video", group.x, group.y);
-        rowY = group.y + labelStep;
-        rowY = slider(context, new Rect(group.x, rowY, group.width, SLIDER_ROW), "quick.distance", "Render distance",
+        Controls.label(ui, "Video", videoGroup.content().x, videoGroup.content().y);
+        slider(context, videoRows[0].rect(), "quick.distance", "Render distance",
                 options.viewDistance + " chunks", fraction(options.viewDistance, 2, 16),
                 VideoSetting.VIEW_DISTANCE);
-        rowY = slider(context, new Rect(group.x, rowY, group.width, SLIDER_ROW), "quick.fps", "Frame limit",
+        slider(context, videoRows[1].rect(), "quick.fps", "Frame limit",
                 frameLimit(options.maxFramerate), fraction(options.maxFramerate, 10, 260),
                 VideoSetting.FRAME_LIMIT);
-        rowY = slider(context, new Rect(group.x, rowY, group.width, SLIDER_ROW), "quick.fov", "Field of view",
+        slider(context, videoRows[2].rect(), "quick.fov", "Field of view",
                 fov(options.fov), VideoOptionDomain.fovFraction(options.fov),
                 VideoSetting.FOV);
-        slider(context, new Rect(group.x, rowY, group.width, SLIDER_ROW), "quick.gamma", "Brightness",
+        slider(context, videoRows[3].rect(), "quick.gamma", "Brightness",
                 brightness(options.gamma), options.gamma, VideoSetting.GAMMA);
 
-        y = video.bottom() + Skin.SECTION_GAP;
-        Rect display = new Rect(area.x, y, width, displayHeight);
+        Rect display = displayGroup.rect();
         FathomComponents.panel(ui, display);
-        group = display.inset(groupPad, groupPad);
-        Controls.label(ui, "Display", group.x, group.y);
-        rowY = group.y + labelStep;
-        rowY = toggle(context, new Rect(group.x, rowY, group.width, ROW), "quick.vsync", "VSync", options.vsync);
-        rowY = toggle(context, new Rect(group.x, rowY, group.width, ROW), "quick.bob", "View bobbing", options.bobView);
-        toggle(context, new Rect(group.x, rowY, group.width, ROW), "quick.shadows", "Entity shadows",
+        Controls.label(ui, "Display", displayGroup.content().x, displayGroup.content().y);
+        toggle(context, displayRows[0].rect(), "quick.vsync", "VSync", options.vsync);
+        toggle(context, displayRows[1].rect(), "quick.bob", "View bobbing", options.bobView);
+        toggle(context, displayRows[2].rect(), "quick.shadows", "Entity shadows",
                 options.entityShadows);
 
-        y = display.bottom() + Skin.SECTION_GAP;
-        ui.text("Changes apply instantly.", area.x + Skin.S1, y + ui.ascent(Type.SMALL),
+        Rect footerArea = footerBox.rect();
+        ui.text("Changes apply instantly.", footerArea.x + Skin.S1, footerArea.y + ui.ascent(Type.SMALL),
                 Type.SMALL, Skin.TEXT_DISABLED);
 
         ui.unclip();

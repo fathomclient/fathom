@@ -13,7 +13,6 @@ import net.fathom.optimizations.core.ui.anim.Motion;
 import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.Text;
-import net.fathom.optimizations.core.ui.render.FathomRenderer;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Shadow;
@@ -36,11 +35,8 @@ import net.fathom.optimizations.generated.FathomTheme.Tokens;
  *   }
  * </pre>
  *
- * <p>Everything draws through {@link Renderer}. On the vector renderer the
- * optional {@link FathomRenderer} extras (real drop shadows, horizontal
- * gradients) are used; on the GL fallback the same control degrades to the
- * shapes {@code Renderer} has. No control knows which one it is talking to
- * beyond that check, and none of them touches NanoVG or GL.
+ * <p>Everything draws through {@link Renderer}. No control knows which backend
+ * it is talking to and none of them touches OpenGL.
  *
  * <h2>State: one slot per control</h2>
  *
@@ -1042,17 +1038,6 @@ public final class Controls {
         float width = 18f;
         int shade = Skin.fade(Tokens.PALETTE_UMBER_900, 0.55f);
         int clear = Skin.fade(Tokens.PALETTE_UMBER_900, 0f);
-        if (ui instanceof FathomRenderer) {
-            FathomRenderer vector = (FathomRenderer) ui;
-            if (left) {
-                vector.horizontalGradient(box.x, box.y + 1f, box.x + width, box.bottom() - 1f, 0f, shade, clear);
-            }
-            if (right) {
-                vector.horizontalGradient(box.right() - width, box.y + 1f, box.right(), box.bottom() - 1f, 0f,
-                        clear, shade);
-            }
-            return;
-        }
         int steps = 6;
         for (int step = 0; step < steps; step++) {
             float from = step / (float) steps;

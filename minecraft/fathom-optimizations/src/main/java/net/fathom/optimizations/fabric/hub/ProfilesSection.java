@@ -8,6 +8,7 @@ import net.fathom.optimizations.core.profile.FathomProfile;
 import net.fathom.optimizations.core.profile.ProfileException;
 import net.fathom.optimizations.core.profile.ProfileLocation;
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.Box;
 import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
@@ -53,6 +54,17 @@ final class ProfilesSection implements Section {
     private static final int MAX_NAME = 64;
 
     private final Scroller scroller = new Scroller();
+    private final Box page = Box.column("profiles.page");
+    private final Box actionBar = Box.row("profiles.actions").height(Skin.H_MD).gap(Skin.S2);
+    private final Box newButton = Box.fixed("profiles.new", 132f, Skin.H_MD);
+    private final Box importButton = Box.fixed("profiles.import", 96f, Skin.H_MD);
+    private final Box actionNotice = Box.row("profiles.notice").grow(1f);
+    private final Box bodyBox = Box.stack("profiles.body").grow(1f);
+    private final Box listSlot = Box.stack("profiles.list.slot");
+    private final Box listBox = Box.column("profiles.list").padding(LIST_PAD).scroll(true);
+    private final Box cardBox = Box.stack("profiles.card");
+    private final java.util.List<Box> profileRows = new java.util.ArrayList<Box>();
+    private String rowSignature = "";
 
     private String selectedId;
     private String renamingId;
@@ -60,6 +72,16 @@ final class ProfilesSection implements Section {
     private String confirmingDelete;
     private long confirmAt;
     private String problem = "";
+
+    ProfilesSection() {
+        actionBar.add(newButton);
+        actionBar.add(importButton);
+        actionBar.add(Box.column("profiles.actions.gap").width(Skin.S2));
+        actionBar.add(actionNotice);
+        page.add(actionBar);
+        page.add(Box.column("profiles.actions.after").height(Skin.S5));
+        page.add(bodyBox);
+    }
 
     @Override
     public String title() {
@@ -109,26 +131,29 @@ final class ProfilesSection implements Section {
             selectedId = selected == null ? null : selected.id();
         }
 
-        actions(context, runtime, area.top(Skin.H_MD));
+        page.layout(ui, area.x, area.y, area.width, area.height);
+        actions(context, runtime, actionBar.rect());
 
-        Rect body = area.belowTop(Skin.H_MD + Skin.S5);
+        Rect body = bodyBox.rect();
         if (body.width >= WIDE) {
             float listWidth = Math.min(LIST_MAX, body.width * 0.42f);
-            list(context, runtime, profiles, new Rect(body.x, body.y, listWidth, body.height));
+            listSlot.layout(ui, body.x, body.y, listWidth, body.height);
+            list(context, runtime, profiles, listSlot.rect());
             if (selected != null) {
                 float cardX = body.x + listWidth + Skin.S5;
-                card(context, runtime, selected, profiles.size(),
-                        new Rect(cardX, body.y, body.right() - cardX, Math.min(body.height, CARD_HEIGHT)));
+                cardBox.layout(ui, cardX, body.y, body.right() - cardX, Math.min(body.height, CARD_HEIGHT));
+                card(context, runtime, selected, profiles.size(), cardBox.rect());
             }
         } else {
             // Narrow: the card on top, because it is what the list is for.
             float cardHeight = Math.min(CARD_HEIGHT, body.height * 0.55f);
             if (selected != null) {
-                card(context, runtime, selected, profiles.size(), new Rect(body.x, body.y, body.width, cardHeight));
+                cardBox.layout(ui, body.x, body.y, body.width, cardHeight);
+                card(context, runtime, selected, profiles.size(), cardBox.rect());
             }
             float listTop = body.y + cardHeight + Skin.S5;
-            list(context, runtime, profiles,
-                    new Rect(body.x, listTop, body.width, Math.max(0f, body.bottom() - listTop)));
+            listSlot.layout(ui, body.x, listTop, body.width, Math.max(0f, body.bottom() - listTop));
+            list(context, runtime, profiles, listSlot.rect());
         }
     }
 
@@ -141,7 +166,7 @@ final class ProfilesSection implements Section {
         Controls controls = context.controls();
         float x = bar.x;
 
-        if (controls.primary(ui, "profiles.new", new Rect(x, bar.y, 132f, bar.height), "New profile", true)) {
+        if (controls.primary(ui, "profiles.new", newButton.rect(), "New profile", true)) {
             try {
                 FathomProfile created = runtime.create("New profile");
                 selectedId = created.id();
@@ -153,9 +178,9 @@ final class ProfilesSection implements Section {
                 problem = failure.getMessage();
             }
         }
-        x += 132f + Skin.S2;
+        x = importButton.rect().x;
 
-        if (controls.secondary(ui, "profiles.import", new Rect(x, bar.y, 96f, bar.height), "Import", true)) {
+        if (controls.secondary(ui, "profiles.import", importButton.rect(), "Import", true)) {
             try {
                 List<FathomProfile> imported = runtime.importAll();
                 if (!imported.isEmpty()) {
@@ -166,7 +191,7 @@ final class ProfilesSection implements Section {
                 problem = failure.getMessage();
             }
         }
-        x += 96f + Skin.S4;
+        x = actionNotice.rect().x;
 
         String shown = problem.isEmpty() ? runtime.notice() : problem;
         if (!shown.isEmpty()) {
@@ -185,18 +210,21 @@ final class ProfilesSection implements Section {
         Controls controls = context.controls();
         float pad = LIST_PAD;
         float contentHeight = profiles.size() * ROW;
-        Rect group = new Rect(list.x, list.y, list.width - Skin.S3,
-                Math.min(list.height, contentHeight + pad * 2f));
+        syncRows(profiles);
+        float groupHeight = Math.min(list.height, contentHeight + pad * 2f);
+        float offset = scroller.offset(context.delta(), contentHeight, Math.max(0f, groupHeight - pad * 2f));
+        listBox.width(list.width - Skin.S3).height(groupHeight).scrollTo(offset);
+        listBox.layout(ui, list.x, list.y, list.width - Skin.S3, groupHeight);
+        Rect group = listBox.rect();
         if (!profiles.isEmpty()) {
             FathomComponents.group(ui, group, (ROW - 4f) / 2f + pad);
         }
-        Rect inner = group.inset(pad);
-        float offset = scroller.offset(context.delta(), contentHeight, inner.height);
+        Rect inner = listBox.content();
 
         ui.clip(inner.x, inner.y, inner.right(), inner.bottom());
         for (int index = 0; index < profiles.size(); index++) {
             FathomProfile profile = profiles.get(index);
-            Rect row = new Rect(inner.x, inner.y + index * ROW - offset, inner.width, ROW).inset(0f, 2f);
+            Rect row = profileRows.get(index).content();
             if (row.bottom() < inner.y || row.y > inner.bottom()) {
                 continue;
             }
@@ -230,6 +258,27 @@ final class ProfilesSection implements Section {
         }
         ui.unclip();
         scroller.rail(ui, inner, context.pointer(), context.now());
+    }
+
+    /** Rebuild only when the profile collection changes; ordinary frames reuse every row. */
+    private void syncRows(List<FathomProfile> profiles) {
+        StringBuilder signature = new StringBuilder(profiles.size() * 24);
+        for (FathomProfile profile : profiles) {
+            signature.append(profile.id()).append('\n');
+        }
+        String next = signature.toString();
+        if (next.equals(rowSignature)) {
+            return;
+        }
+        rowSignature = next;
+        profileRows.clear();
+        listBox.children().clear();
+        listBox.invalidate();
+        for (int index = 0; index < profiles.size(); index++) {
+            Box row = Box.row("profiles.row." + profiles.get(index).id()).height(ROW).padding(0f, 2f);
+            profileRows.add(row);
+            listBox.add(row);
+        }
     }
 
     private void card(HubContext context, ProfileRuntime runtime, FathomProfile profile, int total, Rect card) {

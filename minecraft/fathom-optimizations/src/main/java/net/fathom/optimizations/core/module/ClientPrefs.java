@@ -160,7 +160,7 @@ public final class ClientPrefs {
         return hudFontChanged && hudFont != DEFAULT_HUD_FONT;
     }
 
-    /** Whether framebuffer-sized antialiased geometry is used for Fathom UI. */
+    /** Whether optional framebuffer backdrop effects are enabled. */
     public boolean highQualityUi() {
         return highQualityUi;
     }

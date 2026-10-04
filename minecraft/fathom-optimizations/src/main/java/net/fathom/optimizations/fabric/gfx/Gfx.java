@@ -27,14 +27,11 @@ public final class Gfx {
     private static GlRenderer renderer;
     /** The interface compositor; null until a screen first opens, or when the GPU cannot run it. */
     private static SdfRenderer compositor;
-    /**
-     * Which renderer screens use: {@code sdf} (the compositor, the default),
-     * {@code gl} (the coverage-texture renderer it replaces, kept for the HUD
-     * and as the fallback) or {@code nanovg} (the development backend).
-     * Development A/B comparisons only.
-     */
+    /** Which renderer screens use: {@code sdf} (default) or {@code gl} for A/B diagnostics. */
     private static final String SCREEN_RENDERER = System.getProperty("fathom.uiRenderer", "sdf");
     private static boolean compositorOpen;
+    /** A live-HUD frame, distinct from a screen frame for profiling and clocking. */
+    private static net.fathom.optimizations.core.ui.render.Renderer overlayRenderer;
     private static Clock clock;
     private static final Frames FRAMES = new Frames();
     /** Menu background isolation runs every frame; retain its snapshot too. */
@@ -89,7 +86,7 @@ public final class Gfx {
         screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
         GlRenderer active = renderer(client);
         // Screens follow the launcher's capitalization, the HUD editor included;
-        // the HUD itself, drawn through beginOverlay, keeps its own.
+        // the HUD itself, drawn through beginHudOverlay, keeps its own.
         active.setLowercase(!net.fathom.optimizations.fabric.menu.MenuScenes.standardCapitalization());
         active.setHighQuality(net.fathom.optimizations.fabric.Runtime.highQualityUi());
         float delta = clock().advance(System.nanoTime());
@@ -101,7 +98,6 @@ public final class Gfx {
 
     /** What {@link #beginScreen} opened, so {@link #endScreen} closes the same thing. */
     private static final boolean FORCE_GL_RENDERER = Boolean.getBoolean("fathom.forceGlRenderer");
-    private static boolean vectorOpen;
     private static boolean glOpen;
     private static float screenDelta;
     /** The renderer {@link #beginScreen} returned, for the geometry debug overlay. */
@@ -110,14 +106,13 @@ public final class Gfx {
     /**
      * Begin a Fathom screen frame on the best renderer available.
      *
-     * <p>The vector renderer ({@link Canvas}, NanoVG) when it can start, otherwise
-     * the GL renderer, with the same clock, frame measurements and profiler
-     * section either way. Callers draw through the returned {@code Renderer} and
-     * never learn which one it is.
+     * <p>The SDF compositor when it can start, otherwise the compatibility GL
+     * renderer, with the same clock, frame measurements and profiler section
+     * either way. Callers draw through {@code Renderer} and do not branch on it.
      */
     public static net.fathom.optimizations.core.ui.render.Renderer beginScreen(
             MinecraftClient client, float scalePreference) {
-        if (vectorOpen || glOpen || compositorOpen) {
+        if (glOpen || compositorOpen) {
             throw new IllegalStateException("a Fathom screen frame is already open");
         }
         if (!FORCE_GL_RENDERER && "sdf".equals(SCREEN_RENDERER)) {
@@ -126,6 +121,7 @@ public final class Gfx {
                 net.fathom.optimizations.fabric.diag.UiProfile.frameBegin();
                 screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
                 sdf.setLowercase(!net.fathom.optimizations.fabric.menu.MenuScenes.standardCapitalization());
+                sdf.setEffectsEnabled(net.fathom.optimizations.fabric.Runtime.highQualityUi());
                 if (sdf.beginFrame(net.fathom.optimizations.core.ui.UiScale.fittingPreference(
                         client.width, client.height, scalePreference))) {
                     screenDelta = clock().advance(System.nanoTime());
@@ -136,18 +132,6 @@ public final class Gfx {
                 }
                 net.fathom.optimizations.core.instrument.Probe.stop(
                         net.fathom.optimizations.core.instrument.Probe.Section.SCREEN, screenProbe);
-            }
-        }
-        if (!FORCE_GL_RENDERER && "nanovg".equals(SCREEN_RENDERER)) {
-            net.fathom.optimizations.core.ui.render.FathomRenderer vector =
-                    Canvas.begin(client, net.fathom.optimizations.core.ui.render.FrameScale.Mode.FATHOM);
-            if (vector != null) {
-                screenProbe = net.fathom.optimizations.core.instrument.Probe.start();
-                screenDelta = clock().advance(System.nanoTime());
-                FRAMES.begin();
-                vectorOpen = true;
-                screenRenderer = vector;
-                return vector;
             }
         }
         screenDelta = begin(client, scalePreference);
@@ -164,16 +148,11 @@ public final class Gfx {
         return screenDelta;
     }
 
-    /** Whether the frame {@link #beginScreen} opened is the vector renderer's. */
-    public static boolean vectorFrame() {
-        return vectorOpen;
-    }
-
     /** Close what {@link #beginScreen} opened. Safe to call when nothing is open. */
     public static void endScreen() {
         // Developer-only (-Dfathom.debugGeometry=true): the frame's boxes, on top.
         if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED
-                && (glOpen || vectorOpen || compositorOpen) && screenRenderer != null) {
+                && (glOpen || compositorOpen) && screenRenderer != null) {
             screenRenderer.pushLayer(net.fathom.optimizations.core.ui.render.Layer.DEBUG);
             net.fathom.optimizations.fabric.diag.UiDebug.draw(screenRenderer, compositor);
             net.fathom.optimizations.core.ui.render.GeometryDebug.drawAndClear(screenRenderer);
@@ -199,19 +178,6 @@ public final class Gfx {
             glOpen = false;
             end();
             return;
-        }
-        if (!vectorOpen) {
-            return;
-        }
-        vectorOpen = false;
-        try {
-            Canvas.end();
-            net.fathom.optimizations.fabric.ui.HoverLatency.frameRendered(clock().frames());
-        } finally {
-            net.fathom.optimizations.core.instrument.Probe.stop(
-                    net.fathom.optimizations.core.instrument.Probe.Section.SCREEN, screenProbe);
-            screenProbe = 0L;
-            FRAMES.end();
         }
     }
 
@@ -256,23 +222,75 @@ public final class Gfx {
      * @return the renderer with a frame open, or null when one is already open —
      *     the HUD editor draws the widgets from inside its own frame
      */
-    public static GlRenderer beginOverlay(MinecraftClient client, float scalePreference) {
-        GlRenderer active = renderer(client);
-        if (active.inFrame()) {
+    /**
+     * Open the renderer used by the live HUD.
+     *
+     * <p>The SDF compositor is the production path. The coverage renderer is
+     * retained solely as the compatibility fallback for GPUs without GLSL 1.20
+     * or framebuffer objects. Unlike a screen frame this does not advance the
+     * interface clock or enter the screen profiler.
+     */
+    public static net.fathom.optimizations.core.ui.render.Renderer beginHudOverlay(
+            MinecraftClient client, float scalePreference) {
+        if (overlayRenderer != null) {
             return null;
         }
-        // The HUD keeps its own capitalization. Set every frame: the renderer
-        // is shared, and the last screen frame may have left lowercase on.
-        active.setLowercase(false);
-        active.setHighQuality(net.fathom.optimizations.fabric.Runtime.highQualityUi());
-        active.beginFrame(scalePreference);
-        return active;
+        SdfRenderer sdf = compositor(client);
+        if (sdf != null && !sdf.inFrame()) {
+            sdf.setLowercase(false);
+            sdf.setEffectsEnabled(net.fathom.optimizations.fabric.Runtime.highQualityUi());
+            if (sdf.beginFrame(scalePreference)) {
+                overlayRenderer = sdf;
+                return sdf;
+            }
+        }
+        GlRenderer fallback = renderer(client);
+        if (fallback.inFrame()) {
+            return null;
+        }
+        fallback.setLowercase(false);
+        fallback.setHighQuality(net.fathom.optimizations.fabric.Runtime.highQualityUi());
+        fallback.beginFrame(scalePreference);
+        overlayRenderer = fallback;
+        return fallback;
     }
 
-    /** Close what {@link #beginOverlay} opened. Null is the "already open" case. */
-    public static void endOverlay(GlRenderer opened) {
-        if (opened != null) {
-            opened.endFrame();
+    /** Flush the active HUD batch before Minecraft performs an immediate draw. */
+    public static void flushHudOverlay() {
+        net.fathom.optimizations.core.ui.render.Renderer active = activeRenderer();
+        if (active instanceof SdfRenderer) {
+            ((SdfRenderer) active).flush();
+        } else if (active instanceof GlRenderer) {
+            ((GlRenderer) active).flush();
+        }
+    }
+
+    /** The currently open compositor/fallback frame, if any. */
+    public static net.fathom.optimizations.core.ui.render.Renderer activeRenderer() {
+        if (compositor != null && compositor.inFrame()) {
+            return compositor;
+        }
+        if (renderer != null && renderer.inFrame()) {
+            return renderer;
+        }
+        return null;
+    }
+
+    /** Close a frame returned by {@link #beginHudOverlay}. */
+    public static void endHudOverlay(net.fathom.optimizations.core.ui.render.Renderer opened) {
+        if (opened == null) {
+            return;
+        }
+        try {
+            if (opened instanceof SdfRenderer) {
+                ((SdfRenderer) opened).endFrame();
+            } else if (opened instanceof GlRenderer) {
+                ((GlRenderer) opened).endFrame();
+            }
+        } finally {
+            if (overlayRenderer == opened) {
+                overlayRenderer = null;
+            }
         }
     }
 
@@ -333,9 +351,6 @@ public final class Gfx {
             compositor.dispose();
             compositor = null;
         }
-        // NanoVG may be the only backend a session created. Dispose both
-        // resource owners so fonts, images and the vector context cannot leak.
-        Canvas.dispose();
         if (renderer != null) {
             renderer.dispose();
             renderer = null;

@@ -1,6 +1,6 @@
 # In-game UI on NanoVG — foundation
 
-Status: **renderer layer built (§9); Fathom Hub and the custom main menu use it with the GL renderer as fallback.**
+Status: **historical experiment; superseded and removed by [`ingame-ui-compositor.md`](ingame-ui-compositor.md).**
 Phase dates: foundation and renderer layer, 2026-09-12.
 
 This revisits [`ingame-ui-renderer-decision.md`](ingame-ui-renderer-decision.md), which

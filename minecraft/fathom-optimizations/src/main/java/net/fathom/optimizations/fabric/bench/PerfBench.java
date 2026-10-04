@@ -26,7 +26,7 @@ import net.fathom.optimizations.fabric.hud.HudEditorScreen;
 /**
  * Development-only, scripted performance benchmark.
  *
- * <p>Started with {@code gradle runClient -Pnanovg -PperfBench=world} (gameplay
+ * <p>Started with {@code gradle runClient -PperfBench=world} (gameplay
  * scenarios in the development save) or {@code -PperfBench=soak} (long idle runs
  * of the main menu, Hub, full-page module settings and HUD editor, to catch frame-rate
  * degradation and memory growth). Absent the property this class does nothing:
