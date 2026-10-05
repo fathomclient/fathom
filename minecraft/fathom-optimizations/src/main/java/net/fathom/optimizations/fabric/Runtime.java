@@ -136,6 +136,9 @@ public final class Runtime {
     private static final String HIGH_QUALITY_OVERRIDE = System.getProperty("fathom.highQualityUi");
     private static final String MENU_BACKGROUND_OVERRIDE = System.getProperty("fathom.menuBackgroundQuality");
     private static final String HUD_FONT_OVERRIDE = System.getProperty("fathom.hudFont");
+    private static final String RSHIFT_BACKGROUND_OVERRIDE = System.getProperty("fathom.rshiftBackground");
+    private static final String RSHIFT_BLUR_OVERRIDE = System.getProperty("fathom.rshiftBlur");
+    private static final String RSHIFT_DIM_OVERRIDE = System.getProperty("fathom.rshiftDim");
 
     public static boolean highQualityUi() {
         String override = HIGH_QUALITY_OVERRIDE;
@@ -154,6 +157,43 @@ public final class Runtime {
         }
         FathomHud current = hud();
         return current == null ? "High" : current.prefs().menuBackgroundLabel();
+    }
+
+    /** Whether RShift uses the live gameplay framebuffer when one exists. */
+    public static boolean gameplayGlass() {
+        if (RSHIFT_BACKGROUND_OVERRIDE != null) {
+            return "gameplay glass".equalsIgnoreCase(RSHIFT_BACKGROUND_OVERRIDE.trim())
+                    || "gameplay".equalsIgnoreCase(RSHIFT_BACKGROUND_OVERRIDE.trim())
+                    || "glass".equalsIgnoreCase(RSHIFT_BACKGROUND_OVERRIDE.trim());
+        }
+        FathomHud current = hud();
+        return current == null || current.prefs().gameplayGlass();
+    }
+
+    /** Full-screen gameplay-glass blur, in logical pixels. */
+    public static float rshiftBlur() {
+        if (RSHIFT_BLUR_OVERRIDE != null) {
+            try {
+                return Math.max(0f, Math.min(32f, Float.parseFloat(RSHIFT_BLUR_OVERRIDE.trim())));
+            } catch (NumberFormatException ignored) {
+                // A development override must not make the client unusable.
+            }
+        }
+        FathomHud current = hud();
+        return current == null ? 18f : current.prefs().rshiftBlur();
+    }
+
+    /** Alpha of the neutral ink scrim over gameplay glass. */
+    public static float rshiftDim() {
+        if (RSHIFT_DIM_OVERRIDE != null) {
+            try {
+                return Math.max(0f, Math.min(0.75f, Float.parseFloat(RSHIFT_DIM_OVERRIDE.trim())));
+            } catch (NumberFormatException ignored) {
+                // Fall through to the persisted preset.
+            }
+        }
+        FathomHud current = hud();
+        return current == null ? 0.34f : current.prefs().rshiftDim();
     }
 
     /**

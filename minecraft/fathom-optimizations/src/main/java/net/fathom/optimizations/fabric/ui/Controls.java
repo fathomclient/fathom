@@ -276,6 +276,13 @@ public final class Controls {
         return openId != null;
     }
 
+    /** Development motion tour: open the named dropdown exactly as a click would. */
+    public void scriptPopover(String id) {
+        if (id != null && !id.isEmpty()) {
+            openId = id;
+        }
+    }
+
     public void closePopover() {
         openId = null;
     }

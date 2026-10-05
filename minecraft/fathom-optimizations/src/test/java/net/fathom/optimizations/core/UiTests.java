@@ -66,6 +66,7 @@ public final class UiTests {
         aTripOverrideDoesNotBecomeTheNextTripsDefault();
         aMotionMapsOpacityGeometryAndColour();
         anImmediateCloseCannotFinishOpeningFirst();
+        reopeningAnExitContinuesFromTheVisibleFrame();
         aSmoothSpringIsFrameRateIndependentAndBounded();
         theCurveStartsFastAndEndsExactly();
         theSharedDurationsAreWithinTheSpecifiedBands();
@@ -435,6 +436,21 @@ public final class UiTests {
                         && transition.visibility(0.04f + Timing.SCREEN_EXIT) == 0f,
                 "exit finishes cleanly at invisible");
         pass("an immediate close cannot finish opening first");
+    }
+
+    static void reopeningAnExitContinuesFromTheVisibleFrame() {
+        Transition transition = new Transition(Timing.SCREEN_ENTER, Timing.SCREEN_EXIT);
+        transition.open(0f);
+        transition.close(0.08f);
+        float visible = transition.visibility(0.11f);
+        transition.reopen(0.11f);
+        check(Math.abs(transition.visibility(0.11f) - visible) < 0.0001f,
+                "reopening starts on the exact frame the exit had reached");
+        check(transition.visibility(0.15f) >= visible,
+                "and immediately heads back toward open");
+        check(!transition.finished(1f) && transition.visibility(1f) == 1f,
+                "the abandoned exit cannot later close the screen");
+        pass("reopening an exit continues from the visible frame");
     }
 
     static void aSmoothSpringIsFrameRateIndependentAndBounded() {

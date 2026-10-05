@@ -43,6 +43,12 @@ public final class ClientPrefs {
         "Auto", "65%", "75%", "85%", "100%", "115%", "125%"
     };
     public static final String[] MENU_BACKGROUND_CHOICES = {"High", "Auto", "Low", "Off"};
+    /** What RShift presents behind the interface while a world is visible. */
+    public static final String[] RSHIFT_BACKGROUND_CHOICES = {"Fathom background", "Gameplay glass"};
+    /** Restrained presets rather than exposing the blur implementation as a shader laboratory. */
+    public static final String[] RSHIFT_BLUR_CHOICES = {"Soft", "Balanced", "Strong"};
+    /** The legibility scrim over the blurred gameplay frame. */
+    public static final String[] RSHIFT_DIM_CHOICES = {"Light", "Balanced", "Deep"};
 
     // The ends are UiScale.MIN_PREFERENCE and MAX_PREFERENCE. Offering a choice
     // the renderer would clamp away would be a control that lies about what it
@@ -58,6 +64,17 @@ public final class ClientPrefs {
     private static final int DEFAULT_MENU_BACKGROUND = 0;
     private int menuBackgroundChoice = DEFAULT_MENU_BACKGROUND;
     private boolean menuBackgroundChanged;
+    private static final int DEFAULT_RSHIFT_BACKGROUND = 1;
+    private static final int DEFAULT_RSHIFT_BLUR = 1;
+    private static final int DEFAULT_RSHIFT_DIM = 1;
+    private static final float[] RSHIFT_BLUR_VALUES = {12f, 18f, 26f};
+    private static final float[] RSHIFT_DIM_VALUES = {0.24f, 0.34f, 0.44f};
+    private int rshiftBackgroundChoice = DEFAULT_RSHIFT_BACKGROUND;
+    private int rshiftBlurChoice = DEFAULT_RSHIFT_BLUR;
+    private int rshiftDimChoice = DEFAULT_RSHIFT_DIM;
+    private boolean rshiftBackgroundChanged;
+    private boolean rshiftBlurChanged;
+    private boolean rshiftDimChanged;
 
     /** Which of {@link #SCALE_CHOICES} is selected. */
     public int scaleChoice() {
@@ -208,5 +225,104 @@ public final class ClientPrefs {
 
     public boolean menuBackgroundChangedFromDefault() {
         return menuBackgroundChanged && menuBackgroundChoice != DEFAULT_MENU_BACKGROUND;
+    }
+
+    public int rshiftBackgroundChoice() {
+        return rshiftBackgroundChoice;
+    }
+
+    public String rshiftBackgroundLabel() {
+        return RSHIFT_BACKGROUND_CHOICES[rshiftBackgroundChoice];
+    }
+
+    public boolean gameplayGlass() {
+        return rshiftBackgroundChoice == 1;
+    }
+
+    public void setRshiftBackgroundChoice(int index) {
+        if (index < 0 || index >= RSHIFT_BACKGROUND_CHOICES.length || index == rshiftBackgroundChoice) {
+            return;
+        }
+        rshiftBackgroundChoice = index;
+        rshiftBackgroundChanged = true;
+    }
+
+    public void setRshiftBackgroundLabel(String wanted) {
+        rshiftBackgroundChoice = choice(wanted, RSHIFT_BACKGROUND_CHOICES, DEFAULT_RSHIFT_BACKGROUND);
+        rshiftBackgroundChanged = rshiftBackgroundChoice != DEFAULT_RSHIFT_BACKGROUND;
+    }
+
+    public boolean rshiftBackgroundChangedFromDefault() {
+        return rshiftBackgroundChanged && rshiftBackgroundChoice != DEFAULT_RSHIFT_BACKGROUND;
+    }
+
+    public int rshiftBlurChoice() {
+        return rshiftBlurChoice;
+    }
+
+    public String rshiftBlurLabel() {
+        return RSHIFT_BLUR_CHOICES[rshiftBlurChoice];
+    }
+
+    public float rshiftBlur() {
+        return RSHIFT_BLUR_VALUES[rshiftBlurChoice];
+    }
+
+    public void setRshiftBlurChoice(int index) {
+        if (index < 0 || index >= RSHIFT_BLUR_CHOICES.length || index == rshiftBlurChoice) {
+            return;
+        }
+        rshiftBlurChoice = index;
+        rshiftBlurChanged = true;
+    }
+
+    public void setRshiftBlurLabel(String wanted) {
+        rshiftBlurChoice = choice(wanted, RSHIFT_BLUR_CHOICES, DEFAULT_RSHIFT_BLUR);
+        rshiftBlurChanged = rshiftBlurChoice != DEFAULT_RSHIFT_BLUR;
+    }
+
+    public boolean rshiftBlurChangedFromDefault() {
+        return rshiftBlurChanged && rshiftBlurChoice != DEFAULT_RSHIFT_BLUR;
+    }
+
+    public int rshiftDimChoice() {
+        return rshiftDimChoice;
+    }
+
+    public String rshiftDimLabel() {
+        return RSHIFT_DIM_CHOICES[rshiftDimChoice];
+    }
+
+    public float rshiftDim() {
+        return RSHIFT_DIM_VALUES[rshiftDimChoice];
+    }
+
+    public void setRshiftDimChoice(int index) {
+        if (index < 0 || index >= RSHIFT_DIM_CHOICES.length || index == rshiftDimChoice) {
+            return;
+        }
+        rshiftDimChoice = index;
+        rshiftDimChanged = true;
+    }
+
+    public void setRshiftDimLabel(String wanted) {
+        rshiftDimChoice = choice(wanted, RSHIFT_DIM_CHOICES, DEFAULT_RSHIFT_DIM);
+        rshiftDimChanged = rshiftDimChoice != DEFAULT_RSHIFT_DIM;
+    }
+
+    public boolean rshiftDimChangedFromDefault() {
+        return rshiftDimChanged && rshiftDimChoice != DEFAULT_RSHIFT_DIM;
+    }
+
+    private static int choice(String wanted, String[] options, int current) {
+        if (wanted == null) {
+            return current;
+        }
+        for (int index = 0; index < options.length; index++) {
+            if (options[index].equalsIgnoreCase(wanted.trim())) {
+                return index;
+            }
+        }
+        return current;
     }
 }

@@ -34,6 +34,9 @@ import net.fathom.optimizations.fabric.menu.FathomMenuScreen;
  *       as rail clicks), {@code typing} (Hub search, typed and erased),
  *       {@code openclose} (the Hub opened and closed in turn). One line per
  *       step in the log; no screenshot.
+ *   <li>{@code motion:<kind>} -- a half-size 60 fps PNG sequence for
+ *       {@code open}, {@code close}, {@code rapid}, {@code tabs},
+ *       {@code hover}, {@code popover}, or {@code scroll}.
  * </ul>
  *
  * <p>The steps before {@code world} run at every scale in
@@ -93,6 +96,7 @@ public final class UiTour {
         if (at >= planSteps.size()) {
             if (at == planSteps.size()) {
                 at++;
+                MotionCapture.shutdown();
                 System.out.println("[Fathom] UI tour: done.");
                 client.scheduleStop();
             }
@@ -115,6 +119,15 @@ public final class UiTour {
                 scaleOverride = scale;
             }
             if (measure(client, step, scale)) {
+                at++;
+            }
+            return;
+        }
+        if (step.startsWith("motion:")) {
+            if (scale == scale) {
+                scaleOverride = scale;
+            }
+            if (motion(client, step.substring("motion:".length()))) {
                 at++;
             }
             return;
@@ -159,6 +172,122 @@ public final class UiTour {
     private static long measureStartedAt;
     private static boolean measuring;
     private static int measureTick;
+
+    private static String motionKind;
+    private static long motionWarmupUntil;
+    private static long motionStartedAt;
+    private static int motionAction;
+    private static boolean motionRecording;
+
+    /** Script one interaction while {@link MotionCapture} samples completed frames. */
+    private static boolean motion(MinecraftClient client, String requested) {
+        String kind = requested.trim().toLowerCase(Locale.ROOT);
+        long now = System.nanoTime();
+        if (!kind.equals(motionKind)) {
+            MotionCapture.finish();
+            motionKind = kind;
+            motionWarmupUntil = 0L;
+            motionStartedAt = 0L;
+            motionAction = 0;
+            motionRecording = false;
+            net.fathom.optimizations.fabric.gfx.Pointer.script(Float.NaN, Float.NaN);
+        }
+
+        net.fathom.optimizations.fabric.hub.FathomHubScreen hub =
+                client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen
+                        ? (net.fathom.optimizations.fabric.hub.FathomHubScreen) client.currentScreen : null;
+
+        if (!motionRecording) {
+            if ("open".equals(kind) || "rapid".equals(kind)) {
+                if (hub != null) {
+                    hub.beginClose();
+                    return false;
+                }
+                if (motionWarmupUntil == 0L) {
+                    MotionCapture.prepare(client);
+                    motionWarmupUntil = now + 250_000_000L;
+                    return false;
+                }
+                if (now < motionWarmupUntil) {
+                    return false;
+                }
+                startMotion(client, kind, now);
+                FathomNavigation.openHub(client, Runtime.hud(), "Mods");
+            } else {
+                int section = "popover".equals(kind) ? 2 : "scroll".equals(kind) ? 1 : 1;
+                if (hub == null) {
+                    FathomNavigation.openHub(client, Runtime.hud(), section == 2 ? "Performance" : "Mods");
+                    motionWarmupUntil = now + 500_000_000L;
+                    return false;
+                }
+                if (motionWarmupUntil == 0L) {
+                    MotionCapture.prepare(client);
+                    hub.scriptSection(section);
+                    motionWarmupUntil = now + 500_000_000L;
+                    return false;
+                }
+                if (now < motionWarmupUntil) {
+                    return false;
+                }
+                startMotion(client, kind, now);
+                if ("close".equals(kind)) {
+                    hub.beginClose();
+                } else if ("tabs".equals(kind)) {
+                    hub.scriptSection(0);
+                } else if ("popover".equals(kind)) {
+                    hub.scriptPopover("perf.rshift-background");
+                } else if ("hover".equals(kind)) {
+                    net.fathom.optimizations.fabric.gfx.Pointer.script(210f, 124f);
+                }
+            }
+        }
+
+        float elapsed = (now - motionStartedAt) / 1_000_000_000f;
+        hub = client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen
+                ? (net.fathom.optimizations.fabric.hub.FathomHubScreen) client.currentScreen : null;
+        if ("rapid".equals(kind) && hub != null) {
+            float[] edges = {0.055f, 0.095f, 0.135f, 0.175f};
+            while (motionAction < edges.length && elapsed >= edges[motionAction]) {
+                hub.toggleOpen();
+                motionAction++;
+            }
+        } else if ("tabs".equals(kind) && hub != null && motionAction == 0 && elapsed >= 0.18f) {
+            hub.scriptSection(2);
+            motionAction++;
+        } else if ("hover".equals(kind)) {
+            // Sweep vertically through the retained rail button bounds. The
+            // pointer target is changed before the next rendered frame and the
+            // control responds in that frame; there is no tick-loop delay.
+            float phase = Math.min(1f, elapsed / 0.50f);
+            net.fathom.optimizations.fabric.gfx.Pointer.script(210f, 124f + phase * 230f);
+        } else if ("scroll".equals(kind)) {
+            net.fathom.optimizations.fabric.gfx.Pointer.script(720f, 430f);
+            int edge = (int) (elapsed / 0.045f);
+            if (edge > motionAction) {
+                net.fathom.optimizations.fabric.gfx.Pointer.scriptWheel(elapsed < 0.30f ? -1 : 1);
+                motionAction = edge;
+            }
+        }
+
+        MotionCapture.frame(client);
+        float duration = "rapid".equals(kind) || "hover".equals(kind) || "scroll".equals(kind)
+                ? 0.55f : 0.38f;
+        if (elapsed < duration) {
+            return false;
+        }
+        MotionCapture.finish();
+        net.fathom.optimizations.fabric.gfx.Pointer.script(Float.NaN, Float.NaN);
+        motionKind = null;
+        motionRecording = false;
+        return true;
+    }
+
+    private static void startMotion(MinecraftClient client, String kind, long now) {
+        motionStartedAt = now;
+        motionAction = 0;
+        motionRecording = true;
+        MotionCapture.start(client, kind, 60);
+    }
 
     /** One frame of a measurement step; true when it has finished. */
     private static boolean measure(MinecraftClient client, String step, float scale) {
@@ -224,7 +353,7 @@ public final class UiTour {
             net.fathom.optimizations.fabric.gfx.Pointer.script(-1000f, -1000f);
             if (measureTick % 40 == 0) {
                 if (client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen) {
-                    ((net.fathom.optimizations.fabric.hub.FathomHubScreen) client.currentScreen).beginClose();
+                    ((net.fathom.optimizations.fabric.hub.FathomHubScreen) client.currentScreen).toggleOpen();
                 } else {
                     FathomNavigation.openHub(client, Runtime.hud(), "Mods");
                 }

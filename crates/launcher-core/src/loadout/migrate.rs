@@ -231,6 +231,9 @@ fn apply_features(
                 "ui.scale" => profile.client.ui_scale = Some(value.clone()),
                 "ui.high-quality" => profile.client.high_quality_ui = parse_bool(value),
                 "hud.font" => profile.client.hud_font = Some(value.clone()),
+                "rshift.background" => profile.client.rshift_background = Some(value.clone()),
+                "rshift.blur" => profile.client.rshift_blur = Some(value.clone()),
+                "rshift.dim" => profile.client.rshift_dim = Some(value.clone()),
                 other => report.unmapped.push(format!("client.{other}")),
             }
             continue;

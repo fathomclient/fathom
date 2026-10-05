@@ -24,7 +24,8 @@ import net.fathom.optimizations.generated.GraphiteTokens;
  *   <li>Nothing inside a material gets a material: items inside a surface are
  *   {@link #overlay}s and {@link #hairline}s.</li>
  *   <li>States change density and rim, never colour; disabled is a token swap.</li>
- *   <li>No glow, no gradient rim, no blur.</li>
+ *   <li>No glow or gradient rim; blur belongs to one screen backdrop, never an
+ *   individual material.</li>
  * </ul>
  */
 public final class Graphite {

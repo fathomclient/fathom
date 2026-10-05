@@ -111,9 +111,13 @@ public final class FathomProfile {
         public String uiScale;
         public Boolean highQualityUi;
         public String hudFont;
+        public String rshiftBackground;
+        public String rshiftBlur;
+        public String rshiftDim;
 
         boolean isEmpty() {
-            return hubKey == null && uiScale == null && highQualityUi == null && hudFont == null;
+            return hubKey == null && uiScale == null && highQualityUi == null && hudFont == null
+                    && rshiftBackground == null && rshiftBlur == null && rshiftDim == null;
         }
 
         Client copy() {
@@ -122,6 +126,9 @@ public final class FathomProfile {
             out.uiScale = uiScale;
             out.highQualityUi = highQualityUi;
             out.hudFont = hudFont;
+            out.rshiftBackground = rshiftBackground;
+            out.rshiftBlur = rshiftBlur;
+            out.rshiftDim = rshiftDim;
             return out;
         }
     }
@@ -428,6 +435,9 @@ public final class FathomProfile {
         Object quality = client.get("highQualityUi");
         profile.client.highQualityUi = quality instanceof Boolean ? (Boolean) quality : null;
         profile.client.hudFont = text(client.get("hudFont"));
+        profile.client.rshiftBackground = text(client.get("rshiftBackground"));
+        profile.client.rshiftBlur = text(client.get("rshiftBlur"));
+        profile.client.rshiftDim = text(client.get("rshiftDim"));
 
         Map<?, ?> performance = object(document.get("performance"));
         profile.performance.preset = text(performance.get("preset"));
@@ -513,6 +523,15 @@ public final class FathomProfile {
         }
         if (client.hudFont != null) {
             clientMap.put("hudFont", client.hudFont);
+        }
+        if (client.rshiftBackground != null) {
+            clientMap.put("rshiftBackground", client.rshiftBackground);
+        }
+        if (client.rshiftBlur != null) {
+            clientMap.put("rshiftBlur", client.rshiftBlur);
+        }
+        if (client.rshiftDim != null) {
+            clientMap.put("rshiftDim", client.rshiftDim);
         }
         out.put("client", clientMap);
 

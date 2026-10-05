@@ -39,9 +39,9 @@ import net.fathom.optimizations.generated.GraphiteTokens;
  *
  * <h2>What this is</h2>
  *
- * <p>The launcher, in the game: its composition over its background. There is
- * no application window. The background chosen in the launcher is the page
- * under a light scrim, and the Hub's
+ * <p>The launcher, in the game: its composition over either the chosen Fathom
+ * background or the live world through shared GPU glass. There is no
+ * application window. The Hub's
  * parts float over it the way the launcher's rail, selectors and Play control
  * float over the recording:
  *
@@ -61,8 +61,8 @@ import net.fathom.optimizations.generated.GraphiteTokens;
  * groups of light glass; the current section is the standard-glass capsule
  * with the brighter rim, and no marker bar. The content area is open: the
  * page's own groups are light glass, rows inside them are not cards, and only
- * what floats over everything (menus, popovers) is dense. There is no blur
- * anywhere: see {@code Skin}.
+ * what floats over everything (menus, popovers) is dense. Gameplay glass uses
+ * one full-screen blur; individual panes never run their own blur.
  *
  * <h2>It takes the screen</h2>
  *
@@ -73,11 +73,12 @@ import net.fathom.optimizations.generated.GraphiteTokens;
  * reason for a client menu to be small: while it is open it is the only thing
  * the user is looking at.
  *
- * <h2>No themes, and the world as context</h2>
+ * <h2>No themes, and two presentation modes</h2>
  *
- * <p>In a world, the world is the background, deepened only enough for ivory
- * type to hold. With no world -- opened from the title screen -- it is the
- * launcher's photograph, as the title screen draws it, never an empty frame.
+ * <p>Gameplay glass preserves, blurs and tints the live world. Fathom background
+ * uses the chosen library image with its normal legibility treatment. With no
+ * world -- opened from the title screen -- the latter is always used, never an
+ * empty frame.
  *
  * <h2>Input does not come from Minecraft</h2>
  *
@@ -197,6 +198,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         return sections.size();
     }
 
+    /** Development motion tour: open a retained dropdown by its control id. */
+    public void scriptPopover(String id) {
+        controls.scriptPopover(id);
+    }
+
     public FathomHubScreen startingAt(String title) {
         startAt = title;
         return this;
@@ -268,14 +274,29 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         controls.closePopover();
     }
 
+    /** The frame-rate RShift edge: close, or reopen an exit already in flight. */
+    public void toggleOpen() {
+        if (!closing) {
+            beginClose();
+            return;
+        }
+        closing = false;
+        transition.reopen(Gfx.clock().seconds());
+        controls.setInputEnabled(true);
+        closeStartedNs = 0L;
+    }
+
     // -----------------------------------------------------------------------
     // The frame
     // -----------------------------------------------------------------------
 
     @Override
     public void render(int ignoredMouseX, int ignoredMouseY, float ignoredDelta) {
-        // One video pass; panels add tint and rims, never another blur/capture.
-        Gfx.isolated(backdropPass);
+        // Gameplay glass leaves the freshly rendered world in the target
+        // framebuffer. Fathom background retains the existing scene pass.
+        if (!gameplayGlass()) {
+            Gfx.isolated(backdropPass);
+        }
         Renderer ui = Gfx.beginScreen(client, Runtime.uiScale());
         float delta = Gfx.screenDelta();
         boolean restorePrevious = false;
@@ -500,6 +521,20 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         float open = transition.enter(now);
         float shown = transition.visibility(now);
 
+        if (gameplayGlass()) {
+            // One full-screen glass primitive asks the compositor to capture
+            // the world framebuffer at the BACKDROP boundary. SdfBackdrop
+            // downsamples and blurs it entirely on the GPU; the tint then
+            // restores predictable contrast without replacing the scene.
+            ui.pushAlpha(shown);
+            Graphite.captureFrost(ui);
+            ui.glass(0f, 0f, ui.width(), ui.height(), 0f,
+                    Runtime.rshiftBlur(), 1.06f, 0.97f);
+            ui.rounded(0f, 0f, ui.width(), ui.height(), 0f,
+                    Colour.argb(Runtime.rshiftDim(), 0x071019));
+            ui.popAlpha();
+        }
+
         // Groups fade and rise 8dp on entry; on exit they fade.
         ui.pushAlpha(shown);
         ui.pushTransform(0f, (1f - open) * GraphiteTokens.MOTION_TRAVEL);
@@ -517,6 +552,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
 
         ui.popTransform();
         ui.popAlpha();
+    }
+
+    /** Gameplay glass is meaningful only with an actual world framebuffer. */
+    private boolean gameplayGlass() {
+        return client != null && client.world != null && Runtime.gameplayGlass();
     }
 
     /**
@@ -597,10 +637,15 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             ui.text(section.title(), item.x + lead + glyph + Graphite.S3,
                     Graphite.baseline(ui, item, label), label, ink);
             if ((state.clicked || index == scriptedSection) && !selected) {
+                // When a second navigation input arrives mid-crossfade, retain
+                // the current page at exactly its visible opacity. A settled
+                // page starts a fresh transition at zero as usual.
+                float continuation = pageSwap.settled(now) ? 0f : pageSwap.opacity(now);
                 previous = current;
                 current = index;
-                pageSwap.set(0f, now);
+                pageSwap.set(continuation, now);
                 pageSwap.to(1f, now);
+                controls.closePopover();
                 controls.clearFocus();
                 context.keybindCapture().cancel();
                 sections.get(current).opened(context);
@@ -642,24 +687,26 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         // Open: the page starts level with the rail and has no pane of its own.
         Rect inner = content;
 
-        // A page change fades and rises 8dp over 180ms.
+        // A page change crossfades the old page out while the new page rises
+        // in. The destination is interactive from its first frame; the old
+        // page is presentation-only while it leaves.
         float swap = pageSwap.value(Gfx.clock().seconds());
         float rise = (1f - swap) * GraphiteTokens.MOTION_TRAVEL;
 
         ui.clip(content.x - Graphite.S6, content.y - Graphite.S2, content.right() + Graphite.S6,
                 content.bottom() + Graphite.S6);
+        if (previous != current && swap < 1f) {
+            controls.setInputEnabled(false);
+            ui.pushAlpha(1f - swap);
+            ui.pushTransform(0f, -swap * GraphiteTokens.MOTION_TRAVEL * 0.5f);
+            drawSection(ui, sections.get(previous), inner);
+            ui.popTransform();
+            ui.popAlpha();
+            controls.setInputEnabled(!closing);
+        }
         ui.pushAlpha(swap);
         ui.pushTransform(0f, rise);
-
-        Rect body;
-        if (section.ownsHeading()) {
-            body = inner;
-        } else {
-            Rect heading = FathomComponents.sectionHeader(ui, inner, section.title(), section.subtitle());
-            body = inner.belowTop(heading.height + Skin.SECTION_GAP);
-        }
-        section.render(context, body);
-
+        drawSection(ui, section, inner);
         ui.popTransform();
         ui.popAlpha();
         ui.unclip();
@@ -672,6 +719,17 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
                 || net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE)) {
             section.scroll(notches);
         }
+    }
+
+    private void drawSection(Renderer ui, Section section, Rect inner) {
+        Rect body;
+        if (section.ownsHeading()) {
+            body = inner;
+        } else {
+            Rect heading = FathomComponents.sectionHeader(ui, inner, section.title(), section.subtitle());
+            body = inner.belowTop(heading.height + Skin.SECTION_GAP);
+        }
+        section.render(context, body);
     }
 
     // -----------------------------------------------------------------------

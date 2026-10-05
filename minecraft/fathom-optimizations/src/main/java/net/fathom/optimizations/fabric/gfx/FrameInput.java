@@ -50,7 +50,7 @@ public final class FrameInput {
             if (hubKey.isMouseButton()) {
                 hub.consumeMouseButton(hubKey.mouseButton());
             }
-            hub.beginClose();
+            hub.toggleOpen();
         } else if (!(client.currentScreen instanceof FathomScreen)) {
             Runtime.features().seal();
             FathomNavigation.openHub(client, Runtime.hud());

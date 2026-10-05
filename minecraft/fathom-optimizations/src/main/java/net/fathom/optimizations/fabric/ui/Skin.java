@@ -17,16 +17,16 @@ import net.fathom.optimizations.generated.FathomTheme.Tokens;
  * should feel like the launcher walked into Minecraft, and a slightly different
  * tone or corner reads, immediately, as a different program.
  *
- * <h2>Glass without blur</h2>
+ * <h2>Glass over one shared backdrop</h2>
  *
- * <p>The launcher's panes blur what is behind them. The game's do not: a blur
- * is a framebuffer read and a pass per surface, and the game has better things
- * to spend a frame on. So the materials here are the manifest's
+ * <p>When Gameplay glass is selected, the Hub blurs the framebuffer once and
+ * every surface composes over that shared result. Individual panes never
+ * recapture or reblur their contents. The materials here are the manifest's
  * {@code tint-game} fills: clear is the launcher's own faint neutral veil, light
  * and standard are transparent dark deepenings, and only dense is dense.
- * Unblurred, a pale veil behind light type costs it contrast,
- * so a group that carries text deepens a little instead. The background -- the
- * photograph, or the world under a light scrim -- provides the colour; the
+ * A pale veil behind light type costs it contrast, so a group that carries text
+ * deepens a little instead. The background -- the photograph, or the blurred
+ * world under a controlled tint -- provides the colour; the
  * glass borrows it. There is no application shell: navigation and content
  * float as separate groups.
  *

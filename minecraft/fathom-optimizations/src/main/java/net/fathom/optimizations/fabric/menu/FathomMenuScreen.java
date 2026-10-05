@@ -12,6 +12,8 @@ import net.minecraft.client.util.ScreenshotUtils;
 import net.fathom.optimizations.core.module.LaunchSession;
 import net.fathom.optimizations.core.ui.anim.Ease;
 import net.fathom.optimizations.core.ui.anim.Transition;
+import net.fathom.optimizations.core.ui.anim.Motion;
+import net.fathom.optimizations.core.ui.anim.Timing;
 import net.fathom.optimizations.core.ui.layout.Box;
 import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.core.ui.layout.TextLeaf;
@@ -234,6 +236,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
 
     /** The account panel under the header's account pill. */
     private boolean accountOpen;
+    private final Motion accountPanelMotion = new Motion(0f, Timing.PANEL);
+    private boolean accountPanelPresent;
     private Rect accountPill;
     private LauncherAccount account;
 
@@ -273,6 +277,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         pointer.reset();
         controls.reset();
         accountOpen = Boolean.getBoolean("fathom.qaAccountOpen");
+        accountPanelMotion.set(accountOpen ? 1f : 0f, now);
+        accountPanelPresent = accountOpen;
         account = LauncherAccount.get(client.runDirectory);
         account.check();
     }
@@ -306,6 +312,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
             pointer.poll(client, ui);
             controls.begin(pointer, Gfx.screenDelta(), ui);
             float now = Gfx.clock().seconds();
+            accountPanelMotion.to(accountOpen ? 1f : 0f, now,
+                    accountOpen ? Timing.PANEL : Timing.SCREEN_EXIT,
+                    accountOpen ? Ease.Curve.STANDARD : Ease.Curve.EXIT);
+            accountPanelPresent = accountOpen || accountPanelMotion.opacity(now) > 0f;
             layout(ui);
             draw(ui, now);
             controls.end();
@@ -441,8 +451,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         factValues[1].set(presetName());
         factValues[2].set(hubKey());
         card.width(Math.min(CARD_WIDTH, Math.max(280f, ui.width() - CARD_LEFT - 56f)));
-        accountPanelBox.hidden(!accountOpen);
-        if (accountOpen) {
+        accountPanelBox.hidden(!accountPanelPresent);
+        if (accountPanelPresent) {
             syncAccountLayout();
         }
         root.layout(ui, 0f, 0f, ui.width(), ui.height());
@@ -487,9 +497,20 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         rail(ui, railBottom, railBottomItems, RAIL_BOTTOM, "rail.bottom");
         installation(ui, now);
         legal(ui);
-        if (accountOpen) {
+        if (accountPanelPresent) {
             ui.pushLayer(net.fathom.optimizations.core.ui.render.Layer.POPOVER);
+            float panelShown = accountPanelMotion.opacity(now);
+            ui.pushAlpha(panelShown);
+            ui.pushTransform(0f, (1f - panelShown) * GraphiteTokens.MOTION_TRAVEL);
+            if (!accountOpen) {
+                controls.setInputEnabled(false);
+            }
             accountPanel(ui);
+            if (!accountOpen) {
+                controls.setInputEnabled(!closing);
+            }
+            ui.popTransform();
+            ui.popAlpha();
             ui.popLayer();
         }
         // The top layer: tooltips (and any popover), over the account panel.

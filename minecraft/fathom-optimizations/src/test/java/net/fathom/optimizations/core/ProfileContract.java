@@ -35,6 +35,9 @@ public final class ProfileContract {
         FathomProfile startup = game.resolveLive();
         check("survival".equals(startup.id()), "it opens the launcher's choice: " + startup.id());
         check("Minecraft".equals(startup.client().hudFont), "with Survival's own settings");
+        check("Gameplay glass".equals(startup.client().rshiftBackground)
+                && "Strong".equals(startup.client().rshiftBlur)
+                && "Deep".equals(startup.client().rshiftDim), "with Survival's RShift presentation");
 
         FathomProfile bedwars = game.load("bedwars");
         check(Boolean.TRUE.equals(bedwars.modules().get("cps").enabled), "Bedwars' modules came across");
@@ -43,6 +46,9 @@ public final class ProfileContract {
 
         // -- switched in the hub: the departing profile saved, Bedwars live ------
         bedwars.module("zoom").enabled = Boolean.TRUE;
+        bedwars.client().rshiftBackground = "Fathom background";
+        bedwars.client().rshiftBlur = "Soft";
+        bedwars.client().rshiftDim = "Light";
         game.save(bedwars);
         game.setLastProfileId("bedwars");
         System.out.println("  ok   switched to Bedwars in game, with an edit");

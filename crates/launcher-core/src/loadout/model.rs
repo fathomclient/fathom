@@ -257,6 +257,15 @@ pub struct ClientPrefs {
     /// `Fathom` or `Minecraft`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hud_font: Option<String>,
+    /// `Fathom background` or `Gameplay glass` for RShift in a world.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rshift_background: Option<String>,
+    /// `Soft`, `Balanced`, or `Strong`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rshift_blur: Option<String>,
+    /// `Light`, `Balanced`, or `Deep`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rshift_dim: Option<String>,
 }
 
 /// The performance settings a profile may carry.

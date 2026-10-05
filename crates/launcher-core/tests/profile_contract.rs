@@ -80,6 +80,9 @@ fn launcher_writes(store: &ProfileStore) {
         );
     }
     survival.client.hud_font = Some("Minecraft".to_owned());
+    survival.client.rshift_background = Some("Gameplay glass".to_owned());
+    survival.client.rshift_blur = Some("Strong".to_owned());
+    survival.client.rshift_dim = Some("Deep".to_owned());
     store.save(&survival).unwrap();
 
     // Chosen in the launcher: the next game opens Survival.
@@ -102,5 +105,11 @@ fn launcher_reads(store: &ProfileStore) {
     let zoom = bedwars.modules.get("zoom").expect("the game's edit arrived");
     assert_eq!(zoom.enabled, Some(true));
     assert_eq!(bedwars.hud.get("fps").unwrap().anchor, "top-right");
+    assert_eq!(
+        bedwars.client.rshift_background.as_deref(),
+        Some("Fathom background")
+    );
+    assert_eq!(bedwars.client.rshift_blur.as_deref(), Some("Soft"));
+    assert_eq!(bedwars.client.rshift_dim.as_deref(), Some("Light"));
     assert_eq!(store.list().profiles.len(), 3, "reading created nothing");
 }

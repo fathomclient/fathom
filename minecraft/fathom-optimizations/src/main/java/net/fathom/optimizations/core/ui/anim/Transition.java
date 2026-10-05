@@ -32,6 +32,21 @@ public final class Transition {
         entering.to(1f, now);
     }
 
+    /**
+     * Reopen an exit in flight from the exact visible value.
+     *
+     * <p>This is deliberately not {@link #open}: an input toggle may arrive a
+     * few milliseconds after close began, and resetting entry to zero there
+     * would produce a one-frame opacity and position discontinuity.
+     */
+    public void reopen(float now) {
+        float visible = visibility(now);
+        closing = false;
+        entering.set(visible, now);
+        exiting.set(0f, now);
+        entering.to(1f, now);
+    }
+
     /** Begin the independent exit. Safe to call repeatedly. */
     public void close(float now) {
         if (closing) {

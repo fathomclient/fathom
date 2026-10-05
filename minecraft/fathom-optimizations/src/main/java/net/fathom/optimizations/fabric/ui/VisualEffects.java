@@ -7,14 +7,14 @@ import net.fathom.optimizations.core.ui.render.Shadow;
 import net.fathom.optimizations.generated.FathomTheme.Tokens;
 
 /**
- * Fathom's depth vocabulary: glass without blur.
+ * Fathom's surface-depth vocabulary over the compositor's shared backdrop.
  *
  * <p>Warm translucent fills with a lit top edge and a faint rim; hover and
  * selection are density and luminance, never a hue. There are deliberately no
  * glow or bloom effects. Shadows use the shared {@link Shadow} presets; no
  * helper reads the framebuffer, allocates an image, creates a texture or
- * changes GL state -- a pane is a fill, a fading overlay and an outline, all
- * from the renderer's one sheet.
+ * changes GL state -- the screen-level glass pass owns that work. A pane is a
+ * fill, a fading overlay and an outline, all from the renderer's one sheet.
  */
 public final class VisualEffects {
 

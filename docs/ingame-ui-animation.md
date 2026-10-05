@@ -1,9 +1,9 @@
 # Fathom in-game animation architecture
 
-This pass changes animation behavior only. Layout, colors, type, interaction
-semantics, persisted settings, and the NanoVG renderer boundary are unchanged.
-Components still submit ordinary values through `Renderer`; the animation
-package never calls NanoVG or OpenGL.
+Animation stays above the renderer boundary. Components submit ordinary values
+through `Renderer`; the animation package never calls the SDF compositor or
+OpenGL. Layout, colors, type, interaction semantics, and persisted settings are
+independent of the clock.
 
 ## One clock and four small primitives
 
@@ -32,7 +32,7 @@ and `EXIT`. Spring motion is explicit rather than hidden inside an easing curve.
 3. Call `to` freely every frame. An unchanged target does not restart a motion.
 4. Use `Timing`; do not add component-local millisecond constants without a
    behavior that cannot fit an existing intent.
-5. Animate values passed to `Renderer`. Do not add raw NanoVG calls to controls.
+5. Animate values passed to `Renderer`. Do not add raw OpenGL calls to controls.
 6. Disable interaction as soon as a screen begins closing, and replace the
    screen only after the renderer has ended its final frame.
 

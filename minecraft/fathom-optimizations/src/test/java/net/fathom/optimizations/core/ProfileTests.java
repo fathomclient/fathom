@@ -212,6 +212,9 @@ public final class ProfileTests {
         profile.hud().put("cps", entry);
         profile.client().hudFont = "Minecraft";
         profile.client().hubKey = Integer.valueOf(54);
+        profile.client().rshiftBackground = "Gameplay glass";
+        profile.client().rshiftBlur = "Strong";
+        profile.client().rshiftDim = "Deep";
         profile.performance().preset = "balanced";
         profile.performance().switches.put("font-metrics-cache", Boolean.TRUE);
         store.save(profile);
@@ -224,6 +227,9 @@ public final class ProfileTests {
         check("bottom-right".equals(backEntry.anchor) && backEntry.x == 6 && backEntry.y == -2, "placement");
         check(backEntry.scale == 1.25f && backEntry.opacity == 0.5f, "scale and opacity");
         check("Minecraft".equals(back.client().hudFont) && back.client().hubKey.intValue() == 54, "client");
+        check("Gameplay glass".equals(back.client().rshiftBackground)
+                && "Strong".equals(back.client().rshiftBlur)
+                && "Deep".equals(back.client().rshiftDim), "RShift presentation");
         check("balanced".equals(back.performance().preset)
                 && Boolean.TRUE.equals(back.performance().switches.get("font-metrics-cache")), "performance");
         pass("a profile round-trips unchanged");
@@ -264,7 +270,10 @@ public final class ProfileTests {
                 + "  },\n"
                 + "  \"client\": {\n"
                 + "    \"hubKey\": 54,\n"
-                + "    \"hudFont\": \"Fathom\"\n"
+                + "    \"hudFont\": \"Fathom\",\n"
+                + "    \"rshiftBackground\": \"Gameplay glass\",\n"
+                + "    \"rshiftBlur\": \"Balanced\",\n"
+                + "    \"rshiftDim\": \"Deep\"\n"
                 + "  },\n"
                 + "  \"performance\": {\n"
                 + "    \"preset\": \"aggressive\",\n"
@@ -283,13 +292,17 @@ public final class ProfileTests {
         FathomProfile.HudEntry cps = profile.hud().get("cps");
         check("top-right".equals(cps.anchor) && cps.x == 4 && cps.y == 20 && cps.scale == 1.5f, "hud entry");
         check(profile.client().hubKey.intValue() == 54 && "Fathom".equals(profile.client().hudFont), "client");
+        check("Gameplay glass".equals(profile.client().rshiftBackground)
+                && "Balanced".equals(profile.client().rshiftBlur)
+                && "Deep".equals(profile.client().rshiftDim), "RShift presentation");
         check(profile.client().uiScale == null && profile.client().highQualityUi == null, "absent means default");
         check("aggressive".equals(profile.performance().preset), "preset");
 
         // And what this side writes carries every key the Rust struct requires.
         String written = profile.toJson();
         for (String required : Arrays.asList("\"schema\"", "\"id\"", "\"name\"", "\"createdAt\"", "\"anchor\"",
-                "\"x\"", "\"y\"", "\"client\"", "\"performance\"", "\"hubKey\"")) {
+                "\"x\"", "\"y\"", "\"client\"", "\"performance\"", "\"hubKey\"",
+                "\"rshiftBackground\"", "\"rshiftBlur\"", "\"rshiftDim\"")) {
             check(written.contains(required), "writes " + required);
         }
         check(!written.contains("\"hidden\""), "a false flag is left out, as serde does");

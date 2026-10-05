@@ -559,6 +559,9 @@ public final class FeatureTests {
         // broke a test about persistence.
         prefs.setScaleLabel("115%");
         prefs.setHighQualityUi(false);
+        prefs.setRshiftBackgroundLabel("Fathom background");
+        prefs.setRshiftBlurLabel("Strong");
+        prefs.setRshiftDimLabel("Deep");
 
         ModuleStore store = new ModuleStore();
         try {
@@ -575,6 +578,12 @@ public final class FeatureTests {
         // or it should not be offered.
         check("115%".equals(readPrefs.scaleLabel()), "the interface scale survived, got " + readPrefs.scaleLabel());
         check(!readPrefs.highQualityUi(), "the UI rendering quality survived");
+        check("Fathom background".equals(readPrefs.rshiftBackgroundLabel()),
+                "the RShift presentation mode survived");
+        check("Strong".equals(readPrefs.rshiftBlurLabel()) && Math.abs(readPrefs.rshiftBlur() - 26f) < 0.01f,
+                "the glass blur preset survived");
+        check("Deep".equals(readPrefs.rshiftDimLabel()) && Math.abs(readPrefs.rshiftDim() - 0.44f) < 0.01f,
+                "the glass dim preset survived");
         check("Right Click".equals(read.keyName()), "and renders with a name, got " + read.keyName());
 
         // Right Shift is the default, and it has to keep rendering as one.
@@ -662,6 +671,17 @@ public final class FeatureTests {
         ClientPrefs prefs = new ClientPrefs();
         check(prefs.scaleIsAutomatic(), "automatic by default");
         check(prefs.highQualityUi(), "high quality rendering is on by default");
+        check(prefs.gameplayGlass(), "gameplay glass is the in-world RShift default");
+        check("Balanced".equals(prefs.rshiftBlurLabel()) && "Balanced".equals(prefs.rshiftDimLabel()),
+                "glass has two restrained balanced defaults");
+        prefs.setRshiftBackgroundLabel("Fathom background");
+        prefs.setRshiftBlurLabel("Strong");
+        prefs.setRshiftDimLabel("Deep");
+        prefs.setRshiftBackgroundLabel("not from this version");
+        prefs.setRshiftBlurLabel("not from this version");
+        prefs.setRshiftDimLabel("not from this version");
+        check(prefs.gameplayGlass() && "Balanced".equals(prefs.rshiftBlurLabel())
+                && "Balanced".equals(prefs.rshiftDimLabel()), "unknown RShift choices reset safely");
         // Auto sits a step under the full window-derived size: at 1.0 the Hub
         // read as oversized on a 1080p screen.
         check(Math.abs(prefs.uiScale() - 0.9f) < 0.001f, "which is 0.9 of the automatic scale");

@@ -100,13 +100,19 @@ fallback. Regenerate that fallback with `tools/prepare-main-menu-poster.ps1`.
 
 ## In-game backgrounds
 
-The title screen, the Hub and Fathom's menu backdrops draw the background chosen
-in the launcher (`FathomMenuScreen.drawBackdrop`). The game reads it from the
-launcher's `appearance.json` in its data root (`BackgroundChoice`, re-checked
-at most once a second). Rainforest Storm plays its frame sequence; every other
-background shows its full-resolution still from `textures/menu/scenes/`, the
-same picture the launcher shows. A game started without the launcher shows the
-default. The HUD is gameplay and never draws a menu background.
+The title screen and Fathom menu draw the background chosen in the launcher
+(`FathomMenuScreen.drawBackdrop`). The Hub offers two persisted presentation
+modes. **Fathom background** keeps that same behavior. **Gameplay glass** keeps
+the live world framebuffer, downsamples and blurs it on the GPU, then applies a
+controlled dark tint before drawing the Hub. Gameplay glass falls back to the
+Fathom background when no world exists.
+
+The game reads the chosen library background from the launcher's
+`appearance.json` in its data root (`BackgroundChoice`, re-checked at most once
+a second). Rainforest Storm plays its frame sequence; every other background
+shows its full-resolution still from `textures/menu/scenes/`, the same picture
+the launcher shows. A game started without the launcher shows the default. The
+HUD is gameplay and never draws a menu background.
 
 ## Tokyo Tower and Aurora
 

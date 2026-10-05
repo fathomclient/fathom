@@ -192,6 +192,15 @@ loom {
             if (project.hasProperty('qualityUi')) {
                 vmArg "-Dfathom.highQualityUi=${project.property('qualityUi')}"
             }
+            if (project.hasProperty('rshiftBackground')) {
+                vmArg "-Dfathom.rshiftBackground=${project.property('rshiftBackground')}"
+            }
+            if (project.hasProperty('rshiftBlur')) {
+                vmArg "-Dfathom.rshiftBlur=${project.property('rshiftBlur')}"
+            }
+            if (project.hasProperty('rshiftDim')) {
+                vmArg "-Dfathom.rshiftDim=${project.property('rshiftDim')}"
+            }
             // Point the module at a config file in the run directory, so the
             // launcher's own `config/fathom-performance.properties` contract can
             // be exercised by hand: edit that file, restart, observe.

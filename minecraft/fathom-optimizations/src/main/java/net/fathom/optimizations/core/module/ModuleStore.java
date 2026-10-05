@@ -90,6 +90,9 @@ public final class ModuleStore {
         }
         prefs.setHudFontLabel(properties.getProperty("client.hud.font"));
         prefs.setMenuBackgroundLabel(properties.getProperty("client.menu-background-quality"));
+        prefs.setRshiftBackgroundLabel(properties.getProperty("client.rshift.background"));
+        prefs.setRshiftBlurLabel(properties.getProperty("client.rshift.blur"));
+        prefs.setRshiftDimLabel(properties.getProperty("client.rshift.dim"));
         String quality = properties.getProperty("client.ui.high-quality");
         if (quality != null) {
             Boolean parsed = bool(quality);
@@ -220,6 +223,15 @@ public final class ModuleStore {
         }
         if (prefs != null && prefs.menuBackgroundChangedFromDefault()) {
             properties.setProperty("client.menu-background-quality", prefs.menuBackgroundLabel());
+        }
+        if (prefs != null && prefs.rshiftBackgroundChangedFromDefault()) {
+            properties.setProperty("client.rshift.background", prefs.rshiftBackgroundLabel());
+        }
+        if (prefs != null && prefs.rshiftBlurChangedFromDefault()) {
+            properties.setProperty("client.rshift.blur", prefs.rshiftBlurLabel());
+        }
+        if (prefs != null && prefs.rshiftDimChangedFromDefault()) {
+            properties.setProperty("client.rshift.dim", prefs.rshiftDimLabel());
         }
 
         for (FathomModule feature : registry.all()) {

@@ -174,6 +174,12 @@ public final class ProfileSwitch {
         prefs.setScaleLabel(target.client().uiScale == null ? ClientPrefs.SCALE_CHOICES[0] : target.client().uiScale);
         prefs.setHighQualityUi(target.client().highQualityUi == null || target.client().highQualityUi.booleanValue());
         prefs.setHudFontLabel(target.client().hudFont == null ? ClientPrefs.HUD_FONT_CHOICES[0] : target.client().hudFont);
+        prefs.setRshiftBackgroundLabel(target.client().rshiftBackground == null
+                ? ClientPrefs.RSHIFT_BACKGROUND_CHOICES[1] : target.client().rshiftBackground);
+        prefs.setRshiftBlurLabel(target.client().rshiftBlur == null
+                ? ClientPrefs.RSHIFT_BLUR_CHOICES[1] : target.client().rshiftBlur);
+        prefs.setRshiftDimLabel(target.client().rshiftDim == null
+                ? ClientPrefs.RSHIFT_DIM_CHOICES[1] : target.client().rshiftDim);
 
         // 8. live-safe performance switches.
         Set<String> owned = ownedByModules(features);
@@ -272,6 +278,15 @@ public final class ProfileSwitch {
         }
         if (!prefs.hudFontIsFathom()) {
             out.client().hudFont = prefs.hudFontLabel();
+        }
+        if (prefs.rshiftBackgroundChangedFromDefault()) {
+            out.client().rshiftBackground = prefs.rshiftBackgroundLabel();
+        }
+        if (prefs.rshiftBlurChangedFromDefault()) {
+            out.client().rshiftBlur = prefs.rshiftBlurLabel();
+        }
+        if (prefs.rshiftDimChangedFromDefault()) {
+            out.client().rshiftDim = prefs.rshiftDimLabel();
         }
 
         Set<String> owned = ownedByModules(hud.features());
