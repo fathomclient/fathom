@@ -51,6 +51,10 @@ for (const bg of manifest.backgrounds) {
       'minecraft/fathom-optimizations/src/main/resources/assets/fathom-optimizations/textures/menu',
       bg.minecraft.still);
     if (!fs.existsSync(file)) throw new Error(`${bg.id}: minecraft still ${bg.minecraft.still} does not exist`);
+    const thumbnail = path.join(root,
+      'minecraft/fathom-optimizations/src/main/resources/assets/fathom-optimizations/textures/menu/thumbs',
+      `${bg.id}.jpg`);
+    if (!fs.existsSync(thumbnail)) throw new Error(`${bg.id}: minecraft thumbnail does not exist (run tools/prepare-background-library.mjs)`);
   }
 }
 if (!ids.has(manifest.default)) throw new Error(`the default ${manifest.default} is not in the library`);
@@ -116,7 +120,8 @@ const java = [
   ' *',
   ' * <p>Parallel arrays, one entry per background. {@code STILL} is a classpath',
   ' * resource under {@code /assets/fathom-optimizations/textures/menu/};',
-  ' * {@code VIDEO} names a frame sequence there, or is null for a still.',
+  ' * {@code THUMBNAIL} is the 384x216 picker image; {@code VIDEO} names a',
+  ' * frame sequence there, or is null for a still.',
   ' */',
   'public final class BackgroundCatalog {',
   '    private BackgroundCatalog() {}',
@@ -133,6 +138,10 @@ const java = [
   '',
   '    public static final String[] STILL = {',
   ...arr((bg) => bg.minecraft.still),
+  '    };',
+  '',
+  '    public static final String[] THUMBNAIL = {',
+  ...arr((bg) => `thumbs/${bg.id}.jpg`),
   '    };',
   '',
   '    public static final String[] VIDEO = {',

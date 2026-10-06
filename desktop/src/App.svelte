@@ -322,9 +322,25 @@
     launch = NO_LAUNCH;
   }
 
+  let backgroundRequest = 0;
+
   async function chooseBackground(id: string) {
     pickerOpen = false;
     if (id === choice) return;
+    const request = ++backgroundRequest;
+    const option = BACKGROUNDS.find((candidate) => candidate.id === id);
+    if (!option) return;
+    /* Decode the full still before swapping the retained scene. The picker
+       thumbnail answers immediately, while this prevents a black/empty frame
+       when a large image has not been seen in this process yet. */
+    const preload = new Image();
+    preload.src = option.still;
+    try {
+      await preload.decode();
+    } catch {
+      /* Background.svelte still has the neutral fallback if the file fails. */
+    }
+    if (request !== backgroundRequest) return;
     choice = id;
     await setBackground(id);
   }

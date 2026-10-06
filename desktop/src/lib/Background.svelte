@@ -34,6 +34,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { optionFor, DEFAULT_BACKGROUND } from './backgrounds';
+  import { MOTION_SURFACE } from './motion';
 
   export let choice: string = DEFAULT_BACKGROUND;
 
@@ -76,7 +77,7 @@
 <div class="backdrop" aria-hidden="true" data-background={option.id} data-kind={option.type}>
   <div class="fallback"></div>
   {#key option.id}
-    <div class="scene" transition:fade={{ duration: 420 }}>
+    <div class="scene" transition:fade={{ duration: MOTION_SURFACE }}>
       <img class="media" src={option.still} alt="" draggable="false" />
       {#if option.type === 'video' && !failed}
         <video
@@ -131,7 +132,7 @@
 
   .video {
     opacity: 0;
-    transition: opacity 420ms var(--ease-standard);
+    transition: opacity var(--motion-surface) var(--ease-standard);
   }
 
   .video.shown {

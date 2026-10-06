@@ -235,7 +235,7 @@ public final class UiTour {
                 } else if ("tabs".equals(kind)) {
                     hub.scriptSection(0);
                 } else if ("popover".equals(kind)) {
-                    hub.scriptPopover("perf.rshift-background");
+                    hub.scriptPopover("perf.menu-background");
                 } else if ("hover".equals(kind)) {
                     net.fathom.optimizations.fabric.gfx.Pointer.script(210f, 124f);
                 }

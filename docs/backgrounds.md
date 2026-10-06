@@ -25,7 +25,8 @@ offer it. From it:
   and Red Tower (the tower, not the sky).
 - `tools/prepare-background-library.mjs` builds every derived file: each video's
   full-resolution fallback still (frame 0 of the clip), every 384×216 thumbnail,
-  the game's copy of every still, and Rainforest Storm's launcher video.
+  the game's thumbnail copy, the game's copy of every still, and Rainforest
+  Storm's launcher video.
 
 The default is Rainforest Storm: after the audit it is the only background with
 an unblurred, full-HD moving source in the repository.
@@ -107,12 +108,19 @@ the live world framebuffer, downsamples and blurs it on the GPU, then applies a
 controlled dark tint before drawing the Hub. Gameplay glass falls back to the
 Fathom background when no world exists.
 
-The game reads the chosen library background from the launcher's
-`appearance.json` in its data root (`BackgroundChoice`, re-checked at most once
-a second). Rainforest Storm plays its frame sequence; every other background
-shows its full-resolution still from `textures/menu/scenes/`, the same picture
-the launcher shows. A game started without the launcher shows the default. The
-HUD is gameplay and never draws a menu background.
+The launcher and game read and write the same `background` key in
+`appearance.json` in the launcher's data root (`BackgroundChoice`, re-checked
+at most once a second). The game preloads a selected full scene before the
+atomic shared-file write, while picker cards use their separate 384×216 texture
+cache. Rainforest Storm plays its frame sequence; every other background shows
+its full-resolution still from `textures/menu/scenes/`, the same picture the
+launcher shows. A game started without the launcher shows the default. The HUD
+is gameplay and never draws a menu background.
+
+The supported catalogue has eleven entries. `golden-hour` is intentionally not
+in it: its historical files remain for provenance, but the unconfirmed licence
+means neither generated picker exposes it and a stored value migrates to the
+default.
 
 ## Tokyo Tower and Aurora
 

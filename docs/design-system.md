@@ -1,4 +1,4 @@
-# Fathom's design system: golden-hour glass
+# Fathom's design system: Graphite glass
 
 One manifest, three outputs. Everything visual in the launcher, and eventually
 in the game, comes from [`assets/theme/fathom-theme.json`](../assets/theme/fathom-theme.json):
@@ -328,7 +328,7 @@ snapshot, taken once when the screen opens. HUD modules never get a live blur.
 | Selection / on | a denser fill and `Skin.EDGE_ELEVATED`; switches and sliders in champagne with an ivory knob |
 | The old red | `Skin.ENERGY*`: ivory luminance only. There is no hue but the status tones |
 | `Wordmark.svelte` | `Graphite.wordmark`: the outlines are `generated/Wordmark.java`, from the same generator as the launcher's; `GlRenderer` rasterises them once per size into their own sheet with the same optical tiers and x-height snapping |
-| `Background.svelte` | `MenuScenes` + `MenuPoster`: the approved set (Golden Hour), the launcher's warm scrim, the warm field only when the picture cannot load. The Hub opened from the title screen draws the same photograph behind itself (`FathomMenuScreen.drawBackdrop`) |
+| `Background.svelte` | `MenuScenes` + `MenuPoster`: the generated approved set, the launcher's neutral scrim, and the fallback field only when the picture cannot load. The Hub opened from the title screen draws the same selected scene (`FathomMenuScreen.drawBackdrop`) |
 
 The Hub has no window. The background -- the world under the light scrim, or
 the photograph -- is the page. The header is loose capsules; navigation is two

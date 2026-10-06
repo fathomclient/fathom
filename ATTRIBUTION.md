@@ -14,7 +14,7 @@ redistribute it.
 
 ## Background (launcher and game)
 
-### golden-hour
+### golden-hour (historical, not shipped as a choice)
 
 | | |
 |---|---|
@@ -24,10 +24,10 @@ redistribute it.
 | Licence | **Not yet confirmed.** Wallpapers.com hosts user uploads; the uploader is not necessarily the photographer, and the site does not grant redistribution rights by default. Confirm the terms, or replace the image, before a public release. |
 
 - `desktop/public/backgrounds/golden-hour.jpg` (and `thumbs/golden-hour.jpg`)
-  — one of the user-selectable backgrounds ("Golden Hour"). Credited in the
-  launcher under Settings → Appearance when chosen.
+  — retained historical files only. The id is absent from the canonical
+  manifest and cannot be selected in the launcher or game.
 - `minecraft/fathom-optimizations/src/main/resources/assets/fathom-optimizations/textures/menu/scenes/golden-hour.jpg`
-  — the same file, behind the in-game menus when chosen.
+  — retained historical copy, not referenced by the generated game catalogue.
 
 ### graphite
 

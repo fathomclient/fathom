@@ -36,8 +36,25 @@
       class:selected={option.id === value}
       role="radio"
       aria-checked={option.id === value}
-      style={`--own-glow: ${option.accent}`}
+      tabindex={option.id === value ? 0 : -1}
       on:click={() => onChoose(option.id)}
+      on:keydown={(event) => {
+        const index = options.indexOf(option);
+        const parent = event.currentTarget.parentElement;
+        const columns = parent
+          ? getComputedStyle(parent).gridTemplateColumns.split(' ').length
+          : 1;
+        const next = event.key === 'ArrowRight' ? index + 1
+          : event.key === 'ArrowLeft' ? index - 1
+          : event.key === 'ArrowDown' ? index + columns
+          : event.key === 'ArrowUp' ? index - columns
+          : index;
+        if (next !== index && next >= 0 && next < options.length) {
+          event.preventDefault();
+          const buttons = parent?.querySelectorAll<HTMLButtonElement>('.item');
+          buttons?.[next]?.focus();
+        }
+      }}
     >
       <!-- The thumbnail sits over the fallback field, so a missing file shows
            the same substrate the background itself would. -->
@@ -94,19 +111,14 @@
     transition: box-shadow var(--motion-hover) var(--ease-standard);
   }
 
-  /* Hover and selection brighten the one rim; neither changes its width.
-     Each thumbnail glows in its own accent -- the light the interface will
-     take if you choose it: a hint on hover, a soft halo once chosen. */
+  /* Hover and selection brighten the one neutral rim; neither changes its
+     width. The scene is already the colour, so the control adds no neon halo. */
   .item:hover .thumb {
-    box-shadow:
-      var(--control-rim-strong),
-      0 6px 18px -8px color-mix(in srgb, var(--own-glow) calc(var(--g-glow-selected-alpha) * 150%), transparent);
+    box-shadow: var(--control-rim-strong), 0 7px 16px -12px rgba(0, 0, 0, 0.7);
   }
 
   .item.selected .thumb {
-    box-shadow:
-      var(--control-rim-strong),
-      0 8px 22px -8px color-mix(in srgb, var(--own-glow) calc(var(--g-glow-halo-alpha) * 120%), transparent);
+    box-shadow: var(--control-rim-strong), 0 8px 18px -12px rgba(0, 0, 0, 0.8);
   }
 
   .item:focus-visible {

@@ -164,7 +164,7 @@ multi-size text, icon/label row, toggle, scrollbar and popover in game. At the s
 channel on average. Primary and secondary text ink density are within about 1%.
 The same scene was checked at scale 1 and 1.5.
 
-The automated tour captured the main menu, account panel, all six Hub sections,
+The automated tour captured the main menu, account panel, all seven Hub sections,
 live HUD and HUD editor at 1280×720 after animations settled. The retained menu
 tree also matches the launcher's measured card, header, rail and footer geometry.
 

@@ -2,7 +2,8 @@
 
 ## Result
 
-RShift has two profile-scoped presentation modes in **Performance → Interface**:
+RShift has two profile-scoped presentation modes in the dedicated
+**Appearance** page:
 
 - **Fathom background** draws the selected library background and its existing
   legibility treatment.
@@ -48,6 +49,23 @@ this workload, so Gameplay glass stays live rather than freezing the opening
 frame. A snapshot path would add state and stale-world behavior without a useful
 performance win. This decision is based on this desktop/GPU run; unusually slow
 or unsupported drivers remain the practical limitation.
+
+### Appearance-page regression pass
+
+After adding the real-thumbnail grid and its caches, the finished Appearance
+page was measured again on the same machine, resolution, world, scale, and
+four-second idle harness:
+
+| Mode | UI CPU mean | GPU mean | GPU p95 | Draws | Quads | Frames |
+|---|---:|---:|---:|---:|---:|---:|
+| Fathom background | 0.244 ms | 0.149 ms | 0.154 ms | 11 | 506 | 3,043 |
+| Live gameplay glass | 0.231 ms | 0.165 ms | 0.164 ms | 10 | 504 | 3,201 |
+
+The new same-page live-glass delta is **0.016 ms GPU mean**. Thumbnail textures
+account for the extra texture runs but are uploaded once; steady-state GPU and
+CPU cost stayed below the earlier presentation benchmark. With RShift closed,
+the section is not rendered, polled, or asked for a selected scene, so the new
+picker contributes no recurring closed-menu work.
 
 ## Motion and input
 

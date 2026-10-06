@@ -38,24 +38,6 @@
       "accent": "#cf81a8"
     },
     {
-      "id": "golden-hour",
-      "label": "Golden Hour",
-      "type": "image",
-      "asset": "backgrounds/golden-hour.jpg",
-      "still": "backgrounds/golden-hour.jpg",
-      "thumbnail": "backgrounds/thumbs/golden-hour.jpg",
-      "width": 1920,
-      "height": 1080,
-      "launcher": true,
-      "minecraft": {
-        "still": "scenes/golden-hour.jpg",
-        "video": null
-      },
-      "credit": "\"Palm Tree Sunset Water\", credited to showtime at Wallpapers.com; see ATTRIBUTION.md",
-      "note": "Licence not yet confirmed (ATTRIBUTION.md). Confirm or replace before a public release.",
-      "accent": "#e7a06a"
-    },
-    {
       "id": "bg_6clear",
       "label": "Metropolis",
       "type": "video",

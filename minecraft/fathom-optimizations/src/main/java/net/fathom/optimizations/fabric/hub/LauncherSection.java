@@ -46,7 +46,7 @@ final class LauncherSection implements Section {
     private final Box openButton = Box.fixed("launcher.open", 170f, Skin.H_MD);
     private final Box recheckButton = Box.fixed("launcher.recheck", 120f, Skin.H_MD);
     private final Box noteBox = Box.row("launcher.note").grow(1f);
-    private final Box details = Box.column("launcher.details");
+    private final Box details = Box.column("launcher.details").padding(Skin.S4, Skin.S3);
     private final Box[] detailRows = new Box[CONNECTION_ACTIONS.length];
 
     LauncherSection() {
@@ -153,20 +153,25 @@ final class LauncherSection implements Section {
 
         // -- what crosses -----------------------------------------------------
         Rect below = details.rect();
-        Controls.label(ui, "What this connection carries", below.x, below.y);
+        FathomComponents.panel(ui, below);
+        Rect detailContent = details.content();
+        Controls.label(ui, "What this connection carries", detailContent.x, detailContent.y);
         float y = 0f;
         for (int index = 0; index < CONNECTION_ACTIONS.length; index++) {
             Rect detail = detailRows[index].rect();
             String line = CONNECTION_ACTIONS[index];
             y = detail.y;
-            ui.rounded(below.x + 3f, y + 7f, below.x + 7f, y + 11f, 2f, Skin.TEXT_DISABLED);
-            ui.text(line, below.x + 18f, y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_FAINT);
+            ui.rounded(detailContent.x + 3f, y + 7f, detailContent.x + 7f, y + 11f, 2f,
+                    Skin.TEXT_DISABLED);
+            ui.text(line, detailContent.x + 18f, y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_FAINT);
         }
         y = details.children().get(5).rect().y;
-        ui.text("No token or password ever crosses it.", below.x, y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_MUTED);
+        ui.text("No token or password ever crosses it.", detailContent.x, y + ui.ascent(Type.BODY), Type.BODY,
+                Skin.TEXT_MUTED);
         y = details.children().get(6).rect().y;
-        ui.text(Text.fit(ui, "Loopback only, with a key that dies with this session.", Type.SMALL, below.width),
-                below.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_DISABLED);
+        ui.text(Text.fit(ui, "Loopback only, with a key that dies with this session.", Type.SMALL,
+                        detailContent.width),
+                detailContent.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_DISABLED);
     }
 
     private static String label(LauncherBridge.State state) {

@@ -6,7 +6,8 @@ package net.fathom.optimizations.generated;
  *
  * <p>Parallel arrays, one entry per background. {@code STILL} is a classpath
  * resource under {@code /assets/fathom-optimizations/textures/menu/};
- * {@code VIDEO} names a frame sequence there, or is null for a still.
+ * {@code THUMBNAIL} is the 384x216 picker image; {@code VIDEO} names a
+ * frame sequence there, or is null for a still.
  */
 public final class BackgroundCatalog {
     private BackgroundCatalog() {}
@@ -16,7 +17,6 @@ public final class BackgroundCatalog {
     public static final String[] IDS = {
         "bg_6aurora",
         "bg_1",
-        "golden-hour",
         "bg_6clear",
         "bg_3",
         "bg_6midnight",
@@ -31,7 +31,6 @@ public final class BackgroundCatalog {
     public static final String[] LABELS = {
         "Aurora",
         "Cherry Grove",
-        "Golden Hour",
         "Metropolis",
         "Midnight Coast",
         "Midnight Metropolis",
@@ -46,7 +45,6 @@ public final class BackgroundCatalog {
     public static final String[] STILL = {
         "scenes/bg_6aurora.jpg",
         "scenes/bg_1.jpg",
-        "scenes/golden-hour.jpg",
         "scenes/bg_6clear.jpg",
         "scenes/bg_3.jpg",
         "scenes/bg_6midnight.jpg",
@@ -58,8 +56,21 @@ public final class BackgroundCatalog {
         "scenes/bg_6tokyo.jpg",
     };
 
+    public static final String[] THUMBNAIL = {
+        "thumbs/bg_6aurora.jpg",
+        "thumbs/bg_1.jpg",
+        "thumbs/bg_6clear.jpg",
+        "thumbs/bg_3.jpg",
+        "thumbs/bg_6midnight.jpg",
+        "thumbs/bg_5noraintickunfrozen.jpg",
+        "thumbs/bg_5rain.jpg",
+        "thumbs/bg_5noraintickfrozen.jpg",
+        "thumbs/bg_4.jpg",
+        "thumbs/bg_2.jpg",
+        "thumbs/bg_6tokyo.jpg",
+    };
+
     public static final String[] VIDEO = {
-        null,
         null,
         null,
         null,
@@ -76,7 +87,6 @@ public final class BackgroundCatalog {
     public static final String[] CREDITS = {
         "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
         "Recorded in vanilla Minecraft by the Fathom project owner",
-        "\"Palm Tree Sunset Water\", credited to showtime at Wallpapers.com; see ATTRIBUTION.md",
         "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
         "Recorded in vanilla Minecraft by the Fathom project owner",
         "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
@@ -92,7 +102,6 @@ public final class BackgroundCatalog {
     public static final int[] ACCENT = {
         0x7B9FD5,
         0xCF81A8,
-        0xE7A06A,
         0xC2938E,
         0x95BBB4,
         0xC48D90,

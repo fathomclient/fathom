@@ -1066,22 +1066,34 @@ public final class Controls {
 
     /** A value with a list behind it; the list is drawn by {@link #drawOverlays}. */
     public int dropdown(Renderer ui, String id, Rect area, String[] options, int selected) {
+        return dropdown(ui, id, area, options, selected, true);
+    }
+
+    /** A dropdown that can remain visible while a dependent group leaves. */
+    public int dropdown(Renderer ui, String id, Rect area, String[] options, int selected, boolean enabled) {
         if (options == null || options.length == 0) {
             return selected;
         }
         boolean open = id.equals(openId);
-        State s = state(id, area, true);
+        if (!enabled && open) {
+            openId = null;
+            open = false;
+        }
+        State s = state(id, area, enabled);
         if (s.clicked) {
             openId = open ? null : id;
             open = !open;
         }
         float spin = active(s, open);
 
-        int face = Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, Math.max(s.hover, spin)),
-                Skin.RECESSED, s.press);
+        int face = enabled
+                ? Skin.mix(Skin.mix(Skin.RECESSED, Skin.ELEVATED, Math.max(s.hover, spin)),
+                        Skin.RECESSED, s.press)
+                : Skin.FILL_DISABLED;
         float radius = Skin.control(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
-        int edge = Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, Math.max(s.hover, spin));
+        int edge = enabled ? Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, Math.max(s.hover, spin))
+                : Skin.EDGE_RECESSED;
         ui.rim(area.x, area.y, area.right(), area.bottom(), radius, edge);
         focusRing(ui, s, area, radius);
 
@@ -1090,9 +1102,10 @@ public final class Controls {
         float chevron = 14f;
         String value = options[Math.max(0, Math.min(options.length - 1, selected))];
         middle(ui, value, area.x + Skin.S3, area, area.width - Skin.S3 * 2f - chevron - Skin.S1, Type.BODY,
-                Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, Math.max(s.hover, spin)));
+                enabled ? Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, Math.max(s.hover, spin)) : Skin.TEXT_DISABLED);
         ui.icon(Icon.CHEVRON_DOWN, area.right() - Skin.S3 - chevron, area.centreY() - chevron / 2f,
-                chevron, Skin.mix(Skin.TEXT_FAINT, Skin.TEXT, Math.max(s.hover, spin)));
+                chevron, enabled ? Skin.mix(Skin.TEXT_FAINT, Skin.TEXT, Math.max(s.hover, spin))
+                        : Skin.TEXT_DISABLED);
 
         if (open) {
             overlays.add(overlay(id, area, options, selected, false));

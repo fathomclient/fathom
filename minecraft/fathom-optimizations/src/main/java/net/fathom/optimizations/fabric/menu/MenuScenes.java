@@ -34,10 +34,9 @@ import net.fathom.optimizations.generated.BackgroundCatalog;
  *
  * <p>The list is generated from {@code assets/backgrounds/manifest.json} (the
  * {@link BackgroundCatalog}), the same catalogue the launcher's picker is
- * generated from. The choice is made in the launcher -- Settings, Appearance,
- * Background -- and {@link #selected()} reads it, so the title screen, the Hub
- * and every Fathom menu backdrop show the background the launcher shows. There
- * is no second picker in the game to disagree with it.
+ * generated from. The launcher and in-game Appearance page both write the same
+ * validated key, and {@link #selected()} reads it, so the title screen, the Hub
+ * and every Fathom menu backdrop agree without a second catalogue or protocol.
  *
  * <h2>The fallback is not a scene</h2>
  *
@@ -73,8 +72,10 @@ public final class MenuScenes {
         public final int accent;
         /** The still's classpath resource: the same picture the launcher shows. */
         final String still;
+        /** A dedicated 384x216 picker image. */
+        final String thumbnail;
 
-        Scene(String id, String label, boolean animated, String still, String credit, int accent) {
+        Scene(String id, String label, boolean animated, String still, String thumbnail, String credit, int accent) {
             this.id = id;
             this.accent = accent;
             this.label = label;
@@ -82,6 +83,7 @@ public final class MenuScenes {
             this.gradient = false;
             this.credit = credit;
             this.still = MENU + still;
+            this.thumbnail = MENU + thumbnail;
         }
 
         public boolean credited() {
@@ -99,6 +101,7 @@ public final class MenuScenes {
         for (int index = 0; index < SCENES.length; index++) {
             SCENES[index] = new Scene(BackgroundCatalog.IDS[index], BackgroundCatalog.LABELS[index],
                     BackgroundCatalog.VIDEO[index] != null, BackgroundCatalog.STILL[index],
+                    BackgroundCatalog.THUMBNAIL[index],
                     BackgroundCatalog.CREDITS[index], BackgroundCatalog.ACCENT[index]);
         }
     }
@@ -114,6 +117,7 @@ public final class MenuScenes {
 
     /** Scene id to texture name. Zero means tried and failed; absent means untried. */
     private static final Map<String, Integer> TEXTURES = new HashMap<String, Integer>();
+    private static final Map<String, Integer> THUMBNAILS = new HashMap<String, Integer>();
 
     private MenuScenes() {}
 
@@ -125,7 +129,13 @@ public final class MenuScenes {
                 GL11.glDeleteTextures(texture.intValue());
             }
         }
+        for (Integer texture : THUMBNAILS.values()) {
+            if (texture != null && texture.intValue() > 0) {
+                GL11.glDeleteTextures(texture.intValue());
+            }
+        }
         TEXTURES.clear();
+        THUMBNAILS.clear();
     }
 
     public static Scene[] all() {
@@ -182,7 +192,9 @@ public final class MenuScenes {
             return chosen;
         }
         chosenAt = now;
-        File root = ProfileLocation.platformRoot();
+        File root = net.fathom.optimizations.fabric.Runtime.bridge() == null
+                ? ProfileLocation.platformRoot()
+                : net.fathom.optimizations.fabric.Runtime.bridge().launcherRoot();
         File file = root == null ? null : new File(root, BackgroundChoice.FILE);
         long modified = file != null && file.isFile() ? file.lastModified() : 0L;
         if (chosen != null && modified == chosenModified) {
@@ -242,7 +254,7 @@ public final class MenuScenes {
         if (scene == null || scene.gradient) {
             return false;
         }
-        if (ui instanceof GlRenderer && !TEXTURES.containsKey(scene.id)) {
+        if (ui instanceof GlRenderer && !THUMBNAILS.containsKey(scene.id)) {
             // A first-use upload binds a raw GL texture. Flush geometry queued
             // against the old renderer's atlas before that bind so a freshly
             // opened scene picker cannot render its preceding rounded controls
@@ -250,7 +262,7 @@ public final class MenuScenes {
             // later, so it needs no flush.
             ((GlRenderer) ui).flush();
         }
-        int texture = texture(scene);
+        int texture = cachedTexture(THUMBNAILS, scene.id, scene.thumbnail);
         if (texture > 0) {
             if (ui instanceof GlRenderer) {
                 ((GlRenderer) ui).image(texture, area.x, area.y, area.right(), area.bottom(),
@@ -272,17 +284,20 @@ public final class MenuScenes {
         if (scene == null || scene.gradient) {
             return 0;
         }
-        Integer known = TEXTURES.get(scene.id);
+        return cachedTexture(TEXTURES, scene.id, scene.still);
+    }
+
+    private static int cachedTexture(Map<String, Integer> cache, String id, String path) {
+        Integer known = cache.get(id);
         if (known != null) {
             return known.intValue();
         }
-        int uploaded = upload(scene.id);
-        TEXTURES.put(scene.id, Integer.valueOf(uploaded));
+        int uploaded = upload(path);
+        cache.put(id, Integer.valueOf(uploaded));
         return uploaded;
     }
 
-    private static int upload(String id) {
-        String path = byId(id).still;
+    private static int upload(String path) {
         try {
             BufferedImage image;
             try (InputStream stream = MenuScenes.class.getResourceAsStream(path)) {
@@ -326,6 +341,32 @@ public final class MenuScenes {
             System.err.println("[Fathom] Menu scene failed to upload: " + failed.getMessage());
             return 0;
         }
+    }
+
+    /**
+     * Make a picker choice live in both processes.
+     *
+     * <p>The full still is decoded and uploaded before the shared file changes,
+     * so the next backdrop frame cannot be black or fall through while an
+     * asset loads. Thumbnail and full-size textures then remain in their
+     * separate process-lifetime caches.
+     */
+    public static boolean choose(Scene scene) {
+        if (scene == null || texture(scene) <= 0) {
+            return false;
+        }
+        File root = net.fathom.optimizations.fabric.Runtime.bridge() == null
+                ? ProfileLocation.platformRoot()
+                : net.fathom.optimizations.fabric.Runtime.bridge().launcherRoot();
+        if (!BackgroundChoice.choose(root, scene.id, BackgroundCatalog.IDS)) {
+            System.err.println("[Fathom] Could not save the shared background choice.");
+            return false;
+        }
+        chosen = scene;
+        chosenAt = System.nanoTime();
+        File file = root == null ? null : new File(root, BackgroundChoice.FILE);
+        chosenModified = file != null && file.isFile() ? file.lastModified() : 0L;
+        return true;
     }
 
     /**

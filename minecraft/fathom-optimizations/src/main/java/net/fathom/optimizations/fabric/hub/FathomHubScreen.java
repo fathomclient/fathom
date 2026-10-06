@@ -216,6 +216,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             sections.add(new QuickSection());
             sections.add(new ModsSection());
             sections.add(new PerformanceSection());
+            sections.add(new AppearanceSection());
             sections.add(new ProfilesSection());
             sections.add(new DiagnosticsSection());
             sections.add(new LauncherSection());

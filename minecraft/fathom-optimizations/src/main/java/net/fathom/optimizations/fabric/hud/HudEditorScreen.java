@@ -90,18 +90,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private static final List<Snap.Guide> NO_GUIDES = Collections.emptyList();
 
     private static final float TOOLBAR_HEIGHT = 52f;
+    private static final float TOOLBAR_TWO_ROW_HEIGHT = 92f;
 
-    /**
-     * The toolbar's buttons, as widths and the gap that follows each.
-     *
-     * <p>One array, read by both the pass that draws the bar and the pass that
-     * decides whether a click landed on it. They were two copies of the same
-     * arithmetic and drifted apart the first time a button changed width, which
-     * is exactly the divergence {@link Rect} exists to prevent.
-     */
-    private static final float[] TOOL_WIDTHS = {96f, 92f, 110f, 116f, 100f, 104f};
+    /** The gap after each toolbar control; retained rectangles own the widths. */
     private static final float[] TOOL_GAPS = {Skin.S3, Skin.S2, Skin.S2, Skin.S2, Skin.S2, Skin.S4};
-    private static final float PICKER_WIDTH = 200f;
     // Wide enough for "Reset position" beside "Reset widget", tall enough for
     // the row they sit in. Both were measured against the panel in the game
     // after the buttons were added and drew outside it.
@@ -122,6 +114,21 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private final Controls controls = new Controls();
     private final Pointer pointer = new Pointer();
     private final Transition transition = new Transition(Timing.SCREEN_ENTER, Timing.SCREEN_EXIT);
+    /** Toolbar geometry is rebuilt only when the viewport or one of its labels changes. */
+    private final Rect[] toolbarKeys = new Rect[6];
+    private Rect cachedToolbarRow;
+    private Rect cachedToolbarPicker;
+    private float cachedToolbarWidth = Float.NaN;
+    private float cachedToolbarViewportHeight = Float.NaN;
+    private float cachedToolbarHeight = TOOLBAR_HEIGHT;
+    private boolean cachedToolbarGrid;
+    private boolean cachedToolbarBounds;
+    private boolean cachedToolbarTwoRows;
+    private String cachedToolbarSnap = "";
+    /** Profile labels are rebuilt when profiles change, never once per frame. */
+    private List<net.fathom.optimizations.core.profile.FathomProfile> toolbarProfiles =
+            Collections.emptyList();
+    private String[] toolbarProfileOptions = new String[0];
 
     private String dragging;
     private String resizing;
@@ -251,7 +258,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             // Decided before anything reads it: the bar's own controls consult it
             // to know whether to respond, and so does the widget hit test.
             barYields = chromeYields(
-                    Rect.of(0f, ui.height() - TOOLBAR_HEIGHT, ui.width(), ui.height()), mouseX, mouseY);
+                    toolbarArea(ui), mouseX, mouseY);
             placeInspector(ui);
             inspectorYields = selected != null && chromeYields(inspectorArea(ui), mouseX, mouseY);
 
@@ -447,8 +454,11 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     private void label(Renderer ui, String text, float x, float y) {
-        ui.text(text, x, y + ui.ascent(Type.CAPTION), Type.CAPTION,
-                Skin.argb(0.68f, Skin.ACCENT));
+        float height = ui.lineHeight(Type.CAPTION) + Skin.S1;
+        Rect plate = new Rect(x, y, ui.measure(text, Type.CAPTION) + Skin.S2 * 2f, height);
+        ui.rounded(plate.x, plate.y, plate.right(), plate.bottom(), Tokens.RADIUS_XS, Skin.OVERLAY);
+        ui.text(text, plate.x + Skin.S2, Controls.baseline(ui, plate, Type.CAPTION), Type.CAPTION,
+                Skin.ACCENT);
     }
 
     /** A dashed rectangle, so it reads as a boundary rather than a box. */
@@ -542,8 +552,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     // -----------------------------------------------------------------------
 
     private void toolbar(Renderer ui) {
-        float top = ui.height() - TOOLBAR_HEIGHT;
-        Rect bar = Rect.of(0f, top, ui.width(), ui.height());
+        Rect bar = toolbarArea(ui);
+        float top = bar.y;
         Rect row = toolbarRow(ui);
         Rect[] keys = toolbarButtons(ui);
 
@@ -602,7 +612,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             note = "Every widget is back where it started.";
             problem = hud.save();
         }
-        float cursor = keys[5].right() + Skin.S4;
+        float cursor = cachedToolbarTwoRows ? row.x : keys[5].right() + Skin.S4;
 
         // The profile picker, at the right where a document's name goes. The
         // layout being edited is the live profile's, so choosing another profile
@@ -611,10 +621,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         net.fathom.optimizations.fabric.profile.ProfileRuntime profiles = hud.profiles();
         if (profiles != null) {
             List<net.fathom.optimizations.core.profile.FathomProfile> all = profiles.cachedProfiles();
-            String[] options = new String[all.size()];
+            syncProfileOptions(all);
+            String[] options = toolbarProfileOptions;
             int index = 0;
             for (int at = 0; at < all.size(); at++) {
-                options[at] = all.get(at).name();
                 if (all.get(at).id().equals(profiles.liveId())) {
                     index = at;
                 }
@@ -656,21 +666,16 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         controls.clearShield();
     }
 
-    /** The six buttons along the left of the bar, laid out once. */
+    /** The six buttons along the left of the bar, retained until its inputs change. */
     private Rect[] toolbarButtons(Renderer ui) {
-        Rect row = toolbarRow(ui);
-        Rect[] out = new Rect[TOOL_WIDTHS.length];
-        float cursor = row.x;
-        for (int index = 0; index < TOOL_WIDTHS.length; index++) {
-            out[index] = new Rect(cursor, row.y, TOOL_WIDTHS[index], row.height);
-            cursor += TOOL_WIDTHS[index] + TOOL_GAPS[index];
-        }
-        return out;
+        layoutToolbar(ui);
+        return toolbarKeys;
     }
 
     /** The profile picker, at the right of the bar. */
     private Rect toolbarPicker(Renderer ui) {
-        return toolbarRow(ui).vcentreRight(0f, PICKER_WIDTH, toolbarRow(ui).height);
+        layoutToolbar(ui);
+        return cachedToolbarPicker;
     }
 
     /**
@@ -713,7 +718,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         // Anchor, as a dropdown rather than a row that cycles: nine values is
         // too many to step through one press at a time.
         ui.text("Anchor", inner.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
-        Rect anchorBox = new Rect(inner.x, y + 16f, inner.width, Skin.H_SM);
+        float labelBox = ui.lineHeight(Type.SMALL) + Skin.S1;
+        Rect anchorBox = new Rect(inner.x, y + labelBox, inner.width, Skin.H_SM);
         int chosen = controls.dropdown(ui, "insp.anchor", anchorBox, ANCHOR_LABELS, placement.anchor().ordinal());
         if (chosen != placement.anchor().ordinal() && chosen >= 0 && chosen < ANCHORS.length) {
             // The offset is reset with the anchor: keeping it would send the
@@ -722,7 +728,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             hud.place(widget.id(), placement.withAnchor(ANCHORS[chosen]).withOffset(4, 4));
             problem = hud.save();
         }
-        y += 16f + Skin.H_SM + Skin.S3;
+        y += labelBox + Skin.H_SM + Skin.S3;
 
         y = sliderRow(ui, inner, y, "insp.scale", "Scale", Math.round(placement.scale() * 100) + "%",
                 (placement.scale() - Placement.MIN_SCALE)
@@ -773,7 +779,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             Widget widget, boolean scale) {
         ui.text(label, inner.x, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
         ui.textRight(value, inner.right(), y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_MUTED);
-        Rect track = new Rect(inner.x, y + 16f, inner.width, Controls.SLIDER_HEIGHT);
+        float labelBox = ui.lineHeight(Type.SMALL) + Skin.S1;
+        Rect track = new Rect(inner.x, y + labelBox, inner.width, Controls.SLIDER_HEIGHT);
         double next = controls.slider(ui, id, track, fraction, true);
         if (Math.abs(next - fraction) > 0.001d) {
             Placement placement = hud.placement(widget.id());
@@ -783,7 +790,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                     : placement.withOpacity((float) next));
             problem = hud.save();
         }
-        return y + 16f + Controls.SLIDER_HEIGHT + Skin.S3;
+        return y + labelBox + Controls.SLIDER_HEIGHT + Skin.S3;
     }
 
     private Widget widgetNamed(String name) {
@@ -872,8 +879,96 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     }
 
     private Rect toolbarRow(Renderer ui) {
-        Rect bar = Rect.of(0f, ui.height() - TOOLBAR_HEIGHT, ui.width(), ui.height());
-        return bar.inset(Skin.S5, 0f).vcentre(0f, bar.width - Skin.S5 * 2f, Skin.H_MD);
+        layoutToolbar(ui);
+        return cachedToolbarRow;
+    }
+
+    private Rect toolbarArea(Renderer ui) {
+        layoutToolbar(ui);
+        return Rect.of(0f, ui.height() - cachedToolbarHeight, ui.width(), ui.height());
+    }
+
+    /**
+     * Fit the editor toolbar at every supported interface scale. Wide screens
+     * keep the document picker on the same line; narrow logical viewports put
+     * it on a second line instead of letting two hitboxes overlap.
+     */
+    private void layoutToolbar(Renderer ui) {
+        String snap = prefs.snapLabel();
+        if (cachedToolbarWidth == ui.width()
+                && cachedToolbarViewportHeight == ui.height()
+                && cachedToolbarGrid == prefs.grid()
+                && cachedToolbarBounds == prefs.bounds()
+                && cachedToolbarSnap.equals(snap)) {
+            return;
+        }
+        cachedToolbarWidth = ui.width();
+        cachedToolbarViewportHeight = ui.height();
+        cachedToolbarGrid = prefs.grid();
+        cachedToolbarBounds = prefs.bounds();
+        cachedToolbarSnap = snap;
+
+        String[] labels = {
+            "Done",
+            prefs.grid() ? "Grid on" : "Grid",
+            prefs.bounds() ? "Bounds on" : "Bounds",
+            "Snap: " + snap,
+            "Duplicate",
+            "Reset all",
+        };
+        float[] widths = new float[labels.length];
+        float buttonsWidth = 0f;
+        for (int index = 0; index < labels.length; index++) {
+            widths[index] = Math.max(72f, ui.measure(labels[index], Type.BODY_STRONG) + Skin.S4 * 2f);
+            buttonsWidth += widths[index] + TOOL_GAPS[index];
+        }
+
+        float margin = Skin.S5;
+        float available = Math.max(1f, ui.width() - margin * 2f);
+        float pickerWidth = Math.min(200f, Math.max(148f, ui.width() * 0.17f));
+        cachedToolbarTwoRows = buttonsWidth + pickerWidth > available;
+        cachedToolbarHeight = cachedToolbarTwoRows ? TOOLBAR_TWO_ROW_HEIGHT : TOOLBAR_HEIGHT;
+        float top = ui.height() - cachedToolbarHeight;
+        float buttonY = cachedToolbarTwoRows ? top + Skin.S2 : top + (cachedToolbarHeight - Skin.H_MD) / 2f;
+        float pickerY = cachedToolbarTwoRows
+                ? ui.height() - Skin.S2 - Skin.H_MD
+                : buttonY;
+
+        // The two-line arrangement has the full row for buttons. Extremely
+        // narrow windows compress them uniformly, preserving non-overlapping
+        // bounds; labels are clipped by the canonical button primitive.
+        float buttonScale = cachedToolbarTwoRows && buttonsWidth > available
+                ? available / buttonsWidth : 1f;
+        float cursor = margin;
+        for (int index = 0; index < toolbarKeys.length; index++) {
+            float width = widths[index] * buttonScale;
+            toolbarKeys[index] = new Rect(cursor, buttonY, width, Skin.H_MD);
+            cursor += width + TOOL_GAPS[index] * buttonScale;
+        }
+        cachedToolbarPicker = new Rect(ui.width() - margin - pickerWidth, pickerY, pickerWidth, Skin.H_MD);
+        cachedToolbarRow = new Rect(margin, pickerY, available, Skin.H_MD);
+    }
+
+    private void syncProfileOptions(List<net.fathom.optimizations.core.profile.FathomProfile> all) {
+        boolean changed = all.size() != toolbarProfiles.size();
+        if (!changed) {
+            for (int index = 0; index < all.size(); index++) {
+                net.fathom.optimizations.core.profile.FathomProfile next = all.get(index);
+                net.fathom.optimizations.core.profile.FathomProfile old = toolbarProfiles.get(index);
+                if (!next.id().equals(old.id()) || !next.name().equals(old.name())) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (!changed) {
+            return;
+        }
+        toolbarProfiles = new ArrayList<net.fathom.optimizations.core.profile.FathomProfile>(all);
+        toolbarProfileOptions = new String[all.size()];
+        for (int index = 0; index < all.size(); index++) {
+            toolbarProfileOptions[index] = all.get(index).name();
+        }
     }
 
     /**
@@ -905,7 +1000,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private Rect inspectorAt(Renderer ui, int corner) {
         float margin = Skin.S5;
         float left = corner % 2 == 0 ? ui.width() - INSPECTOR_WIDTH - margin : margin;
-        float top = corner < 2 ? margin : ui.height() - TOOLBAR_HEIGHT - margin - INSPECTOR_HEIGHT;
+        float top = corner < 2 ? margin : ui.height() - cachedToolbarHeight - margin - INSPECTOR_HEIGHT;
         return new Rect(left, top, INSPECTOR_WIDTH, INSPECTOR_HEIGHT);
     }
 

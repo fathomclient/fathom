@@ -96,6 +96,7 @@ public final class UiTests {
         // -- rims and the background choice ----------------------------------
         aRimIsOneDevicePixelAtEveryScale();
         theBackgroundChoiceIsReadFromTheLaunchersFileAndValidated();
+        changingTheBackgroundKeepsTheLaunchersAppearanceKeys();
 
         // -- vector renderer state -------------------------------------------
         nestedClipsIntersect();
@@ -977,6 +978,29 @@ public final class UiTests {
         check("bg_5rain".equals(net.fathom.optimizations.core.ui.BackgroundChoice.resolve(
                 null, ids, "bg_5rain")), "no file is the default");
         pass("the background choice is read from the launcher's file and validated");
+    }
+
+    private static void changingTheBackgroundKeepsTheLaunchersAppearanceKeys() {
+        String[] ids = {"bg_5rain", "bg_6midnight"};
+        String changed = net.fathom.optimizations.core.ui.BackgroundChoice.updated(
+                "{\"background\":\"bg_5rain\",\"reduce_blur\":true,\"standard_capitalization\":true}",
+                "bg_6midnight", ids);
+        check("bg_6midnight".equals(net.fathom.optimizations.core.ui.BackgroundChoice.resolve(
+                changed, ids, "bg_5rain")), "the game writes the selected scene");
+        check(changed.contains("\"reduce_blur\": true"), "the launcher blur preference survives");
+        check(changed.contains("\"standard_capitalization\": true"), "the launcher case preference survives");
+        String repaired = net.fathom.optimizations.core.ui.BackgroundChoice.updated(
+                "not json", "bg_5rain", ids);
+        check("bg_5rain".equals(net.fathom.optimizations.core.ui.BackgroundChoice.resolve(
+                repaired, ids, "bg_6midnight")), "a corrupt appearance file is repaired");
+        boolean refused = false;
+        try {
+            net.fathom.optimizations.core.ui.BackgroundChoice.updated("{}", "../../secret", ids);
+        } catch (IllegalArgumentException expected) {
+            refused = true;
+        }
+        check(refused, "an unapproved id cannot be written");
+        pass("changing the background keeps the launcher's appearance keys");
     }
 
     private static void check(boolean condition, String what) {

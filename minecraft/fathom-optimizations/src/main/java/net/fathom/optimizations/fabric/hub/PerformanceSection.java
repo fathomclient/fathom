@@ -62,7 +62,7 @@ final class PerformanceSection implements Section {
     private final Box interfaceLabel = Box.column("performance.interface.label");
     private final Box interfaceBox = Box.column("performance.interface");
     private final Box presetLabel = Box.column("performance.preset.label");
-    private final Box presetBox = Box.row("performance.preset").height(Skin.H_MD);
+    private final Box presetBox = Box.row("performance.preset").height(Skin.H_MD + Skin.S2 * 2f);
     private final Box listViewport = Box.stack("performance.list.viewport").grow(1f);
     private final Box listLayout = Box.column("performance.list").padding(Skin.S2).scroll(true);
     private final java.util.List<Box> layerBoxes = new java.util.ArrayList<Box>();
@@ -123,7 +123,7 @@ final class PerformanceSection implements Section {
         float labelHeight = ui.lineHeight(Type.LABEL) + Skin.S1;
         float interfaceLine = ui.lineHeight(Type.ROW_TITLE) + ui.lineHeight(Type.SMALL);
         interfaceLabel.height(labelHeight);
-        interfaceBox.height(interfaceLine * 5f + Skin.S3 * 4f + Skin.S3 * 2f);
+        interfaceBox.height(interfaceLine * 2f + Skin.S3 + Skin.S3 * 2f);
         presetLabel.height(labelHeight);
         page.layout(ui, area.x, area.y, area.width, area.height);
         meters(context, metersBox.rect());
@@ -142,7 +142,8 @@ final class PerformanceSection implements Section {
         presentationRows(context, interfaceGroup.inset(Skin.CARD_PADDING, Skin.S3));
         Controls.label(ui, "Preset", presetLabel.rect().x, presetLabel.rect().y);
         Rect presetRow = presetBox.rect();
-        presets(context, switches, presetRow);
+        FathomComponents.panel(ui, presetRow);
+        presets(context, switches, presetRow.inset(Skin.S2, Skin.S2));
         Rect body = listViewport.rect();
         List<Optimization> entries = cachedEngineEntries();
         List<Row> layerRows = layerRows();
@@ -379,55 +380,9 @@ final class PerformanceSection implements Section {
             context.markDirty();
         }
 
-        Rect mode = new Rect(area.x, area.y + step, area.width, line);
         float pickerWidth = Math.min(220f, Math.max(160f, area.width * 0.30f));
-        Rect picker = mode.vcentreRight(0f, pickerWidth, Skin.H_MD);
-        ui.text("RShift background", mode.x,
-                mode.y + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
-        ui.text(Text.fit(ui, "Blur live gameplay in-world, or use the selected Fathom background.",
-                        Type.SMALL, picker.x - mode.x - Skin.S5),
-                mode.x, mode.y + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.SMALL),
-                Type.SMALL, Skin.TEXT_FAINT);
-        int background = context.hud().prefs().rshiftBackgroundChoice();
-        int backgroundChosen = context.controls().dropdown(ui, "perf.rshift-background", picker,
-                ClientPrefs.RSHIFT_BACKGROUND_CHOICES, background);
-        if (backgroundChosen != background) {
-            context.hud().prefs().setRshiftBackgroundChoice(backgroundChosen);
-            context.markDirty();
-        }
-
-        Rect blur = new Rect(area.x, area.y + step * 2f, area.width, line);
-        picker = blur.vcentreRight(0f, pickerWidth, Skin.H_MD);
-        ui.text("Glass blur", blur.x, blur.y + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
-        ui.text(Text.fit(ui, "Three tuned GPU blur strengths; Balanced is the default.", Type.SMALL,
-                        picker.x - blur.x - Skin.S5),
-                blur.x, blur.y + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.SMALL),
-                Type.SMALL, Skin.TEXT_FAINT);
-        int blurChoice = context.hud().prefs().rshiftBlurChoice();
-        int blurChosen = context.controls().dropdown(ui, "perf.rshift-blur", picker,
-                ClientPrefs.RSHIFT_BLUR_CHOICES, blurChoice);
-        if (blurChosen != blurChoice) {
-            context.hud().prefs().setRshiftBlurChoice(blurChosen);
-            context.markDirty();
-        }
-
-        Rect dim = new Rect(area.x, area.y + step * 3f, area.width, line);
-        picker = dim.vcentreRight(0f, pickerWidth, Skin.H_MD);
-        ui.text("Glass dim", dim.x, dim.y + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
-        ui.text(Text.fit(ui, "A restrained neutral tint keeps labels legible over bright scenes.", Type.SMALL,
-                        picker.x - dim.x - Skin.S5),
-                dim.x, dim.y + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.SMALL),
-                Type.SMALL, Skin.TEXT_FAINT);
-        int dimChoice = context.hud().prefs().rshiftDimChoice();
-        int dimChosen = context.controls().dropdown(ui, "perf.rshift-dim", picker,
-                ClientPrefs.RSHIFT_DIM_CHOICES, dimChoice);
-        if (dimChosen != dimChoice) {
-            context.hud().prefs().setRshiftDimChoice(dimChosen);
-            context.markDirty();
-        }
-
-        Rect video = new Rect(area.x, area.y + step * 4f, area.width, line);
-        picker = video.vcentreRight(0f, pickerWidth, Skin.H_MD);
+        Rect video = new Rect(area.x, area.y + step, area.width, line);
+        Rect picker = video.vcentreRight(0f, pickerWidth, Skin.H_MD);
         ui.text("Menu background quality", video.x,
                 video.y + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
         ui.text(Text.fit(ui, "Video decode quality; Fathom UI remains native-resolution.",

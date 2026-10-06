@@ -16,6 +16,8 @@
  *   so it must be the same picture -- and not the 640x360 poster these files
  *   used to be, which was being stretched to full screen.
  * - A THUMBNAIL for the picker: 384x216 from the still. Never used full size.
+ *   The same small file is copied into the game; the in-game picker never
+ *   decodes a 1920x1080 scene to draw a card.
  * - The MINECRAFT STILL for every background the game offers: the launcher's
  *   still, copied, so the menu shows the same picture as the launcher.
  * - Rainforest Storm's VIDEO: re-encoded from the game's own 1920x1080, 30 fps
@@ -74,6 +76,15 @@ for (const bg of manifest.backgrounds) {
       '-vf', 'scale=384:216:force_original_aspect_ratio=increase:flags=lanczos,crop=384:216',
       '-q:v', '3', thumb]);
     made++;
+  }
+
+  if (bg.minecraft) {
+    const gameThumb = game(`thumbs/${bg.id}.jpg`);
+    if (needed(gameThumb)) {
+      fs.mkdirSync(path.dirname(gameThumb), { recursive: true });
+      fs.copyFileSync(thumb, gameThumb);
+      made++;
+    }
   }
 
   // The game's still: the same picture the launcher shows.

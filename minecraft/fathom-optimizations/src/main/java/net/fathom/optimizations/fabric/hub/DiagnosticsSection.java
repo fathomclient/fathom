@@ -24,6 +24,7 @@ import net.fathom.optimizations.fabric.gfx.Gfx;
 import net.fathom.optimizations.fabric.gfx.GlRenderer;
 import net.fathom.optimizations.fabric.gfx.SdfRenderer;
 import net.fathom.optimizations.fabric.ui.Controls;
+import net.fathom.optimizations.fabric.ui.FathomComponents;
 import net.fathom.optimizations.fabric.ui.Skin;
 import net.fathom.optimizations.fabric.ui.Graphite;
 
@@ -67,7 +68,7 @@ final class DiagnosticsSection implements Section {
     private final Box toolbarAfter = Box.column("diagnostics.toolbar.after").height(Skin.S5);
     private final Box factsViewport = Box.stack("diagnostics.facts.viewport").grow(1f);
     private final Box factsLayout = Box.column("diagnostics.facts").scroll(true)
-            .padding(0f, 0f, Skin.S3, 0f);
+            .padding(Skin.S3, Skin.S2, Skin.S4, Skin.S2);
     private final Box benchBox = Box.row("diagnostics.benchmark").height(Skin.H_MD);
     private final Box scenarioBox = Box.row("diagnostics.scenario").height(Skin.H_MD);
     private final Box spikeBox = Box.row("diagnostics.spike").height(Skin.H_MD);
@@ -256,9 +257,11 @@ final class DiagnosticsSection implements Section {
         }
 
         Rect body = factsViewport.rect();
+        FathomComponents.group(ui, body, Skin.R_CARD);
         List<String[]> facts = facts(context);
-        float contentHeight = facts.size() * FACT_ROW;
+        float contentHeight = facts.size() * FACT_ROW + Skin.S2 * 2f;
         float offset = scroller.offset(context.delta(), contentHeight, body.height);
+        Rect viewport = body;
         syncFactBoxes(facts.size());
         factsLayout.scrollTo(offset);
         factsLayout.layout(ui, body.x, body.y, body.width, body.height);
@@ -292,7 +295,7 @@ final class DiagnosticsSection implements Section {
             }
         }
         ui.unclip();
-        scroller.rail(ui, body, context.pointer(), context.now());
+        scroller.rail(ui, viewport, context.pointer(), context.now());
     }
 
     private void syncFactBoxes(int count) {
