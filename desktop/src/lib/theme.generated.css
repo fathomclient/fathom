@@ -321,6 +321,7 @@
   --brand-wall: 1;
   --brand-plane: 2;
   --brand-unit-divisor: 8;
+  --brand-icon-divisor: 7;
   --brand-corner-outer: 1.5;
   --brand-corner-inner: 0.5;
   --brand-corner-plane: 0.25;
@@ -331,7 +332,6 @@
   --brand-stacked-scale: 2;
   --brand-frame-ink: #ededed;
   --brand-plane-ink: #a8afb3;
-  --brand-tile: #171d20;
   --brand-dark-frame-ink: #171d20;
   --brand-dark-plane-ink: #646b6f;
   --brand-measure-track: 0.16;
