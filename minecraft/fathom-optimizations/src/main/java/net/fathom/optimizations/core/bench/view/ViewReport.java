@@ -218,6 +218,8 @@ public final class ViewReport {
 
         validity(out);
         summary(out);
+        multiplayer(out);
+        armDistributions(out);
         comparison(out);
         for (String scene : scenes) {
             breakdown(out, scene);
@@ -226,6 +228,9 @@ public final class ViewReport {
         topConsumers(out);
         owners(out);
         counters(out);
+        packets(out);
+        perPlayer(out);
+        tail(out);
         arms(out);
         return out.toString();
     }
@@ -428,6 +433,286 @@ public final class ViewReport {
         line(out, "");
     }
 
+    // -----------------------------------------------------------------------
+    // Multiplayer profile
+    // -----------------------------------------------------------------------
+
+    /** The scene every multiplayer scene is compared with: the singleplayer copy, if it ran. */
+    private ViewBucket singleplayer() {
+        ViewBucket sp = bucket("sp", NORMAL);
+        return sp != null && sp.frames() > 0 ? sp : null;
+    }
+
+    private boolean multiplayerRun() {
+        for (String scene : scenes) {
+            if (scene.startsWith("mp-") || scene.equals("lobby") || scene.equals("live") || scene.equals("sp")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void multiplayer(StringBuilder out) {
+        if (!multiplayerRun()) {
+            return;
+        }
+        ViewBucket sp = singleplayer();
+        line(out, "MULTIPLAYER VS SINGLEPLAYER (normal arm, ms per frame; delta against 'sp')");
+        line(out, "--------------------------------------------------------------------------");
+        line(out, String.format(Locale.ROOT, "%-17s %7s %7s %7s %7s | %7s %7s %7s %7s | %6s %6s %6s %7s %8s %8s %6s",
+                "scene", "median", "mean", "p95", "p99", "d med", "d mean", "d p95", "d p99",
+                "plyrs", "drawn", "tags", "pkt/s", "B/frame", "MB/s", "GC/m"));
+        for (String scene : scenes) {
+            ViewBucket bucket = bucket(scene, NORMAL);
+            if (bucket == null || bucket.frames() == 0) {
+                continue;
+            }
+            double packetsPerSecond = 0d;
+            for (PacketKind kind : PacketKind.ALL) {
+                if (kind != PacketKind.NOT_A_PACKET) {
+                    packetsPerSecond += bucket.packetPerSecond(kind, PacketKind.APPLIED);
+                }
+            }
+            double minutes = bucket.measuredSeconds / 60d;
+            line(out, String.format(Locale.ROOT,
+                    "%-17s %7.3f %7.3f %7.3f %7.3f | %7s %7s %7s %7s | %6.1f %6.1f %6.1f %7.0f %8.0f %8.1f %6.1f",
+                    scene, bucket.frameMillisAt(50d), bucket.meanFrameMillis(), bucket.frameMillisAt(95d),
+                    bucket.frameMillisAt(99d),
+                    sp == null ? "-" : signed3(bucket.frameMillisAt(50d) - sp.frameMillisAt(50d)),
+                    sp == null ? "-" : signed3(bucket.meanFrameMillis() - sp.meanFrameMillis()),
+                    sp == null ? "-" : signed3(bucket.frameMillisAt(95d) - sp.frameMillisAt(95d)),
+                    sp == null ? "-" : signed3(bucket.frameMillisAt(99d) - sp.frameMillisAt(99d)),
+                    bucket.counterPerFrame(ViewCounter.PLAYERS_LOADED), bucket.callsPerFrame(ViewSection.ENTITY_PLAYER),
+                    bucket.callsPerFrame(ViewSection.NAMETAG), packetsPerSecond,
+                    bucket.clientBytesPerFrame(), bucket.clientAllocationMegabytesPerSecond(),
+                    minutes <= 0d ? 0d : bucket.gcCount() / minutes));
+        }
+        line(out, "plyrs = other players loaded; drawn = player entities drawn per frame; tags = labels drawn;");
+        line(out, "pkt/s = packets applied on the client thread; B/frame and MB/s = client-thread allocation.");
+        line(out, "");
+        if (sp == null) {
+            return;
+        }
+        line(out, "WHERE THE MULTIPLAYER TIME GOES (normal arm, mean ms per frame, delta against 'sp')");
+        line(out, "-----------------------------------------------------------------------------------");
+        ViewSection[] rows = {
+            ViewSection.TASKS, ViewSection.TICK, ViewSection.TICK_ENTITIES, ViewSection.TICK_PLAYER,
+            ViewSection.TICK_PARTICLES, ViewSection.SETUP_TERRAIN, ViewSection.CHUNK_UPDATES,
+            ViewSection.ENTITIES, ViewSection.FATHOM_CULL, ViewSection.ENTITY_PLAYER, ViewSection.MODEL,
+            ViewSection.FEATURES, ViewSection.ARMOR, ViewSection.HELD_ITEM, ViewSection.CAPE,
+            ViewSection.SHADOW_FIRE, ViewSection.NAMETAG_DECIDE, ViewSection.NAMETAG, ViewSection.ENTITY_ITEM,
+            ViewSection.ENTITY, ViewSection.PARTICLES, ViewSection.HUD, ViewSection.HUD_SCOREBOARD,
+            ViewSection.HUD_TABLIST, ViewSection.HUD_CHAT, ViewSection.HUD_HOTBAR, ViewSection.FATHOM_HUD,
+            ViewSection.TEXT, ViewSection.SWAP,
+        };
+        StringBuilder head = new StringBuilder(String.format(Locale.ROOT, "%-44s %8s", "section (total time)", "sp"));
+        for (String scene : scenes) {
+            if (!scene.equals("sp")) {
+                head.append(String.format(Locale.ROOT, " %9s", shortName(scene)));
+            }
+        }
+        line(out, head.toString());
+        for (ViewSection section : rows) {
+            StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "%-44s %8.4f", section.label,
+                    sp.totalMillis(section)));
+            for (String scene : scenes) {
+                if (scene.equals("sp")) {
+                    continue;
+                }
+                ViewBucket bucket = bucket(scene, NORMAL);
+                row.append(bucket == null || bucket.frames() == 0 ? String.format(Locale.ROOT, " %9s", "-")
+                        : String.format(Locale.ROOT, " %+9.4f", bucket.totalMillis(section) - sp.totalMillis(section)));
+            }
+            line(out, row.toString());
+        }
+        StringBuilder total = new StringBuilder(String.format(Locale.ROOT, "%-44s %8.4f", "frame (mean)",
+                sp.meanFrameMillis()));
+        for (String scene : scenes) {
+            if (scene.equals("sp")) {
+                continue;
+            }
+            ViewBucket bucket = bucket(scene, NORMAL);
+            total.append(bucket == null || bucket.frames() == 0 ? String.format(Locale.ROOT, " %9s", "-")
+                    : String.format(Locale.ROOT, " %+9.4f", bucket.meanFrameMillis() - sp.meanFrameMillis()));
+        }
+        line(out, total.toString());
+        line(out, "Rows nest (players inside entities, layers inside players) and TEXT overlaps the HUD and");
+        line(out, "nametags, so the rows do not add up to the frame. The frame row is the real delta.");
+        line(out, "");
+    }
+
+    private static String shortName(String scene) {
+        return scene.length() <= 9 ? scene : scene.substring(0, 9);
+    }
+
+    /** Every arm's distribution and its paired difference from the normal arm, window by window. */
+    private void armDistributions(StringBuilder out) {
+        if (arms.size() < 2) {
+            return;
+        }
+        line(out, "ARMS: DISTRIBUTION AND PAIRED DIFFERENCE (ms per frame)");
+        line(out, "--------------------------------------------------------");
+        line(out, "Windows of the same round are paired: an arm and the normal arm measured back to back in the");
+        line(out, "same scene. 'paired' = median over rounds of (arm window mean - normal window mean);");
+        line(out, "'wins' = rounds in which the arm was faster than normal.");
+        line(out, String.format(Locale.ROOT, "%-17s %-34s %7s %7s %7s %7s %8s %8s %8s %8s %8s %5s",
+                "scene", "arm", "median", "mean", "p95", "p99", "d med", "d mean", "d p95", "d p99", "paired",
+                "wins"));
+        for (String scene : scenes) {
+            ViewBucket normal = bucket(scene, NORMAL);
+            if (normal == null || normal.frames() == 0) {
+                continue;
+            }
+            for (String arm : arms) {
+                ViewBucket other = bucket(scene, arm);
+                if (other == null || other.frames() == 0) {
+                    continue;
+                }
+                boolean base = arm.equals(NORMAL);
+                double[] paired = base ? null : paired(normal, other);
+                line(out, String.format(Locale.ROOT, "%-17s %-34s %7.3f %7.3f %7.3f %7.3f %8s %8s %8s %8s %8s %5s",
+                        scene, arm.length() > 34 ? arm.substring(0, 34) : arm,
+                        other.frameMillisAt(50d), other.meanFrameMillis(),
+                        other.frameMillisAt(95d), other.frameMillisAt(99d),
+                        base ? "" : signed3(other.frameMillisAt(50d) - normal.frameMillisAt(50d)),
+                        base ? "" : signed3(other.meanFrameMillis() - normal.meanFrameMillis()),
+                        base ? "" : signed3(other.frameMillisAt(95d) - normal.frameMillisAt(95d)),
+                        base ? "" : signed3(other.frameMillisAt(99d) - normal.frameMillisAt(99d)),
+                        paired == null ? "" : signed3(paired[0]),
+                        paired == null ? "" : String.format(Locale.ROOT, "%d/%d", (int) paired[1], (int) paired[2])));
+            }
+        }
+        line(out, "");
+    }
+
+    /** [median paired difference, rounds the arm won, rounds compared]. */
+    static double[] paired(ViewBucket normal, ViewBucket arm) {
+        List<Double> a = normal.windowMeans();
+        List<Double> b = arm.windowMeans();
+        int count = Math.min(a.size(), b.size());
+        if (count == 0) {
+            return new double[] {0d, 0d, 0d};
+        }
+        double[] differences = new double[count];
+        int wins = 0;
+        for (int index = 0; index < count; index++) {
+            differences[index] = b.get(index).doubleValue() - a.get(index).doubleValue();
+            if (differences[index] < 0d) {
+                wins++;
+            }
+        }
+        java.util.Arrays.sort(differences);
+        double median = count % 2 == 1 ? differences[count / 2]
+                : (differences[count / 2 - 1] + differences[count / 2]) / 2d;
+        return new double[] {median, wins, count};
+    }
+
+    private void packets(StringBuilder out) {
+        if (!multiplayerRun()) {
+            return;
+        }
+        line(out, "PACKETS ON THE CLIENT THREAD (normal arm)");
+        line(out, "-----------------------------------------");
+        line(out, "Per scene: packets queued and applied per second, client-thread microseconds per frame spent");
+        line(out, "applying them, microseconds per packet, and chunk sections they invalidated per second.");
+        for (String scene : scenes) {
+            ViewBucket bucket = bucket(scene, NORMAL);
+            if (bucket == null || bucket.frames() == 0) {
+                continue;
+            }
+            line(out, scene + String.format(Locale.ROOT, "  (most packets in one frame: %d)", bucket.packetPeak()));
+            line(out, String.format(Locale.ROOT, "  %-56s %9s %9s %9s %9s %9s", "kind", "queued/s", "applied/s",
+                    "us/frame", "us/packet", "inval/s"));
+            for (PacketKind kind : PacketKind.ALL) {
+                double applied = bucket.packetPerSecond(kind, PacketKind.APPLIED);
+                double queued = bucket.packetPerSecond(kind, PacketKind.QUEUED);
+                if (applied <= 0d && queued <= 0d) {
+                    continue;
+                }
+                double nanosPerFrame = bucket.packetPerFrame(kind, PacketKind.NANOS);
+                double perPacket = bucket.packetPerFrame(kind, PacketKind.APPLIED);
+                line(out, String.format(Locale.ROOT, "  %-56s %9.1f %9.1f %9.2f %9.2f %9.1f",
+                        kind.label.length() > 56 ? kind.label.substring(0, 56) : kind.label, queued, applied,
+                        nanosPerFrame / 1000d, perPacket <= 0d ? 0d : nanosPerFrame / perPacket / 1000d,
+                        bucket.packetPerSecond(kind, PacketKind.INVALIDATIONS)));
+            }
+        }
+        line(out, "");
+    }
+
+    private void perPlayer(StringBuilder out) {
+        if (!multiplayerRun()) {
+            return;
+        }
+        line(out, "ONE PLAYER (normal arm, microseconds per player drawn)");
+        line(out, "------------------------------------------------------");
+        ViewSection[] parts = {
+            ViewSection.ENTITY_PLAYER, ViewSection.MODEL, ViewSection.FEATURES, ViewSection.ARMOR,
+            ViewSection.HELD_ITEM, ViewSection.CAPE, ViewSection.SHADOW_FIRE, ViewSection.NAMETAG_DECIDE,
+            ViewSection.NAMETAG,
+        };
+        StringBuilder head = new StringBuilder(String.format(Locale.ROOT, "%-17s %7s", "scene", "drawn/f"));
+        for (ViewSection part : parts) {
+            head.append(String.format(Locale.ROOT, " %9s", shortName(part.name().toLowerCase(Locale.ROOT))));
+        }
+        line(out, head.toString());
+        for (String scene : scenes) {
+            ViewBucket bucket = bucket(scene, NORMAL);
+            if (bucket == null || bucket.callsPerFrame(ViewSection.ENTITY_PLAYER) <= 0d) {
+                continue;
+            }
+            double drawn = bucket.callsPerFrame(ViewSection.ENTITY_PLAYER);
+            StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "%-17s %7.1f", scene, drawn));
+            for (ViewSection part : parts) {
+                // Total time over players drawn: the layers of mobs (none in these scenes) would land here too.
+                row.append(String.format(Locale.ROOT, " %9.2f", bucket.totalMillis(part) * 1000d / drawn));
+            }
+            line(out, row.toString());
+        }
+        line(out, "Columns are total (inclusive) time divided by players drawn. entity_pl is the whole draw;");
+        line(out, "the rest nest inside it. Probe cost is included (about two timed pairs per column per player).");
+        line(out, "");
+    }
+
+    private void tail(StringBuilder out) {
+        line(out, "WHAT THE SLOW FRAMES CONTAIN (normal arm)");
+        line(out, "-----------------------------------------");
+        line(out, "Frames ranked by time. 'median band' = ranks 40-60%; 'p95+' = the slowest 5%; 'p99+' = slowest 1%.");
+        line(out, "tick% = share of the band's frames that ran a client tick; gc% = share in which a GC finished.");
+        for (String scene : scenes) {
+            ViewBucket bucket = bucket(scene, NORMAL);
+            if (bucket == null || bucket.frames() < 200) {
+                continue;
+            }
+            double[] split = bucket.tickSplit();
+            line(out, String.format(Locale.ROOT,
+                    "%s  (frames with a tick: %.1f%%, mean %.3f ms; without: %.3f ms; tick cost %.3f ms)", scene,
+                    split[2] * 100d, split[0], split[1], split[0] - split[1]));
+            double[][] bands = {bucket.band(40d, 60d), bucket.band(95d, 100d), bucket.band(99d, 100d)};
+            String[] names = {"median band", "p95+", "p99+"};
+            StringBuilder head = new StringBuilder(String.format(Locale.ROOT, "  %-12s %8s %6s %6s %6s", "band",
+                    "frame", "tick%", "gc%", "pkts"));
+            for (ViewSection section : ViewBucket.TAIL) {
+                head.append(String.format(Locale.ROOT, " %9s", shortName(section.name().toLowerCase(Locale.ROOT))));
+            }
+            line(out, head.toString());
+            for (int band = 0; band < bands.length; band++) {
+                double[] values = bands[band];
+                StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "  %-12s %8.3f %5.1f%% %5.1f%% %6.1f",
+                        names[band], values[0], values[1] * 100d, values[2] * 100d, values[3]));
+                for (int at = 0; at < ViewBucket.TAIL.length; at++) {
+                    row.append(String.format(Locale.ROOT, " %9.4f", values[4 + at]));
+                }
+                line(out, row.toString());
+            }
+        }
+        line(out, "");
+    }
+
+    private static String signed3(double value) {
+        return String.format(Locale.ROOT, "%+.3f", value);
+    }
+
     private void counters(StringBuilder out) {
         line(out, "CHUNK AND DRAW COUNTERS (per frame, normal arm)");
         line(out, "-----------------------------------------------");
@@ -454,7 +739,9 @@ public final class ViewReport {
             ViewBucket bucket = bucket(scene, NORMAL);
             drawn.append(String.format(Locale.ROOT, " %11.1f", bucket == null ? 0d : sectionsDrawn(bucket)));
             entities.append(String.format(Locale.ROOT, " %11.1f",
-                    bucket == null ? 0d : bucket.callsPerFrame(ViewSection.ENTITY)));
+                    bucket == null ? 0d : bucket.callsPerFrame(ViewSection.ENTITY)
+                            + bucket.callsPerFrame(ViewSection.ENTITY_PLAYER)
+                            + bucket.callsPerFrame(ViewSection.ENTITY_ITEM)));
             tiles.append(String.format(Locale.ROOT, " %11.1f",
                     bucket == null ? 0d : bucket.callsPerFrame(ViewSection.BLOCK_ENTITY)));
             tags.append(String.format(Locale.ROOT, " %11.1f",

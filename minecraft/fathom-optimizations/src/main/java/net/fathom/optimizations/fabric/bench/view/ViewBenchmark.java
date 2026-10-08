@@ -119,6 +119,26 @@ public final class ViewBenchmark implements ViewProbe.Sink {
      */
     private static final int FPS_CAP = intProperty("fathom.view.fpsCap", 0);
     private static final boolean QUIT = !"false".equalsIgnoreCase(System.getProperty("fathom.view.quit", "true"));
+    /**
+     * Multiplayer profile. {@code host:port} of the server the MP scenes run on;
+     * empty for the singleplayer view benchmark.
+     */
+    private static final String SERVER = System.getProperty("fathom.view.server", "").trim();
+    /**
+     * A directory shared with the scene driver (tools/mp-bench): the harness
+     * writes {@code request.txt} when it wants a scene, the driver sets the
+     * scene up on the server and answers in {@code ready.txt}. Without it the MP
+     * scenes are whatever the server is doing (the {@code live} scene).
+     */
+    private static final String CONTROL = System.getProperty("fathom.view.control", "").trim();
+    /** Where the SP scene stands, so it matches the MP scenes' camera: {@code x,y,z}. */
+    private static final String POSITION = System.getProperty("fathom.view.pos", "").trim();
+    private static final float FIXED_YAW = (float) doubleProperty("fathom.view.yaw", Double.NaN);
+    /** Run the singleplayer scene again after the MP scenes, to show drift across the switch. */
+    private static final boolean SP_AGAIN = !"false".equalsIgnoreCase(System.getProperty("fathom.view.spAgain", "true"));
+    private static final double REJOIN_SECONDS = doubleProperty("fathom.view.rejoinSettle", 12.0d);
+    private static final double SCENE_READY_CAP_SECONDS = doubleProperty("fathom.view.sceneCap", 60.0d);
+    private static final double SCENE_SETTLE_SECONDS = doubleProperty("fathom.view.sceneSettle", 5.0d);
     private static final String DEFAULT_COMMANDS =
             "gamerule doDaylightCycle false;time set 6000;weather clear 1000000;difficulty 0;"
                     + "gamerule doMobSpawning false";
@@ -138,16 +158,51 @@ public final class ViewBenchmark implements ViewProbe.Sink {
          * uploaded for the quiet period. The window's length is the rebuild time.
          * Not in the default scene list.
          */
-        RELOAD("reload", 0f, "level view while every chunk is rebuilt (F3+A)");
+        RELOAD("reload", 0f, "level view while every chunk is rebuilt (F3+A)"),
+
+        // -- Multiplayer profile. "sp" is the same camera in a singleplayer copy
+        // of the server's world; the rest are set up on the server by the
+        // scene driver and measured over a real connection.
+        SP("sp", 8f, Where.SP, "singleplayer copy of the server world, same camera, nobody else"),
+        MP_EMPTY("mp-empty", 8f, Where.MP, "connected, same camera, no other player in range"),
+        MP_FEW("mp-few", 8f, Where.MP, "5 players walking 10-25 blocks away"),
+        LOBBY("lobby", 8f, Where.MP, "40 players walking, sneaking, sprinting and chatting around the camera"),
+        COMBAT("combat", 8f, Where.MP, "20 armoured players fighting in pairs 6-20 blocks away"),
+        COMBAT_PARTICLES("combat-particles", 8f, Where.MP,
+                "the combat scene plus crit, magic-crit and reddust bursts from the server"),
+        NAMETAGS("nametags", 8f, Where.MP,
+                "40 players standing 6-30 blocks away, team-coloured names and a health score below each"),
+        HUD_HEAVY("hud-heavy", 8f, Where.MP,
+                "40 players; 15-line sidebar updated every tick, tab list held open, chat every 100 ms"),
+        CHUNKS("chunks", 8f, Where.MP, "blocks changing near the camera every tick, players walking"),
+        /** Whatever a real server is doing; the camera is left alone. */
+        LIVE("live", Float.NaN, Where.MP, "a live server, camera not held");
+
+        enum Where { ANY, SP, MP }
 
         final String id;
         final float pitch;
+        final Where where;
         final String description;
 
         Scene(String id, float pitch, String description) {
+            this(id, pitch, Where.ANY, description);
+        }
+
+        Scene(String id, float pitch, Where where, String description) {
             this.id = id;
             this.pitch = pitch;
+            this.where = where;
             this.description = description;
+        }
+
+        boolean remote() {
+            return where == Where.MP && this != LIVE;
+        }
+
+        /** Chunk traffic is the workload here, so the settle phase cannot wait for it to stop. */
+        boolean busyChunks() {
+            return this == CHUNKS || this == LIVE;
         }
 
         static Scene byId(String id) {
@@ -164,8 +219,10 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     private static final List<String> ARMS = arms();
 
     private static List<Scene> scenes() {
-        String list = System.getProperty("fathom.view.scenes",
-                "sky,horizon,down45,down90,entities,particles,translucent");
+        String fallback = SERVER.isEmpty() ? "sky,horizon,down45,down90,entities,particles,translucent"
+                : CONTROL.isEmpty() ? "live"
+                : "sp,mp-empty,mp-few,lobby,combat,combat-particles,nametags,hud-heavy,chunks";
+        String list = System.getProperty("fathom.view.scenes", fallback);
         List<Scene> out = new ArrayList<Scene>();
         for (String id : list.split(",")) {
             Scene scene = Scene.byId(id);
@@ -177,7 +234,8 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     }
 
     private static List<String> arms() {
-        String list = System.getProperty("fathom.view.arms", "normal,probes-off,fathom-off,drain");
+        String list = System.getProperty("fathom.view.arms",
+                SERVER.isEmpty() ? "normal,probes-off,fathom-off,drain" : "normal,probes-off,fathom-off");
         List<String> out = new ArrayList<String>();
         out.add(ViewReport.NORMAL);
         for (String arm : list.split(",")) {
@@ -193,7 +251,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     // State
     // -----------------------------------------------------------------------
 
-    private enum Phase { WAIT_WORLD, JOIN_SETTLE, SETTLE, MEASURE, DONE }
+    private enum Phase { WAIT_WORLD, JOIN_SETTLE, LEAVE_WORLD, AWAIT_SCENE, SETTLE, MEASURE, DONE }
 
     /** One window: a scene under an arm, recorded or (warm-up) not. */
     private static final class Step {
@@ -254,6 +312,19 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     private final List<BlockPos> placed = new ArrayList<BlockPos>();
     private long particlesSpawnedAt;
 
+    // Multiplayer profile.
+    /** Whether the world now loaded is the server (true) or the singleplayer copy. */
+    private boolean onServer;
+    /** Set once the first world has settled and the step list exists; later joins resume it. */
+    private boolean runBuilt;
+    private boolean joinRequested;
+    private int requestSequence;
+    private Scene requestedScene;
+    private long lastControlPoll;
+    private long gcSeen = -1L;
+    private long clientAllocatedAtStart;
+    private final Map<String, String> serverNotes = new LinkedHashMap<String, String>();
+
     private ViewBenchmark() {}
 
     /** Called once per frame from the benchmark runner, in the post-frame window. */
@@ -270,8 +341,8 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     // -----------------------------------------------------------------------
 
     @Override
-    public void frame(long periodNanos, long[] total, long[] child, int[] calls, long[] counters, int tag,
-            boolean valid) {
+    public void frame(long periodNanos, long[] total, long[] child, int[] calls, long[] counters, long[] packets,
+            int tag, boolean valid, int flags) {
         long now = System.nanoTime();
         if (counters[ViewCounter.REBUILDS_QUEUED.ordinal()] > 0L
                 || counters[ViewCounter.REBUILDS_SYNC.ordinal()] > 0L
@@ -288,7 +359,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             bucket.reject();
             return;
         }
-        bucket.add(frameNanos, total, child, calls, counters);
+        bucket.add(frameNanos, total, child, calls, counters, packets, flags);
         if (tag == measuringTag) {
             windowFrameNanos += frameNanos;
             windowFrames++;
@@ -353,10 +424,23 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         if (!focused && ending >= 0 && ending < tags.size()) {
             tags.get(ending).unfocused();
         }
+        long gc = gcTotals()[0];
+        if (gcSeen >= 0L && gc != gcSeen) {
+            ViewProbe.flagFrame(ViewProbe.FLAG_GC);
+        }
+        gcSeen = gc;
+        if (inWorld) {
+            ViewProbe.level(ViewCounter.PLAYERS_LOADED, Math.max(0, client.world.playerEntities.size() - 1));
+            ViewProbe.level(ViewCounter.ENTITIES_LOADED, client.world.loadedEntities.size());
+            ViewProbe.level(ViewCounter.PARTICLES_LIVE, ViewProbe.particlesLive);
+        }
 
         switch (phase) {
             case WAIT_WORLD:
                 waitWorld(client, now);
+                return;
+            case LEAVE_WORLD:
+                leaveWorld(client, now);
                 return;
             case DONE:
                 return;
@@ -368,11 +452,32 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             return;
         }
         Step current = stepIndex >= 0 && stepIndex < steps.size() ? steps.get(stepIndex) : null;
-        if (current != null) {
+        if (client.currentScreen != null && (phase == Phase.SETTLE || phase == Phase.MEASURE)) {
+            // A screen in a window nobody is using is one the game opened by
+            // itself (the pause menu on focus loss, a death screen). Name it once
+            // and close it: the run measures the world, and every frame with a
+            // screen is rejected.
+            String screen = client.currentScreen.getClass().getName();
+            String note = "Closed a screen the game opened during a window: " + screen;
+            if (!runNotes.contains(note)) {
+                runNotes.add(note);
+                System.out.println("[FATHOM VIEW] " + note);
+            }
+            client.setScreen(null);
+        }
+        if (current != null && !Float.isNaN(current.scene.pitch)) {
             hold(player, current.scene.pitch);
+        }
+        if (current != null && current.scene == Scene.HUD_HEAVY && client.options != null) {
+            // The tab list is drawn while its key is held; a key nobody presses stays pressed.
+            net.minecraft.client.option.KeyBinding.setKeyPressed(client.options.playerListKey.getCode(), true);
         }
         if (current != null && current.scene == Scene.PARTICLES) {
             particles(client, now);
+        }
+        if (current != null && current.scene == Scene.ENTITIES && net.fathom.optimizations.fabric.perf.NametagNames.VERIFY
+                && framesSeen % 30 == 0) {
+            churnTeams(client);
         }
         double elapsed = (now - phaseStarted) / 1_000_000_000d;
 
@@ -380,19 +485,30 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             case JOIN_SETTLE:
                 ViewProbe.tagNextFrame(-1, true, false);
                 double quiet = (now - lastHitch) / 1_000_000_000d;
-                if ((elapsed >= JOIN_MIN_SECONDS && quiet >= 5d) || elapsed >= JOIN_CAP_SECONDS) {
+                double minimum = runBuilt ? REJOIN_SECONDS : JOIN_MIN_SECONDS;
+                if ((elapsed >= minimum && quiet >= 3d) || elapsed >= JOIN_CAP_SECONDS) {
                     runNotes.add(String.format(Locale.ROOT,
-                            "World settled after %.0f s (%.0f s without a hitch, steady frame %.3f ms).",
-                            elapsed, quiet, steadyFrameNanos / 1_000_000d));
-                    beginRun(client, now);
+                            "%s settled after %.0f s (%.0f s without a hitch, steady frame %.3f ms).",
+                            onServer ? "Server world" : "Singleplayer world", elapsed, quiet,
+                            steadyFrameNanos / 1_000_000d));
+                    if (runBuilt) {
+                        enterStep(client, now);
+                    } else {
+                        beginRun(client, now);
+                    }
                 }
+                return;
+            case AWAIT_SCENE:
+                ViewProbe.tagNextFrame(-1, !ViewReport.PROBES_OFF.equals(activeArm), false);
+                awaitScene(now, elapsed);
                 return;
             case SETTLE:
                 ViewProbe.tagNextFrame(-1, !ViewReport.PROBES_OFF.equals(activeArm),
                         ViewReport.DRAIN.equals(activeArm));
                 double sinceChunks = (now - lastChunkActivity) / 1_000_000_000d;
                 boolean timedOut = elapsed >= SETTLE_CAP_SECONDS;
-                if ((elapsed >= SETTLE_SECONDS && sinceChunks >= QUIET_SECONDS) || timedOut) {
+                boolean busy = current != null && current.scene.busyChunks();
+                if ((elapsed >= SETTLE_SECONDS && (sinceChunks >= QUIET_SECONDS || busy)) || timedOut) {
                     if (timedOut) {
                         settleTimeouts++;
                     }
@@ -420,17 +536,158 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     private void waitWorld(MinecraftClient client, long now) {
         ViewProbe.tagNextFrame(-1, true, false);
         if (client.world != null && client.player != null) {
-            phase = Phase.JOIN_SETTLE;
-            phaseStarted = now;
-            lastHitch = now;
-            runCommands(client);
-            System.out.println("[FATHOM VIEW] in the world; waiting for it to settle.");
+            joined(client, now);
             return;
         }
-        if (!worldRequested && !WORLD.isEmpty() && framesSeen > 120 && client.currentScreen != null) {
-            worldRequested = true;
+        if (!worldRequested && framesSeen > 120 && client.currentScreen != null) {
+            boolean singleplayerFirst = !WORLD.isEmpty() && (SERVER.isEmpty() || needs(Scene.Where.SP));
+            if (singleplayerFirst) {
+                worldRequested = true;
+                System.out.println("[FATHOM VIEW] loading save '" + WORLD + "'.");
+                client.startIntegratedServer(WORLD, WORLD, null);
+            } else if (!SERVER.isEmpty()) {
+                worldRequested = true;
+                connect(client);
+            }
+        }
+    }
+
+    private static boolean needs(Scene.Where where) {
+        for (Scene scene : SCENES) {
+            if (scene.where == where) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A world has just loaded: settle it, then begin the run or resume it. */
+    private void joined(MinecraftClient client, long now) {
+        onServer = !client.isIntegratedServerRunning();
+        phase = Phase.JOIN_SETTLE;
+        phaseStarted = now;
+        lastHitch = now;
+        runCommands(client);
+        System.out.println("[FATHOM VIEW] in the " + (onServer ? "server" : "singleplayer")
+                + " world; waiting for it to settle.");
+    }
+
+    private void connect(MinecraftClient client) {
+        String host = SERVER;
+        int port = 25565;
+        int colon = SERVER.lastIndexOf(':');
+        if (colon > 0) {
+            host = SERVER.substring(0, colon);
+            port = Integer.parseInt(SERVER.substring(colon + 1).trim());
+        }
+        System.out.println("[FATHOM VIEW] connecting to " + host + ":" + port + ".");
+        client.setScreen(new net.minecraft.client.gui.screen.ConnectScreen(
+                new net.minecraft.client.gui.screen.TitleScreen(), client, host, port));
+    }
+
+    /** Between worlds: wait for the old one to close, then join the one the next step needs. */
+    private void leaveWorld(MinecraftClient client, long now) {
+        ViewProbe.tagNextFrame(-1, true, false);
+        if (joinRequested && client.world != null && client.player != null) {
+            joined(client, now);
+            return;
+        }
+        if (joinRequested || client.world != null || (now - phaseStarted) < 1_000_000_000L) {
+            return;
+        }
+        joinRequested = true;
+        Step next = steps.get(stepIndex);
+        if (next.scene.where == Scene.Where.SP) {
             System.out.println("[FATHOM VIEW] loading save '" + WORLD + "'.");
             client.startIntegratedServer(WORLD, WORLD, null);
+        } else {
+            connect(client);
+        }
+    }
+
+    private boolean needsSwitch(Scene scene) {
+        return (scene.where == Scene.Where.SP && onServer) || (scene.where == Scene.Where.MP && !onServer);
+    }
+
+    // -----------------------------------------------------------------------
+    // Scene driver handshake (multiplayer profile)
+    // -----------------------------------------------------------------------
+
+    private void requestScene(Scene scene, long now) {
+        requestSequence++;
+        requestedScene = scene;
+        writeControl("request.txt", requestSequence + " " + scene.id);
+        phase = Phase.AWAIT_SCENE;
+        phaseStarted = now;
+        lastControlPoll = 0L;
+        System.out.println("[FATHOM VIEW] asked the scene driver for " + scene.id + " (#" + requestSequence + ").");
+    }
+
+    private void awaitScene(long now, double elapsed) {
+        if (now - lastControlPoll < 100_000_000L) {
+            return;
+        }
+        lastControlPoll = now;
+        String ready = readControl("ready.txt");
+        boolean answered = false;
+        if (ready != null) {
+            String[] parts = ready.trim().split(" ", 3);
+            try {
+                answered = parts.length >= 2 && Integer.parseInt(parts[0]) == requestSequence;
+            } catch (NumberFormatException partial) {
+                answered = false;
+            }
+            if (answered && parts.length == 3 && !serverNotes.containsKey(requestedScene.id)) {
+                serverNotes.put(requestedScene.id, parts[2]);
+            }
+        }
+        if (answered || elapsed >= SCENE_READY_CAP_SECONDS) {
+            if (!answered) {
+                runNotes.add("Scene driver did not answer for " + requestedScene.id + " within "
+                        + SCENE_READY_CAP_SECONDS + " s; measured anyway.");
+            }
+            phase = Phase.SETTLE;
+            // A scene that has just been set up is still settling -- players
+            // spawning, skins and chunks arriving -- and the first arm measured
+            // in it would carry that. Every arm gets the same start this way.
+            phaseStarted = now + (long) (SCENE_SETTLE_SECONDS * 1_000_000_000d);
+        }
+    }
+
+    private static void writeControl(String name, String text) {
+        if (CONTROL.isEmpty()) {
+            return;
+        }
+        try {
+            File directory = new File(CONTROL);
+            directory.mkdirs();
+            File temporary = new File(directory, name + ".tmp");
+            writeFile(temporary, text + "\n");
+            File target = new File(directory, name);
+            if (target.exists() && !target.delete()) {
+                System.out.println("[FATHOM VIEW] could not replace " + target);
+            }
+            if (!temporary.renameTo(target)) {
+                writeFile(target, text + "\n");
+            }
+        } catch (IOException failure) {
+            System.out.println("[FATHOM VIEW] control write failed: " + failure);
+        }
+    }
+
+    private static String readControl(String name) {
+        if (CONTROL.isEmpty()) {
+            return null;
+        }
+        File file = new File(CONTROL, name);
+        if (!file.isFile()) {
+            return null;
+        }
+        try {
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (IOException busy) {
+            return null;
         }
     }
 
@@ -438,10 +695,19 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     private void runCommands(MinecraftClient client) {
         final IntegratedServer server = client.getServer();
         if (server == null) {
-            runNotes.add("Not a local world: time, weather and spawning were not fixed.");
+            String note = "Server world: time, weather, spawning and position are set by the scene driver.";
+            if (!runNotes.contains(note)) {
+                runNotes.add(note);
+            }
             return;
         }
-        final String commands = System.getProperty("fathom.view.commands", DEFAULT_COMMANDS);
+        String configured = System.getProperty("fathom.view.commands", DEFAULT_COMMANDS);
+        if (!POSITION.isEmpty()) {
+            // The multiplayer scenes stand here; so does the singleplayer one.
+            configured = configured + ";tp @p " + POSITION.replace(',', ' ')
+                    + (Float.isNaN(FIXED_YAW) ? "" : " " + FIXED_YAW + " 8");
+        }
+        final String commands = configured;
         runNotes.add("World commands: " + commands);
         server.submit(new Runnable() {
             @Override
@@ -465,7 +731,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         startX = player.x;
         startY = player.y;
         startZ = player.z;
-        startYaw = player.yaw;
+        startYaw = Float.isNaN(FIXED_YAW) ? player.yaw : FIXED_YAW;
         if (Boolean.getBoolean("fathom.view.packIconCheck")) {
             // Scans the resource pack folder the way the pack screen does, which
             // loads every pack's icon -- so the icon downscale can be seen working
@@ -478,20 +744,28 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         System.out.println(String.format(Locale.ROOT,
                 "[FATHOM VIEW] probe pair costs %.1f ns; starting warm-up.", probePairNanos));
         memory = new MemorySampler();
-        for (Scene scene : SCENES) {
-            steps.add(new Step(-1, scene, ViewReport.NORMAL, false));
-        }
-        for (int round = 0; round < ROUNDS; round++) {
-            List<String> order = new ArrayList<String>(ARMS);
-            if (round % 2 == 1) {
-                Collections.reverse(order);
-            }
+        if (SERVER.isEmpty()) {
+            addSegment(SCENES, 0, ROUNDS);
+        } else {
+            // Worlds cannot interleave the way arms do -- switching costs a
+            // reload -- so the singleplayer scene runs before the server scenes
+            // and again after them, and its two halves show any drift.
+            List<Scene> local = new ArrayList<Scene>();
+            List<Scene> remote = new ArrayList<Scene>();
             for (Scene scene : SCENES) {
-                for (String arm : order) {
-                    steps.add(new Step(round, scene, arm, true));
-                }
+                (scene.where == Scene.Where.SP ? local : remote).add(scene);
+            }
+            boolean startOnServer = onServer;
+            List<Scene> first = startOnServer ? remote : local;
+            List<Scene> second = startOnServer ? local : remote;
+            int firstRounds = second.isEmpty() || !SP_AGAIN || startOnServer ? ROUNDS : (ROUNDS + 1) / 2;
+            addSegment(first, 0, firstRounds);
+            addSegment(second, 0, ROUNDS);
+            if (!startOnServer && SP_AGAIN && !second.isEmpty() && ROUNDS - firstRounds > 0) {
+                addSegment(first, firstRounds, ROUNDS - firstRounds);
             }
         }
+        runBuilt = true;
         // Buckets in report order, so tags are stable.
         for (Scene scene : SCENES) {
             for (String arm : ARMS) {
@@ -504,14 +778,66 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         advance(client, now);
     }
 
+    /** Warm-up windows for each scene, then rounds of every scene under every arm. */
+    private void addSegment(List<Scene> scenes, int firstRound, int rounds) {
+        if (scenes.isEmpty() || rounds <= 0) {
+            return;
+        }
+        if (firstRound == 0) {
+            for (Scene scene : scenes) {
+                steps.add(new Step(-1, scene, ViewReport.NORMAL, false));
+            }
+        }
+        for (int round = firstRound; round < firstRound + rounds; round++) {
+            List<String> order = new ArrayList<String>(ARMS);
+            if (round % 2 == 1) {
+                Collections.reverse(order);
+            }
+            for (Scene scene : scenes) {
+                for (String arm : order) {
+                    steps.add(new Step(round, scene, arm, true));
+                }
+            }
+        }
+    }
+
     private void advance(MinecraftClient client, long now) {
         stepIndex++;
         if (stepIndex >= steps.size()) {
             finish(client, null);
             return;
         }
+        enterStep(client, now);
+    }
+
+    /** Set up the step at {@link #stepIndex}: switch worlds if it needs the other one, then scene and arm. */
+    private void enterStep(MinecraftClient client, long now) {
         Step next = steps.get(stepIndex);
-        if (next.scene != activeScene) {
+        if (!SERVER.isEmpty() && needsSwitch(next.scene)) {
+            restoreArm(client, activeArm);
+            activeArm = ViewReport.NORMAL;
+            teardown(client);
+            activeScene = null;
+            phase = Phase.LEAVE_WORLD;
+            phaseStarted = now;
+            joinRequested = false;
+            ViewProbe.tagNextFrame(-1, true, false);
+            System.out.println("[FATHOM VIEW] leaving the " + (onServer ? "server" : "singleplayer")
+                    + " world for " + next.scene.id + ".");
+            boolean local = client.isIntegratedServerRunning();
+            if (!local) {
+                // Singleplayer must not disconnect first: the integrated server
+                // stops itself when its owner leaves, and connect(null) then waits
+                // forever on a task for a server thread that has already exited.
+                client.world.disconnect();
+            }
+            client.connect((ClientWorld) null);
+            client.setScreen(local ? new net.minecraft.client.gui.screen.TitleScreen()
+                    : new net.minecraft.client.gui.screen.TitleScreen());
+            return;
+        }
+        boolean sceneChanged = next.scene != activeScene;
+        if (sceneChanged) {
             teardown(client);
             setup(client, next.scene);
             activeScene = next.scene;
@@ -526,6 +852,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         phase = Phase.SETTLE;
         phaseStarted = now;
         ViewProbe.tagNextFrame(-1, !ViewReport.PROBES_OFF.equals(activeArm), ViewReport.DRAIN.equals(activeArm));
+        if (sceneChanged && next.scene.remote()) {
+            requestScene(next.scene, now);
+        }
     }
 
     private void beginMeasure(long now) {
@@ -545,6 +874,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         gcCountAtStart = gc[0];
         gcMillisAtStart = gc[1];
         allocatedAtStart = memory.sample().allocatedBytesSinceStart();
+        clientAllocatedAtStart = threadAllocated();
         if (current.record) {
             measuringTag = tags.indexOf(buckets.get(ViewReport.key(current.scene.id, current.arm)));
         } else {
@@ -566,8 +896,11 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         bucket.window(windowFrames == 0 ? 0d : windowFrameNanos / 1_000_000d / windowFrames, seconds,
                 gc[0] - gcCountAtStart, gc[1] - gcMillisAtStart,
                 memory.sample().allocatedBytesSinceStart() - allocatedAtStart);
+        long clientAllocated = threadAllocated();
+        bucket.clientAllocation(clientAllocated < 0L || clientAllocatedAtStart < 0L ? -1L
+                : clientAllocated - clientAllocatedAtStart);
         measuringTag = -1;
-        if (ViewReport.NORMAL.equals(current.arm)) {
+        if (ViewReport.NORMAL.equals(current.arm) && !sceneNotes.containsKey(current.scene.id)) {
             sceneNotes.put(current.scene.id, sceneState(client));
         }
         if (SCREENSHOTS && current.round == 0) {
@@ -603,6 +936,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     }
 
     private void teardown(MinecraftClient client) {
+        if (activeScene == Scene.HUD_HEAVY && client.options != null) {
+            net.minecraft.client.option.KeyBinding.setKeyPressed(client.options.playerListKey.getCode(), false);
+        }
         ClientWorld world = client.world;
         if (world == null) {
             spawned.clear();
@@ -652,6 +988,31 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 spawned.add(Integer.valueOf(id));
                 id--;
             }
+        }
+    }
+
+    /**
+     * Verification only: keep moving the spawned players between client-side teams
+     * and rewriting those teams' prefixes and suffixes, so a name cache that missed
+     * a change would serve a stale label and be counted.
+     */
+    private void churnTeams(MinecraftClient client) {
+        net.minecraft.scoreboard.Scoreboard board = client.world.getScoreboard();
+        String[] names = {"fathomA", "fathomB"};
+        for (String name : names) {
+            if (board.getTeam(name) == null) {
+                board.addTeam(name);
+            }
+        }
+        java.util.Random random = new java.util.Random(framesSeen);
+        net.minecraft.scoreboard.Team team = board.getTeam(names[random.nextInt(2)]);
+        team.setPrefix("\u00a7" + "0123456789abcdef".charAt(random.nextInt(16)) + (random.nextBoolean() ? "[VIP] " : ""));
+        team.setSuffix(random.nextBoolean() ? "\u00a7r \u00a7e*" : "");
+        String player = String.format(Locale.ROOT, "Bench%02d", random.nextInt(48));
+        if (random.nextInt(4) == 0) {
+            board.clearPlayerTeam(player);
+        } else {
+            board.addPlayerToTeam(player, team.getName());
         }
     }
 
@@ -723,11 +1084,41 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         } else if ("hud-steady-off".equals(arm)) {
             net.fathom.optimizations.fabric.perf.HudSteadyCache.setEnabled(false);
         } else if (arm.startsWith("off:")) {
-            String outcome = setSwitch(arm.substring(4), false);
+            // Several switches at once, joined with '+': a combined before/after.
+            for (String id : arm.substring(4).split("\\+")) {
+                String outcome = setSwitch(id, false);
+                if (!runNotes.contains(outcome)) {
+                    runNotes.add(outcome);
+                }
+            }
+        } else if (arm.startsWith("on:")) {
+            String outcome = forceSwitch(arm.substring(3), true);
             if (!runNotes.contains(outcome)) {
                 runNotes.add(outcome);
             }
         }
+    }
+
+    /** An {@code on:} arm: switch one optimization on for the window, whatever the board says. Not saved. */
+    private String forceSwitch(String id, boolean on) {
+        net.fathom.optimizations.core.registry.SwitchBoard board = net.fathom.optimizations.fabric.Runtime.switches();
+        if (board == null) {
+            return "Switch arm " + id + ": no switchboard.";
+        }
+        net.fathom.optimizations.core.registry.OptimizationId key =
+                net.fathom.optimizations.core.registry.OptimizationId.of(id);
+        boolean normal;
+        if (on) {
+            normal = board.isEnabled(key);
+            switchesBefore.put(id, Boolean.valueOf(normal));
+            board.setByUser(key, true);
+        } else {
+            Boolean before = switchesBefore.remove(id);
+            normal = before != null && before.booleanValue();
+            board.setByUser(key, normal);
+        }
+        net.fathom.optimizations.fabric.Runtime.refreshHotSwitches();
+        return "Switch arm on:" + id + ": " + (normal ? "on" : "off") + " in the normal arm, on in this arm.";
     }
 
     /** What an {@code off:} arm switched off, so it can be put back exactly. */
@@ -767,7 +1158,11 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         } else if ("hud-steady-off".equals(arm)) {
             net.fathom.optimizations.fabric.perf.HudSteadyCache.setEnabled(true);
         } else if (arm.startsWith("off:")) {
-            setSwitch(arm.substring(4), true);
+            for (String id : arm.substring(4).split("\\+")) {
+                setSwitch(id, true);
+            }
+        } else if (arm.startsWith("on:")) {
+            forceSwitch(arm.substring(3), false);
         }
     }
 
@@ -844,6 +1239,21 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         if (reason != null) {
             runNotes.add("Run ended early: " + reason);
         }
+        if (net.fathom.optimizations.fabric.perf.NametagNames.VERIFY) {
+            runNotes.add(String.format(Locale.ROOT,
+                    "Cache verification: nametag names %d checked, %d mismatched%s (served %d, rebuilt %d); "
+                            + "armour textures %d checked, %d mismatched.",
+                    net.fathom.optimizations.fabric.perf.NametagNames.verified,
+                    net.fathom.optimizations.fabric.perf.NametagNames.mismatches,
+                    net.fathom.optimizations.fabric.perf.NametagNames.firstMismatch == null ? ""
+                            : " (first: " + net.fathom.optimizations.fabric.perf.NametagNames.firstMismatch + ")",
+                    net.fathom.optimizations.fabric.perf.NametagNames.hits,
+                    net.fathom.optimizations.fabric.perf.NametagNames.builds,
+                    net.fathom.optimizations.fabric.perf.ArmorTextures.verified,
+                    net.fathom.optimizations.fabric.perf.ArmorTextures.mismatches));
+        }
+        writeControl("done.txt", reason == null ? "done" : "failed " + reason);
+        runNotes.add("Vanilla HUD replay: " + net.fathom.optimizations.fabric.perf.VanillaHudReplay.summary());
         try {
             write(client);
         } catch (Throwable failure) {
@@ -860,6 +1270,11 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         overlays.put(Scene.ENTITIES.id, Scene.HORIZON.id);
         overlays.put(Scene.PARTICLES.id, Scene.HORIZON.id);
         overlays.put(Scene.TRANSLUCENT.id, Scene.HORIZON.id);
+        for (Scene scene : SCENES) {
+            if (scene.remote() && scene != Scene.MP_EMPTY && SCENES.contains(Scene.MP_EMPTY)) {
+                overlays.put(scene.id, Scene.MP_EMPTY.id);
+            }
+        }
         String focus = SCENES.contains(Scene.DOWN45) ? Scene.DOWN45.id : SCENES.get(SCENES.size() - 1).id;
         ViewReport report = new ViewReport(sceneIds(), ARMS, buckets, environment, probePairNanos,
                 SCENES.get(0).id, focus, overlays);
@@ -868,8 +1283,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         if (!directory.isDirectory() && !directory.mkdirs()) {
             throw new IOException("cannot create " + directory);
         }
-        File text = new File(directory, "fathom-view-" + stamp + ".txt");
-        File csv = new File(directory, "fathom-view-" + stamp + ".csv");
+        String prefix = SERVER.isEmpty() ? "fathom-view-" : "fathom-mp-";
+        File text = new File(directory, prefix + stamp + ".txt");
+        File csv = new File(directory, prefix + stamp + ".csv");
         writeFile(text, report.render());
         writeFile(csv, report.csv());
         System.out.println("[FATHOM VIEW] report: " + text.getAbsolutePath());
@@ -922,7 +1338,8 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                         + "(no pause, no frame cap in this mode) and are reported per bucket.");
         for (Scene scene : SCENES) {
             out.add("Scene " + scene.id + ": " + scene.description
-                    + (sceneNotes.containsKey(scene.id) ? " | " + sceneNotes.get(scene.id) : ""));
+                    + (sceneNotes.containsKey(scene.id) ? " | " + sceneNotes.get(scene.id) : "")
+                    + (serverNotes.containsKey(scene.id) ? " | driver: " + serverNotes.get(scene.id) : ""));
         }
         List<String> unseen = new ArrayList<String>();
         for (ViewSection section : ViewSection.ALL) {
@@ -1002,6 +1419,20 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             out.append(bean.getName());
         }
         return out.toString();
+    }
+
+    /** Bytes the calling thread has allocated, where HotSpot can say; -1 otherwise. */
+    private static long threadAllocated() {
+        try {
+            java.lang.management.ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+            if (bean instanceof com.sun.management.ThreadMXBean) {
+                return ((com.sun.management.ThreadMXBean) bean).getThreadAllocatedBytes(
+                        Thread.currentThread().getId());
+            }
+        } catch (Throwable unsupported) {
+            // Not HotSpot, or switched off.
+        }
+        return -1L;
     }
 
     private static long[] gcTotals() {

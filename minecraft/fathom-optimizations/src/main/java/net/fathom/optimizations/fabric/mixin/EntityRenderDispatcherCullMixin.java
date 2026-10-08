@@ -31,6 +31,10 @@ public abstract class EntityRenderDispatcherCullMixin {
             @Local(argsOnly = true, ordinal = 0) double cameraX,
             @Local(argsOnly = true, ordinal = 1) double cameraY,
             @Local(argsOnly = true, ordinal = 2) double cameraZ) {
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.enter(
+                    net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_CULL);
+        }
         net.fathom.optimizations.fabric.gfx.GlStateAudit.Scope audit =
                 net.fathom.optimizations.fabric.gfx.GlStateAudit.beginRequested(
                         net.fathom.optimizations.fabric.gfx.GlStateAudit.ENTITY_LIMIT,
@@ -39,6 +43,10 @@ public abstract class EntityRenderDispatcherCullMixin {
         net.fathom.optimizations.fabric.gfx.GlStateAudit.afterFathom(audit, false, "policy-only");
         net.fathom.optimizations.fabric.gfx.GlStateAudit.finish(
                 net.fathom.optimizations.fabric.gfx.GlStateAudit.ENTITY_LIMIT);
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.exit(
+                    net.fathom.optimizations.core.bench.view.ViewSection.FATHOM_CULL);
+        }
         return result;
     }
 }

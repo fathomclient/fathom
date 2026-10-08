@@ -7,6 +7,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.player.PlayerEntity;
 
 import net.fathom.optimizations.core.bench.view.ViewProbe;
 import net.fathom.optimizations.core.bench.view.ViewSection;
@@ -15,6 +17,9 @@ import net.fathom.optimizations.core.bench.view.ViewSection;
  * View benchmark only: each entity draw. The world path calls
  * {@code doRenderEntity} ({@code method_6913}) directly, which is why it is the
  * boundary rather than the wrapper.
+ *
+ * <p>Players and dropped items are timed as their own sections: they are what a
+ * multiplayer frame has and a singleplayer one mostly does not.
  */
 @Mixin(EntityRenderDispatcher.class)
 public abstract class ViewEntityMixin {
@@ -22,12 +27,19 @@ public abstract class ViewEntityMixin {
     @Inject(method = "method_6913(Lnet/minecraft/entity/Entity;DDDFFZ)Z", at = @At("HEAD"), require = 0)
     private void fathom$viewEntityStart(Entity entity, double x, double y, double z, float yaw,
             float tickDelta, boolean hideDebugBox, CallbackInfoReturnable<Boolean> info) {
-        ViewProbe.enter(ViewSection.ENTITY);
+        ViewProbe.enter(section(entity));
     }
 
     @Inject(method = "method_6913(Lnet/minecraft/entity/Entity;DDDFFZ)Z", at = @At("RETURN"), require = 0)
     private void fathom$viewEntityEnd(Entity entity, double x, double y, double z, float yaw,
             float tickDelta, boolean hideDebugBox, CallbackInfoReturnable<Boolean> info) {
-        ViewProbe.exit(ViewSection.ENTITY);
+        ViewProbe.exit(section(entity));
+    }
+
+    private static ViewSection section(Entity entity) {
+        if (entity instanceof PlayerEntity) {
+            return ViewSection.ENTITY_PLAYER;
+        }
+        return entity instanceof ItemEntity ? ViewSection.ENTITY_ITEM : ViewSection.ENTITY;
     }
 }

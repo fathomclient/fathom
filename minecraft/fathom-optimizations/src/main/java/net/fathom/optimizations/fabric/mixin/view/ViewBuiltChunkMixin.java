@@ -7,7 +7,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.client.world.BuiltChunk;
 
-import net.fathom.optimizations.core.bench.view.ViewCounter;
 import net.fathom.optimizations.core.bench.view.ViewProbe;
 
 /**
@@ -21,7 +20,7 @@ public abstract class ViewBuiltChunkMixin {
     @Inject(method = "method_10162(Z)V", at = @At("HEAD"), require = 0)
     private void fathom$viewInvalidated(boolean dirty, CallbackInfo info) {
         if (dirty) {
-            ViewProbe.count(ViewCounter.INVALIDATIONS, 1L);
+            ViewProbe.invalidated();
         }
     }
 }

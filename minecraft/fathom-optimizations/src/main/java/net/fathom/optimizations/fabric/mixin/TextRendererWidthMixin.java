@@ -83,6 +83,10 @@ public abstract class TextRendererWidthMixin {
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                 net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.STRING_WIDTH);
         net.fathom.optimizations.fabric.diag.GlSync.stringWidthQueried();
+        if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.tally(
+                    net.fathom.optimizations.core.bench.view.ViewCounter.STRING_WIDTHS);
+        }
         // A static refreshed once per frame. Looking the switch up by string here
         // parsed and allocated an id on every width query the game made.
         if (Runtime.fontMetricsCache
@@ -116,6 +120,7 @@ public abstract class TextRendererWidthMixin {
     @Inject(method = "init()V", at = @At("RETURN"))
     private void fathom$fontReloaded(CallbackInfo callback) {
         fathom$memo().invalidate();
+        net.fathom.optimizations.fabric.perf.VanillaHudReplay.releaseAll();
         net.fathom.optimizations.fabric.perf.NametagRenderer.release();
         // Both HUD recordings name the glyph texture by id, and a reload makes a new one.
         net.fathom.optimizations.fabric.perf.HudSteadyCache.release();
@@ -126,6 +131,7 @@ public abstract class TextRendererWidthMixin {
     @Inject(method = "setUnicode(Z)V", at = @At("RETURN"))
     private void fathom$unicodeChanged(boolean unicode, CallbackInfo callback) {
         fathom$memo().invalidate();
+        net.fathom.optimizations.fabric.perf.VanillaHudReplay.releaseAll();
         net.fathom.optimizations.fabric.perf.NametagRenderer.release();
         net.fathom.optimizations.fabric.perf.HudSteadyCache.release();
         net.fathom.optimizations.fabric.perf.HudLayerCache.invalidate();

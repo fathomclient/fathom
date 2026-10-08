@@ -24,7 +24,23 @@ public enum ViewCounter {
     /** A rebuild done on the client thread, inside the frame. */
     REBUILDS_SYNC("rebuilds on the client thread"),
     /** A finished layer buffer uploaded to the GPU. */
-    UPLOADS("layer buffers uploaded");
+    UPLOADS("layer buffers uploaded"),
+    /** Sections invalidated while a packet was being applied: the server changed a block or sent a chunk. */
+    INVALIDATIONS_BY_PACKET("sections invalidated by packets"),
+    /** Packets applied on the client thread this frame. */
+    PACKET_TASKS("packets applied on the client thread"),
+    /** Packets the network thread queued for the client thread this frame. */
+    PACKETS_QUEUED("packets queued by the network thread"),
+    /** Other players in the world (level). */
+    PLAYERS_LOADED("other players loaded"),
+    /** Entities in the world (level). */
+    ENTITIES_LOADED("entities loaded"),
+    /** Live particles (level). */
+    PARTICLES_LIVE("particles live"),
+    /** {@code TextRenderer.getStringWidth} calls, every caller. */
+    STRING_WIDTHS("string width queries"),
+    /** Client ticks run this frame: 0 on most frames, 1 on about one in (fps / 20). */
+    TICKS("client ticks");
 
     public static final ViewCounter[] ALL = values();
     public static final int COUNT = ALL.length;

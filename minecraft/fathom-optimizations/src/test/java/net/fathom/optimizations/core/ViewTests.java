@@ -51,8 +51,8 @@ public final class ViewTests {
         int frames;
 
         @Override
-        public void frame(long periodNanos, long[] total, long[] child, int[] calls, long[] counters, int tag,
-                boolean valid) {
+        public void frame(long periodNanos, long[] total, long[] child, int[] calls, long[] counters,
+                long[] packets, int tag, boolean valid, int flags) {
             this.period = periodNanos;
             this.total = total.clone();
             this.child = child.clone();

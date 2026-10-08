@@ -63,6 +63,12 @@ public final class Runtime {
             net.fathom.optimizations.core.registry.OptimizationId.of("render.chunk.rebuild-scheduling");
     public static final net.fathom.optimizations.core.registry.OptimizationId FRAME_LIMITER =
             net.fathom.optimizations.core.registry.OptimizationId.of("input.frame-limiter-accuracy");
+    public static final net.fathom.optimizations.core.registry.OptimizationId NAMETAG_NAME_CACHE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.nametag-name-cache");
+    public static final net.fathom.optimizations.core.registry.OptimizationId ARMOR_TEXTURE_CACHE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.armor-texture-cache");
+    public static final net.fathom.optimizations.core.registry.OptimizationId VANILLA_HUD_REPLAY =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.hud.vanilla-replay");
     public static final net.fathom.optimizations.core.registry.OptimizationId PACK_ICON_DOWNSCALE =
             net.fathom.optimizations.core.registry.OptimizationId.of("resources.pack-icon-downscale");
 
@@ -78,6 +84,9 @@ public final class Runtime {
     public static boolean chunkLookupCache;
     public static boolean hotPathAllocation;
     public static boolean frameLimiter;
+    public static boolean nametagNameCache;
+    public static boolean armorTextureCache;
+    public static boolean vanillaHudReplay;
 
     /** Re-read the hot switches from the board. Cheap: a handful of map lookups. */
     public static void refreshHotSwitches() {
@@ -89,6 +98,13 @@ public final class Runtime {
         chunkLookupCache = current.isEnabled(CHUNK_LOOKUP_CACHE);
         hotPathAllocation = current.isEnabled(HOT_PATH_ALLOCATION);
         frameLimiter = current.isEnabled(FRAME_LIMITER);
+        nametagNameCache = current.isEnabled(NAMETAG_NAME_CACHE);
+        armorTextureCache = current.isEnabled(ARMOR_TEXTURE_CACHE);
+        boolean replay = current.isEnabled(VANILLA_HUD_REPLAY);
+        if (vanillaHudReplay && !replay) {
+            net.fathom.optimizations.fabric.perf.VanillaHudReplay.releaseAll();
+        }
+        vanillaHudReplay = replay;
     }
 
     /**

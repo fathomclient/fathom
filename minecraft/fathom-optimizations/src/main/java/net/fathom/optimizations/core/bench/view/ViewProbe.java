@@ -53,16 +53,22 @@ public final class ViewProbe {
          * @param child nanoseconds of nested sections, so self = total - child
          * @param calls completed entries per section
          * @param counters per-frame counts, indexed by {@link ViewCounter}
+         * @param packets per {@link PacketKind}, {@link PacketKind#STRIDE} slots each
          * @param tag what the frame was measuring, as set by {@link #tagNextFrame}
          * @param valid false when the frame should not be counted (focus, screen, transition)
+         * @param flags {@link #FLAG_GC} and friends, set by the harness for the frame now ending
          */
         void frame(long periodNanos, long[] total, long[] child, int[] calls, long[] counters,
-                int tag, boolean valid);
+                long[] packets, int tag, boolean valid, int flags);
     }
+
+    /** A garbage collection finished during this frame. */
+    public static final int FLAG_GC = 1;
 
     private static final int SECTIONS = ViewSection.COUNT;
     private static final int LOOP = ViewSection.LOOP.ordinal();
     private static final int HARNESS = ViewSection.HARNESS.ordinal();
+    private static final int TASKS = ViewSection.TASKS.ordinal();
 
     private static final long[] TOTAL = new long[SECTIONS];
     private static final long[] CHILD = new long[SECTIONS];
@@ -74,6 +80,19 @@ public final class ViewProbe {
 
     private static final AtomicLongArray COUNTERS = new AtomicLongArray(ViewCounter.COUNT);
     private static final long[] COUNTER_SNAPSHOT = new long[ViewCounter.COUNT];
+    /** Client-thread tallies: plain adds, merged into the counters at the loop head. */
+    private static final long[] TALLY = new long[ViewCounter.COUNT];
+
+    /** Per-kind packet figures for the frame in progress, client thread only. */
+    private static final long[] PACKETS = new long[PacketKind.COUNT * PacketKind.STRIDE];
+    /** Packets queued by the network thread, per kind. */
+    private static final AtomicLongArray QUEUED = new AtomicLongArray(PacketKind.COUNT);
+    /** The kind of the packet the open task is applying, or -1 if it has not said. */
+    private static int currentPacket = -1;
+    private static int flags;
+
+    /** Live particles, refreshed by the particle tick hook. Read by the harness. */
+    public static volatile int particlesLive;
 
     private static Thread owner;
     private static Sink sink;
@@ -127,6 +146,12 @@ public final class ViewProbe {
         long elapsed = System.nanoTime() - START[index];
         TOTAL[index] += elapsed;
         CALLS[index]++;
+        if (index == TASKS) {
+            int kind = currentPacket < 0 ? PacketKind.NOT_A_PACKET.ordinal() : currentPacket;
+            PACKETS[kind * PacketKind.STRIDE + PacketKind.NANOS] += elapsed;
+            PACKETS[kind * PacketKind.STRIDE + PacketKind.APPLIED]++;
+            currentPacket = -1;
+        }
         // Normally the top of the stack. A callback cancelled by another Mixin
         // can leave a section above it open; it is dropped here rather than
         // allowed to swallow its parent's time, and the loop head resets it.
@@ -151,6 +176,45 @@ public final class ViewProbe {
      */
     public static void count(ViewCounter counter, long amount) {
         COUNTERS.addAndGet(counter.ordinal(), amount);
+    }
+
+    /**
+     * Add to a counter from the client thread, in the timed arms only: a plain
+     * array add, for things counted hundreds of times a frame (string widths).
+     */
+    public static void tally(ViewCounter counter) {
+        if (timing && Thread.currentThread() == owner) {
+            TALLY[counter.ordinal()]++;
+        }
+    }
+
+    /**
+     * A packet handler reached its main-thread half. On the client thread this
+     * names the packet the open task is applying; on the network thread it is
+     * the packet being queued.
+     */
+    public static void packet(int kind) {
+        if (Thread.currentThread() == owner) {
+            if (timing && DEPTH[TASKS] > 0) {
+                currentPacket = kind;
+            }
+        } else {
+            QUEUED.incrementAndGet(kind);
+        }
+    }
+
+    /** A chunk section was marked dirty. Attributed to the packet being applied, if any. */
+    public static void invalidated() {
+        COUNTERS.incrementAndGet(ViewCounter.INVALIDATIONS.ordinal());
+        if (timing && Thread.currentThread() == owner && currentPacket >= 0) {
+            PACKETS[currentPacket * PacketKind.STRIDE + PacketKind.INVALIDATIONS]++;
+            TALLY[ViewCounter.INVALIDATIONS_BY_PACKET.ordinal()]++;
+        }
+    }
+
+    /** Flag the frame now ending. Set by the harness in the post-frame window. */
+    public static void flagFrame(int flag) {
+        flags |= flag;
     }
 
     /** Record a per-frame level rather than a count (the visible-section list size). */
@@ -187,10 +251,17 @@ public final class ViewProbe {
         }
         if (lastHead != 0L && sink != null) {
             for (int index = 0; index < COUNTER_SNAPSHOT.length; index++) {
-                COUNTER_SNAPSHOT[index] = COUNTERS.getAndSet(index, 0L);
+                COUNTER_SNAPSHOT[index] = COUNTERS.getAndSet(index, 0L) + TALLY[index];
             }
-            sink.frame(now - lastHead, TOTAL, CHILD, CALLS, COUNTER_SNAPSHOT, tag, frameValid);
+            for (int kind = 0; kind < PacketKind.COUNT; kind++) {
+                PACKETS[kind * PacketKind.STRIDE + PacketKind.QUEUED] = QUEUED.getAndSet(kind, 0L);
+            }
+            sink.frame(now - lastHead, TOTAL, CHILD, CALLS, COUNTER_SNAPSHOT, PACKETS, tag, frameValid, flags);
         }
+        Arrays.fill(TALLY, 0L);
+        Arrays.fill(PACKETS, 0L);
+        currentPacket = -1;
+        flags = 0;
         Arrays.fill(TOTAL, 0L);
         Arrays.fill(CHILD, 0L);
         Arrays.fill(CALLS, 0);

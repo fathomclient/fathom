@@ -183,6 +183,66 @@
       "conflicts": []
     },
     {
+      "id": "render.entity.nametag-name-cache",
+      "name": "Nametag name cache",
+      "description": "Every visible nametag, every frame, vanilla builds a chat component with click and hover events -- an NBT compound turned into a string, a UUID turned into a string -- only to read back prefix, name and suffix. This keeps the string the original code produced and rebuilds it the frame the name, team, prefix or suffix changes. Output-identical.",
+      "group": "ENTITIES",
+      "groupLabel": "Entities",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Proportional to labels on screen: player lobbies, holograms, PvP. Removes per-label allocation and Java 8 regex compiles.",
+      "defaultOn": true,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "view-2026-10-05-entities",
+        "summary": "OptiFine profile, 48 armoured players with nametags, 4 interleaved rounds against the switch off: faster in 4/4 rounds, paired median -0.200 ms/frame, median 1.948 -> 1.815 ms, p99 4.243 -> 3.813 ms; the label decision fell from 0.069 to 0.009 ms/frame. Verified against the original on 130,122 labels with teams and prefixes changing: 0 mismatches."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "render.entity.armor-texture-cache",
+      "name": "Armor texture lookup cache",
+      "description": "Vanilla finds each armour piece's texture by formatting its path with String.format every frame, then looking the string up in a cache of its own. This remembers the identifier the original lookup returned for each material and layer, so the same object comes back without the formatting. Output-identical.",
+      "group": "ENTITIES",
+      "groupLabel": "Entities",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Proportional to armoured players and mobs in view; up to five String.format calls per armoured player per frame.",
+      "defaultOn": true,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "view-2026-10-05-entities",
+        "summary": "OptiFine profile, 48 iron-armoured players, 4 interleaved rounds against the switch off: faster in 3/4 rounds, paired median -0.174 ms/frame, median 1.948 -> 1.784 ms; the armour layer fell from 0.456 to 0.253 ms/frame and client allocation from 206 to 99 MB/s. 543,702 lookups verified identical."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "render.hud.vanilla-replay",
+      "name": "Replay unchanged chat and scoreboard",
+      "description": "Chat and the scoreboard sidebar redraw every glyph every frame, though what they show changes at most once a client tick or when the server changes the scoreboard. This records them while they hold still and replays the recording until anything they are drawn from changes; that frame is drawn live. Obfuscated text is always drawn live. Output-identical.",
+      "group": "HUD",
+      "groupLabel": "HUD and interface",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Whenever chat lines or a server sidebar are on screen: in the multiplayer profile they cost 0.06-0.13 and 0.05-0.09 ms a frame.",
+      "defaultOn": true,
+      "minecraft": ["1.8.9"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "mp-2026-10-06-hud",
+        "summary": "Local 1.8.9 server, 40 scripted players, OptiFine profile, 4 interleaved rounds against the switch off. Scoreboard updating every tick and chat every 100 ms: faster in 4/4 rounds, paired median -0.155 ms/frame, p95 3.314 -> 3.065 ms, p99 4.061 -> 3.652 ms. Lobby with chat and sidebar: -0.111 and -0.115 ms paired, 3/4 rounds in each of two runs. No change where neither is on screen. Pixel check: 630 chat and 691 sidebar replays drawn both ways offscreen, 0 differing bytes."
+      },
+      "conflicts": []
+    },
+    {
       "id": "input.unfocused-fps-cap",
       "name": "Cap frame rate when unfocused",
       "description": "Vanilla renders at full speed into a window you have alt-tabbed away from. This caps it at 30 frames per second while the window does not have focus, and changes nothing while it does.",

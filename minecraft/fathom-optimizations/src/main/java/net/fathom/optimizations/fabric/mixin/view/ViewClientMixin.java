@@ -23,6 +23,7 @@ public abstract class ViewClientMixin {
 
     @Inject(method = "tick()V", at = @At("HEAD"), require = 0)
     private void fathom$viewTickStart(CallbackInfo info) {
+        ViewProbe.tally(net.fathom.optimizations.core.bench.view.ViewCounter.TICKS);
         ViewProbe.enter(ViewSection.TICK);
     }
 

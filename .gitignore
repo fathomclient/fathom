@@ -62,3 +62,7 @@ Thumbs.db
 # classpath it read from a real launch.
 /minecraft/fathom-optimizations/run-ab/
 /tools/.bench-classpath.txt
+
+# The multiplayer profile's local server, its world and the client instance
+# that connects to it (tools/mp-bench).
+/minecraft/fathom-optimizations/run-mp/

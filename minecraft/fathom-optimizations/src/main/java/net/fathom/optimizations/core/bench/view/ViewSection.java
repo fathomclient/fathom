@@ -26,6 +26,8 @@ public enum ViewSection {
     /** {@code MinecraftClient.tick}: the 20 Hz client simulation. */
     TICK("client tick (simulation)", LOOP, Owner.VANILLA),
     TICK_ENTITIES("tick: entities + block entities", TICK, Owner.VANILLA),
+    /** One other player's tick: interpolation, limb swing, cape, water and fire checks. */
+    TICK_PLAYER("tick: other players", TICK_ENTITIES, Owner.VANILLA),
     TICK_WORLD("tick: world (chunk unload, weather)", TICK, Owner.VANILLA),
     TICK_DISPLAY("tick: random block display ticks", TICK, Owner.VANILLA),
     TICK_PARTICLES("tick: particles", TICK, Owner.VANILLA),
@@ -55,8 +57,29 @@ public enum ViewSection {
     LAYER_TRANSLUCENT("terrain: translucent layer", WORLD, Owner.VANILLA_OPTIFINE),
     /** {@code renderEntities}: entities and block entities. Its self time is culling and setup. */
     ENTITIES("entities + block entities", WORLD, Owner.VANILLA_OPTIFINE),
-    ENTITY("entity draws", ENTITIES, Owner.VANILLA_OPTIFINE),
-    NAMETAG("nametags", ENTITY, Owner.VANILLA_FATHOM),
+    /** Fathom's distance-limit answer on {@code shouldRender}, once per entity considered. */
+    FATHOM_CULL("Fathom entity limits (shouldRender hook)", ENTITIES, Owner.FATHOM),
+    ENTITY("entity draws (not players or items)", ENTITIES, Owner.VANILLA_OPTIFINE),
+    /** Other players: the multiplayer-specific entity. */
+    ENTITY_PLAYER("player entity draws", ENTITIES, Owner.VANILLA_OPTIFINE),
+    /** Dropped items. */
+    ENTITY_ITEM("item entity draws", ENTITIES, Owner.VANILLA_OPTIFINE),
+    /** {@code LivingEntityRenderer.renderModel}: the body, with its skin bound. */
+    MODEL("living: body model + skin", ENTITY_PLAYER, Owner.VANILLA_OPTIFINE),
+    /** {@code LivingEntityRenderer.renderFeatures}: every layer drawn over the body. */
+    FEATURES("living: feature layers", ENTITY_PLAYER, Owner.VANILLA_OPTIFINE),
+    ARMOR("layer: armor (+ glint)", FEATURES, Owner.VANILLA_OPTIFINE),
+    HELD_ITEM("layer: held item", FEATURES, Owner.VANILLA),
+    CAPE("layer: cape", FEATURES, Owner.VANILLA_OPTIFINE),
+    /** {@code EntityRenderer.postRender}: the blob shadow and the fire overlay. */
+    SHADOW_FIRE("shadow + fire", ENTITY_PLAYER, Owner.VANILLA_OPTIFINE),
+    /**
+     * {@code renderName}: whether a label shows, the display name built for it,
+     * and (players) the below-name score line. The label drawing itself is
+     * {@link #NAMETAG}.
+     */
+    NAMETAG_DECIDE("nametag: visibility + display name + score", ENTITY_PLAYER, Owner.VANILLA_OPTIFINE),
+    NAMETAG("nametags", NAMETAG_DECIDE, Owner.VANILLA_FATHOM),
     BLOCK_ENTITY("block entity draws", ENTITIES, Owner.VANILLA_OPTIFINE),
     SELECTION("selection box", WORLD, Owner.VANILLA),
     BLOCK_DAMAGE("block damage overlay", WORLD, Owner.VANILLA),
@@ -72,6 +95,12 @@ public enum ViewSection {
     TEXT("text drawing (TextRenderer.draw, all callers)", null, Owner.VANILLA_OPTIFINE),
     /** {@code InGameHud.render}, including Fathom's HUD drawn at its end. */
     HUD("HUD (vanilla + Fathom)", RENDER, Owner.VANILLA),
+    HUD_HOTBAR("HUD: hotbar + items", HUD, Owner.VANILLA),
+    HUD_STATUS("HUD: health, food, armour bars", HUD, Owner.VANILLA),
+    /** The sidebar objective: the server's scoreboard. */
+    HUD_SCOREBOARD("HUD: scoreboard sidebar", HUD, Owner.VANILLA_OPTIFINE),
+    HUD_TABLIST("HUD: tab list", HUD, Owner.VANILLA),
+    HUD_CHAT("HUD: chat", HUD, Owner.VANILLA),
     FATHOM_HUD("Fathom HUD", HUD, Owner.FATHOM),
     /** Deciding which widgets draw this frame: module checks, visibility, click sampling. */
     FATHOM_HUD_DECIDE("Fathom HUD: deciding what to draw", FATHOM_HUD, Owner.FATHOM),

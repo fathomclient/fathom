@@ -77,7 +77,7 @@ public final class RegistryTests {
                     planned++;
             }
         }
-        check(running == 12, "expected 12 implemented entries, found " + running);
+        check(running == 15, "expected 15 implemented entries, found " + running);
         check(planned == 1, "expected 1 planned entry, found " + planned);
     }
 
