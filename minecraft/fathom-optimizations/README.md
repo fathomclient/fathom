@@ -73,8 +73,8 @@ What stands in for that, and what does not:
   badly over the game, or a popover that opens off-screen would not be caught by
   any of it.
 
-**Every registry entry is still off by default.** Promotion requires an in-game
-measurement; `docs/performance/optimizations.md` §7 explains why in full, per entry.
+**A registry entry is off by default until it has an in-game measurement.**
+`docs/performance/optimization-registry.md` lists which ones have one.
 Client *features* — the hub, the HUD widgets, the frame caps — are a different thing
 from registry optimizations and have their own defaults, in `core/feature`.
 
@@ -273,16 +273,12 @@ it* is their work.
 - `docs/ingame-ui-renderer-decision.md` — how the in-game renderer was chosen, and
   what the seven rejected options would have cost
 - `docs/performance/ingame-ui.md` — what that renderer costs, measured in the client
-- `docs/performance/optimizations.md` — what was implemented, what was rejected, why
 - `docs/performance/benchmarks.md` — every measurement, with its limitations
 - `docs/performance/optimization-registry.md` — the register, generated from this code
 - `docs/modules.md` — every module, what it drives, its settings, and the toggle
   validation table
-- `docs/performance/fathom-vs-lunar.md` — how a comparison with Lunar would be run,
-  and what it could support. No comparison has been run.
 - `docs/integration.md` — what crosses between the launcher and the game: the
   session descriptor, the main menu, the OptiFine flow, and what Fathom stands
   down for it
 - `docs/performance/benchmark-methodology.md` — how anything gets measured
-- `docs/performance/baseline.md` — the reference machine
 - `docs/research/performance.md` — the analysis behind the registry

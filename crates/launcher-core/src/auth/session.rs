@@ -1,6 +1,6 @@
 //! Authentication state, as a state machine rather than a pile of booleans.
 //!
-//! The six states in the brief map one-to-one onto [`AuthStatus`]. The richer
+//! The six states in the spec map one-to-one onto [`AuthStatus`]. The richer
 //! [`AuthState`] carries the data each state actually needs, so there is no way
 //! to be "authenticated" without an identity or "entitlement verified" without
 //! a proof.
@@ -46,7 +46,7 @@ use super::entitlement::Ownership;
 use super::provider::{IdentityKind, MinecraftIdentity};
 
 /// The flat status, for matching and display. Exactly the six states the
-/// product brief names.
+/// product spec names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthStatus {
     SignedOut,

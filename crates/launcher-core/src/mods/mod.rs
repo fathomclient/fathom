@@ -46,10 +46,11 @@ pub mod browse;
 pub mod catalog;
 pub mod config;
 pub mod definition;
+pub mod history;
 pub mod identify;
 pub mod jar;
-pub mod optifine;
 pub mod modrinth;
+pub mod optifine;
 pub mod resolve;
 pub mod store;
 pub mod supplied;
@@ -224,6 +225,7 @@ impl ModEngine {
                 sha1: entry.sha1.clone(),
                 enabled: entry.enabled,
                 definition: catalog::find(&entry.id),
+                recorded: resolve::Recorded::of(&entry.origin),
             })
             .collect()
     }

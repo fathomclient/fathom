@@ -160,6 +160,15 @@ export interface ModRow {
   /** The repository project, when it came from one. */
   slug: string | null;
   updatable: boolean;
+  /** `builtin` (Fathom's client), `component` (another Fathom jar), `external`. */
+  kind: 'builtin' | 'component' | 'external';
+  /** "Built into Fathom", "From Modrinth", "Your file", ... */
+  sourceLabel: string;
+  compatibility: { verdict: Verdict | 'unknown'; detail: string } | null;
+  /** Problems in the current set that are about this mod. */
+  issues: string[];
+  /** How many earlier builds can be put back. */
+  previous: number;
 }
 
 /** What each filter would show, so a chip can say so before it is pressed. */
@@ -264,6 +273,8 @@ export interface ModsView {
   components: ComponentRow[];
   /** The Minecraft version this profile runs. */
   minecraft: string;
+  /** Minecraft is running for this profile: mod changes apply on its next start. */
+  gameRunning: boolean;
 }
 
 /* -- performance --------------------------------------------------------- */
@@ -356,6 +367,8 @@ export interface PerformanceView {
   videoLimits: VideoLimits | null;
   /** OptiFine's Render Regions, for a profile that runs OptiFine; null otherwise. */
   renderRegions: RenderRegions | null;
+  /** The most recent (or running) session, as the game measured it; null before one. */
+  lastSession: SessionPulse | null;
 }
 
 /** OptiFine's Render Regions: reported and offered, never changed unasked. */
@@ -634,6 +647,44 @@ export interface LaunchProgress {
   active: boolean;
   cancellable: boolean;
   failure: string | null;
+  /** The failure may be about mods: offer recovery and a launch without them. */
+  recovery?: boolean;
+  /** This is a launch without external mods. */
+  safe?: boolean;
+  /** Seconds since the game started; set while it runs and after it ends. */
+  elapsedSeconds?: number | null;
+  /** The game's own reading of the session, once its module has written one. */
+  pulse?: SessionPulse | null;
+  /** Whether `pulse` is recent. False in a menu or with the game in the background. */
+  pulseLive?: boolean;
+  /** 0 check, 1 download, 2 start, 3 confirm the Fathom client, 4 running. */
+  step?: number;
+}
+
+/**
+ * The game's reading of a session (`launcher_core::session_pulse`). Measured in
+ * a world with the window focused; menus and loading screens are not in it.
+ */
+export interface SessionPulse {
+  updatedAt: number;
+  secondsOfPlay: number;
+  frames: number;
+  currentFps: number;
+  averageFps: number;
+  p95Ms: number;
+  p99Ms: number;
+  worstMs: number;
+  /** Frames of 50 ms or longer. */
+  hitches: number;
+  heapUsedMb: number;
+  heapMaxMb: number;
+  modules: number;
+  bucketSeconds: number;
+  /** Frames per second per bucket, oldest first. */
+  timelineFps: number[];
+  /** The slowest frame in each bucket, in milliseconds. */
+  timelineWorstMs: number[];
+  marks: { bucket: number; kind: 'world' | 'settings' }[];
 }
 
 export interface ConsoleView {
@@ -793,6 +844,7 @@ const FIXTURE_MODS: ModsView = {
   browseBlocked: 'Mod repositories are turned off in Privacy settings.',
   components: [],
   minecraft: '1.8.9',
+  gameRunning: false,
   loaderSupportsMods: false,
   loaderNotice: {
     message: 'Mods need a loader.',
@@ -830,7 +882,66 @@ const FIXTURE_PERFORMANCE: PerformanceView = {
   benchmarkCount: 0,
   videoLimits: null,
   renderRegions: null,
+  lastSession: null,
 };
+
+/* Visual QA only: `?session=preparing|downloading|starting|running|ended|crashed`
+   puts the launch in that state in the browser, with a synthetic reading, so
+   each state can be looked at without a game. Never used in the app. */
+const SESSION_PROOF = typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search).get('session')
+  : null;
+
+function fixturePulse(buckets: number): SessionPulse {
+  const fps = Array.from({ length: buckets }, (_, index) => {
+    const base = index < buckets * 0.55 ? 212 : 248;
+    return Math.round((base + Math.sin(index * 1.7) * 9 + Math.sin(index * 0.37) * 6) * 10) / 10;
+  });
+  const worst = fps.map((rate, index) =>
+    Math.round((1000 / rate) * (index % 13 === 7 ? 6.2 : 1.6 + (Math.sin(index * 2.3) + 1) * 0.35) * 10) / 10,
+  );
+  return {
+    updatedAt: Date.now(),
+    secondsOfPlay: buckets * 10,
+    frames: Math.round(buckets * 10 * 231),
+    currentFps: fps[fps.length - 1] ?? 0,
+    averageFps: 231.4,
+    p95Ms: 5.21,
+    p99Ms: 7.84,
+    worstMs: 41.6,
+    hitches: 0,
+    heapUsedMb: 1210,
+    heapMaxMb: 4096,
+    modules: 9,
+    bucketSeconds: 10,
+    timelineFps: fps,
+    timelineWorstMs: worst,
+    marks: [
+      { bucket: 2, kind: 'world' },
+      { bucket: Math.floor(buckets * 0.55), kind: 'settings' },
+    ],
+  };
+}
+
+function fixtureLaunch(): LaunchProgress {
+  const base = { ...NO_LAUNCH };
+  switch (SESSION_PROOF) {
+    case 'preparing':
+      return { ...base, phase: 'preparing', headline: 'Checking', detail: 'Verifying what is on disk', active: true, cancellable: true, step: 0 };
+    case 'downloading':
+      return { ...base, phase: 'downloading', headline: 'Downloading', detail: '412 of 771 · 84 MB', fraction: 0.534, active: true, cancellable: true, step: 1 };
+    case 'starting':
+      return { ...base, phase: 'starting', headline: 'Starting', detail: 'Confirming the Fathom client', active: true, step: 3 };
+    case 'running':
+      return { ...base, phase: 'running', headline: 'Minecraft is running', detail: 'Running for 42 minutes', active: true, step: 4, elapsedSeconds: 2534, pulse: fixturePulse(60), pulseLive: true };
+    case 'ended':
+      return { ...base, phase: 'finished', headline: 'Session ended', detail: 'Minecraft exited normally.', elapsedSeconds: 4380, pulse: fixturePulse(90) };
+    case 'crashed':
+      return { ...base, phase: 'finished', headline: 'Minecraft stopped', detail: 'Minecraft crashed (exit code -1).', failure: 'Minecraft crashed (exit code -1).', recovery: true, elapsedSeconds: 312, pulse: fixturePulse(14) };
+    default:
+      return NO_LAUNCH;
+  }
+}
 
 const FIXTURE_SETTINGS: SettingsView = {
   account: {
@@ -1084,7 +1195,9 @@ export async function addMod(profile?: string): Promise<ModsView> {
 /* -- performance --------------------------------------------------------- */
 
 export async function performanceView(profile?: string): Promise<PerformanceView> {
-  if (!inTauri) return FIXTURE_PERFORMANCE;
+  if (!inTauri) {
+    return SESSION_PROOF ? { ...FIXTURE_PERFORMANCE, lastSession: fixturePulse(90) } : FIXTURE_PERFORMANCE;
+  }
   return invoke<PerformanceView>('performance_view', { profile: profile ?? null });
 }
 
@@ -1173,9 +1286,13 @@ export const NO_LAUNCH: LaunchProgress = {
 };
 
 /** Start a launch. Returns as soon as the work is on its way, not when it ends. */
-export async function play(): Promise<LaunchProgress> {
+/**
+ * Start the selected profile. `withoutExternalMods` starts it with Fathom's
+ * own components only, for this launch: nothing is deleted or changed.
+ */
+export async function play(withoutExternalMods = false): Promise<LaunchProgress> {
   if (!inTauri) return NO_LAUNCH;
-  return invoke<LaunchProgress>('play');
+  return invoke<LaunchProgress>('play', { withoutExternalMods });
 }
 
 /** Ask the launch in flight to stop. Only does anything before the game starts. */
@@ -1185,7 +1302,7 @@ export async function cancelLaunch(): Promise<LaunchProgress> {
 }
 
 export async function launchProgress(): Promise<LaunchProgress> {
-  if (!inTauri) return NO_LAUNCH;
+  if (!inTauri) return fixtureLaunch();
   return invoke<LaunchProgress>('launch_progress');
 }
 
@@ -1636,4 +1753,419 @@ export async function exportFathomProfile(id: string): Promise<string> {
 export async function importFathomProfile(json: string): Promise<FathomProfilesView> {
   if (!inTauri) return FIXTURE_FATHOM_PROFILES;
   return invoke<FathomProfilesView>('fathom_profile_import', { json });
+}
+
+/* -- the mod browser ----------------------------------------------------------
+   Mirrors `crates/launcher-desktop/src/api/browse.rs`. Every call that can
+   reach the network runs on a Rust worker, outside the launcher's lock, so a
+   slow index never freezes the window. There are no fixtures here: outside
+   the app these calls fail, and the page says the browser needs Fathom. */
+
+export type CatalogProvider = 'modrinth' | 'curseforge';
+export type Verdict = 'compatible' | 'unverified' | 'incompatible';
+export type Breadth = 'tagged' | 'plausible' | 'any-loader';
+export type CatalogSort = 'relevance' | 'downloads' | 'updated' | 'newest';
+export type ReleaseChannel = 'release' | 'beta' | 'alpha';
+
+export interface ProjectRef {
+  provider: CatalogProvider;
+  id: string;
+}
+
+export interface CatalogProviderView {
+  id: CatalogProvider;
+  label: string;
+  ready: boolean;
+  note: string | null;
+}
+
+export interface BrowseContext {
+  profileId: string;
+  profileName: string;
+  minecraft: string;
+  loader: string;
+  loadsMods: boolean;
+  blocked: string | null;
+  providers: CatalogProviderView[];
+}
+
+export interface CatalogCategory {
+  id: string;
+  label: string;
+}
+
+export type CatalogInstallState =
+  | { state: 'not-installed' }
+  | { state: 'installed'; version: string | null; fileName: string }
+  | {
+      state: 'update-available';
+      installed: string | null;
+      latest: string;
+      versionId: string;
+      fileName: string;
+    }
+  | { state: 'installing' }
+  | { state: 'updating' }
+  | { state: 'removal-pending' }
+  | { state: 'failed'; reason: string };
+
+export interface CatalogEntry {
+  key: string;
+  reference: ProjectRef;
+  providerLabel: string;
+  slug: string;
+  name: string;
+  summary: string;
+  authors: string[];
+  icon: string | null;
+  downloads: number;
+  categories: string[];
+  updated: string | null;
+  install: CatalogInstallState;
+  installedId: string | null;
+  /** A definite "no" from the project's own facets. Absent means unchecked. */
+  ruledOut: string | null;
+  possibleDuplicateOf: string | null;
+  alsoOn: string[];
+}
+
+export interface ProviderOutcome {
+  id: CatalogProvider;
+  label: string;
+  configured: boolean;
+  problem: string | null;
+  retryable: boolean;
+  results: number;
+}
+
+export interface CatalogSearchView {
+  entries: CatalogEntry[];
+  providers: ProviderOutcome[];
+  offset: number;
+  nextOffset: number;
+  hasMore: boolean;
+  superseded: boolean;
+}
+
+export interface BestFile {
+  versionId: string;
+  number: string;
+  channel: ReleaseChannel;
+  published: string | null;
+}
+
+export interface ProjectVerdict {
+  verdict: Verdict;
+  headline: string;
+  /** The same reason in one short line, for a card. */
+  short: string;
+  best: BestFile | null;
+  builds: number;
+}
+
+export interface VerdictView {
+  key: string;
+  verdict: ProjectVerdict | null;
+  problem: string | null;
+}
+
+export interface Finding {
+  code: string;
+  verdict: Verdict;
+  detail: string;
+}
+
+export interface CatalogDependency {
+  kind: 'required' | 'optional' | 'incompatible' | 'embedded';
+  key: string | null;
+  name: string | null;
+  installed: boolean;
+}
+
+export interface CatalogVersion {
+  versionId: string;
+  number: string;
+  name: string;
+  channel: ReleaseChannel;
+  published: string | null;
+  loaders: string[];
+  gameVersions: string;
+  fileName: string;
+  size: number | null;
+  verdict: Verdict;
+  findings: Finding[];
+  dependencies: CatalogDependency[];
+  downloadable: boolean;
+  installed: boolean;
+}
+
+export interface CatalogDetail {
+  entry: CatalogEntry;
+  description: string | null;
+  descriptionFormat: 'markdown' | 'html';
+  gallery: { url: string; title: string | null }[];
+  license: string;
+  hasSource: boolean;
+  hasIssues: boolean;
+  projectUrl: string;
+  verdict: ProjectVerdict;
+  versions: CatalogVersion[];
+  withheld: boolean;
+}
+
+export interface InstallArgs {
+  reference: ProjectRef;
+  versionId?: string | null;
+  optional?: ProjectRef[];
+  acceptUnverified?: boolean;
+  acceptDuplicates?: boolean;
+  /** A profile entry id: makes this an update to the newest build. */
+  replacing?: string | null;
+  /** With `replacing`: fetch the same build again, because its file is damaged or gone. */
+  repair?: boolean;
+}
+
+export interface PlannedView {
+  key: string;
+  name: string;
+  number: string;
+  fileName: string;
+  size: number | null;
+  requiredBy: string | null;
+  optional: boolean;
+  possibleDuplicate: string | null;
+}
+
+export interface PlanView {
+  root: PlannedView;
+  dependencies: PlannedView[];
+  satisfied: string[];
+  disabledDependencies: string[];
+  optional: {
+    reference: ProjectRef;
+    name: string | null;
+    suggestedBy: string;
+    alreadyInstalled: boolean;
+  }[];
+  blockers: string[];
+  unverified: { name: string; number: string; reasons: string[] }[];
+  needsDuplicateConfirmation: boolean;
+  isUpdate: boolean;
+  downloadBytes: number;
+}
+
+export interface InstallOutcome {
+  ok: boolean;
+  message: string;
+  cancelled: boolean;
+}
+
+export interface InstallEvent {
+  key: string;
+  progress: {
+    phase: 'checking' | 'downloading' | 'recording' | 'done';
+    completed: number;
+    total: number;
+    current: string;
+  } | null;
+  finished: InstallOutcome | null;
+}
+
+const NEEDS_APP = 'The mod browser needs the Fathom app.';
+
+function catalogCall<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+  if (!inTauri) return Promise.reject(new Error(NEEDS_APP));
+  return invoke<T>(command, args);
+}
+
+export function catalogContext(profile?: string): Promise<BrowseContext> {
+  return catalogCall('catalog_context', { profile: profile ?? null });
+}
+
+export function catalogCategories(): Promise<CatalogCategory[]> {
+  return catalogCall('catalog_categories');
+}
+
+export function catalogSearch(
+  args: {
+    text: string;
+    category: string | null;
+    sort: CatalogSort;
+    offset: number;
+    breadth: Breadth;
+  },
+  profile?: string,
+): Promise<CatalogSearchView> {
+  return catalogCall('catalog_search', { profile: profile ?? null, args });
+}
+
+export function catalogVerdicts(projects: ProjectRef[], profile?: string): Promise<VerdictView[]> {
+  return catalogCall('catalog_verdicts', { profile: profile ?? null, projects });
+}
+
+/** An icon or screenshot, as a data URL the Rust side fetched and checked. */
+export function catalogImage(provider: CatalogProvider, url: string): Promise<string> {
+  return catalogCall('catalog_image', { provider, url });
+}
+
+export function catalogDetail(reference: ProjectRef, profile?: string): Promise<CatalogDetail> {
+  return catalogCall('catalog_detail', { profile: profile ?? null, reference });
+}
+
+export function catalogPlan(args: InstallArgs, profile?: string): Promise<PlanView> {
+  return catalogCall('catalog_plan', { profile: profile ?? null, args });
+}
+
+export function catalogInstall(args: InstallArgs, profile?: string): Promise<InstallOutcome> {
+  return catalogCall('catalog_install', { profile: profile ?? null, args });
+}
+
+export function catalogCancelInstall(reference: ProjectRef): Promise<boolean> {
+  return catalogCall('catalog_cancel_install', { reference });
+}
+
+/** Open a project's page, source or tracker, or a link from its description. */
+export function catalogOpenLink(
+  reference: ProjectRef,
+  which: 'page' | 'source' | 'issues' | 'description',
+  url?: string,
+): Promise<void> {
+  return catalogCall('catalog_open_link', { reference, which, url: url ?? null });
+}
+
+export function catalogUninstall(id: string, profile?: string): Promise<string> {
+  return catalogCall('catalog_uninstall', { profile: profile ?? null, id });
+}
+
+/** Progress for installs started from the browser. Returns the unsubscribe. */
+export async function onCatalogInstall(
+  handler: (event: InstallEvent) => void,
+): Promise<() => void> {
+  if (!inTauri) return () => {};
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen<InstallEvent>('fathom://mod-install', (event) => handler(event.payload));
+}
+
+
+/* -- installed mods and recovery ---------------------------------------------
+   Mirrors `crates/launcher-desktop/src/api/installed.rs`. */
+
+export interface Requirement {
+  id: string;
+  name: string;
+  installed: boolean;
+  enabled: boolean;
+}
+
+export interface EarlierBuild {
+  sha1: string;
+  version: string | null;
+  fileName: string;
+  replacedAt: number;
+  available: boolean;
+}
+
+export interface InstalledDetail {
+  id: string;
+  name: string;
+  summary: string;
+  kind: 'builtin' | 'component' | 'external';
+  sourceLabel: string;
+  enabled: boolean;
+  version: string | null;
+  fileName: string;
+  fingerprint: string;
+  license: string | null;
+  minecraft: string[];
+  loaders: string[];
+  compatibility: { verdict: Verdict | 'unknown'; detail: string } | null;
+  requires: Requirement[];
+  requiredBy: string[];
+  issues: string[];
+  earlier: EarlierBuild[];
+  missing: boolean;
+  damaged: boolean;
+  repairable: boolean;
+  updatable: boolean;
+  provider: CatalogProvider | null;
+  project: string | null;
+  disabledReason: string | null;
+  gameRunning: boolean;
+}
+
+export type ChangeKind =
+  | { kind: 'added' }
+  | { kind: 'removed' }
+  | { kind: 'updated'; from: string | null; to: string | null }
+  | { kind: 'enabled' }
+  | { kind: 'disabled' };
+
+export interface ModChange {
+  id: string;
+  name: string;
+  source: 'user-supplied' | 'first-party' | 'catalogue';
+  change: ChangeKind;
+  affectsLaunch: boolean;
+}
+
+export interface ModRecoveryView {
+  profileName: string;
+  lastLaunch: {
+    at: number;
+    outcome: { state: 'started' } | { state: 'worked' } | { state: 'failed'; message: string };
+    safe: boolean;
+  } | null;
+  lastGoodAt: number | null;
+  changes: ModChange[];
+  missing: { id: string; name: string; repairable: boolean }[];
+  damaged: { id: string; name: string; repairable: boolean }[];
+  problems: string[];
+  evidence: { source: string; line: string; names: string[] }[];
+  namedByLogs: string[];
+  canRestore: boolean;
+  externalEnabled: number;
+  gameRunning: boolean;
+}
+
+export interface RestoreReport {
+  switchedOff: string[];
+  reverted: string[];
+  switchedOn: string[];
+  reAdded: string[];
+  unavailable: string[];
+}
+
+export interface UpdatesCheck {
+  updates: { id: string; name: string; installed: string | null; latest: string; reference: ProjectRef }[];
+  checkable: number;
+  total: number;
+}
+
+export function installedModDetail(id: string, profile?: string): Promise<InstalledDetail> {
+  return catalogCall('installed_mod_detail', { profile: profile ?? null, id });
+}
+
+export function revealModFile(id: string, profile?: string): Promise<void> {
+  return catalogCall('reveal_mod_file', { profile: profile ?? null, id });
+}
+
+export function restoreModBuild(id: string, sha1: string, profile?: string): Promise<string> {
+  return catalogCall('restore_mod_build', { profile: profile ?? null, id, sha1 });
+}
+
+export function modRecovery(profile?: string): Promise<ModRecoveryView> {
+  return catalogCall('mod_recovery', { profile: profile ?? null });
+}
+
+export function restoreLastGoodMods(profile?: string): Promise<RestoreReport> {
+  return catalogCall('restore_last_good_mods', { profile: profile ?? null });
+}
+
+export function checkModUpdates(profile?: string): Promise<UpdatesCheck> {
+  return catalogCall('check_mod_updates', { profile: profile ?? null });
+}
+
+/** Look up hand-added jars by their exact bytes. Returns how many were recognised. */
+export function identifyMods(profile?: string): Promise<number> {
+  return catalogCall('identify_mods', { profile: profile ?? null });
 }

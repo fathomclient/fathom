@@ -164,7 +164,7 @@ Write-Host "Optimization module: $(Split-Path -Leaf $loadable)"
 # the old frame sequences here would add tens of megabytes of files nothing
 # reads.
 #
-# The iced-era assets remain quarantined source material and are not packaged.
+# The iced-era assets are gone; there is nothing beside the executable to package.
 
 Copy-Item (Join-Path $root "PRIVACY.md") $dest -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "README.md") $dest -ErrorAction SilentlyContinue

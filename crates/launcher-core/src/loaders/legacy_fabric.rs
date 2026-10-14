@@ -280,7 +280,11 @@ impl LegacyFabricProvider {
             .paths()
             .metadata_cache_dir()
             .join("legacy-fabric")
-            .join(format!("{}-{}.json", encode(minecraft_version), encode(loader_version)));
+            .join(format!(
+                "{}-{}.json",
+                encode(minecraft_version),
+                encode(loader_version)
+            ));
         // Why the cached copy was not used, for the error if fetching fails
         // too: "the service is down" alone does not say why the copy that
         // should have made that irrelevant was passed over.
@@ -300,7 +304,9 @@ impl LegacyFabricProvider {
             encode(loader_version)
         );
         let with_reason = |error: LoaderError| match error {
-            LoaderError::Malformed(detail) => LoaderError::Malformed(format!("{detail}; {passed_over}")),
+            LoaderError::Malformed(detail) => {
+                LoaderError::Malformed(format!("{detail}; {passed_over}"))
+            }
             other => other,
         };
         let body = Self::fetch_bytes(&path, http, feature).map_err(with_reason)?;
@@ -344,7 +350,11 @@ impl LegacyFabricProvider {
         })
     }
 
-    fn fetch_bytes(path: &str, http: &HttpClient, feature: Feature) -> Result<Vec<u8>, LoaderError> {
+    fn fetch_bytes(
+        path: &str,
+        http: &HttpClient,
+        feature: Feature,
+    ) -> Result<Vec<u8>, LoaderError> {
         let request = RequestDescriptor::new(
             Destination::LegacyFabricMeta,
             Purpose::ResolveLoaderMetadata,
@@ -531,7 +541,10 @@ mod tests {
         let paths = crate::paths::DataPaths::rooted_at(tmp.path());
         paths.ensure().unwrap();
         let http = HttpClient::new(
-            NetworkPolicy { online: false, ..NetworkPolicy::default() },
+            NetworkPolicy {
+                online: false,
+                ..NetworkPolicy::default()
+            },
             NetworkJournal::new(),
             "test/0.0",
         );
@@ -557,8 +570,9 @@ mod tests {
     fn a_cached_loader_profile_launches_without_the_service() {
         let (_tmp, cache, http) = offline();
         std::fs::write(cached(&cache), PROFILE).unwrap();
-        let entry = LegacyFabricProvider::loader_profile("1.8.9", "0.19.3", &cache, &http, Feature::Play)
-            .expect("read from the cache");
+        let entry =
+            LegacyFabricProvider::loader_profile("1.8.9", "0.19.3", &cache, &http, Feature::Play)
+                .expect("read from the cache");
         assert_eq!(entry.loader.version, "0.19.3");
         assert!(entry.launcher_meta.is_some());
         assert_eq!(http.journal().summary().total, 0);
@@ -567,16 +581,30 @@ mod tests {
     #[test]
     fn an_unusable_cached_profile_is_fetched_again_rather_than_trusted() {
         let (_tmp, cache, http) = offline();
-        std::fs::write(cached(&cache), r#"{"loader":{"maven":"x","version":"0.19.3"}}"#).unwrap();
+        std::fs::write(
+            cached(&cache),
+            r#"{"loader":{"maven":"x","version":"0.19.3"}}"#,
+        )
+        .unwrap();
         // Offline, so fetching again fails -- which is the point: it tried.
-        assert!(LegacyFabricProvider::loader_profile("1.8.9", "0.19.3", &cache, &http, Feature::Play).is_err());
+        assert!(LegacyFabricProvider::loader_profile(
+            "1.8.9",
+            "0.19.3",
+            &cache,
+            &http,
+            Feature::Play
+        )
+        .is_err());
     }
 
     #[test]
     fn a_document_that_does_not_parse_says_what_came_back() {
-        let error = LegacyFabricProvider::parse::<LoaderEntry>("/p", br#"{"code":502,"message":"Bad Gateway"}"#)
-            .unwrap_err()
-            .to_string();
+        let error = LegacyFabricProvider::parse::<LoaderEntry>(
+            "/p",
+            br#"{"code":502,"message":"Bad Gateway"}"#,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("Bad Gateway"), "{error}");
     }
 

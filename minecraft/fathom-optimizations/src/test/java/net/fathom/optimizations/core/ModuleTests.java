@@ -46,7 +46,7 @@ import net.fathom.optimizations.core.registry.SwitchBoard;
  *   <li>every widget module must carry the common HUD settings, so no widget
  *       ends up with a colour setting the drawing ignores;
  *   <li>a toggle must change state, show and hide its effect, persist, and stay
- *       inside its own profile — printed as the table the brief asks for by
+ *       inside its own profile — printed as the table the spec asks for by
  *       {@link #theToggleValidationTable}.
  * </ul>
  *
@@ -197,16 +197,11 @@ public final class ModuleTests {
                     module.id() + " does not default to Minecraft's font");
         }
 
-        File directory = temporaryDirectory("module-font");
-        ModuleRegistry before = ModuleRegistry.standard();
-        ((Setting.Choice) before.find("fps").setting(HudStyle.FONT)).set("Fathom");
-        try {
-            new ModuleStore().save(directory, before);
-        } catch (Exception problem) {
-            throw new AssertionError("saving per-module font failed: " + problem);
-        }
-        ModuleRegistry after = ModuleRegistry.standard();
-        new ModuleStore().load(directory, after);
+        File collection = temporaryDirectory("module-font");
+        ProfileRig before = new ProfileRig();
+        ((Setting.Choice) before.features.find("fps").setting(HudStyle.FONT)).set("Fathom");
+        before.saveAs(collection, "fonts");
+        ModuleRegistry after = ProfileRig.restarted(collection, "fonts").features;
         check("Fathom".equals(after.find("fps").choice(HudStyle.FONT, "missing")),
                 "FPS kept its own font choice");
         check("Minecraft".equals(after.find("coordinates").choice(HudStyle.FONT, "missing")),
@@ -348,72 +343,76 @@ public final class ModuleTests {
         return module.enabled() && module.switchable();
     }
 
-    /** A value set in the hub is the value the next launch reads. */
+    /**
+     * A value set in the hub is the value the next launch reads.
+     *
+     * <p>Through the path the game actually saves by: the running client is
+     * captured into a profile document, written to the collection, read back
+     * by a fresh client and applied. An earlier version of this test went
+     * through the old properties store, which the game had stopped writing --
+     * so it passed while proving nothing about a restart.
+     */
     static void settingsSurviveARestart() {
-        File directory = temporaryDirectory("modules-restart");
-
-        ModuleRegistry before = ModuleRegistry.standard();
-        FathomModule clock = before.find("clock");
+        File collection = temporaryDirectory("modules-restart");
+        ProfileRig before = new ProfileRig();
+        FathomModule clock = before.features.find("clock");
         clock.setEnabled(true);
         ((Setting.Choice) clock.setting("format")).set("12 hour");
         ((Setting.Toggle) clock.setting("seconds")).set(true);
         ((Setting.Whole) clock.setting(HudStyle.PADDING)).set(7);
         ((Setting.Colour) clock.setting(HudStyle.TEXT_COLOUR)).set(0x33AAFF);
+        before.features.find("zoom").keybinds().get(0).set(Keybind.mouse(3));
+        before.hub.set(56);
+        before.prefs.setMenuBackgroundLabel("Low");
+        before.place("clock", net.fathom.optimizations.core.hud.Placement.at(
+                net.fathom.optimizations.core.hud.Anchor.BOTTOM_LEFT, 12, 30));
+        before.saveAs(collection, "restart");
 
-        Keybind hubKey = new Keybind("hub", "Open Fathom Hub", 54);
-        try {
-            new ModuleStore().save(directory, before, hubKey,
-                    new net.fathom.optimizations.core.module.ClientPrefs());
-        } catch (Exception problem) {
-            throw new AssertionError("saving failed: " + problem);
-        }
-
-        ModuleRegistry after = ModuleRegistry.standard();
-        new ModuleStore().load(directory, after);
-        FathomModule read = after.find("clock");
+        ProfileRig after = ProfileRig.restarted(collection, "restart");
+        FathomModule read = after.features.find("clock");
         check(read.enabled(), "the switch survived");
         check("12 hour".equals(read.choice("format", "24 hour")), "a choice survived");
         check(read.toggle("seconds", false), "a toggle survived");
         check(Math.round(read.number(HudStyle.PADDING, 3)) == 7, "a common HUD setting survived");
         check(read.colour(HudStyle.TEXT_COLOUR, 0xFFFFFF) == 0x33AAFF, "a colour survived");
+        check(after.features.find("zoom").keybinds().get(0).key() == Keybind.mouse(3), "a mouse keybind survived");
+        check(after.hub.key() == 56, "the hub key survived");
+        check("Low".equals(after.prefs.menuBackgroundLabel()), "the menu background survived");
+        check(after.layout().get("clock", null).anchor() == net.fathom.optimizations.core.hud.Anchor.BOTTOM_LEFT
+                && after.layout().get("clock", null).offsetY() == 30, "a widget position survived");
         pass("settings survive a restart");
     }
 
     /**
-     * Two profiles, two files, no bleed.
+     * Two profiles, one collection, no bleed.
      *
-     * <p>Profile isolation is not a feature of the store: it is a consequence of
-     * the store being handed the game directory, and the launcher giving each
-     * profile its own. That is exactly why it is worth a test — it would be lost
-     * silently the day something decided to resolve the path itself.
+     * <p>Profiles share one directory -- the launcher keeps a single collection
+     * for every installation -- so isolation is a property of the documents,
+     * not of where they are stored. Switching to one must leave nothing of the
+     * other behind, including values the other changed and this one did not.
      */
     static void oneProfileDoesNotSeeAnother() {
-        File first = temporaryDirectory("modules-profile-a");
-        File second = temporaryDirectory("modules-profile-b");
+        File collection = temporaryDirectory("modules-profiles");
 
-        ModuleRegistry a = ModuleRegistry.standard();
-        a.find("cps").setEnabled(true);
-        ((Setting.Whole) a.find("cps").setting("window")).set(5);
+        ProfileRig a = new ProfileRig();
+        a.features.find("cps").setEnabled(true);
+        ((Setting.Whole) a.features.find("cps").setting("window")).set(5);
+        a.saveAs(collection, "first");
 
-        ModuleRegistry b = ModuleRegistry.standard();
-        b.find("cps").setEnabled(false);
+        ProfileRig b = new ProfileRig();
+        b.features.find("cps").setEnabled(false);
+        b.saveAs(collection, "second");
 
+        ProfileRig client = ProfileRig.restarted(collection, "first");
+        check(client.features.find("cps").enabled(), "the first profile kept its switch on");
+        check(Math.round(client.features.find("cps").number("window", 1)) == 5, "and its own setting");
         try {
-            new ModuleStore().save(first, a);
-            new ModuleStore().save(second, b);
-        } catch (Exception problem) {
-            throw new AssertionError("saving failed: " + problem);
+            client.apply(new net.fathom.optimizations.core.profile.ProfileStore(collection).load("second"));
+        } catch (net.fathom.optimizations.core.profile.ProfileException failure) {
+            throw new AssertionError(failure.getMessage());
         }
-
-        ModuleRegistry readA = ModuleRegistry.standard();
-        new ModuleStore().load(first, readA);
-        ModuleRegistry readB = ModuleRegistry.standard();
-        new ModuleStore().load(second, readB);
-
-        check(readA.find("cps").enabled(), "the first profile kept its switch on");
-        check(Math.round(readA.find("cps").number("window", 1)) == 5, "and its own setting");
-        check(!readB.find("cps").enabled(), "the second profile is unaffected");
-        check(Math.round(readB.find("cps").number("window", 1)) == 1, "including its settings");
+        check(!client.features.find("cps").enabled(), "switching to the second profile switched it off");
+        check(Math.round(client.features.find("cps").number("window", 1)) == 1, "and took its setting back");
         pass("one profile does not see another");
     }
 
@@ -693,7 +692,7 @@ public final class ModuleTests {
     // -----------------------------------------------------------------------
 
     /**
-     * The table the brief asks for, checked and printed.
+     * The table the spec asks for, checked and printed.
      *
      * <p>Printed because a table nobody can read is a check somebody has to take
      * on trust, and this is the artefact that answers "which modules actually
@@ -738,36 +737,31 @@ public final class ModuleTests {
         pass("every switchable module passes the toggle validation table");
     }
 
-    /** Switch it on, write it, read it back into a fresh registry. */
+    /** Switch it, save the profile, restart, and see whether it came back. */
     private static boolean persists(FathomModule module) {
-        File directory = temporaryDirectory("modules-persist");
-        ModuleRegistry written = ModuleRegistry.standard();
-        FathomModule copy = written.find(module.id());
-        copy.setEnabled(!copy.defaultEnabled());
-        try {
-            new ModuleStore().save(directory, written);
-        } catch (Exception problem) {
-            throw new AssertionError("saving failed: " + problem);
-        }
-        ModuleRegistry read = ModuleRegistry.standard();
-        new ModuleStore().load(directory, read);
-        return read.find(module.id()).enabled() == !module.defaultEnabled();
+        File collection = temporaryDirectory("modules-persist");
+        ProfileRig written = new ProfileRig();
+        written.features.find(module.id()).setEnabled(!module.defaultEnabled());
+        written.saveAs(collection, "persist");
+        ProfileRig read = ProfileRig.restarted(collection, "persist");
+        return read.features.find(module.id()).enabled() == !module.defaultEnabled();
     }
 
-    /** The same switch, written in one directory, must not appear in another. */
+    /** The same switch, saved in one profile, must not appear when another is applied. */
     private static boolean isolated(FathomModule module) {
-        File mine = temporaryDirectory("modules-mine");
-        File theirs = temporaryDirectory("modules-theirs");
-        ModuleRegistry written = ModuleRegistry.standard();
-        written.find(module.id()).setEnabled(!module.defaultEnabled());
+        File collection = temporaryDirectory("modules-isolated");
+        ProfileRig mine = new ProfileRig();
+        mine.features.find(module.id()).setEnabled(!module.defaultEnabled());
+        mine.saveAs(collection, "mine");
+        new ProfileRig().saveAs(collection, "theirs");
+
+        ProfileRig client = ProfileRig.restarted(collection, "mine");
         try {
-            new ModuleStore().save(mine, written);
-        } catch (Exception problem) {
-            throw new AssertionError("saving failed: " + problem);
+            client.apply(new net.fathom.optimizations.core.profile.ProfileStore(collection).load("theirs"));
+        } catch (net.fathom.optimizations.core.profile.ProfileException failure) {
+            throw new AssertionError(failure.getMessage());
         }
-        ModuleRegistry other = ModuleRegistry.standard();
-        new ModuleStore().load(theirs, other);
-        return other.find(module.id()).enabled() == module.defaultEnabled();
+        return client.features.find(module.id()).enabled() == module.defaultEnabled();
     }
 
     private static String tick(boolean yes, int width) {

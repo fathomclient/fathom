@@ -130,6 +130,10 @@ loom {
                 // The value may be a module id, to capture one drawer.
                 vmArg "-Dfathom.qaOpenSettings=${project.property('qaOpenSettings')}"
             }
+            if (project.hasProperty('qaEditorSelect')) {
+                // Visual-only: the HUD editor opens with this widget selected.
+                vmArg "-Dfathom.qaEditorSelect=${project.property('qaEditorSelect')}"
+            }
             if (project.hasProperty('qaPointer')) {
                 // Visual-only: fixed pointer position (UI units, "x,y") for hover captures.
                 vmArg "-Dfathom.qaPointer=${project.property('qaPointer')}"
@@ -182,6 +186,17 @@ loom {
             }
             if (project.hasProperty('transitionProbe')) {
                 vmArg '-Dfathom.transitionInstrumentation=true'
+            }
+            // In-game module self-test (fabric/diag/ModuleSelfTest):
+            //   gradle runClient -PqaModules=run -PprofilesDir=<scratch collection>
+            //   gradle runClient -PqaModules=verify -PprofilesDir=<the same collection>
+            // The HUD editor and Mods page, driven like a player (fabric/diag/EditorSelfTest):
+            //   gradle runClient -PqaEditor=run -PprofilesDir=<scratch collection>
+            //   gradle runClient -PqaEditor=verify -PprofilesDir=<the same collection>
+            ['qaModules', 'qaEditor', 'qaWorld', 'qaServer'].each { key ->
+                if (project.hasProperty(key)) {
+                    vmArg "-Dfathom.${key}=${project.property(key)}"
+                }
             }
             if (project.hasProperty('profilesDir')) {
                 vmArg "-Dfathom.profilesDir=${project.property('profilesDir')}"
@@ -253,7 +268,6 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(8)
     }
-    withSourcesJar()
 }
 
 /**
@@ -275,10 +289,9 @@ def generateThemeTokens = tasks.register('generateThemeTokens', Exec) {
     commandLine 'node', 'tools/generate-fathom-theme.mjs'
 }
 
-// Both tasks read `src/main/java`, which contains the generated file, so both
+// Compilation reads `src/main/java`, which contains the generated file, so it
 // must run after it; Gradle refuses the build otherwise.
 tasks.named('compileJava').configure { dependsOn generateThemeTokens }
-tasks.named('sourcesJar').configure { dependsOn generateThemeTokens }
 
 tasks.withType(JavaCompile).configureEach {
     it.options.encoding = 'UTF-8'
@@ -380,6 +393,8 @@ def coreSuites = [
         'net.fathom.optimizations.core.FeatureTests',
         'net.fathom.optimizations.core.HudTests',
         'net.fathom.optimizations.core.ModuleTests',
+        'net.fathom.optimizations.core.BaselineTests',
+        'net.fathom.optimizations.core.EditorTests',
         'net.fathom.optimizations.core.OptTests',
         'net.fathom.optimizations.core.UiTests',
         'net.fathom.optimizations.core.ProfileTests',
@@ -390,6 +405,7 @@ def coreSuites = [
         'net.fathom.optimizations.core.RegistryTests',
         'net.fathom.optimizations.core.PacingTests',
         'net.fathom.optimizations.core.RendererTests',
+        'net.fathom.optimizations.core.PulseTests',
 ]
 
 def coreTest = tasks.register('coreTest') {
@@ -419,18 +435,28 @@ tasks.register('exportRegistry', JavaExec) {
     args file('../../assets/optimizations/registry.json').absolutePath
 }
 
-// Graphite + Instrument assets shared by the launcher and the game: the grain
-// tile and -- with -PbackdropSource=<capture.png> -- the processed backdrop.
-// Offline; nothing here runs in a build. The wordmark's outlines come from
+// The public website's data bundle: product facts, benchmark results,
+// backgrounds, optimizations and approved media, written to web-export/ at the
+// repository root from the sources the client itself uses. Deterministic, and
+// refused if the output contains anything private. See docs/web-export.md.
+tasks.register('exportWebData', JavaExec) {
+    group = 'fathom'
+    description = 'Writes the website data bundle to web-export/.'
+    dependsOn tasks.named('exportRegistry'), tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.tools.WebExport'
+    args = [rootProject.projectDir.toPath().resolve('../..').normalize().toString()]
+}
+
+// The launcher's grain tile. Offline; nothing here runs in a build. The wordmark's outlines come from
 // tools/generate-wordmark.py.
 tasks.register('graphiteAssets', JavaExec) {
     group = 'fathom'
-    description = 'Regenerates the Graphite backdrop and grain.'
+    description = "Regenerates the launcher's grain tile."
     dependsOn tasks.named('testClasses')
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.fathom.optimizations.tools.GraphiteAssets'
-    args = [rootProject.projectDir.toPath().resolve('../..').normalize().toString(),
-            project.findProperty('backdropSource')?.toString() ?: '']
+    args = [rootProject.projectDir.toPath().resolve('../..').normalize().toString()]
 }
 
 // The interface's glyph atlas: multi-channel distance fields of Geist and

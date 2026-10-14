@@ -15,7 +15,7 @@ const background = params.get('bg') ?? '/backgrounds/bg_5rain.jpg';
 const scene = document.getElementById('scene') as HTMLDivElement;
 document.body.style.margin = '0';
 document.body.style.overflow = 'hidden';
-document.body.style.background = '#071015';
+document.body.style.background = '#080e13';
 scene.style.cssText =
   `position:fixed;inset:0;background:url(${background}) center/cover no-repeat;` +
   'font-family:var(--type-family);color:var(--color-text);';

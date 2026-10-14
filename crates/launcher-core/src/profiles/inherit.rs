@@ -249,7 +249,7 @@ mod tests {
         assert_eq!(resolved, profile);
     }
 
-    /// The example from the brief: Bedwars derives from Competitive.
+    /// The example from the spec: Bedwars derives from Competitive.
     #[test]
     fn a_derived_profile_inherits_the_client_and_keeps_its_own_look() {
         let parent = base();

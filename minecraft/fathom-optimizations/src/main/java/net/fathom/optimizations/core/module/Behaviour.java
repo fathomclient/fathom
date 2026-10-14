@@ -48,9 +48,24 @@ public final class Behaviour {
      */
     public static final String PERFORMANCE_LAYER = "performance-layer";
 
+    /**
+     * Draw the scoreboard sidebar as a HUD widget, and skip vanilla's.
+     * Implemented by the sidebar Mixin, which hands the objective over.
+     */
+    public static final String SCOREBOARD = "scoreboard";
+
+    /** A brighter lightmap, read where vanilla reads gamma. Implemented by the lightmap Mixin. */
+    public static final String FULLBRIGHT = "fullbright";
+
+    /** The client world's sky at a fixed hour. Implemented by the sky angle Mixin. */
+    public static final String TIME_CHANGER = "time-changer";
+
+    /** Timestamps, folded repeats, background and shadow. Implemented by the chat Mixin. */
+    public static final String CHAT = "chat";
+
     /** Every behaviour the client implements. */
     public static final String[] ALL = {
-        ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE, PERFORMANCE_LAYER
+        ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE, PERFORMANCE_LAYER, SCOREBOARD, FULLBRIGHT, TIME_CHANGER, CHAT
     };
 
     private Behaviour() {}

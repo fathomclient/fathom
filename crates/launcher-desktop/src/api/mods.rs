@@ -85,6 +85,10 @@ pub struct ModsView {
     /// version it is filtering to, and reading that out of the profile name
     /// would be guessing at a string somebody chose.
     pub minecraft: String,
+    /// Whether Minecraft is running for this profile right now. Mods are
+    /// Java code loaded at start-up: a change applies the next time the game
+    /// starts, never to the session in progress.
+    pub game_running: bool,
 }
 
 /// What each filter would show.
@@ -258,6 +262,111 @@ pub struct ModRow {
     pub slug: Option<String>,
     /// True when this entry carries what an update check needs.
     pub updatable: bool,
+    /// `builtin` (Fathom's own client, which carries the in-game modules),
+    /// `component` (another jar Fathom installs and keeps current) or
+    /// `external` (a mod the user installed or added).
+    pub kind: &'static str,
+    /// Where it came from, in a few words: "Built into Fathom", "From
+    /// Modrinth", "Your file", "Your file · identified on Modrinth".
+    pub source_label: String,
+    /// What the compatibility resolver makes of what was recorded about this
+    /// build. `None` for Fathom's own jars, which are built for this profile.
+    pub compatibility: Option<RowCompatibility>,
+    /// Problems in the current set that are about this mod.
+    pub issues: Vec<String>,
+    /// Earlier builds that can be put back.
+    pub previous: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RowCompatibility {
+    /// `compatible`, `unverified`, `incompatible` or `unknown`.
+    pub verdict: &'static str,
+    pub detail: String,
+}
+
+/// What can be said about an installed build's compatibility from what was
+/// recorded about it, without the network.
+pub fn recorded_compatibility(
+    entry: &launcher_core::mods::ProfileMod,
+    profile: &Profile,
+) -> Option<RowCompatibility> {
+    use launcher_core::mods::browse::compat::{assess_recorded, Verdict};
+    // Fathom's own jars are built for this profile, and a mod in the built-in
+    // catalogue (OptiFine, say) is checked by the resolver against researched
+    // facts that say more than an index's tags would.
+    if entry.source == ModSource::FirstParty
+        || launcher_core::mods::catalog::find(&entry.id).is_some()
+    {
+        return None;
+    }
+    if entry.origin.loaders.is_empty() {
+        return Some(RowCompatibility {
+            verdict: "unknown",
+            detail: "Fathom has no record of what this file was built for. Check that it is a \
+                     Legacy Fabric mod for Minecraft 1.8.9."
+                .to_owned(),
+        });
+    }
+    let target = launcher_core::mods::browse::Target::of(profile);
+    let assessment = assess_recorded(&entry.origin.loaders, &entry.origin.minecraft, &target);
+    let detail = assessment
+        .reasons()
+        .next()
+        .map(|finding| finding.detail.clone())
+        .unwrap_or_default();
+    Some(RowCompatibility {
+        verdict: match assessment.verdict {
+            Verdict::Compatible => "compatible",
+            Verdict::Unverified => "unverified",
+            Verdict::Incompatible => "incompatible",
+        },
+        detail,
+    })
+}
+
+/// The kind of jar an entry is, as the page distinguishes them.
+pub fn kind_of(entry: &launcher_core::mods::ProfileMod) -> &'static str {
+    match entry.source {
+        ModSource::FirstParty
+            if entry.id.as_str() == launcher_core::mods::catalog::FATHOM_OPTIMIZATIONS =>
+        {
+            "builtin"
+        }
+        ModSource::FirstParty => "component",
+        // Installed from an index, but by Fathom's component system (Legacy
+        // OptiFabric, Legacy Fabric API): Fathom keeps these current.
+        ModSource::Managed
+            if launcher_core::components::ALL
+                .iter()
+                .any(|component| component.mod_id == entry.id.as_str()) =>
+        {
+            "component"
+        }
+        ModSource::Managed | ModSource::UserSupplied => "external",
+    }
+}
+
+/// Where an entry came from, in a few words.
+pub fn source_label(entry: &launcher_core::mods::ProfileMod) -> String {
+    let index = entry
+        .origin
+        .repository
+        .as_deref()
+        .and_then(launcher_core::mods::browse::Provider::parse)
+        .map(|provider| provider.label());
+    match (entry.source, index) {
+        (ModSource::FirstParty, _) if kind_of(entry) == "builtin" => "Built into Fathom".to_owned(),
+        (ModSource::FirstParty, _) => "Fathom component".to_owned(),
+        (ModSource::Managed, Some(index)) if kind_of(entry) == "component" => {
+            format!("Fathom component · from {index}")
+        }
+        (ModSource::Managed, Some(index)) => format!("From {index}"),
+        (ModSource::Managed, None) => "Installed by Fathom".to_owned(),
+        (ModSource::UserSupplied, Some(index)) => format!("Your file · identified on {index}"),
+        (ModSource::UserSupplied, None) => "Your file".to_owned(),
+    }
 }
 
 /// Bytes, in words.
@@ -308,6 +417,7 @@ fn warning_for(reason: &DisabledReason) -> Option<String> {
         // The ordinary case: the user switched it off. Not a warning, and
         // rendering it as one would put a badge on every deliberate choice.
         DisabledReason::UserChoice => None,
+        DisabledReason::Recovery { detail } => Some(detail.clone()),
         DisabledReason::Conflict { detail, .. } => Some(if detail.is_empty() {
             "Off because it conflicts with another mod in this profile.".to_owned()
         } else {
@@ -373,7 +483,7 @@ pub fn view(core: &Launcher, profile: &Profile) -> ModsView {
     let resolution = core.resolve_mods(profile);
     // Problems name mods by id; the lookup turns those into the names the page
     // is already showing, so a warning and the row it is about agree.
-    let names = NameLookup::from_definitions(&core.mod_catalogue());
+    let names = NameLookup::from_definitions(&core.mod_catalogue()).with_profile(&profile.mods);
 
     let rows: Vec<ModRow> = profile
         .mods
@@ -391,12 +501,20 @@ pub fn view(core: &Launcher, profile: &Profile) -> ModsView {
 
             ModRow {
                 id: entry.id.as_str().to_owned(),
-                name: definition
-                    .as_ref()
-                    .map_or_else(|| tidy(&entry.file_name), |d| d.name.clone()),
-                summary: definition
-                    .as_ref()
-                    .map_or_else(String::new, |d| d.summary.clone()),
+                name: definition.as_ref().map_or_else(
+                    || {
+                        entry
+                            .origin
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| tidy(&entry.file_name))
+                    },
+                    |d| d.name.clone(),
+                ),
+                summary: definition.as_ref().map_or_else(
+                    || entry.origin.summary.clone().unwrap_or_default(),
+                    |d| d.summary.clone(),
+                ),
                 enabled: entry.enabled,
                 // A mod switched off automatically is describing a fact about
                 // the world, not a preference, so it is not the user's to flip.
@@ -425,6 +543,16 @@ pub fn view(core: &Launcher, profile: &Profile) -> ModsView {
                 }),
                 slug: entry.origin.project.clone(),
                 updatable: entry.origin.is_updatable(),
+                kind: kind_of(entry),
+                source_label: source_label(entry),
+                compatibility: recorded_compatibility(entry, profile),
+                issues: resolution
+                    .problems
+                    .iter()
+                    .filter(|problem| problem.mods().first().is_some_and(|id| *id == &entry.id))
+                    .map(|problem| problem.message(&names))
+                    .collect(),
+                previous: entry.previous.len(),
             }
         })
         .collect();
@@ -467,6 +595,9 @@ pub fn view(core: &Launcher, profile: &Profile) -> ModsView {
         browse_blocked: core.browsing_blocked().map(str::to_owned),
         components: components_for(core, profile),
         minecraft: profile.version_id.clone(),
+        game_running: core
+            .game_status(&profile.id)
+            .is_some_and(|status| status.is_running()),
         rows,
     }
 }
@@ -776,5 +907,66 @@ mod tests {
             detail: "OptiFine replaces the same renderer.".to_owned(),
         })
         .is_some());
+    }
+
+    fn entry(id: &str, source: ModSource) -> launcher_core::mods::ProfileMod {
+        launcher_core::mods::ProfileMod::new(
+            launcher_core::mods::ModId::new(id).unwrap_or_else(|_| unreachable!("a literal id")),
+            "a".repeat(40),
+            format!("{id}.jar"),
+        )
+        .from_source(source)
+    }
+
+    /// The page says plainly what each jar is: Fathom's own client, a jar
+    /// Fathom keeps current, or a mod the user chose -- never confusing the
+    /// last two, because only the last is the user's to update or remove.
+    #[test]
+    fn every_entry_is_labelled_for_what_it_is() {
+        let builtin = entry("fathom-optimizations", ModSource::FirstParty);
+        assert_eq!(kind_of(&builtin), "builtin");
+        assert_eq!(source_label(&builtin), "Built into Fathom");
+
+        let mut optifabric = entry("optifabric", ModSource::Managed);
+        optifabric.origin.repository = Some("modrinth".to_owned());
+        assert_eq!(kind_of(&optifabric), "component");
+        assert_eq!(source_label(&optifabric), "Fathom component · from Modrinth");
+
+        let mut browsed = entry("ksyxis", ModSource::Managed);
+        browsed.origin.repository = Some("modrinth".to_owned());
+        assert_eq!(kind_of(&browsed), "external");
+        assert_eq!(source_label(&browsed), "From Modrinth");
+
+        let mut identified = entry("my-mod", ModSource::UserSupplied);
+        assert_eq!(source_label(&identified), "Your file");
+        identified.origin.repository = Some("modrinth".to_owned());
+        assert_eq!(source_label(&identified), "Your file · identified on Modrinth");
+    }
+
+    /// Compatibility is shown from what was recorded about the build, and is
+    /// honestly "unknown" for a file nothing recorded anything about.
+    #[test]
+    fn recorded_compatibility_is_shown_and_unknown_is_unknown() {
+        let profile = {
+            let mut profile = launcher_core::profiles::Profile::new(
+                launcher_core::profiles::ProfileId::new("p").unwrap_or_else(|_| unreachable!("a literal id")),
+                "P",
+            );
+            profile.loader.kind = launcher_core::profiles::Loader::LegacyFabric;
+            profile
+        };
+        let mut forge = entry("a-forge-mod", ModSource::UserSupplied);
+        forge.origin.loaders = ["forge".to_owned()].into_iter().collect();
+        forge.origin.minecraft = ["1.8.9".to_owned()].into_iter().collect();
+        let verdict = recorded_compatibility(&forge, &profile).map(|c| c.verdict);
+        assert_eq!(verdict, Some("incompatible"));
+
+        let unknown = entry("mystery", ModSource::UserSupplied);
+        assert_eq!(recorded_compatibility(&unknown, &profile).map(|c| c.verdict), Some("unknown"));
+
+        // A mod Fathom's own catalogue knows (OptiFine) is judged by the
+        // catalogue's researched facts instead.
+        assert!(recorded_compatibility(&entry("optifine", ModSource::UserSupplied), &profile).is_none());
+        assert!(recorded_compatibility(&entry("fathom-optimizations", ModSource::FirstParty), &profile).is_none());
     }
 }

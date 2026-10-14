@@ -69,7 +69,7 @@ public final class HudLayerCache {
     public static final long REFRESH_NANOS = 50_000_000L;
 
     private static final String[] SLOW = {
-        "fps", "coordinates", "clock", "ping", "armour", "potions", "pack-display"
+        "fps", "coordinates", "clock", "ping", "armour", "potions", "pack-display", "scoreboard"
     };
 
     /** Whether a widget may be cached. Unknown widgets are realtime. */

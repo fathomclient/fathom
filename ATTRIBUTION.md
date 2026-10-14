@@ -12,34 +12,6 @@ redistribute it.
 
 ---
 
-## Background (launcher and game)
-
-### golden-hour (historical, not shipped as a choice)
-
-| | |
-|---|---|
-| Image | Palm Tree Sunset Water |
-| Credited to | showtime, at Wallpapers.com |
-| Source | <https://wallpapers.com/wallpapers/palm-tree-sunset-water-63gj3uifdzlwg9vh.html> |
-| Licence | **Not yet confirmed.** Wallpapers.com hosts user uploads; the uploader is not necessarily the photographer, and the site does not grant redistribution rights by default. Confirm the terms, or replace the image, before a public release. |
-
-- `desktop/public/backgrounds/golden-hour.jpg` (and `thumbs/golden-hour.jpg`)
-  — retained historical files only. The id is absent from the canonical
-  manifest and cannot be selected in the launcher or game.
-- `minecraft/fathom-optimizations/src/main/resources/assets/fathom-optimizations/textures/menu/scenes/golden-hour.jpg`
-  — retained historical copy, not referenced by the generated game catalogue.
-
-### graphite
-
-| | |
-|---|---|
-| Image | The Graphite backdrop: a Minecraft scene processed by `GraphiteAssets` (`BackdropProcess`) |
-| Source | **Not yet recorded.** `assets/graphite/cinematic-scene.png` (1672×941) is the capture it was processed from; who captured or authored it, and in which world, is not written down. Record it here before a public release. |
-
-- `assets/graphite/backdrop-default.png` and its game copy
-  `textures/menu/graphite/backdrop-default.png`, behind some in-game menus. It
-  is no longer offered as a background in the launcher.
-
 ## Background footage
 
 Every recording below is a user-selectable background again (see
@@ -48,7 +20,7 @@ full-resolution still (`<id>.jpg`, frame 0 of the clip), a picker thumbnail
 (`thumbs/<id>.jpg`) and a copy of the still for the game's menus
 (`textures/menu/scenes/<id>.jpg`).
 
-All background footage was recorded in Minecraft by the Fathom project owner.
+all of the background footage was recorded in minecraft by me.
 Some recordings were made in vanilla worlds. Others were made in community-made
 worlds whose creators permit their use with credit; those creators are credited
 below.
@@ -58,7 +30,6 @@ below.
 Recorded in vanilla Minecraft.
 
 - `desktop/public/backgrounds/bg_1` – `bg_4` (`.webm`, `.jpg`)
-- `crates/launcher-ui/assets/backgrounds/bg_1/` – `bg_4/`
 
 ### bg_5 — Tideworn
 

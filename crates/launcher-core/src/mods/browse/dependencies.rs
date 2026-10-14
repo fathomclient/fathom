@@ -30,6 +30,7 @@ use std::collections::{BTreeSet, VecDeque};
 
 use serde::Serialize;
 
+use super::compat::{assess_file, Verdict};
 use super::identity::{already_installed, same_project, Duplicate};
 use super::model::{DependencyKind, ModFile, ModProject, ProjectRef, Target};
 use super::provider::BrowseError;
@@ -145,6 +146,22 @@ pub enum Blocker {
     TooLarge,
 }
 
+/// A build in the plan that the compatibility resolver could not vouch for.
+///
+/// Not a blocker: the user may know better than the index's tags (a plain
+/// `fabric` 1.8.9 build is usually a Legacy Fabric mod). But it is never
+/// installed silently — the installer refuses a plan with any of these until
+/// the caller passes [`super::InstallOptions::accept_unverified`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnverifiedBuild {
+    pub project: ProjectRef,
+    /// The build's version number.
+    pub number: String,
+    /// Why the resolver could not say yes, one sentence each.
+    pub reasons: Vec<String>,
+}
+
 /// Everything installing one mod involves.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -158,6 +175,8 @@ pub struct InstallPlan {
     pub satisfied: Vec<SatisfiedDependency>,
     pub optional: Vec<OptionalDependency>,
     pub blockers: Vec<Blocker>,
+    /// Builds that need the user's explicit consent; see [`UnverifiedBuild`].
+    pub unverified: Vec<UnverifiedBuild>,
     /// The profile entry being replaced, when this plan is an update.
     pub replaces: Option<String>,
 }
@@ -174,6 +193,10 @@ impl InstallPlan {
 
     /// Whether the plan contains anything the user has to confirm as not a
     /// duplicate.
+    pub fn needs_unverified_confirmation(&self) -> bool {
+        !self.unverified.is_empty()
+    }
+
     pub fn needs_duplicate_confirmation(&self) -> bool {
         self.installs()
             .any(|planned| planned.possible_duplicate.is_some())
@@ -195,17 +218,27 @@ fn entry_is(entry: &ProfileMod, reference: &ProjectRef) -> bool {
         && entry.origin.project.as_deref() == Some(reference.id.as_str())
 }
 
-fn check_file(file: &ModFile, target: &Target, blockers: &mut Vec<Blocker>) {
-    if !file.supports(target) {
-        blockers.push(Blocker::Incompatible {
+/// The resolver's verdict on one planned build, recorded where it belongs:
+/// an incompatible build blocks the plan, an unverified one asks for consent.
+fn check_file(
+    file: &ModFile,
+    name: &str,
+    target: &Target,
+    blockers: &mut Vec<Blocker>,
+    unverified: &mut Vec<UnverifiedBuild>,
+) {
+    let assessment = assess_file(file, target);
+    match assessment.verdict {
+        Verdict::Compatible => {}
+        Verdict::Unverified => unverified.push(UnverifiedBuild {
             project: file.project.clone(),
-            detail: format!(
-                "{} is not built for Minecraft {} on {}",
-                file.number,
-                target.minecraft,
-                target.loader.label()
-            ),
-        });
+            number: file.number.clone(),
+            reasons: assessment.reasons().map(|f| f.detail.clone()).collect(),
+        }),
+        Verdict::Incompatible => blockers.push(Blocker::Incompatible {
+            project: file.project.clone(),
+            detail: format!("{name} {}: {}", file.number, assessment.headline()),
+        }),
     }
     if let super::model::FileDownload::Withheld { where_to_get } = &file.download {
         blockers.push(Blocker::NotDownloadable {
@@ -242,7 +275,8 @@ pub fn plan(
     if !target.loads_mods() {
         blockers.push(Blocker::NoModLoader);
     }
-    check_file(&file, target, &mut blockers);
+    let mut unverified = Vec::new();
+    check_file(&file, &project.name, target, &mut blockers, &mut unverified);
 
     // Everything already in the profile except the entry being replaced.
     let others: Vec<ProfileMod> = installed
@@ -274,6 +308,7 @@ pub fn plan(
         satisfied: Vec::new(),
         optional: Vec::new(),
         blockers,
+        unverified,
         replaces: replacing.map(|entry| entry.id.to_string()),
     };
 
@@ -400,7 +435,13 @@ pub fn plan(
                 });
                 continue;
             }
-            check_file(&chosen_file, target, &mut plan.blockers);
+            check_file(
+                &chosen_file,
+                &dependency_project.name,
+                target,
+                &mut plan.blockers,
+                &mut plan.unverified,
+            );
 
             // The same library from the other index, or a hand-added jar that
             // looks like it. Satisfied if the bytes are identical; otherwise

@@ -219,11 +219,18 @@ pub struct HudEntry {
     /// The corner or edge it is anchored to, e.g. `top-left`.
     pub anchor: String,
     /// Offset from that anchor, inward, in Minecraft's scaled pixels.
+    ///
+    /// Read leniently, as every number in a widget is: a fraction, a number
+    /// too large for an `i32` or a string where a number belongs would
+    /// otherwise fail the whole document, and with it every setting in it.
+    /// See [`FathomProfile::repair`].
+    #[serde(default, deserialize_with = "lenient_offset")]
     pub x: i32,
+    #[serde(default, deserialize_with = "lenient_offset")]
     pub y: i32,
-    #[serde(default = "one")]
+    #[serde(default = "one", deserialize_with = "lenient_ratio")]
     pub scale: f32,
-    #[serde(default = "one")]
+    #[serde(default = "one", deserialize_with = "lenient_ratio")]
     pub opacity: f32,
     #[serde(default, skip_serializing_if = "is_false")]
     pub hidden: bool,
@@ -266,6 +273,17 @@ pub struct ClientPrefs {
     /// `Light`, `Balanced`, or `Deep`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rshift_dim: Option<String>,
+    /// The main menu's background video: `High`, `Auto`, `Low` or `Off`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub menu_background: Option<String>,
+    /// Client preferences a newer game wrote that this launcher does not know.
+    ///
+    /// Kept and written back untouched. Without this, renaming or duplicating a
+    /// profile in an older launcher silently dropped every preference added to
+    /// the game after it, which is how the menu background setting used to be
+    /// lost.
+    #[serde(flatten, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 /// The performance settings a profile may carry.
@@ -347,6 +365,43 @@ impl FathomProfile {
             client: self.client.clone(),
             performance: self.performance.clone(),
         }
+    }
+
+    /// Bring every widget's numbers back into range, one value at a time.
+    ///
+    /// The game does the same on load (`FathomProfile.fromJson`). One
+    /// impossible number in one widget -- a hand edit, another tool's bug --
+    /// used to fail the whole document here, so the launcher listed the
+    /// profile as broken and would not switch to it, though nothing in it but
+    /// that one number was wrong. A scale that is not a positive finite number
+    /// becomes 1; an opacity is clamped to 0..=1, and one that is not a number
+    /// becomes 1; offsets are already bounded as they are read.
+    ///
+    /// Returns what was repaired, one line each, for the log.
+    pub fn repair(&mut self) -> Vec<String> {
+        let mut repaired = Vec::new();
+        for (widget, entry) in &mut self.hud {
+            if !entry.scale.is_finite() || entry.scale <= 0.0 {
+                repaired.push(format!("widget {widget}: scale {} is now 1", entry.scale));
+                entry.scale = 1.0;
+            }
+            if entry.opacity.is_nan() {
+                repaired.push(format!(
+                    "widget {widget}: opacity was not a number and is now 1"
+                ));
+                entry.opacity = 1.0;
+            } else if !(0.0..=1.0).contains(&entry.opacity) {
+                let clamped = entry.opacity.clamp(0.0, 1.0);
+                repaired.push(format!(
+                    "widget {widget}: opacity {} is now {clamped}",
+                    entry.opacity
+                ));
+                entry.opacity = clamped;
+            }
+            entry.x = entry.x.clamp(-OFFSET_LIMIT, OFFSET_LIMIT);
+            entry.y = entry.y.clamp(-OFFSET_LIMIT, OFFSET_LIMIT);
+        }
+        repaired
     }
 
     /// Whether this document is one this build understands and can trust.
@@ -448,6 +503,37 @@ fn one() -> f32 {
     1.0
 }
 
+/// Further than any screen from its edge: an offset beyond this is a broken
+/// number, not a choice. The game uses the same limit.
+pub const OFFSET_LIMIT: i32 = 100_000;
+
+/// A widget offset from whatever number is there; anything that is not one is 0.
+fn lenient_offset<'de, D>(deserializer: D) -> Result<i32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value.as_f64() {
+        #[allow(clippy::cast_possible_truncation)]
+        Some(number) if number.is_finite() => number
+            .round()
+            .clamp(-f64::from(OFFSET_LIMIT), f64::from(OFFSET_LIMIT))
+            as i32,
+        _ => 0,
+    })
+}
+
+/// A scale or opacity from whatever is there; anything that is not a number is
+/// NaN, which [`FathomProfile::repair`] then puts right with the rest.
+fn lenient_ratio<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    #[allow(clippy::cast_possible_truncation)]
+    Ok(value.as_f64().map_or(f32::NAN, |number| number as f32))
+}
+
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_false(value: &bool) -> bool {
     !*value
@@ -543,6 +629,49 @@ mod tests {
             profile.validate(),
             Err(ValidationError::Schema(_))
         ));
+    }
+
+    #[test]
+    fn an_impossible_widget_value_is_repaired_and_the_rest_kept() {
+        let json = r#"{"schema":1,"id":"mine","name":"Mine",
+            "modules":{"fps":{"enabled":false,"settings":{"format":"FPS: 120"}}},
+            "hud":{
+              "clock":{"anchor":"top-right","x":7,"y":9,"scale":0,"opacity":1.4},
+              "ping":{"anchor":"top-right","x":1e15,"y":-3.6,"scale":"big","opacity":-1},
+              "fps":{"anchor":"bottom-left","x":3,"y":5,"scale":1.5,"opacity":0.5}}}"#;
+        let mut profile: FathomProfile = serde_json::from_str(json).unwrap();
+        let repaired = profile.repair();
+        assert!(profile.validate().is_ok(), "and validates once repaired");
+        assert_eq!(repaired.len(), 4, "{repaired:?}");
+        let clock = &profile.hud["clock"];
+        assert!(
+            (clock.scale - 1.0).abs() < f32::EPSILON && (clock.opacity - 1.0).abs() < f32::EPSILON
+        );
+        assert_eq!((clock.x, clock.y), (7, 9), "its position is kept");
+        let ping = &profile.hud["ping"];
+        assert_eq!(
+            ping.x, OFFSET_LIMIT,
+            "an absurd offset is brought back near the screen"
+        );
+        assert_eq!(ping.y, -4, "a fraction is rounded");
+        assert!(
+            (ping.scale - 1.0).abs() < f32::EPSILON,
+            "a scale that is not a number is 1"
+        );
+        assert!(
+            ping.opacity.abs() < f32::EPSILON,
+            "a negative opacity is the faintest"
+        );
+        let fps = &profile.hud["fps"];
+        assert!((fps.scale - 1.5).abs() < f32::EPSILON && (fps.opacity - 0.5).abs() < f32::EPSILON);
+        assert_eq!(
+            profile.modules["fps"]
+                .settings
+                .get("format")
+                .map(String::as_str),
+            Some("FPS: 120"),
+            "and nothing else is touched"
+        );
     }
 
     #[test]

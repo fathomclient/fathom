@@ -1,7 +1,7 @@
 //! The three ways to set a profile up, end to end.
 //!
 //! Creates a Vanilla, a Fathom and a Custom 1.8.9 profile through the real
-//! `Launcher` against a real temporary data root, and checks what the brief
+//! `Launcher` against a real temporary data root, and checks what the spec
 //! asked to be checked: Java resolution, component materialization, profile
 //! switching, `OptiFine` import, inheritance and persistence.
 //!
@@ -187,12 +187,22 @@ fn a_missing_component_is_restored_and_a_disabled_one_is_left_off() {
     assert!(report.added.contains(&"fathom-performance"), "{report:?}");
     assert!(profile.mods.contains(&module));
 
-    let mut entry = profile.mods.iter().find(|e| e.id == module).unwrap().clone();
+    let mut entry = profile
+        .mods
+        .iter()
+        .find(|e| e.id == module)
+        .unwrap()
+        .clone();
     entry.enabled = false;
     profile.mods.upsert(entry);
     fixture.launcher.ensure_components(&mut profile).unwrap();
     assert!(
-        !profile.mods.iter().find(|e| e.id == module).unwrap().enabled,
+        !profile
+            .mods
+            .iter()
+            .find(|e| e.id == module)
+            .unwrap()
+            .enabled,
         "a component the user switched off was switched back on"
     );
 }
@@ -231,7 +241,10 @@ fn each_java_policy_resolves_differently() {
     profile.java = JavaPolicy::System;
     let outcome = fixture.launcher.resolve_java(&profile, 8);
     assert!(
-        matches!(outcome, launcher_core::services::JavaOutcome::Missing { .. }),
+        matches!(
+            outcome,
+            launcher_core::services::JavaOutcome::Missing { .. }
+        ),
         "System must never offer to download: {outcome:?}"
     );
 
@@ -354,7 +367,10 @@ fn switching_the_selected_profile_survives_a_restart() {
 
     let store: Arc<dyn CredentialStore> = Arc::new(EphemeralCredentialStore::default());
     let reopened = Launcher::new(fixture.paths.clone(), store).expect("reopened");
-    assert_eq!(reopened.settings().selected_profile.as_ref(), Some(&fathom.id));
+    assert_eq!(
+        reopened.settings().selected_profile.as_ref(),
+        Some(&fathom.id)
+    );
 }
 
 /// Everything a profile carries has to survive being written and read back,
@@ -368,10 +384,12 @@ fn a_profile_round_trips_through_disk_with_its_new_fields() {
     profile.presentation.theme = Some("bg_3".to_owned());
     profile.presentation.resource_pack = Some("faithful.zip".to_owned());
     profile.presentation.hud_layout = Some("bedwars".to_owned());
-    profile.servers.push(launcher_core::profiles::ServerShortcut {
-        name: "Practice".to_owned(),
-        address: "play.example.net".to_owned(),
-    });
+    profile
+        .servers
+        .push(launcher_core::profiles::ServerShortcut {
+            name: "Practice".to_owned(),
+            address: "play.example.net".to_owned(),
+        });
     profile.java = JavaPolicy::Managed;
     profile.memory = MemoryChoice::Explicit(3072).resolve();
     fixture.launcher.save_profile(&profile).unwrap();
@@ -392,7 +410,7 @@ fn a_profile_round_trips_through_disk_with_its_new_fields() {
     assert_eq!(read_back.memory.heap_mb, 3072);
 }
 
-/// The brief's example: a Bedwars profile that is the same client with a
+/// The spec's example: a Bedwars profile that is the same client with a
 /// different look, and stays the same client when the parent changes.
 #[test]
 fn a_derived_profile_follows_its_parent() {
@@ -415,7 +433,10 @@ fn a_derived_profile_follows_its_parent() {
     fixture.launcher.save_profile(&parent).unwrap();
 
     let resolved = fixture.launcher.resolve_profile(&child).expect("resolved");
-    assert_eq!(resolved.optimizations.preset, OptimizationPreset::Competitive);
+    assert_eq!(
+        resolved.optimizations.preset,
+        OptimizationPreset::Competitive
+    );
     assert_eq!(resolved.memory.heap_mb, 4096);
     assert_eq!(resolved.loader_kind(), Loader::LegacyFabric);
     // And it keeps its own name and its own look.

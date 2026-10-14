@@ -246,11 +246,7 @@ pub fn sign_out(app: &tauri::AppHandle) -> Result<AuthProgress, String> {
 }
 
 /// Run one attempt on its own thread, settling the supervisor when it ends.
-fn spawn<F>(
-    app: &tauri::AppHandle,
-    cancel: Cancel,
-    body: F,
-) -> Result<(), String>
+fn spawn<F>(app: &tauri::AppHandle, cancel: Cancel, body: F) -> Result<(), String>
 where
     F: FnOnce(&tauri::AppHandle, &Cancel) -> AuthProgress + Send + 'static,
 {
@@ -296,10 +292,7 @@ pub fn switch_account(app: &tauri::AppHandle, id: String) -> Result<AuthProgress
             return Err("that account is not remembered on this device".to_owned());
         }
     }
-    let cancel = app
-        .state::<State>()
-        .auth
-        .begin(AuthProgress::restoring())?;
+    let cancel = app.state::<State>().auth.begin(AuthProgress::restoring())?;
     let generation = app.state::<State>().auth.generation();
     spawn(app, cancel, move |handle, cancel| {
         run_restore_account(handle, cancel, &id)
@@ -418,14 +411,13 @@ fn run_restore(app: &tauri::AppHandle, cancel: &Cancel) -> AuthProgress {
             // Logged, because "nothing stored" and "restored fine" were both
             // silent, and the only way to tell them apart was to watch the
             // window and guess.
-            tracing::info!(
-                account = %account_id,
-                "no stored session for the remembered account; it will need signing in"
-            );
+            // Not the account id: it is the Minecraft profile UUID, which
+            // names the player to anyone who looks it up.
+            tracing::info!("no stored session for the remembered account; it will need signing in");
             AuthProgress::idle()
         }
         Ok(Some(signed_in)) => {
-            tracing::info!(account = %account_id, "restored the remembered account at start-up");
+            tracing::info!("restored the remembered account at start-up");
             adopt(app, |core| core.adopt_session(signed_in))
         }
         Err(error) => {

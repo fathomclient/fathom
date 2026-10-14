@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "profile": "pvp-2",
+  "profileName": "Bedwars \"ranked\" \\ ✓",
+  "minecraft": "1.8.9",
+  "loader": "Legacy Fabric",
+  "loaderVersion": "0.19.3",
+  "preset": "competitive",
+  "component": "0.3.0-hud",
+  "launcher": "0.1.0",
+  "root": "C:\\Users\\Example\\AppData\\Local\\Fathom\\data"
+}

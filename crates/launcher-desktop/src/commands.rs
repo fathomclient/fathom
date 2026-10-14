@@ -32,7 +32,7 @@ macro_rules! locked {
 /// `None` means "whatever is selected", which is what every page sends when the
 /// user has not explicitly picked one. Falling back to the first profile rather
 /// than erroring keeps a fresh install from showing six broken pages.
-fn resolve_profile(core: &Launcher, id: Option<&str>) -> Result<Profile, String> {
+pub(crate) fn resolve_profile(core: &Launcher, id: Option<&str>) -> Result<Profile, String> {
     if let Some(id) = id {
         return api::profiles::find(core, id).ok_or_else(|| "no such profile".to_owned());
     }
@@ -344,6 +344,197 @@ pub fn install_mod(
     Ok(api::mods::view(&core, &target))
 }
 
+// ---------------------------------------------------------------------------
+// The mod browser
+//
+// Everything that can wait on the network is `async` and runs on a worker; see
+// `api::browse` for why and for the two-pass install.
+// ---------------------------------------------------------------------------
+
+/// What the browser needs before its first request: no network.
+#[tauri::command]
+pub fn catalog_context(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+) -> Result<api::browse::BrowseContext, String> {
+    let core = locked!(state);
+    let target = resolve_profile(&core, profile.as_deref())?;
+    Ok(api::browse::context(&core, &target))
+}
+
+#[tauri::command]
+pub async fn catalog_categories(
+    app: tauri::AppHandle,
+) -> Result<Vec<launcher_core::mods::browse::Category>, String> {
+    api::browse::categories(app).await
+}
+
+#[tauri::command]
+pub async fn catalog_search(
+    app: tauri::AppHandle,
+    profile: Option<String>,
+    args: api::browse::SearchArgs,
+) -> Result<api::browse::SearchView, String> {
+    api::browse::search(app, profile, args).await
+}
+
+#[tauri::command]
+pub async fn catalog_verdicts(
+    app: tauri::AppHandle,
+    profile: Option<String>,
+    projects: Vec<launcher_core::mods::browse::ProjectRef>,
+) -> Result<Vec<api::browse::VerdictView>, String> {
+    api::browse::verdicts(app, profile, projects).await
+}
+
+#[tauri::command]
+pub async fn catalog_image(
+    app: tauri::AppHandle,
+    provider: launcher_core::mods::browse::Provider,
+    url: String,
+) -> Result<String, String> {
+    api::browse::image(app, provider, url).await
+}
+
+#[tauri::command]
+pub async fn catalog_detail(
+    app: tauri::AppHandle,
+    profile: Option<String>,
+    reference: launcher_core::mods::browse::ProjectRef,
+) -> Result<api::browse::DetailView, String> {
+    api::browse::detail(app, profile, reference).await
+}
+
+#[tauri::command]
+pub async fn catalog_plan(
+    app: tauri::AppHandle,
+    profile: Option<String>,
+    args: api::browse::InstallArgs,
+) -> Result<api::browse::PlanView, String> {
+    api::browse::plan(app, profile, args).await
+}
+
+/// Install (or update) from the browser. Progress arrives as
+/// `fathom://mod-install` events; the returned outcome is the last word.
+#[tauri::command]
+pub async fn catalog_install(
+    app: tauri::AppHandle,
+    profile: Option<String>,
+    args: api::browse::InstallArgs,
+) -> Result<api::browse::InstallOutcome, String> {
+    api::browse::install(app, profile, args).await
+}
+
+#[tauri::command]
+pub fn catalog_cancel_install(
+    app: tauri::AppHandle,
+    reference: launcher_core::mods::browse::ProjectRef,
+) -> bool {
+    api::browse::cancel_install(&app, &reference)
+}
+
+#[tauri::command]
+pub fn catalog_open_link(
+    state: tauri::State<'_, State>,
+    reference: launcher_core::mods::browse::ProjectRef,
+    which: String,
+    url: Option<String>,
+) -> Result<(), String> {
+    let core = locked!(state);
+    api::browse::open_link(&core, &reference, &which, url.as_deref())
+}
+
+/// Remove a mod the browser installed, refusing while another mod needs it.
+#[tauri::command]
+pub fn catalog_uninstall(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+    id: String,
+) -> Result<String, String> {
+    let core = locked!(state);
+    let mut target = resolve_profile(&core, profile.as_deref())?;
+    api::browse::uninstall(&core, &mut target, &id)
+}
+
+// ---------------------------------------------------------------------------
+// Installed mods and recovery
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn installed_mod_detail(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+    id: String,
+) -> Result<api::installed::InstalledDetail, String> {
+    let core = locked!(state);
+    let target = resolve_profile(&core, profile.as_deref())?;
+    api::installed::detail(&core, &target, &id)
+}
+
+/// Show an installed mod's file in the system file manager.
+#[tauri::command]
+pub fn reveal_mod_file(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+    id: String,
+) -> Result<(), String> {
+    let core = locked!(state);
+    let target = resolve_profile(&core, profile.as_deref())?;
+    api::installed::reveal(&core, &target, &id)
+}
+
+/// Put back an earlier build of a mod. Offline.
+#[tauri::command]
+pub fn restore_mod_build(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+    id: String,
+    sha1: String,
+) -> Result<String, String> {
+    let core = locked!(state);
+    let mut target = resolve_profile(&core, profile.as_deref())?;
+    api::installed::restore_build(&core, &mut target, &id, &sha1)
+}
+
+/// What changed since the last launch that worked, what is broken, and what
+/// the logs of the last launch say.
+#[tauri::command]
+pub fn mod_recovery(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+) -> Result<api::installed::RecoveryView, String> {
+    let core = locked!(state);
+    let target = resolve_profile(&core, profile.as_deref())?;
+    Ok(api::installed::recovery(&core, &target))
+}
+
+/// Put the profile's mods back to the set that last worked. Deletes nothing.
+#[tauri::command]
+pub fn restore_last_good_mods(
+    state: tauri::State<'_, State>,
+    profile: Option<String>,
+) -> Result<launcher_core::recovery::mods::RestoreReport, String> {
+    let core = locked!(state);
+    let mut target = resolve_profile(&core, profile.as_deref())?;
+    api::installed::restore_last_good(&core, &mut target)
+}
+
+#[tauri::command]
+pub async fn check_mod_updates(
+    app: tauri::AppHandle,
+    profile: Option<String>,
+) -> Result<api::installed::UpdatesCheck, String> {
+    api::installed::check_updates(app, profile).await
+}
+
+#[tauri::command]
+pub async fn identify_mods(
+    app: tauri::AppHandle,
+    profile: Option<String>,
+) -> Result<usize, String> {
+    api::installed::identify(app, profile).await
+}
+
 /// Install a first-party component the user asked for, such as Fabric API.
 #[tauri::command]
 pub fn install_component(
@@ -558,9 +749,20 @@ pub fn run_recovery(
 ///
 /// Takes an `AppHandle` rather than `State` because the thread outlives this
 /// call and needs its own way back to the shared state.
+///
+/// `withoutExternalMods` starts the game with Fathom's own components only,
+/// for this launch: nothing is deleted and the profile is not changed.
 #[tauri::command]
-pub fn play(app: tauri::AppHandle) -> Result<api::launch::LaunchProgress, String> {
-    crate::session::start(&app)
+pub fn play(
+    app: tauri::AppHandle,
+    without_external_mods: Option<bool>,
+) -> Result<api::launch::LaunchProgress, String> {
+    crate::session::start(
+        &app,
+        launcher_core::LaunchOptions {
+            without_external_mods: without_external_mods.unwrap_or(false),
+        },
+    )
 }
 
 /// Ask the launch in flight to stop.

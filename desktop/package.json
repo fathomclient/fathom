@@ -1,7 +1,7 @@
 {
   "name": "fathom-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "tokens": "node ../tools/generate-fathom-theme.mjs && node ../tools/generate-backgrounds.mjs",
@@ -9,7 +9,8 @@
     "dev": "npm run tokens && vite",
     "build": "npm run tokens && svelte-check --tsconfig ./tsconfig.json && vite build",
     "preview": "vite preview",
-    "check": "node ../tools/generate-fathom-theme.mjs --check && node ../tools/generate-backgrounds.mjs --check && svelte-check --tsconfig ./tsconfig.json"
+    "check": "node ../tools/generate-fathom-theme.mjs --check && node ../tools/generate-backgrounds.mjs --check && svelte-check --tsconfig ./tsconfig.json",
+    "test": "node tests/richtext.test.mjs"
   },
   "dependencies": {
     "@lucide/svelte": "^0.544.0",

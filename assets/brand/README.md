@@ -1,11 +1,14 @@
 # Brand assets
 
-Fathom's identity is **Aperture**: a mark built on a six-unit grid, and the
-word "fathom" set lowercase in Geist.
+Fathom's identity is **Orbit**: an arc that sweeps up and narrows to a bright
+leading point, with a small four-pointed star at the centre of its sweep, on a
+deep rounded tile. The word "fathom" is set lowercase in Geist, ivory, taking
+the arc's blue over its last letters.
 
-Every file here is generated. The construction lives in
-[`desktop/src/lib/brand/aperture.ts`](../../desktop/src/lib/brand/aperture.ts);
-its numbers and inks are `system.brand` in the theme manifest
+Every file here is generated. The geometry lives in
+[`desktop/src/lib/brand/orbit.ts`](../../desktop/src/lib/brand/orbit.ts), drawn
+on the icon's own 512 grid; its inks and the lockup's proportions are
+`system.brand` in the theme manifest
 ([`assets/theme/fathom-theme.json`](../theme/fathom-theme.json)); the
 wordmark's outlines are
 [`wordmark.generated.ts`](../../desktop/src/lib/brand/wordmark.generated.ts),
@@ -14,51 +17,61 @@ with:
 
 ```
 node tools/generate-fathom-theme.mjs
-python tools/generate-wordmark.py        (only when the wordmark changes)
+python tools/generate-wordmark.py        (only when the wordmark's letters change)
 node assets/brand/build-brand.mjs
 ```
 
 ## The mark
 
-A frame six units square with one-unit walls, open at its bottom-right corner.
-The missing corner, two units square, is set inside as the **plane**, moved in
-by its own width, where it lands dead centre: one unit from every wall it
-faces, its outer corner pointing straight at the opening. Wall, gap and plane
-are 1, 1 and 2 units; the opening is 2. Nothing is placed by eye.
+| Part | Ink |
+| --- | --- |
+| Tile | `#141c25` → `#101820` → `#080e13`, top left to bottom right, with a `#35495e` rim |
+| Halo | `#4c9afb` at 22%, fading to nothing at the edge of an ellipse behind the mark |
+| Arc | `#5b9ceb` → `#a5d6ff` → `#8fc8ff` → `#d3e9ff`, from its tail up to its tip |
+| Taper | `#77baff` at 60%, falling away under the tip |
+| Star | `#c9eaff`, over a `#75bdff` glow (70%, blurred 3 grid px), with two `#f2faff` hairlines |
 
-**Solved in pixels.** In an app icon of S px the unit is u = ⌊S ÷ 7⌋ (`icon-divisor`) and the
-frame, 6u, is centred with a margin of (S − 6u) ÷ 2. At every size the icon
-ships in (16, 20, 24, 30, 32, 36, 40, 48, 64, 128, 256, 512) both are whole
-pixels, so no edge ever falls between two pixels. The tiers are set by 8u, the
-size of the tile the mark was first drawn on.
+On light grounds (`mark-reversed.svg`, the README in light mode) the same blues
+go a density deeper (`#1f5fb0` to `#4c9afb`) and the glow is left out, because a
+glow on white only greys it.
 
-| Icon | Tier | Treatment |
-| --- | --- | --- |
-| 16–20 | pixel | u = 2. Square corners everywhere: at 2 px walls a curve is only grey pixels. |
-| 24–40 | curve | Outer corners 1.5u, inner corners 0.5u, concentric. Open ends cut square. |
-| 48 and up | full | The plane's corners soften to 0.25u. |
+## The app icon
 
-Inks: frame ivory `#ededed`, plane sand `#a8afb3` (one density down).
-Reversed, for light grounds: frame `#171d20`, plane `#646b6f`. Signal blue
-belongs in marketing, never in the app icon.
+The icon is the whole thing: tile, halo and mark. `icon.svg` is the master.
+Every raster is drawn at its own size rather than shrunk from the master:
 
-The app icon is the mark alone -- frame and plane on transparency, no tile.
-The deep tile it used to sit on read as a grey outline round the frame and a
-grey square round the plane on a dark taskbar. The cost is contrast on light
-grounds (a light taskbar, File Explorer in light mode), where the ivory frame is
-faint; Windows has no light and dark variants of an executable's icon.
+- The tile's outer edge (10.5 grid px in, the rim's outside) is rounded to a
+  whole pixel, so its sides never fall between two pixels and show as a soft
+  grey fringe on a taskbar. Its rim is drawn inside that edge, at least one
+  whole pixel wide, so the tile keeps a defined edge on a dark taskbar and
+  nothing spills past it on a light one.
+- The mark scales with the tile, so nothing reaches past it at any size.
+- Below 48 px the arc is widened just enough that its thinnest stretch stays
+  about one pixel (1.35 px below 24): a line, not a broken smudge.
+
+| Size | Where |
+| --- | --- |
+| 16, 20, 24, 30, 32, 36, 40, 48, 64, 128, 256 | `icon.ico`: Explorer, the taskbar (30 and 36 are its frames at 125% and 150%), Start |
+| 512 | `icon.png`: Tauri's window icon and the bundle |
+| 16, 32 | the game window (`WindowIconMixin`) |
+| 128 | the mod's own icon (`fabric.mod.json`) |
 
 ## The wordmark
 
 "fathom", always lowercase, in Geist, outlined so it is the same drawing in
 the launcher, the game and every file here. It is shaped by HarfBuzz, so
-Geist's kerning is kept. What changes with size is weight and spacing, chosen
-by the ascender (Geist's cap height) in **device** pixels:
+Geist's kerning is kept. Its ink is ivory `#edf2f7` to 34% of its width, then
+warms to the arc's light, `#b2d7ff`, by the last letter: the "om" carries the
+icon's blue, the rest stays plain. Reversed, it runs from the tile's `#141c25`
+to `#2b5a92`.
+
+What changes with size is weight and spacing, chosen by the ascender (Geist's
+cap height) in **device** pixels:
 
 | Tier | Ascender | Weight | Tracking | Where |
 | --- | --- | --- | --- | --- |
 | small | ≤ 16 px | SemiBold | +2% | the launcher header (13 px), the game (12 dp), the installer |
-| text | 17–32 px | Medium | 0% | the header at 125% and up, the README, documents |
+| text | 17–32 px | Medium | 0% | the header at 125% and up, the splash, documents |
 | display | ≥ 33 px | Medium | −1.5% | anything larger |
 
 Up to 32 px the x-height is rounded to whole pixels. The minimum is a 10 px
@@ -67,46 +80,41 @@ accessible name is "Fathom".
 
 ## The lockup
 
-The mark stands on the wordmark's baseline and its plane's top is the
-x-height, so the mark is one and a half x-heights tall, a little taller than
-the ascenders. The gap is half the mark (3u). Stacked, the mark doubles its
-unit and sits centred above, 3u clear. Clear space is the missing corner, 2u,
-on every side.
+Side by side, the mark is 1.9 ascenders tall, centred on the word's ascender,
+and 0.55 ascenders before it: the launcher header, the game's title screen and
+Hub, the installer. Stacked, the mark is 3.4 ascenders tall and 0.9 above the
+word: the splash and the loading screen. The mark's own box is the arc and the
+star; the glow and the halo spill past it, so nothing round it should clip.
 
 ## Loading
 
-The mark is also the loading and progress symbol (`ApertureMark.svelte`).
-With a known value the open corner closes as the work completes, over the
-closed frame drawn at 16% so the measure is visible; without one the plane
-breathes slowly between two densities. Done closes the frame with the plane in
-the success ink; failed stops where it was with the plane in the danger ink.
-Nothing spins, nothing travels; under reduced motion it holds still. At rest
-the corner is always open: a closed frame means done.
+`OrbitMark.svelte` with `working` is the small wait symbol (signing in,
+restoring a session): the star breathes slowly while the arc holds still.
+Nothing spins or travels; under reduced motion it holds still. Long waits keep
+the sweeping line.
 
 ## Files
 
 | File | What it is |
 | --- | --- |
-| `icon.svg`, `icon-{16,20,24,30,32,36,40,48,64}.svg` | The app icon, untiled: the 512 master and the pixel masters |
+| `icon.svg` | The app icon master, 512 |
 | `png/fathom-icon-*.png` | Every raster size |
-| `mark.svg`, `mark-reversed.svg`, `mark-one-colour.svg` | The mark without its tile, full tier |
-| `wordmark.svg`, `wordmark-text.svg`, `wordmark-small.svg` | The wordmark's three tiers, ivory |
+| `mark.svg`, `mark-reversed.svg`, `mark-one-colour.svg` | The mark without its tile, for dark grounds, light grounds, and one ink |
+| `wordmark.svg`, `wordmark-text.svg`, `wordmark-small.svg` | The wordmark's three tiers |
 | `wordmark-reversed.svg` | The display tier for light grounds |
 | `lockup.svg`, `lockup-reversed.svg` | Mark and word side by side |
 | `lockup-stacked.svg`, `lockup-stacked-reversed.svg` | Stacked |
 
-The shipped application icons are `crates/launcher-desktop/icons/icon.ico`
-(16, 20, 24, 30, 32, 36, 40, 48, 64, 128, 256; 30 and 36 are the taskbar's
-frames at 125% and 150%) and `icon.png` (512). The installer's header and
-sidebar are `nsis-header.bmp` (150 × 57) and `nsis-sidebar.bmp` (164 × 314)
-beside them. All are build output.
+The shipped application icons are `crates/launcher-desktop/icons/icon.ico` and
+`icon.png`; the installer's header and sidebar are `nsis-header.bmp`
+(150 × 57) and `nsis-sidebar.bmp` (164 × 314) beside them. The game's copies
+are `generated/Mark.java` and `assets/fathom-optimizations/icon/`. All are
+build output.
 
-Never: glow, chromatic aberration, RGB splits, stretching, a closed frame at
-rest, a moved or resized plane, waves, water, or anything nautical.
+Never: stretching, recolouring the arc outside these inks, the mark on a tile
+of another colour, a drop shadow, or the star moved off the arc's centre.
 
 ## History
 
-`concepts/` holds the six symbol studies that first produced Aperture. The
-Surface identity (refraction wordmark, offset ring, Sounding Line) that
-replaced it for a week is retired; its construction is in the history at
-commit 25fcc91 (`desktop/src/lib/brand/surface.ts`).
+The Aperture mark (a frame open at one corner, with its missing corner set
+inside) that came before this is in the git history, with its concept studies.

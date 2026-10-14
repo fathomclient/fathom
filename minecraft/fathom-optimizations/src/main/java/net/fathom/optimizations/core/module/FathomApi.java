@@ -115,7 +115,7 @@ public final class FathomApi {
             return register(feature, null, null);
         }
 
-        /** A feature that draws, using the widget's own default placement. */
+        /** A feature that draws, starting in the top-left corner until it is moved. */
         public Result register(FathomModule feature, Object widgetRenderer) {
             return register(feature, widgetRenderer, null);
         }

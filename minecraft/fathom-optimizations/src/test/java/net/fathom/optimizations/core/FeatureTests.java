@@ -81,13 +81,7 @@ public final class FeatureTests {
         theLaunchDescriptorIsReadOrHonestlyAbsent();
         aQuotedProfileNameSurvivesTheDescriptor();
         aDescriptorFromAnotherSchemaIsIgnoredRatherThanGuessedAt();
-        theModuleLogKeepsWhatItSaidAndNoMore();
-        theLaunchDescriptorIsReadOrHonestlyAbsent();
-        aQuotedProfileNameSurvivesTheDescriptor();
-        aDescriptorFromAnotherSchemaIsIgnoredRatherThanGuessedAt();
-        theModuleLogKeepsWhatItSaidAndNoMore();
-        theLaunchDescriptorIsReadOrHonestlyAbsent();
-        aDescriptorFromAnotherSchemaIsIgnoredRatherThanGuessedAt();
+        theLauncherSessionFileIsReadAsWritten();
         theModuleLogKeepsWhatItSaidAndNoMore();
         theInterfaceScaleIsAChoiceAndNotANumber();
 
@@ -372,7 +366,7 @@ public final class FeatureTests {
         pass("every optimization a feature drives actually exists");
     }
 
-    /** The list the brief names, checked by name so a rename is caught. */
+    /** The list the spec names, checked by name so a rename is caught. */
     static void theFirstBatchIsTheOneTheBriefAskedFor() {
         ModuleRegistry registry = ModuleRegistry.standard();
         String[] wanted = {
@@ -386,7 +380,7 @@ public final class FeatureTests {
         // And they share one framework rather than being fourteen unrelated
         // things: every one of them is a FathomModule in one registry.
         check(registry.size() >= wanted.length, "all of them are in the one registry");
-        pass("the first batch is the one the brief asked for");
+        pass("the first batch is the one the spec asked for");
     }
 
     static void onlyTwoThingsAreOnOutOfTheBox() {
@@ -723,6 +717,48 @@ public final class FeatureTests {
     // -----------------------------------------------------------------------
     // The launch descriptor
     // -----------------------------------------------------------------------
+
+    /**
+     * The launcher-to-game handoff, against the launcher's real output.
+     *
+     * <p>{@code contract/session.json} is the document the launcher's
+     * {@code SessionDescriptor::to_json} writes; its own test
+     * ({@code the_game_reads_exactly_what_this_writes}) fails if the writer
+     * stops producing exactly this file. Here the game reads it: a quoted,
+     * backslashed, non-ASCII profile name and a Windows data root, every field.
+     */
+    static void theLauncherSessionFileIsReadAsWritten() {
+        java.io.InputStream stream = FeatureTests.class.getResourceAsStream("/contract/session.json");
+        check(stream != null, "the contract fixture is on the test classpath");
+        String document;
+        try {
+            try {
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                for (int read; (read = stream.read(buffer)) > 0;) {
+                    bytes.write(buffer, 0, read);
+                }
+                document = new String(bytes.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+            } finally {
+                stream.close();
+            }
+        } catch (java.io.IOException failure) {
+            throw new AssertionError("the contract fixture could not be read: " + failure);
+        }
+        LaunchSession session = LaunchSession.parse(document);
+        check(session.present(), "the launcher's document is read");
+        check("pvp-2".equals(session.profileId()), "id: " + session.profileId());
+        check("Bedwars \"ranked\" \\ ✓".equals(session.profileName()), "name: " + session.profileName());
+        check("1.8.9".equals(session.minecraft()), "minecraft: " + session.minecraft());
+        check("Legacy Fabric".equals(session.loader()), "loader: " + session.loader());
+        check("0.19.3".equals(session.loaderVersion()), "loader version: " + session.loaderVersion());
+        check("competitive".equals(session.preset()), "preset: " + session.preset());
+        check("0.3.0-hud".equals(session.component()), "component: " + session.component());
+        check("0.1.0".equals(session.launcherVersion()), "launcher: " + session.launcherVersion());
+        check("C:\\Users\\Example\\AppData\\Local\\Fathom\\data".equals(session.root()),
+                "root: " + session.root());
+        pass("the launcher's session file is read exactly as it was written");
+    }
 
     static void theLaunchDescriptorIsReadOrHonestlyAbsent() {
         // The exact shape `crates/launcher-core/src/session.rs` writes. Spelled

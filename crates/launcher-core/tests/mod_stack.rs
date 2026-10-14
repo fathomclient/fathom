@@ -22,10 +22,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use launcher_core::components::{self, Supply, Tier};
-use launcher_core::mods::{ModId, ModSource, Origin, ProfileMod, Problem, Severity};
+use launcher_core::credentials::{CredentialStore, EphemeralCredentialStore};
+use launcher_core::mods::{ModId, ModSource, Origin, Problem, ProfileMod, Severity};
 use launcher_core::paths::DataPaths;
 use launcher_core::profiles::{Loader, Profile, ProfileId, ProfileKind};
-use launcher_core::credentials::{CredentialStore, EphemeralCredentialStore};
 use launcher_core::services::Launcher;
 
 /// A credential store that keeps nothing. These tests never sign in; the
@@ -262,10 +262,9 @@ fn optifine_is_never_fetchable_by_any_route() {
     assert!(!optifine.supply.is_requestable());
     assert!(matches!(optifine.supply, Supply::UserSupplied { .. }));
 
-    let definition = launcher_core::mods::catalog::find(
-        &ModId::new("optifine").expect("a valid id"),
-    )
-    .expect("it is in the catalogue");
+    let definition =
+        launcher_core::mods::catalog::find(&ModId::new("optifine").expect("a valid id"))
+            .expect("it is in the catalogue");
     assert!(!definition.is_launcher_fetchable());
     assert!(definition.why_not_fetchable().is_some());
 }
@@ -344,7 +343,10 @@ fn collecting_garbage_spares_a_disabled_mod() {
     }
 
     let removed = launcher.mod_engine().store().collect_garbage(&referenced);
-    assert!(removed.is_empty(), "nothing referenced was deleted: {removed:?}");
+    assert!(
+        removed.is_empty(),
+        "nothing referenced was deleted: {removed:?}"
+    );
     assert!(
         launcher.mod_engine().store().contains(&added.sha1),
         "a switched-off mod is still wanted"

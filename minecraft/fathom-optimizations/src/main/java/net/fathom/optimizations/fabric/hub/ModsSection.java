@@ -102,8 +102,6 @@ final class ModsSection implements Section {
     private final Motion pageIn = new Motion(1f, Timing.PANEL);
     private List<FathomModule> modules = Collections.emptyList();
     private List<Setting> openSettings = Collections.emptyList();
-    private final List<Category> presentCategories = new ArrayList<Category>();
-    private String[] categoryLabels = new String[0];
     private final List<FathomModule> visibleModules = new ArrayList<FathomModule>();
     private String visibleSearch;
     private Category visibleFilter;
@@ -121,8 +119,26 @@ final class ModsSection implements Section {
     /** The text setting being typed into, or null. */
     private Setting.Text editing;
 
-    /** Null when the list is showing everything. */
-    private Category filter;
+    /** A colour whose hex value is being typed, and what has been typed so far. */
+    private Setting.Colour editingColour;
+    private String hexDraft = "";
+    /**
+     * The field being typed into, as last drawn. A press anywhere else ends the
+     * entry, as leaving a text box does everywhere else; before, typing carried
+     * on into a field the pointer had long since left.
+     */
+    private Rect editingField;
+
+    /** Where each open page was scrolled to, so switching tabs comes back to the same place. */
+    private final Map<FathomModule, Float> pageScroll = new IdentityHashMap<FathomModule, Float>();
+    /** And the list's, for coming back to it from a page. */
+    private float listScroll;
+
+    @Override
+    public boolean typing() {
+        return editing != null || editingColour != null;
+    }
+
     /** The active tab's module, or null when the "All mods" tab is active. */
     private FathomModule open;
     /** Start of the current category's tight row entrance. */
@@ -156,12 +172,11 @@ final class ModsSection implements Section {
 
     @Override
     public void opened(HubContext context) {
-        scroller.reset();
+        // Coming back to Mods keeps the list where it was and the filter that
+        // was chosen; only what is shown is recomputed.
         modules = context.features().all();
-        cacheCategories(context);
         visibleSearch = null;
         visibleFilter = null;
-        stateFilter = 0;
         visibleStateFilter = -1;
         // Open tabs survive leaving the section and coming back, as a browser's
         // do; only modules that no longer exist are dropped.
@@ -194,6 +209,27 @@ final class ModsSection implements Section {
         context.keybindCapture().cancel();
     }
 
+    String qaOpenModule() {
+        return open == null ? null : open.id();
+    }
+
+    float qaScroll() {
+        return open == null ? scroller.position() : detailScroll.position();
+    }
+
+    void qaTab(HubContext context, String moduleId) {
+        if (moduleId == null) {
+            activate(context, null);
+            return;
+        }
+        for (FathomModule feature : modules) {
+            if (feature.id().equals(moduleId)) {
+                openTab(context, feature);
+                return;
+            }
+        }
+    }
+
     @Override
     public void qaReplay(HubContext context) {
         cardsEnteredAt = context.now();
@@ -211,6 +247,16 @@ final class ModsSection implements Section {
      */
     @Override
     public void render(HubContext context, Rect area) {
+        // The HUD editor's "Settings" asked for a module's page.
+        String requested = FathomHubScreen.takeModuleRequest();
+        if (requested != null) {
+            for (FathomModule feature : modules) {
+                if (feature.id().equals(requested)) {
+                    openTab(context, feature);
+                    break;
+                }
+            }
+        }
         // The whole content area, as every other Hub page uses it: one right
         // edge across Quick, Mods, Performance and Profiles. The list used to
         // stop at 744 and the pages beside it did not.
@@ -247,12 +293,28 @@ final class ModsSection implements Section {
         if (open == feature) {
             return;
         }
+        // A colour half typed is applied if it is a colour, as leaving the
+        // field would; then the page is left where it was scrolled to.
+        commitHex(context);
+        if (open != null) {
+            pageScroll.put(open, Float.valueOf(detailScroll.position()));
+        } else {
+            listScroll = scroller.position();
+        }
         open = feature;
         openSettings = feature == null ? Collections.<Setting>emptyList() : feature.settings();
-        detailScroll.reset();
+        if (feature == null) {
+            scroller.restore(listScroll);
+        } else {
+            Float remembered = pageScroll.get(feature);
+            detailScroll.restore(remembered == null ? 0f : remembered.floatValue());
+        }
         conflictFingerprint = Integer.MIN_VALUE;
         context.keybindCapture().cancel();
         editing = null;
+        editingColour = null;
+        editingField = null;
+        hexDraft = "";
         context.controls().clearFocus();
         context.controls().closePopover();
         pageIn.set(0f, context.now());
@@ -269,6 +331,7 @@ final class ModsSection implements Section {
             return;
         }
         tabs.remove(index);
+        pageScroll.remove(feature);
         if (open == feature) {
             FathomModule next = tabs.isEmpty() ? null
                     : tabs.get(Math.min(index, tabs.size() - 1));
@@ -299,6 +362,7 @@ final class ModsSection implements Section {
             // Out of room even at the narrowest: close the oldest tab not showing.
             FathomModule oldest = tabs.get(0) == open ? tabs.get(1) : tabs.get(0);
             tabs.remove(oldest);
+            pageScroll.remove(oldest);
         }
         float tabWidth = tabs.isEmpty() ? 0f : Math.max(TAB_MIN, Math.min(TAB_MAX, room / tabs.size()));
         float natural = 0f;
@@ -589,126 +653,6 @@ final class ModsSection implements Section {
         }
     }
 
-    /**
-     * The category filter.
-     *
-     * <p>A segmented control rather than a row of loose chips: the categories
-     * are a small fixed set, exactly one is active, and a segmented control is
-     * what that shape of choice looks like everywhere else.
-     */
-    private void categories(HubContext context, Rect area) {
-        int selected = 0;
-        for (int index = 0; index < presentCategories.size(); index++) {
-            if (presentCategories.get(index) == filter) {
-                selected = index + 1;
-            }
-        }
-
-        int chosen = context.controls().segmentedNatural(
-                context.ui(), "mods.filter", area, categoryLabels, selected);
-        if (chosen != selected) {
-            filter = chosen == 0 ? null : presentCategories.get(chosen - 1);
-            scroller.reset();
-            cardsEnteredAt = context.now();
-        }
-    }
-
-    private void cacheCategories(HubContext context) {
-        presentCategories.clear();
-        for (Category category : Category.values()) {
-            for (FathomModule feature : modules) {
-                if (feature.category() == category) {
-                    presentCategories.add(category);
-                    break;
-                }
-            }
-        }
-        categoryLabels = new String[presentCategories.size() + 1];
-        categoryLabels[0] = "All";
-        for (int index = 0; index < presentCategories.size(); index++) {
-            categoryLabels[index + 1] = presentCategories.get(index).label();
-        }
-    }
-
-    /**
-     * One module: a row in the list's group, not a card. The launcher's list
-     * item -- a hairline above it, a faint fill under the pointer, the item's
-     * mark, its title and one line, its controls on the right.
-     */
-    private void moduleRow(HubContext context, FathomModule feature, Rect area, float radius, boolean first) {
-        Renderer ui = context.ui();
-        Controls controls = context.controls();
-        Controls.State surface = controls.state("mod.row." + feature.id(), area, true);
-        boolean visuallyEnabled = feature.enabled() || FORCE_ENABLED_QA;
-        float enabled = controls.towards("mod.row." + feature.id() + "#enabled",
-                visuallyEnabled, Timing.TOGGLE);
-        if (surface.hover > 0.01f) {
-            ui.rounded(area.x, area.y, area.right(), area.bottom(), radius,
-                    Skin.scaleAlpha(Skin.FILL_HOVER, surface.hover));
-        } else if (!first) {
-            ui.fill(area.x + Skin.CARD_PADDING, area.y, area.right() - Skin.CARD_PADDING,
-                    area.y + ui.pixel(), Skin.EDGE_RECESSED);
-        }
-
-        float tile = FathomTheme.Metrics.TILE;
-        Rect iconBox = new Rect(area.x + Skin.CARD_PADDING, Skin.snap(ui, area.centreY() - tile / 2f), tile, tile);
-        Graphite.modMark(ui, iconBox, Icon.of(feature.icon()), enabled, surface.hover);
-
-        boolean configurable = feature.hasSettings() || !feature.keybinds().isEmpty();
-        float right = area.right() - Skin.CARD_PADDING;
-        Rect toggle = feature.switchable()
-                ? new Rect(right - Controls.TOGGLE_WIDTH,
-                        area.centreY() - Controls.TOGGLE_HEIGHT / 2f,
-                        Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT)
-                : new Rect(right, area.y, 0f, 0f);
-        Rect options = configurable
-                ? new Rect(toggle.x - Skin.S3 - 90f, area.centreY() - Skin.H_SM / 2f,
-                        90f, Skin.H_SM)
-                : new Rect(toggle.x, area.y, 0f, 0f);
-        float metaRight = configurable ? options.x : toggle.x;
-        float titleX = iconBox.right() + Skin.S3;
-        float titleRoom = Math.max(0f, metaRight - titleX - Skin.S5);
-        float stack = Controls.stackTop(ui, area, Type.ROW_TITLE, Type.SMALL);
-        float titleBaseline = Controls.stackTitle(ui, stack, Type.ROW_TITLE);
-        ui.text(Text.fit(ui, feature.name(), Type.ROW_TITLE, titleRoom), titleX,
-                titleBaseline, Type.ROW_TITLE,
-                Skin.mix(Skin.TEXT_MUTED, Skin.TEXT,
-                        Math.max(enabled, surface.hover * 0.85f)));
-        if (Text.overflows(ui, feature.name(), Type.ROW_TITLE, titleRoom)) {
-            controls.tooltip(surface, area, feature.name());
-        }
-
-        ui.text(Text.fit(ui, feature.description(), Type.SMALL, titleRoom),
-                titleX, Controls.stackDetail(ui, stack, Type.ROW_TITLE, Type.SMALL), Type.SMALL,
-                Skin.mix(Skin.TEXT_FAINT, Skin.TEXT_MUTED, surface.hover * 0.42f));
-
-        String metadata = metadata(feature);
-        ui.textRight(Text.fit(ui, metadata, Type.CAPTION,
-                        Math.max(0f, metaRight - titleX - Skin.S3)),
-                metaRight - Skin.S3, titleBaseline,
-                Type.CAPTION, visuallyEnabled ? Skin.TEXT_MUTED : Skin.TEXT_DISABLED);
-        if (configurable) {
-            if (controls.recessedAction(ui, "mod.options." + feature.id(), options, "Configure", true)) {
-                openTab(context, feature);
-            }
-        }
-        if (feature.switchable()) {
-            if (controls.toggle(ui, "mod.toggle." + feature.id(), toggle, visuallyEnabled, true)) {
-                context.setFeatureEnabled(feature, !feature.enabled());
-            }
-        } else {
-            float width = Controls.badgeWidth(ui, feature.implementation().label());
-            controls.badge(ui, "mod.implementation." + feature.id(), feature.implementation().label(),
-                    new Rect(right - width, area.centreY() - 10f, width, 20f), Skin.WARN);
-        }
-
-        // Clicking unused card space is an Options shortcut; action controls
-        // above have separate bounds and therefore retain their own behavior.
-        if (configurable && surface.clicked) {
-            openTab(context, feature);
-        }
-    }
-
     /** A row's metadata line, rebuilt only when its key or its status word changes. */
     private String metadata(FathomModule feature) {
         String key = "";
@@ -795,6 +739,15 @@ final class ModsSection implements Section {
         Renderer ui = context.ui();
         Controls controls = context.controls();
 
+        // A press outside the field being typed into ends the entry. Tested
+        // against last frame's field, drawn under the same transform.
+        if ((editing != null || editingColour != null) && context.pointer().pressed(0)
+                && (editingField == null || !controls.pointerOverVisible(editingField))) {
+            commitHex(context);
+            editing = null;
+        }
+        editingField = null;
+
         // The settings groups leave the scroll rail a gutter at the right; the
         // header and footer end where the groups do, so the switch and the
         // reset button line up with the rows' own controls.
@@ -831,9 +784,10 @@ final class ModsSection implements Section {
         ui.text(Text.fit(ui, meta, small, room), titleX,
                 Controls.stackDetail(ui, stack, heading, small), small, Graphite.TEXT_SECONDARY);
 
-        boolean hudEditable = hasHudWidget(context, open);
-        boolean resettable = open.changed();
-        float footerHeight = hudEditable || resettable ? FathomTheme.Metrics.CONTROL + Graphite.S4 : 0f;
+        // The footer is always there, so the page never changes height under
+        // the pointer when the first setting is changed.
+        boolean resettable = open.settingsChanged();
+        float footerHeight = FathomTheme.Metrics.CONTROL + Graphite.S4;
         Rect viewport = Rect.of(area.x, head.bottom() + Graphite.S3,
                 area.right(), area.bottom() - footerHeight);
         refreshConflictCache(context);
@@ -846,28 +800,34 @@ final class ModsSection implements Section {
         y = settingsGroup(context, viewport, y, false, "Behaviour", "How this module works.");
         y = settingsGroup(context, viewport, y, true, "Appearance",
                 "Typography, colour and surface treatment.");
+        y = layoutGroup(context, viewport, y);
         keybindGroup(context, viewport, y);
         ui.unclip();
         detailScroll.rail(ui, viewport, context.pointer(), context.now());
 
-        if (footerHeight > 0f) {
-            float height = FathomTheme.Metrics.CONTROL;
-            Rect footer = new Rect(area.x, area.bottom() - height, area.width - Skin.S3, height);
-            if (hudEditable) {
-                Rect button = new Rect(footer.x, footer.y,
-                        Controls.buttonWidth(ui, "Edit position"), footer.height);
-                if (controls.secondary(ui, "mods.page.hud", button, "Edit position", true)) {
-                    context.editHud();
-                }
+        float height = FathomTheme.Metrics.CONTROL;
+        Rect footer = new Rect(area.x, area.bottom() - height, area.width - Skin.S3, height);
+        String widget = widgetOf(context, open);
+        if (widget != null) {
+            Rect button = new Rect(footer.x, footer.y,
+                    Controls.buttonWidth(ui, "Open HUD editor"), footer.height);
+            if (controls.secondary(ui, "mods.page.hud", button, "Open HUD editor", true)) {
+                commitHex(context);
+                editing = null;
+                context.editHud(widget);
             }
-            if (resettable) {
-                float width = Controls.buttonWidth(ui, "Reset defaults");
-                Rect button = footer.vcentreRight(0f, width, footer.height);
-                if (controls.danger(ui, "mods.page.reset", button, "Reset defaults", true)) {
-                    open.resetToDefaults();
-                    edited(context, null);
-                }
-            }
+        }
+        // Settings and keys only: the switch and the widget's position are
+        // separate preferences with their own controls, and a reset of one
+        // page's settings must not quietly turn the module off or move it.
+        float width = Controls.buttonWidth(ui, "Reset to defaults");
+        Rect reset = footer.vcentreRight(0f, width, footer.height);
+        if (controls.danger(ui, "mods.page.reset", reset, "Reset to defaults", resettable)) {
+            commitHex(context);
+            editing = null;
+            open.resetSettings();
+            context.keybindCapture().cancel();
+            edited(context, null);
         }
     }
 
@@ -880,6 +840,10 @@ final class ModsSection implements Section {
         float behaviour = settingsGroupHeight(context, false);
         float appearance = settingsGroupHeight(context, true);
         float keys = keybindGroupHeight(context);
+        float layout = layoutGroupHeight(context);
+        if (layout > 0f) {
+            height += Skin.SECTION_GAP + layout;
+        }
         if (behaviour > 0f) {
             height += Skin.SECTION_GAP + behaviour;
         }
@@ -892,9 +856,21 @@ final class ModsSection implements Section {
         return height + Skin.S4;
     }
 
-    /** The description line, and the note line under it when there is one. */
+    /** The description line, the note line under it when there is one, and the "off" notice. */
     private float introHeight() {
-        return compactBadge(open).isEmpty() ? 22f : 48f;
+        float height = compactBadge(open).isEmpty() ? 22f : 48f;
+        if (offNotice()) {
+            height += Skin.S3 + OFF_NOTICE;
+        }
+        return height;
+    }
+
+    /** Height of the strip that says a module is off. */
+    private static final float OFF_NOTICE = 44f;
+
+    /** Whether the page says, above its settings, that the module is off. */
+    private boolean offNotice() {
+        return open.switchable() && !open.enabled() && !FORCE_ENABLED_QA;
     }
 
     /**
@@ -912,7 +888,28 @@ final class ModsSection implements Section {
                     + Controls.STACK_GAP,
                     Type.CAPTION, unmet(open) ? Skin.WARN : Skin.TEXT_FAINT);
         }
-        y = intro.bottom();
+        y = text.y + (compactBadge(open).isEmpty() ? 22f : 48f);
+        if (offNotice()) {
+            // Off, said plainly where the settings start: they can still be
+            // changed, and nothing on the screen will show it until it is on.
+            Rect strip = new Rect(viewport.x, y + Skin.S3, viewport.width - Skin.S3, OFF_NOTICE);
+            Graphite.surface(context.ui(), strip, Graphite.R_CONTROL, Graphite.Material.LIGHT, false);
+            Type small = Graphite.floor(context.ui(), Graphite.SMALL);
+            float buttonWidth = Controls.buttonWidth(context.ui(), "Turn on");
+            Rect button = new Rect(strip.right() - Skin.S2 - buttonWidth, strip.centreY() - Skin.H_SM / 2f,
+                    buttonWidth, Skin.H_SM);
+            context.ui().icon(Icon.INFO, strip.x + Skin.S3, strip.centreY() - 8f, 16f, Graphite.TEXT_SECONDARY);
+            context.ui().text(Text.fit(context.ui(), open.name() + " is off. Its settings are kept and apply once it is on.",
+                            small, button.x - strip.x - Skin.S3 * 2f - 24f),
+                    strip.x + Skin.S3 + 24f, Graphite.baseline(context.ui(), strip, small), small,
+                    Graphite.TEXT_SECONDARY);
+            if (context.controls().secondary(context.ui(), "mods.page.turn-on", button, "Turn on", true)) {
+                context.setFeatureEnabled(open, true);
+                visibleSearch = null;
+                visibleStateFilter = -1;
+            }
+            y = strip.bottom();
+        }
         ModulePreview preview = ModulePreview.of(open);
         if (preview != null) {
             y += Skin.S4;
@@ -1069,13 +1066,16 @@ final class ModsSection implements Section {
             }
             case SLIDER: {
                 Setting.Slider slider = (Setting.Slider) setting;
-                double next = controls.slider(ui, id, control, slider.fraction(), true);
+                // The value is part of the control, on its left, so a long
+                // label can never run underneath it.
+                Rect track = Rect.of(control.x + SLIDER_VALUE + Skin.S2, control.y, control.right(), control.bottom());
+                double next = controls.slider(ui, id, track, slider.fraction(), true);
                 if (Math.abs(next - slider.fraction()) > 0.0001d) {
                     slider.setFraction(next);
                     edited(context, setting);
                 }
-                ui.textRight(slider.display(), control.x - Skin.S3, Controls.baseline(ui, area, Type.CAPTION),
-                        Type.CAPTION, Skin.TEXT_FAINT);
+                ui.textRight(slider.display(), control.x + SLIDER_VALUE, Controls.baseline(ui, area, Type.CAPTION),
+                        Type.CAPTION, Skin.TEXT_MUTED);
                 break;
             }
             case CHOICE: {
@@ -1104,7 +1104,11 @@ final class ModsSection implements Section {
             }
             case TEXT: {
                 Setting.Text text = (Setting.Text) setting;
+                if (setting == editing) {
+                    editingField = control;
+                }
                 if (controls.textField(ui, id, control, text.get(), setting == editing)) {
+                    commitHex(context);
                     editing = setting == editing ? null : text;
                     context.keybindCapture().cancel();
                 }
@@ -1126,9 +1130,32 @@ final class ModsSection implements Section {
             case COLOUR:
             default: {
                 Setting.Colour colour = (Setting.Colour) setting;
-                int next = controls.colour(ui, id, control, colour.rgb());
+                // A hex field beside the swatch: the palette is for picking
+                // quickly, the field is for the exact colour somebody has in mind.
+                Rect hex = new Rect(control.x, control.y, control.width - Controls.SWATCH - HEX_GAP, control.height);
+                boolean typingHere = editingColour == colour;
+                if (typingHere) {
+                    editingField = hex;
+                }
+                String shown = typingHere ? "#" + hexDraft : "#" + colour.serialise();
+                if (controls.textField(ui, id + "#hex", hex, shown, typingHere)) {
+                    if (typingHere) {
+                        commitHex(context);
+                    } else {
+                        commitHex(context);
+                        editing = null;
+                        editingColour = colour;
+                        hexDraft = "";
+                        context.keybindCapture().cancel();
+                    }
+                }
+                Rect swatch = new Rect(control.right() - Controls.SWATCH, control.y, Controls.SWATCH, control.height);
+                int next = controls.colour(ui, id, swatch, colour.rgb(), colour.fallback());
                 if (next != colour.rgb()) {
                     colour.set(next);
+                    if (typingHere) {
+                        editingColour = null;
+                    }
                     edited(context, setting);
                 }
                 break;
@@ -1155,7 +1182,7 @@ final class ModsSection implements Section {
             case TOGGLE:
                 return Controls.TOGGLE_WIDTH;
             case SLIDER:
-                return Math.min(150f, rowWidth * 0.45f);
+                return Math.min(SLIDER_VALUE + Skin.S2 + 150f, rowWidth * 0.5f);
             case CHOICE:
                 return Math.min(150f, rowWidth * 0.5f);
             case INTEGER:
@@ -1166,7 +1193,30 @@ final class ModsSection implements Section {
                 return 110f;
             case COLOUR:
             default:
-                return Controls.SWATCH;
+                return Controls.SWATCH + HEX_GAP + HEX_WIDTH;
+        }
+    }
+
+    private static final float HEX_WIDTH = 86f;
+    /** Room for a slider's value ("100%", "18 px") at the left of its control. */
+    private static final float SLIDER_VALUE = 44f;
+    private static final float HEX_GAP = 8f;
+
+    /**
+     * Apply a typed hex colour, if it is one. Six digits, or three that stand
+     * for six (#F80 is #FF8800); anything else leaves the colour as it was.
+     */
+    private void commitHex(HubContext context) {
+        Setting.Colour colour = editingColour;
+        editingColour = null;
+        if (colour == null) {
+            return;
+        }
+        Integer parsed = Setting.Colour.parseTyped(hexDraft);
+        hexDraft = "";
+        if (parsed != null && parsed.intValue() != colour.rgb()) {
+            colour.set(parsed.intValue());
+            edited(context, colour);
         }
     }
 
@@ -1188,14 +1238,200 @@ final class ModsSection implements Section {
         }
     }
 
-    private static boolean hasHudWidget(HubContext context, FathomModule module) {
+    /** The HUD widget a module owns, or null: the one its page positions. */
+    private static String widgetOf(HubContext context, FathomModule module) {
         for (net.fathom.optimizations.core.hud.Widget widget : context.hud().registry().all()) {
             if (context.hud().owner(widget.id()) == module) {
-                return true;
+                return widget.id();
             }
         }
-        return false;
+        return null;
     }
+
+    // -----------------------------------------------------------------------
+    // Position and size
+    // -----------------------------------------------------------------------
+
+    private static final net.fathom.optimizations.core.hud.Anchor[] ANCHORS =
+            net.fathom.optimizations.core.hud.Anchor.values();
+    private static final String[] ANCHOR_LABELS = anchorLabels();
+    private static final int LAYOUT_ROWS = 4;
+
+    private static String[] anchorLabels() {
+        String[] labels = new String[ANCHORS.length];
+        for (int index = 0; index < ANCHORS.length; index++) {
+            labels[index] = ANCHORS[index].label();
+        }
+        return labels;
+    }
+
+    /** The position row's description, rebuilt only when the placement changes. */
+    private net.fathom.optimizations.core.hud.Placement describedPlacement;
+    private String positionText = "";
+
+    private float layoutGroupHeight(HubContext context) {
+        return widgetOf(context, open) == null ? 0f
+                : FathomSettingRows.SECTION_HEADING + FathomSettingRows.ROW * LAYOUT_ROWS;
+    }
+
+    /**
+     * Where the module's widget sits and how large it is: the same scale,
+     * opacity and anchor the HUD editor's inspector sets, so the two can never
+     * disagree, and a way back to where it started. Dragging stays in the
+     * editor, one button away.
+     */
+    private float layoutGroup(HubContext context, Rect viewport, float y) {
+        String widgetId = widgetOf(context, open);
+        if (widgetId == null) {
+            return y;
+        }
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        net.fathom.optimizations.fabric.hud.FathomHud hud = context.hud();
+        net.fathom.optimizations.core.hud.Placement placement = hud.placement(widgetId);
+        net.fathom.optimizations.core.hud.Widget widget = hud.registry().find(widgetId);
+
+        y += Skin.SECTION_GAP;
+        Rect heading = new Rect(viewport.x, y, viewport.width - Skin.S3, FathomSettingRows.SECTION_HEADING);
+        FathomSettingRows.heading(ui, heading, "Position and size",
+                "Where the widget sits on screen. Drag it in the HUD editor.");
+        y = heading.bottom();
+        Rect surface = new Rect(viewport.x, y, viewport.width - Skin.S3, FathomSettingRows.ROW * LAYOUT_ROWS);
+        FathomSettingRows.surface(ui, surface);
+        float sliderWidth = Math.min(SLIDER_VALUE + Skin.S2 + 150f, surface.width * 0.5f);
+
+        // Scale, in five-percent steps, as the inspector's.
+        Rect row = new Rect(surface.x, y, surface.width, FathomSettingRows.ROW);
+        if (rowVisible(row, viewport)) {
+            float min = net.fathom.optimizations.core.hud.Placement.MIN_SCALE;
+            float max = net.fathom.optimizations.core.hud.Placement.MAX_SCALE;
+            float fraction = (placement.scale() - min) / (max - min);
+            float next = layoutSlider(context, "layout.scale." + widgetId, row, "Scale",
+                    Math.round(placement.scale() * 100) + "%", fraction, sliderWidth);
+            if (next >= 0f) {
+                placed(context, widgetId, placement.withScale(Math.round((min + next * (max - min)) * 20f) / 20f));
+            }
+        }
+        y += row.height;
+
+        row = new Rect(surface.x, y, surface.width, FathomSettingRows.ROW);
+        if (rowVisible(row, viewport)) {
+            float next = layoutSlider(context, "layout.opacity." + widgetId, row, "Opacity",
+                    Math.round(placement.opacity() * 100) + "%", (placement.opacity() - 0.1f) / 0.9f, sliderWidth);
+            if (next >= 0f) {
+                placed(context, widgetId, placement.withOpacity(Math.round((0.1f + next * 0.9f) * 20f) / 20f));
+            }
+        }
+        y += row.height;
+
+        // Anchor: which edge it keeps its distance from when the screen changes.
+        row = new Rect(surface.x, y, surface.width, FathomSettingRows.ROW);
+        if (rowVisible(row, viewport)) {
+            Rect control = FathomSettingRows.row(ui, controls, "layout.row.anchor." + widgetId, row,
+                    "Anchor", "The edge it follows when the window or GUI scale changes.",
+                    Math.min(150f, row.width * 0.5f), Skin.H_SM, true, controls.pointerOverVisible(row), false);
+            int chosen = controls.dropdown(ui, "layout.anchor." + widgetId, control, ANCHOR_LABELS,
+                    placement.anchor().ordinal());
+            if (chosen != placement.anchor().ordinal() && chosen >= 0 && chosen < ANCHORS.length) {
+                placed(context, widgetId, reanchored(context, widgetId, placement, ANCHORS[chosen]));
+            }
+        }
+        y += row.height;
+
+        // Where it is now, and the way back.
+        row = new Rect(surface.x, y, surface.width, FathomSettingRows.ROW);
+        if (rowVisible(row, viewport)) {
+            if (placement != describedPlacement) {
+                describedPlacement = placement;
+                positionText = placement.offsetX() + " " + edge(placement.anchor().horizontal(), true) + ", "
+                        + placement.offsetY() + " " + edge(placement.anchor().vertical(), false);
+            }
+            float width = Controls.buttonWidth(ui, "Reset position");
+            Rect control = FathomSettingRows.row(ui, controls, "layout.row.position." + widgetId, row,
+                    "Position", positionText, width, Skin.H_SM, true, controls.pointerOverVisible(row), true);
+            boolean home = widget == null
+                    || (placement.anchor() == widget.defaultPlacement().anchor()
+                            && placement.offsetX() == widget.defaultPlacement().offsetX()
+                            && placement.offsetY() == widget.defaultPlacement().offsetY());
+            if (controls.secondary(ui, "layout.reset." + widgetId, control, "Reset position", !home)) {
+                net.fathom.optimizations.core.hud.Placement start = widget.defaultPlacement();
+                placed(context, widgetId, placement.withAnchor(start.anchor())
+                        .withOffset(start.offsetX(), start.offsetY()));
+            }
+        }
+        y += row.height;
+        return y;
+    }
+
+    private static boolean rowVisible(Rect row, Rect viewport) {
+        return row.bottom() >= viewport.y && row.y <= viewport.bottom();
+    }
+
+    /** "from left", "from the top" and so on: what an offset is measured from. */
+    private static String edge(float fraction, boolean horizontal) {
+        if (fraction < 0.5f) {
+            return horizontal ? "from the left" : "from the top";
+        }
+        if (fraction > 0.5f) {
+            return horizontal ? "from the right" : "from the bottom";
+        }
+        return horizontal ? "from the centre" : "from the middle";
+    }
+
+    /**
+     * A slider row whose value sits inside its control, as every setting's does.
+     *
+     * @return the new fraction, or -1 when it did not move
+     */
+    private float layoutSlider(HubContext context, String id, Rect row, String label, String value,
+            float fraction, float width) {
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        Rect control = FathomSettingRows.row(ui, controls, id + "#row", row, label, "", width,
+                Controls.SLIDER_HEIGHT, true, controls.pointerOverVisible(row), false);
+        Rect track = Rect.of(control.x + SLIDER_VALUE + Skin.S2, control.y, control.right(), control.bottom());
+        double next = controls.slider(ui, id, track, fraction, true);
+        ui.textRight(value, control.x + SLIDER_VALUE, Controls.baseline(ui, row, Type.CAPTION), Type.CAPTION,
+                Skin.TEXT_MUTED);
+        return Math.abs(next - fraction) > 0.001d ? (float) next : -1f;
+    }
+
+    /** A new anchor for a widget, with offsets that keep it exactly where it is on screen. */
+    private static net.fathom.optimizations.core.hud.Placement reanchored(HubContext context, String widgetId,
+            net.fathom.optimizations.core.hud.Placement placement, net.fathom.optimizations.core.hud.Anchor next) {
+        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        net.fathom.optimizations.fabric.gfx.MinecraftGuiSize size = net.fathom.optimizations.fabric.gfx.MinecraftGuiSize.get(client);
+        for (net.fathom.optimizations.fabric.hud.FathomHud.Positioned each
+                : context.hud().boxes(client, size.width(), size.height())) {
+            if (each.widget.id().equals(widgetId)) {
+                net.fathom.optimizations.core.hud.Snap.Box box = each.box;
+                // From where the placement puts it, not where the flow moved it.
+                return placement.withAnchor(next).withOffset(
+                        offsetFor(next.horizontal(), box.x, box.width, size.width()),
+                        offsetFor(next.vertical(), each.naturalY, box.height, size.height()));
+            }
+        }
+        return placement.withAnchor(next);
+    }
+
+    /** The inverse of {@code Anchor.x}: an absolute position as an inward offset. */
+    private static int offsetFor(float fraction, int position, int extent, int screen) {
+        if (fraction > 0.5f) {
+            return screen - (position + extent);
+        }
+        if (fraction < 0.5f) {
+            return position;
+        }
+        return position - Math.round((screen - extent) * 0.5f);
+    }
+
+    /** Apply a placement from this page: live on the next frame, written with the rest. */
+    private static void placed(HubContext context, String widgetId,
+            net.fathom.optimizations.core.hud.Placement next) {
+        context.hud().place(widgetId, next);
+        context.markDirty();
+    }
+
 
     // -----------------------------------------------------------------------
     // Key conflicts
@@ -1250,47 +1486,27 @@ final class ModsSection implements Section {
     }
 
     private String calculateConflict(HubContext context, Keybind keybind) {
-        if (!keybind.isBound()) {
-            return "";
-        }
-        List<String> others = new ArrayList<String>();
-        for (FathomModule module : modules) {
-            for (Keybind other : module.keybinds()) {
-                if (other != keybind && other.key() == keybind.key() && !others.contains(module.name())) {
-                    others.add(module.name());
-                }
-            }
-        }
-        if (context.hud().hubKey() != keybind && context.hud().hubKey().key() == keybind.key()) {
-            others.add("Open Fathom Hub");
-        }
-        // Minecraft's own bindings count. Fathom consumes nothing, so a shared
-        // key fires both actions -- which is worth knowing before wondering why
-        // zooming also drops an item.
+        // Minecraft's own bindings count: Fathom consumes nothing, so a shared
+        // key fires both actions. The rule itself is core's (KeyConflicts),
+        // where it is tested.
+        String[] names = null;
+        int[] codes = null;
         net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
         if (client != null && client.options != null && client.options.allKeys != null) {
-            for (net.minecraft.client.option.KeyBinding vanilla : client.options.allKeys) {
-                if (vanilla == null || vanilla.getCode() != keybind.key()) {
-                    continue;
-                }
-                String name = net.minecraft.client.resource.language.I18n.translate(
-                        vanilla.getTranslationKey());
-                if (!others.contains(name)) {
-                    others.add(name);
+            net.minecraft.client.option.KeyBinding[] all = client.options.allKeys;
+            names = new String[all.length];
+            codes = new int[all.length];
+            for (int index = 0; index < all.length; index++) {
+                if (all[index] != null) {
+                    names[index] = net.minecraft.client.resource.language.I18n.translate(
+                            all[index].getTranslationKey());
+                    codes[index] = all[index].getCode();
                 }
             }
         }
-        if (others.isEmpty()) {
-            return "";
-        }
-        StringBuilder out = new StringBuilder("This key is also used by ");
-        for (int index = 0; index < others.size(); index++) {
-            if (index > 0) {
-                out.append(index == others.size() - 1 ? " and " : ", ");
-            }
-            out.append(others.get(index));
-        }
-        return out.append('.').toString();
+        return net.fathom.optimizations.core.input.KeyConflicts.sentence(
+                net.fathom.optimizations.core.input.KeyConflicts.of(
+                        keybind, modules, context.hud().hubKey(), names, codes));
     }
 
     private void keybindRow(HubContext context, Keybind keybind, Rect area, boolean last) {
@@ -1325,15 +1541,48 @@ final class ModsSection implements Section {
      */
     @Override
     public boolean key(HubContext context, char character, int keyCode) {
+        if (editingColour != null) {
+            return typeHex(context, character, keyCode);
+        }
         if (editing != null) {
             return type(context, character, keyCode);
         }
-        if (open != null && keyCode == Keyboard.KEY_ESCAPE) {
+        if (open != null && keyCode == Keyboard.KEY_ESCAPE && !context.controls().popoverOpen()) {
             // Back to the list, as a browser's Back would; the tab stays open.
+            // An open dropdown is closed first, by the Hub, one layer at a time.
             activate(context, null);
             return true;
         }
         return false;
+    }
+
+    /** Typing a hex colour: Enter applies it, Escape leaves the colour alone. */
+    private boolean typeHex(HubContext context, char character, int keyCode) {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            editingColour = null;
+            hexDraft = "";
+            return true;
+        }
+        if (keyCode == Keyboard.KEY_RETURN || keyCode == Keyboard.KEY_NUMPADENTER) {
+            commitHex(context);
+            return true;
+        }
+        if (keyCode == Keyboard.KEY_BACK) {
+            if (!hexDraft.isEmpty()) {
+                hexDraft = hexDraft.substring(0, hexDraft.length() - 1);
+            }
+            return true;
+        }
+        char lower = Character.toLowerCase(character);
+        boolean digit = (lower >= '0' && lower <= '9') || (lower >= 'a' && lower <= 'f');
+        if (digit && hexDraft.length() < 6) {
+            hexDraft = hexDraft + Character.toUpperCase(character);
+            if (hexDraft.length() == 6) {
+                // Six digits is a whole colour: show it straight away.
+                commitHex(context);
+            }
+        }
+        return true;
     }
 
     /** Typing into a text setting. Escape leaves it; the value is already set. */
@@ -1375,10 +1624,6 @@ final class ModsSection implements Section {
         visibleSearch = search;
         visibleStateFilter = stateFilter;
         return visibleModules;
-    }
-
-    private static float clamp(float value, float low, float high) {
-        return value < low ? low : (value > high ? high : value);
     }
 
     // -----------------------------------------------------------------------

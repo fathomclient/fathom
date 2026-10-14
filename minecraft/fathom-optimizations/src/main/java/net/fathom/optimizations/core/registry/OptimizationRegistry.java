@@ -543,7 +543,7 @@ public final class OptimizationRegistry {
                                     + " machine, and each arm had an outlier.")
                     .evidence(Evidence.inGame(
                             "view-2026-10-03-chunk-workers",
-                            "Full renderer reloads on the user's profile without OptiFine, four"
+                            "Full renderer reloads on my own profile without OptiFine, four"
                                     + " launches in on-off-off-on order, three reloads each,"
                                     + " 5 workers against vanilla's 2: reload-to-quiet median"
                                     + " 0.65 s against 0.76 s, mean 0.73 s against 0.87 s"

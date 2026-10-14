@@ -159,10 +159,16 @@ pub const UNLIMITED: u32 = 260;
 /// good ones the first time it launches.
 pub fn limits(dirs: &ProfileDirs) -> VideoLimits {
     let Ok(text) = std::fs::read_to_string(dirs.options_file()) else {
-        return VideoLimits { max_fps: None, vsync: None };
+        return VideoLimits {
+            max_fps: None,
+            vsync: None,
+        };
     };
 
-    let mut limits = VideoLimits { max_fps: None, vsync: None };
+    let mut limits = VideoLimits {
+        max_fps: None,
+        vsync: None,
+    };
     for line in text.lines() {
         let Some((key, value)) = line.split_once(':') else {
             continue;
@@ -183,7 +189,9 @@ pub fn use_vbo(dirs: &ProfileDirs) -> Option<bool> {
     let text = std::fs::read_to_string(dirs.options_file()).ok()?;
     text.lines().find_map(|line| {
         let (key, value) = line.split_once(':')?;
-        (key.trim() == "useVbo").then(|| value.trim().parse().ok()).flatten()
+        (key.trim() == "useVbo")
+            .then(|| value.trim().parse().ok())
+            .flatten()
     })
 }
 
@@ -210,7 +218,10 @@ pub fn apply_recommended(dirs: &ProfileDirs) -> Result<bool, crate::fs_safety::F
     let mut seen: Vec<&str> = Vec::new();
     let mut rewritten = String::with_capacity(existing.len());
     for line in existing.lines() {
-        let key = line.split_once(':').map(|(key, _)| key.trim()).unwrap_or("");
+        let key = line
+            .split_once(':')
+            .map(|(key, _)| key.trim())
+            .unwrap_or("");
         match DEFAULTS.iter().find(|(name, _)| *name == key) {
             Some((name, value)) => {
                 seen.push(name);
@@ -292,7 +303,9 @@ mod tests {
     /// configured.
     #[test]
     fn seeding_ships_vbo_but_the_frame_limit_fix_never_touches_it() {
-        assert!(SEEDED_DEFAULTS.iter().any(|(k, v)| *k == "useVbo" && *v == "true"));
+        assert!(SEEDED_DEFAULTS
+            .iter()
+            .any(|(k, v)| *k == "useVbo" && *v == "true"));
         assert!(!DEFAULTS.iter().any(|(k, _)| *k == "useVbo"));
 
         let (_tmp, dirs) = dirs();
@@ -314,7 +327,10 @@ fov:0.75
         let after = std::fs::read_to_string(dirs.options_file()).unwrap();
         assert!(after.contains("maxFps:260"), "{after}");
         assert!(after.contains("enableVsync:false"), "{after}");
-        assert!(after.contains("useVbo:false"), "their choice survives: {after}");
+        assert!(
+            after.contains("useVbo:false"),
+            "their choice survives: {after}"
+        );
         assert!(after.contains("fov:0.75"), "{after}");
     }
 
@@ -324,7 +340,10 @@ fov:0.75
 
         assert!(seed(&dirs));
         let first = std::fs::read_to_string(dirs.options_file()).expect("the options file");
-        assert!(!seed(&dirs), "the second call should find the file already there");
+        assert!(
+            !seed(&dirs),
+            "the second call should find the file already there"
+        );
         let second = std::fs::read_to_string(dirs.options_file()).expect("the options file");
 
         assert_eq!(first, second);
@@ -392,7 +411,9 @@ fov:0.75
         let found = limits(&dirs);
         assert_eq!(found.max_fps, Some(260));
         assert_eq!(found.vsync, Some(false));
-        assert!(std::fs::read_to_string(dirs.options_file()).unwrap().contains("fov:0.75"));
+        assert!(std::fs::read_to_string(dirs.options_file())
+            .unwrap()
+            .contains("fov:0.75"));
     }
 
     /// So the button can be pressed twice without the launcher claiming it did

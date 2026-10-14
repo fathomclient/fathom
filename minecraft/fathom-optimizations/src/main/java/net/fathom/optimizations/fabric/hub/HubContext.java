@@ -143,14 +143,25 @@ public final class HubContext {
         this.search = value == null ? "" : value;
     }
 
-    /** Something changed and should be written when the hub closes. */
+    /**
+     * Something changed and should be written: when the hub closes, or after
+     * a moment's quiet if it stays open (see {@code FathomHubScreen}).
+     */
     public void markDirty() {
         dirty = true;
+        dirtyAtNanos = System.nanoTime();
     }
 
     boolean dirty() {
         return dirty;
     }
+
+    /** How long since the last change, while there is one unsaved. */
+    long quietNanos() {
+        return dirty ? System.nanoTime() - dirtyAtNanos : 0L;
+    }
+
+    private long dirtyAtNanos;
 
     void saved() {
         dirty = false;
@@ -198,6 +209,11 @@ public final class HubContext {
     /** Open the HUD editor, coming back here when it closes. */
     public void editHud() {
         FathomNavigation.push(client, new HudEditorScreen(hud));
+    }
+
+    /** Open the HUD editor with one widget already selected. */
+    public void editHud(String widgetId) {
+        FathomNavigation.push(client, new HudEditorScreen(hud, widgetId));
     }
 
     /**

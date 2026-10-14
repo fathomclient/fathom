@@ -44,13 +44,13 @@ final class MenuPoster {
      */
     private static final float[] SCRIM_AT = {0f, 0.22f, 0.50f, 0.78f, 1f};
     private static final float[] SCRIM_ALPHA = {0.14f, 0.03f, 0.02f, 0.07f, 0.18f};
-    private static final int SCRIM_R = 4;
-    private static final int SCRIM_G = 9;
-    private static final int SCRIM_B = 12;
+    private static final int SCRIM_R = 6;
+    private static final int SCRIM_G = 12;
+    private static final int SCRIM_B = 18;
 
-    /** Neutral failure field, used only if the approved poster cannot load. */
+    /** Failure field, the app icon's tile, used only if the approved poster cannot load. */
     private static final float[] FIELD_AT = {0f, 0.28f, 0.52f, 0.76f, 1f};
-    private static final int[] FIELD_RGB = {0x172630, 0x122029, 0x0D181E, 0x0A1419, 0x071015};
+    private static final int[] FIELD_RGB = {0x141C25, 0x121A23, 0x101820, 0x0C141A, 0x080E13};
     private static int texture = -1;
 
     private MenuPoster() {}

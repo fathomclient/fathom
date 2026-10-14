@@ -5,9 +5,11 @@ import org.lwjgl.input.Mouse;
 
 import net.minecraft.client.MinecraftClient;
 
+import net.fathom.optimizations.core.input.HubKeyPolicy;
 import net.fathom.optimizations.core.module.Keybind;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.hub.FathomHubScreen;
+import net.fathom.optimizations.fabric.input.ScreenKinds;
 
 /** Frame-rate hotkey edges for opening and closing the Hub. */
 public final class FrameInput {
@@ -42,16 +44,19 @@ public final class FrameInput {
             return;
         }
 
-        if (client.currentScreen instanceof FathomHubScreen) {
+        // What the press may do depends on what it might have been meant for:
+        // a capital letter in chat, a character in the Hub's own search box,
+        // or a click in a chest are not requests for the Hub.
+        boolean hubBusy = client.currentScreen instanceof FathomHubScreen
+                && ((FathomHubScreen) client.currentScreen).busy();
+        HubKeyPolicy.Action action = HubKeyPolicy.decide(ScreenKinds.of(client.currentScreen), hubBusy);
+        if (action == HubKeyPolicy.Action.CLOSE) {
             FathomHubScreen hub = (FathomHubScreen) client.currentScreen;
-            if (hub.capturingKeybind()) {
-                return;
-            }
             if (hubKey.isMouseButton()) {
                 hub.consumeMouseButton(hubKey.mouseButton());
             }
             hub.toggleOpen();
-        } else if (!(client.currentScreen instanceof FathomScreen)) {
+        } else if (action == HubKeyPolicy.Action.OPEN) {
             Runtime.features().seal();
             FathomNavigation.openHub(client, Runtime.hud());
         } else {

@@ -88,6 +88,10 @@ public final class KeybindCaptureState {
         if (target == null || button < 0) {
             return Outcome.NONE;
         }
+        if (!target.accepts(Keybind.mouse(button))) {
+            // Keep listening: the click was not a choice this binding can take.
+            return Outcome.NONE;
+        }
         Keybind binding = target;
         target = null;
         binding.set(Keybind.mouse(button));

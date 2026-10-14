@@ -1,6 +1,6 @@
 //! The façade the UI talks to.
 //!
-//! The brief is explicit that the UI must not construct launch commands,
+//! The spec is explicit that the UI must not construct launch commands,
 //! manipulate credentials, download arbitrary files, install mods directly, or
 //! touch Minecraft internals. This module is how that is enforced in practice:
 //! it exposes *intentions* ("sign in", "what is blocking Play?", "install this
@@ -201,7 +201,48 @@ fn launch_log_path(dirs: &ProfileDirs) -> PathBuf {
     let stamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
+    // Room for this one among the newest LAUNCH_LOGS_KEPT.
+    prune_launch_logs(&dirs.logs_dir(), LAUNCH_LOGS_KEPT - 1);
     dirs.logs_dir().join(format!("launch-{stamp}.log"))
+}
+
+/// How many launch logs a profile keeps. A crash from last week is still
+/// there; a log from every session ever played is not.
+const LAUNCH_LOGS_KEPT: usize = 20;
+
+/// Remove all but the newest `keep` launch logs in `logs`. Only files named
+/// as [`launch_log_path`] names them are touched, so anything else a user put
+/// beside them is left alone. Best effort: a log that cannot be removed now is
+/// removed on a later launch.
+fn prune_launch_logs(logs: &Path, keep: usize) -> usize {
+    let Ok(entries) = std::fs::read_dir(logs) else {
+        return 0;
+    };
+    let mut stamped: Vec<(u64, PathBuf)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let stamp = name
+                .to_str()?
+                .strip_prefix("launch-")?
+                .strip_suffix(".log")?
+                .parse::<u64>()
+                .ok()?;
+            entry
+                .file_type()
+                .ok()?
+                .is_file()
+                .then(|| (stamp, entry.path()))
+        })
+        .collect();
+    if stamped.len() <= keep {
+        return 0;
+    }
+    stamped.sort_by_key(|entry| std::cmp::Reverse(entry.0));
+    stamped
+        .drain(keep..)
+        .filter(|(_, path)| std::fs::remove_file(path).is_ok())
+        .count()
 }
 
 /// What a profile's Java policy resolves to.
@@ -487,6 +528,15 @@ impl Launcher {
                     Ok(_) => {}
                     Err(error) => tracing::warn!(%error, "could not update Fathom components"),
                 }
+            }
+            // With every profile moved onto this build's jars, the jars of
+            // earlier builds that nothing refers to any more can go.
+            let superseded = crate::components::collect_superseded(&paths, &engine);
+            if !superseded.is_empty() {
+                tracing::info!(
+                    count = superseded.len(),
+                    "superseded Fathom jars removed from the mod store"
+                );
             }
         }
 
@@ -2016,16 +2066,20 @@ impl Launcher {
             return Ok((None, false));
         };
 
-        let mut still_referenced = std::collections::BTreeSet::new();
-        for other in self.profiles.list() {
-            for kept in other.mods.iter() {
-                still_referenced.insert(kept.sha1.clone());
-            }
-        }
+        // Every hash any profile file mentions -- live, backed up, trashed,
+        // unreadable, in a launch history or as an earlier build. Read as text
+        // rather than parsed, so a profile that cannot be loaded still keeps
+        // its jars: reading too much keeps a file, reading too little would
+        // delete one somebody supplied and cannot download again.
+        let mut still_referenced =
+            crate::components::referenced_hashes_except(&self.paths, Some(&profile.id));
         // The profile in hand may be newer than what is on disk, so its own
-        // entries are added from memory rather than from the store's copy.
+        // entries (and their earlier builds) are added from memory as well.
         for kept in profile.mods.iter() {
-            still_referenced.insert(kept.sha1.clone());
+            still_referenced.insert(kept.sha1.to_ascii_lowercase());
+            for earlier in &kept.previous {
+                still_referenced.insert(earlier.sha1.to_ascii_lowercase());
+            }
         }
 
         if still_referenced.contains(&entry.sha1) {
@@ -2037,6 +2091,126 @@ impl Launcher {
             .collect_garbage(&still_referenced)
             .is_empty();
         Ok((removed, deleted))
+    }
+
+    // -- mod recovery -----------------------------------------------------------
+
+    /// What changed since the last launch that worked, what is broken, and
+    /// what the logs of the last launch say. Disk only; no network.
+    pub fn mod_recovery_report(
+        &self,
+        profile: &Profile,
+    ) -> crate::recovery::mods::ModRecoveryReport {
+        crate::recovery::mods::analyse(profile, &self.dirs_for(profile), self.mod_engine().store())
+    }
+
+    /// Put the profile's mods back to the set that last worked, as far as the
+    /// bytes still on this computer allow, and save. Nothing is deleted.
+    pub fn restore_last_good_mods(
+        &self,
+        profile: &mut Profile,
+    ) -> Result<crate::recovery::mods::RestoreReport, ServiceError> {
+        let history = crate::mods::history::LaunchHistory::read(&self.dirs_for(profile));
+        let good = history.last_good.ok_or_else(|| {
+            ServiceError::Failed(
+                "No launch of this profile has been recorded as working yet.".to_owned(),
+            )
+        })?;
+        let store = self.mod_engine().store().clone();
+        let mut next = profile.mods.clone();
+        let report =
+            crate::recovery::mods::restore_last_good(&mut next, &good, |sha| store.contains(sha));
+        if report.changed() {
+            let before = std::mem::replace(&mut profile.mods, next);
+            if let Err(error) = self.profiles.save(profile) {
+                profile.mods = before;
+                return Err(error.into());
+            }
+        }
+        Ok(report)
+    }
+
+    /// Put back a build a mod used before. Offline: the bytes must still be in
+    /// the store, which they are while the profile remembers that build.
+    pub fn restore_mod_build(
+        &self,
+        profile: &mut Profile,
+        id: &ModId,
+        sha1: &str,
+    ) -> Result<ProfileMod, ServiceError> {
+        if !self.mod_engine().store().verify(sha1).unwrap_or(false) {
+            return Err(ServiceError::Failed(
+                "That build is no longer on this computer, or its file is damaged.".to_owned(),
+            ));
+        }
+        let mut next = profile.mods.clone();
+        let entry = next
+            .get_mut(id)
+            .ok_or_else(|| ServiceError::Failed("That mod is not in this profile.".to_owned()))?;
+        entry
+            .restore_previous(sha1, crate::mods::config::now_seconds())
+            .map_err(ServiceError::Failed)?;
+        let restored = entry.clone();
+        let before = std::mem::replace(&mut profile.mods, next);
+        if let Err(error) = self.profiles.save(profile) {
+            profile.mods = before;
+            return Err(error.into());
+        }
+        Ok(restored)
+    }
+
+    /// Record what an index says about jars nobody recorded a source for.
+    ///
+    /// Only fills in what was unknown -- name, version, licence, what it was
+    /// built for, and the index's ids so it can be checked for updates. The
+    /// file, its hash, whether it is on, and the fact that the user supplied
+    /// it are left exactly as they were.
+    pub fn apply_identified(
+        &self,
+        profile: &mut Profile,
+        found: &[crate::mods::browse::Identified],
+    ) -> Result<usize, ServiceError> {
+        let mut next = profile.mods.clone();
+        let mut applied = 0;
+        for identified in found {
+            let Ok(id) = ModId::new(&identified.id) else {
+                continue;
+            };
+            let Some(entry) = next.get_mut(&id) else {
+                continue;
+            };
+            if entry.origin.project.is_some()
+                || !entry.sha1.eq_ignore_ascii_case(&identified.file.hash.sha1)
+            {
+                continue;
+            }
+            let project = &identified.project;
+            let file = &identified.file;
+            entry.origin = crate::mods::Origin {
+                name: Some(project.name.clone()),
+                summary: Some(project.summary.clone()).filter(|s| !s.is_empty()),
+                license: Some(project.license.describe()),
+                minecraft: file.game_versions.clone(),
+                loaders: file.loaders.clone(),
+                repository: Some(project.reference.provider.id().to_owned()),
+                project: Some(project.reference.id.clone()),
+                version_id: Some(file.version_id.clone()),
+                page: Some(project.project_url.clone()),
+                requires: entry.origin.requires.clone(),
+            };
+            if entry.version.is_none() {
+                entry.version = Some(file.version());
+            }
+            applied += 1;
+        }
+        if applied > 0 {
+            let before = std::mem::replace(&mut profile.mods, next);
+            if let Err(error) = self.profiles.save(profile) {
+                profile.mods = before;
+                return Err(error.into());
+            }
+        }
+        Ok(applied)
     }
 
     /// The Fathom components this profile calls for and does not have.
@@ -2725,6 +2899,34 @@ impl Launcher {
         profile: &Profile,
         version: &VersionDetail,
     ) -> Result<GameStatus, LaunchRefusal> {
+        self.launch_with(profile, version, LaunchOptions::default())
+    }
+
+    /// Record how the last launch of a profile went, for recovery.
+    ///
+    /// Called by whoever watched the session; see `mods::history` for what
+    /// counts as having worked.
+    pub fn judge_launch(&self, profile: &ProfileId, outcome: crate::mods::history::Outcome) {
+        let dirs = self.profiles.dirs(profile);
+        crate::mods::history::LaunchHistory::judge(&dirs, outcome);
+    }
+
+    /// The profile's launch history.
+    pub fn launch_history(&self, profile: &ProfileId) -> crate::mods::history::LaunchHistory {
+        crate::mods::history::LaunchHistory::read(&self.profiles.dirs(profile))
+    }
+
+    /// [`Self::launch`], with choices about this one launch.
+    ///
+    /// Long because a launch is one ordered sequence of checks, and every step
+    /// depends on the ones above it.
+    #[allow(clippy::too_many_lines)]
+    pub fn launch_with(
+        &self,
+        profile: &Profile,
+        version: &VersionDetail,
+        options: LaunchOptions,
+    ) -> Result<GameStatus, LaunchRefusal> {
         // Claimed first. Everything below can take a second or two, and that is
         // exactly the window in which a user double-clicks Play.
         let claim = self.running.claim(&profile.id)?;
@@ -2793,9 +2995,12 @@ impl Launcher {
         // Make the mods directory match what the profile says it wants. Without
         // this the mods are recorded and never appear on disk, which looks from
         // the inside exactly like a loader that is not loading them.
+        let mut configured = profile.mods.clone();
         if profile.loader_kind().supports_mods() {
             let mut copy = profile.clone();
-            match self.materialize_mods(&mut copy) {
+            let laid_out = self.lay_out_mods(&mut copy, options);
+            configured = copy.mods.clone();
+            match laid_out {
                 Ok(outcome) => {
                     tracing::info!(profile = %profile.id, summary = %outcome.summary(), "mods directory laid out");
                 }
@@ -2815,8 +3020,31 @@ impl Launcher {
             crate::fathom_client::verify_placed(&pre.dirs.mods_dir(), entry)
                 .map_err(LaunchRefusal::FathomClientUnavailable)?;
         }
+
+        // A library a mod was installed with, now missing or off, is a launch
+        // that will stop at the loader's dependency check. Said here, in
+        // words, with the way out; never for a launch without external mods.
+        if !options.without_external_mods && profile.loader_kind().supports_mods() {
+            let mut checked = profile.clone();
+            checked.mods = configured.clone();
+            if let Some(message) = self.mod_launch_check(&checked) {
+                return Err(LaunchRefusal::ModsNeedAttention(message));
+            }
+        }
+
+        // What this launch is about to load, so recovery can later say what
+        // changed since the last one that worked. Never fatal.
+        crate::mods::history::LaunchHistory::begin(
+            &pre.dirs,
+            profile,
+            &configured,
+            options.without_external_mods,
+        );
         // Whatever the previous session wrote no longer describes this one.
         crate::fathom_client::clear_marker(&pre.dirs.minecraft_dir());
+        // The last session's reading goes with it: a new session's figures start
+        // empty rather than showing the previous game's as this one's.
+        crate::session_pulse::clear(&pre.dirs.minecraft_dir());
 
         // The optimization module reads its settings from a file in the game
         // directory, written fresh on every launch so a previous session's
@@ -2873,6 +3101,75 @@ impl Launcher {
         Ok(claim.fulfil(process))
     }
 
+    /// Make the profile's `mods/` directory match what this launch will load.
+    ///
+    /// Always lays out the full configured set first, which adopts anything
+    /// dropped into `mods/` by hand into the store and records it as placed.
+    /// Without external mods, a second pass then lays out only Fathom's own
+    /// components: because the first pass recorded every jar as placed, this
+    /// pass can take them out of the directory, and because every one of them
+    /// is in the store, nothing is lost. The profile is not changed (beyond
+    /// adopting dropped jars, as every launch does), so the next ordinary
+    /// launch puts every mod back.
+    pub fn lay_out_mods(
+        &self,
+        profile: &mut Profile,
+        options: LaunchOptions,
+    ) -> Result<crate::mods::Materialization, ServiceError> {
+        let mut outcome = self.materialize_mods(profile)?;
+        if !outcome.foreign.is_empty() {
+            // Jars just adopted from a hand-dropped file are in the profile
+            // now but not yet in the directory's record of what was placed;
+            // a second pass records them, so they are managed like every other
+            // mod from here on -- including being taken out below.
+            let engine = self.mod_engine();
+            let resolution =
+                engine.resolve(&profile.mods, &profile.version_id, profile.loader_kind());
+            outcome = engine.materialize(&self.dirs_for(profile), &resolution)?;
+        }
+        if !options.without_external_mods {
+            return Ok(outcome);
+        }
+        let safe = safe_mode_mods(&profile.mods);
+        let engine = self.mod_engine();
+        let resolution = engine.resolve(&safe, &profile.version_id, profile.loader_kind());
+        let outcome = engine.materialize(&self.dirs_for(profile), &resolution)?;
+        tracing::info!(profile = %profile.id, summary = %outcome.summary(), "laid out without external mods");
+        Ok(outcome)
+    }
+
+    /// A sentence naming every enabled mod whose recorded requirement is
+    /// missing or switched off, or `None` when there is none.
+    ///
+    /// The one mod problem that refuses an ordinary launch: the loader would
+    /// stop at the same check, with a message about mod ids instead of names.
+    pub fn mod_launch_check(&self, profile: &Profile) -> Option<String> {
+        let mods = &profile.mods;
+        let resolution =
+            self.mod_engine()
+                .resolve(mods, &profile.version_id, profile.loader_kind());
+        let names = crate::mods::NameLookup::from_definitions(&crate::mods::catalog::entries())
+            .with_profile(mods);
+        let missing: Vec<String> = resolution
+            .problems
+            .iter()
+            .filter(|problem| {
+                matches!(
+                    problem,
+                    crate::mods::Problem::MissingDependency { optional: false, needed_by, .. }
+                        if mods.get(needed_by).is_some_and(|entry| crate::mods::resolve::Recorded::of(&entry.origin).is_some())
+                )
+            })
+            .map(|problem| problem.message(&names))
+            .collect();
+        (!missing.is_empty()).then(|| {
+            format!(
+                "{} Fix it on the Mods page, or launch without external mods.",
+                missing.join(" ")
+            )
+        })
+    }
+
     // -- what is running ---------------------------------------------------
 
     /// The games this launcher started.
@@ -2891,6 +3188,30 @@ impl Launcher {
     }
 }
 
+/// Choices about one launch, as opposed to settings of the profile.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LaunchOptions {
+    /// Start with Fathom's own components only: every mod the user added or
+    /// installed is left out of the mods directory for this launch. Nothing is
+    /// deleted and the profile is not changed.
+    pub without_external_mods: bool,
+}
+
+/// The entries a launch without external mods keeps: Fathom's own components,
+/// except a bridge whose whole purpose is to load a mod the user supplied
+/// (`OptiFabric` exists only to load `OptiFine`, which is the user's).
+pub fn safe_mode_mods(
+    mods: &crate::mods::ProfileModConfiguration,
+) -> crate::mods::ProfileModConfiguration {
+    let mut safe = crate::mods::ProfileModConfiguration::default();
+    for entry in mods.iter() {
+        if entry.source == crate::mods::ModSource::FirstParty && entry.id.as_str() != "optifabric" {
+            safe.upsert(entry.clone());
+        }
+    }
+    safe
+}
+
 #[cfg(test)]
 #[allow(
     clippy::indexing_slicing,
@@ -2899,6 +3220,35 @@ impl Launcher {
     clippy::panic
 )]
 mod tests {
+
+    #[test]
+    fn launch_logs_keep_the_newest_and_leave_other_files_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        for stamp in 1..=25u64 {
+            std::fs::write(dir.path().join(format!("launch-{stamp}.log")), b"x").unwrap();
+        }
+        std::fs::write(dir.path().join("notes.txt"), b"mine").unwrap();
+        std::fs::write(dir.path().join("launch-latest.log"), b"mine").unwrap();
+
+        assert_eq!(super::prune_launch_logs(dir.path(), 19), 6);
+        let mut left: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left.len(),
+            21,
+            "19 launch logs and the two files that are not ours"
+        );
+        assert!(
+            left.contains(&"launch-25.log".to_owned()),
+            "the newest stays"
+        );
+        assert!(!left.contains(&"launch-6.log".to_owned()), "the oldest go");
+        assert!(left.contains(&"notes.txt".to_owned()));
+        assert!(left.contains(&"launch-latest.log".to_owned()));
+    }
 
     /// The smallest document `readiness` will accept. It only reads the Java
     /// requirement, so nothing else needs to be real.

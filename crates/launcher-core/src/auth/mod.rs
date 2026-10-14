@@ -325,12 +325,23 @@ pub struct AzureApp {
 }
 
 impl AzureApp {
-    /// Read the client id from the environment, if present.
+    /// The client id: `FATHOM_AZURE_CLIENT_ID` at run time if set, otherwise
+    /// the one a release build compiled in, otherwise none.
+    ///
+    /// A release for other people has to carry its approved registration --
+    /// asking every tester to set an environment variable is not a sign-in
+    /// flow. The release builder supplies it as
+    /// `FATHOM_RELEASE_AZURE_CLIENT_ID` in the build's environment: a name of
+    /// its own, so a developer's personal `FATHOM_AZURE_CLIENT_ID` is never
+    /// baked into a binary by accident, and nothing about the id is written
+    /// into this repository. A build made without it has none and says so.
     pub fn from_env() -> Self {
+        let runtime = std::env::var("FATHOM_AZURE_CLIENT_ID").ok();
+        let compiled = option_env!("FATHOM_RELEASE_AZURE_CLIENT_ID").map(str::to_owned);
         Self {
-            client_id: std::env::var("FATHOM_AZURE_CLIENT_ID")
-                .ok()
-                .filter(|s| !s.trim().is_empty()),
+            client_id: runtime
+                .filter(|s| !s.trim().is_empty())
+                .or_else(|| compiled.filter(|s| !s.trim().is_empty())),
         }
     }
 

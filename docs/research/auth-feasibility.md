@@ -43,7 +43,7 @@ promise the outcome in advance — including us.
 6. Profile                    /minecraft/profile                       (never reached)
 ```
 
-The reported failure is real and its shape is exactly as described in the brief.
+The reported failure is real and its shape is exactly as described in the spec.
 Steps 1–3 succeed for any newly registered Entra application, because none of
 them know or care about Minecraft. The wall is step 4:
 

@@ -305,6 +305,46 @@ mod tests {
         }
     }
 
+    /// The handoff contract with the game, as a shared file.
+    ///
+    /// The game's own test (`FeatureTests.theLauncherSessionFileIsReadAsWritten`)
+    /// parses this same fixture and checks every field, so a change on either
+    /// side that the other does not follow fails a test rather than a launch.
+    /// The fixture is what this writer produces: regenerate it with
+    /// `FATHOM_UPDATE_FIXTURES=1 cargo test -p launcher-core session` after an
+    /// intended format change, and the Java side then has to agree.
+    #[test]
+    fn the_game_reads_exactly_what_this_writes() {
+        let descriptor = SessionDescriptor {
+            profile_id: "pvp-2".to_owned(),
+            profile_name: "Bedwars \"ranked\" \\ ✓".to_owned(),
+            minecraft: "1.8.9".to_owned(),
+            loader: "Legacy Fabric".to_owned(),
+            loader_version: Some("0.19.3".to_owned()),
+            preset: "competitive".to_owned(),
+            component_version: Some("0.3.0-hud".to_owned()),
+            launcher_version: "0.1.0".to_owned(),
+            root: None,
+        }
+        .with_root(std::path::Path::new(
+            "C:\\Users\\Example\\AppData\\Local\\Fathom\\data",
+        ));
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../minecraft/fathom-optimizations/src/test/resources/contract/session.json");
+        let written = descriptor.to_json();
+        if std::env::var_os("FATHOM_UPDATE_FIXTURES").is_some() {
+            std::fs::create_dir_all(fixture.parent().unwrap()).unwrap();
+            std::fs::write(&fixture, &written).unwrap();
+        }
+        let expected = std::fs::read_to_string(&fixture)
+            .unwrap()
+            .replace("\r\n", "\n");
+        assert_eq!(
+            written, expected,
+            "the session document changed; if that was intended, regenerate the fixture              (FATHOM_UPDATE_FIXTURES=1) and make the game's reader agree"
+        );
+    }
+
     #[test]
     fn a_name_with_quotes_in_it_does_not_break_the_document() {
         let mut awkward = profile();

@@ -492,6 +492,40 @@ public abstract class Setting {
             return value;
         }
 
+        /**
+         * A colour typed by hand: {@code RRGGBB} or the short {@code RGB}, with
+         * or without a leading hash. Null for anything else.
+         */
+        public static Integer parseTyped(String raw) {
+            if (raw == null) {
+                return null;
+            }
+            String text = raw.trim();
+            if (text.startsWith("#")) {
+                text = text.substring(1);
+            }
+            if (text.length() == 3) {
+                StringBuilder wide = new StringBuilder(6);
+                for (int index = 0; index < 3; index++) {
+                    wide.append(text.charAt(index)).append(text.charAt(index));
+                }
+                text = wide.toString();
+            }
+            if (text.length() != 6) {
+                return null;
+            }
+            try {
+                return Integer.valueOf(Integer.parseInt(text, 16));
+            } catch (NumberFormatException notHex) {
+                return null;
+            }
+        }
+
+        /** The colour it shipped with, so the picker can always offer it back. */
+        public int fallback() {
+            return fallback;
+        }
+
         /** Packed ARGB at the given alpha, ready to draw with. */
         public int argb(int alpha) {
             return (Math.max(0, Math.min(255, alpha)) << 24) | value;

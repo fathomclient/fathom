@@ -44,8 +44,12 @@ final class PingWidget implements HudWidget {
 
     private long nextReadNanos;
     private int settings = -1;
+    /** The session the reading was taken in: another server's ping is never shown. */
+    private int readSession = -1;
     private int latency = UNKNOWN;
     private String text = "";
+    /** The reading measured once while it is unchanged, not on every size asked for. */
+    private final MeasuredWidths widths = new MeasuredWidths(2);
 
     @Override
     public String id() {
@@ -55,6 +59,14 @@ final class PingWidget implements HudWidget {
     @Override
     public String placeholder() {
         return "000 ms";
+    }
+
+    private static final String[] PREVIEW = {"42 ms"};
+
+    /** A plausible reading rather than the width template. */
+    @Override
+    public String[] preview() {
+        return PREVIEW;
     }
 
     private static FathomModule module() {
@@ -69,10 +81,11 @@ final class PingWidget implements HudWidget {
     private void read(MinecraftClient client) {
         long now = System.nanoTime();
         int revision = net.fathom.optimizations.core.module.Setting.revision();
-        if (now < nextReadNanos && !text.isEmpty() && revision == settings) {
+        if (now < nextReadNanos && !text.isEmpty() && revision == settings && readSession == Widgets.session()) {
             return;
         }
         settings = revision;
+        readSession = Widgets.session();
         nextReadNanos = now + refreshNanos(Widgets.optionChoice("ping", "refresh", "1 second"));
         latency = latencyOf(client);
         text = format(latency, Widgets.optionChoice("ping", "format", "120 ms"));
@@ -105,11 +118,27 @@ final class PingWidget implements HudWidget {
         return value + " ms";
     }
 
-    private static int latencyOf(MinecraftClient client) {
+    /**
+     * The player's own row in the player list.
+     *
+     * <p>By UUID first, then by name. Behind a proxy, or on a server in offline
+     * mode, the UUID the server lists the player under is not the one the
+     * client's session has, and a lookup by UUID alone found no row: the widget
+     * showed "--" on exactly the servers where the tab list showed full bars.
+     */
+    static PlayerListEntry ownEntry(MinecraftClient client) {
         if (client == null || client.player == null || client.getNetworkHandler() == null) {
-            return UNKNOWN;
+            return null;
         }
         PlayerListEntry entry = client.getNetworkHandler().getPlayerListEntry(client.player.getUuid());
+        if (entry == null && client.player.getGameProfile() != null && client.player.getGameProfile().getName() != null) {
+            entry = client.getNetworkHandler().getPlayerListEntry(client.player.getGameProfile().getName());
+        }
+        return entry;
+    }
+
+    static int latencyOf(MinecraftClient client) {
+        PlayerListEntry entry = ownEntry(client);
         if (entry == null) {
             return UNKNOWN;
         }
@@ -140,7 +169,7 @@ final class PingWidget implements HudWidget {
             width += barsWidth();
         }
         if (numbers()) {
-            width += (bars() ? 3 : 0) + (int) Math.ceil(font.width(text));
+            width += (bars() ? 3 : 0) + (int) Math.ceil(widths.of(font, text));
         }
         return width + pad * 2;
     }

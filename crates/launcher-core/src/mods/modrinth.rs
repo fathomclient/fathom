@@ -44,7 +44,7 @@
 
 use std::collections::BTreeSet;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::definition::{ArtifactHash, License, ModVersion};
 use super::store::{ModStore, StoredMod};
@@ -290,6 +290,25 @@ pub struct SearchOptions<'a> {
     pub index: &'static str,
     /// Whether to restrict the query to this loader and Minecraft version.
     pub compatible_only: bool,
+    /// Which loader tags count as a match when `compatible_only` is set.
+    pub loader_scope: LoaderScope,
+}
+
+/// Which loader tags a compatible-only search accepts.
+///
+/// Modrinth facets are project-wide, so none of these is a compatibility
+/// check; they decide which projects are worth checking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LoaderScope {
+    /// Only the loader's own tag (`legacy-fabric`).
+    #[default]
+    Exact,
+    /// Also plain `fabric`, which is how Legacy Fabric mods uploaded before
+    /// Modrinth had a `legacy-fabric` tag are labelled.
+    WithFabric,
+    /// Any loader at all: only the Minecraft version is required. For showing
+    /// why a mod does not fit, never for installing it.
+    Any,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -297,7 +316,11 @@ pub enum ModrinthError {
     #[error(transparent)]
     Network(#[from] NetworkError),
     #[error("Modrinth returned HTTP {status}")]
-    Status { status: u16 },
+    Status {
+        status: u16,
+        /// The wait Modrinth asked for on a 429, in seconds.
+        retry_after: Option<u64>,
+    },
     #[error("Modrinth returned something this launcher could not read: {0}")]
     Malformed(String),
     #[error("{0} is not on the download allowlist, so this file will not be fetched")]
@@ -306,6 +329,24 @@ pub enum ModrinthError {
     Store(#[from] ModError),
     #[error("{name} has no version for Minecraft {minecraft} on this loader")]
     NoCompatibleVersion { name: String, minecraft: String },
+}
+
+/// One entry of Modrinth's category vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Category {
+    /// The facet value, e.g. `optimization`.
+    pub name: String,
+    /// Which group Modrinth files it under: `categories`, `features`,
+    /// `resolutions` or `performance impact`.
+    pub header: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawCategory {
+    name: String,
+    project_type: String,
+    #[serde(default)]
+    header: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -353,6 +394,7 @@ impl Modrinth {
         if !response.is_success() {
             return Err(ModrinthError::Status {
                 status: response.status,
+                retry_after: response.retry_after,
             });
         }
         response
@@ -381,6 +423,7 @@ impl Modrinth {
                 category: None,
                 index: "relevance",
                 compatible_only: true,
+                loader_scope: LoaderScope::Exact,
             },
             grant,
         )
@@ -467,6 +510,7 @@ impl Modrinth {
         if !response.is_success() {
             return Err(ModrinthError::Status {
                 status: response.status,
+                retry_after: response.retry_after,
             });
         }
         let raw: RawVersion = response
@@ -507,7 +551,15 @@ impl Modrinth {
         let mut clauses: Vec<String> = vec![r#"["project_type:mod"]"#.to_owned()];
         if options.compatible_only {
             clauses.push(format!(r#"["versions:{minecraft}"]"#));
-            clauses.push(format!(r#"["categories:{facet}"]"#));
+            match options.loader_scope {
+                LoaderScope::Exact => clauses.push(format!(r#"["categories:{facet}"]"#)),
+                // OR within one clause.
+                LoaderScope::WithFabric if facet != "fabric" => {
+                    clauses.push(format!(r#"["categories:{facet}","categories:fabric"]"#))
+                }
+                LoaderScope::WithFabric => clauses.push(format!(r#"["categories:{facet}"]"#)),
+                LoaderScope::Any => {}
+            }
         }
         if let Some(category) = options.category.filter(|category| !category.is_empty()) {
             clauses.push(format!(r#"["categories:{}"]"#, escape_facet(category)));
@@ -540,6 +592,7 @@ impl Modrinth {
         if !response.is_success() {
             return Err(ModrinthError::Status {
                 status: response.status,
+                retry_after: response.retry_after,
             });
         }
 
@@ -595,6 +648,7 @@ impl Modrinth {
         if !response.is_success() {
             return Err(ModrinthError::Status {
                 status: response.status,
+                retry_after: response.retry_after,
             });
         }
 
@@ -614,6 +668,60 @@ impl Modrinth {
         // newest anything.
         versions.sort_by_key(|version| version.channel);
         Ok(versions)
+    }
+
+    /// Every build of a project that lists this Minecraft version, whatever
+    /// loader it is tagged for. Newest first, as Modrinth returns them.
+    ///
+    /// For the browser's compatibility resolver, which has to see the plain
+    /// `fabric`, `ornithe` and `forge` builds for 1.8.9 to say *why* a project
+    /// does or does not fit; [`Self::versions`] would hide them. Nothing here
+    /// decides compatibility, and nothing installs from this list without the
+    /// resolver's verdict.
+    pub fn versions_for_game(
+        &self,
+        project: &str,
+        minecraft: &str,
+        grant: &PerActionGrant,
+    ) -> Result<Vec<Version>, ModrinthError> {
+        let path = format!(
+            "{API}/project/{}/version?game_versions={}",
+            encode_segment(project),
+            encode(&format!(r#"["{minecraft}"]"#)),
+        );
+        let raw: Vec<RawVersion> = self.get_json(&path, Purpose::ResolveModMetadata, grant)?;
+        Ok(raw
+            .into_iter()
+            .filter_map(RawVersion::into_version)
+            .collect())
+    }
+
+    /// Modrinth's category vocabulary for mods, as `(name, header)` pairs.
+    ///
+    /// Read from the API rather than written down here so the browser offers
+    /// exactly the categories Modrinth will accept in a facet.
+    pub fn categories(&self, grant: &PerActionGrant) -> Result<Vec<Category>, ModrinthError> {
+        let raw: Vec<RawCategory> = self.get_json(
+            &format!("{API}/tag/category"),
+            Purpose::ResolveModMetadata,
+            grant,
+        )?;
+        Ok(raw
+            .into_iter()
+            .filter(|category| category.project_type == "mod")
+            .filter(|category| {
+                !category.name.is_empty()
+                    && category.name.len() <= 40
+                    && category
+                        .name
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            })
+            .map(|category| Category {
+                name: category.name,
+                header: category.header,
+            })
+            .collect())
     }
 
     /// The newest release-channel version, falling back to the newest of any.

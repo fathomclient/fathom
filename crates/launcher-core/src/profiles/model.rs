@@ -792,7 +792,7 @@ mod tests {
         );
     }
 
-    /// The forward-compatibility property the brief asks for: all three loaders
+    /// The forward-compatibility property the spec asks for: all three loaders
     /// exist in the model now, so introducing Forge is implementing it, not
     /// migrating everyone's files.
     #[test]

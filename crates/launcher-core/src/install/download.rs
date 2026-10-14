@@ -1,6 +1,6 @@
 //! The one place a file is fetched and put on disk.
 //!
-//! Everything the brief asks of a downloader lives here, and nothing else in the
+//! Everything the spec asks of a downloader lives here, and nothing else in the
 //! installer opens a socket or writes an artifact:
 //!
 //! - HTTPS only, via the network allowlist (redirects re-validated per hop, in

@@ -58,6 +58,9 @@ struct State {
     launcher_bridge: Mutex<Option<launcher_core::bridge::Bridge>>,
     /// The start-up Java scan, which screens wait on instead of re-running.
     java_scan: JavaScan,
+    /// The mod browser's cancellation handles. Outside the launcher's mutex
+    /// for the same reason as `launch`.
+    browse: api::browse::Slots,
     /// The jar the user has just supplied, between accepting it and choosing a
     /// profile for it.
     ///
@@ -478,6 +481,34 @@ fn stored_background() -> String {
         .to_owned()
 }
 
+/// The startup check, on every start, before the window shows: finishes or
+/// undoes an interrupted update, discards unverified update staging and
+/// incomplete downloads, and empties the last run's temporary directory. It is
+/// stat calls and deletions of things that cannot be wanted, so it costs
+/// milliseconds; without it `tmp/` and abandoned `.partial` files only grew.
+/// Anything that might be wanted is reported in the log and left alone.
+fn startup_scan(state: &State) {
+    use launcher_core::ops::Operations;
+    use launcher_core::recovery::RecoveryService;
+
+    let Some(paths) = state.core.lock().ok().map(|core| core.paths().clone()) else {
+        return;
+    };
+    match RecoveryService::new(paths, Operations::new())
+        .run_startup_scan(launcher_core::PRODUCT_VERSION)
+    {
+        Ok(report) => {
+            for finding in report.cleaned_up() {
+                tracing::info!(finding = %finding.message(), elapsed_ms = report.elapsed_ms, "startup check");
+            }
+            for finding in report.needs_attention() {
+                tracing::warn!(finding = %finding.message(), "startup check");
+            }
+        }
+        Err(problem) => tracing::info!(%problem, "the startup check was skipped"),
+    }
+}
+
 /// Start Fathom's one canonical desktop launcher.
 ///
 /// Both the shipped `fathom-desktop` binary and the historical
@@ -558,6 +589,7 @@ pub fn run() {
             auth: api::auth::Supervisor::default(),
             launcher_bridge: Mutex::new(None),
             java_scan: JavaScan::default(),
+            browse: api::browse::Slots::default(),
             supplied: Mutex::new(None),
         })
         // A stored refresh token is tried once, on a thread, so a signed-in
@@ -573,6 +605,7 @@ pub fn run() {
                     let _ = window.set_icon(icon.clone());
                 }
             }
+            startup_scan(&app.state::<State>());
             app.state::<State>().java_scan.start(app.handle());
             signin::restore(&app.handle().clone());
             match session::open_launcher_bridge(app.handle()) {
@@ -585,6 +618,18 @@ pub fn run() {
                 Err(error) => tracing::info!(%error, "the launcher bridge is not available"),
             }
             Ok(())
+        })
+        // WebView2 does not report a minimised window as hidden, so the page
+        // cannot tell on its own that nobody can see it; the background video
+        // would go on decoding behind the taskbar. Tell it.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Resized(_) = event {
+                if window.label() == "main" {
+                    use tauri::Emitter as _;
+                    let minimised = window.is_minimized().unwrap_or(false);
+                    let _ = window.emit("fathom://minimised", minimised);
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             home_view,
@@ -645,6 +690,24 @@ pub fn run() {
             commands::supplied_jar,
             commands::add_supplied_jar,
             commands::install_mod,
+            commands::catalog_context,
+            commands::catalog_categories,
+            commands::catalog_search,
+            commands::catalog_verdicts,
+            commands::catalog_image,
+            commands::catalog_detail,
+            commands::catalog_plan,
+            commands::catalog_install,
+            commands::catalog_cancel_install,
+            commands::catalog_open_link,
+            commands::catalog_uninstall,
+            commands::installed_mod_detail,
+            commands::reveal_mod_file,
+            commands::restore_mod_build,
+            commands::mod_recovery,
+            commands::restore_last_good_mods,
+            commands::check_mod_updates,
+            commands::identify_mods,
             commands::install_component,
             commands::mod_updates,
             commands::open_project_page,
@@ -749,7 +812,16 @@ mod tests {
     /// and anything unrecognised migrate to the default.
     #[test]
     fn retired_backgrounds_migrate_to_the_default() {
-        for retired in ["bg1", "bg_5", "static", "bg_6pull", "bg_6pull_red-tower", "graphite", "golden-hour", "../../secret"] {
+        for retired in [
+            "bg1",
+            "bg_5",
+            "static",
+            "bg_6pull",
+            "bg_6pull_red-tower",
+            "graphite",
+            "golden-hour",
+            "../../secret",
+        ] {
             let mut stored = serde_json::Map::new();
             stored.insert("background".to_owned(), serde_json::Value::from(retired));
             assert!(migrate_appearance(&mut stored), "{retired} should migrate");
@@ -916,7 +988,7 @@ mod tests {
         assert_eq!(window["visible"], serde_json::Value::Bool(false));
         // The native background is the splash's own colour, so there is no
         // flash of anything else behind the first frame.
-        assert_eq!(window["backgroundColor"].as_str(), Some("#071015"));
+        assert_eq!(window["backgroundColor"].as_str(), Some("#080e13"));
 
         let page = include_str!("../../../desktop/index.html");
         assert!(page.contains("id=\"splash\""), "index.html paints a splash");
@@ -924,7 +996,10 @@ mod tests {
         let entry = include_str!("../../../desktop/src/main.ts");
         let show = entry.find("void windowShow()").unwrap();
         let mount = entry.find("mount(").unwrap();
-        assert!(show < mount, "the window is shown before the interface mounts");
+        assert!(
+            show < mount,
+            "the window is shown before the interface mounts"
+        );
 
         let shell = include_str!("../../../desktop/src/App.svelte");
         assert!(

@@ -66,3 +66,7 @@ Thumbs.db
 # The multiplayer profile's local server, its world and the client instance
 # that connects to it (tools/mp-bench).
 /minecraft/fathom-optimizations/run-mp/
+
+# The website data bundle (gradle exportWebData). Regenerated, never edited;
+# the website consumes it from a build, see docs/web-export.md.
+/web-export/

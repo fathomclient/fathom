@@ -19,9 +19,11 @@ import java.util.Locale;
  * flag is read once at class load, so a normal run pays a single static branch
  * per widget per frame.
  */
-final class WidgetProfile {
+public final class WidgetProfile {
 
-    static final boolean ENABLED = Boolean.getBoolean("fathom.hudProfile");
+    /** Asked for, or the in-game self-test is running and reports it. */
+    static final boolean ENABLED = Boolean.getBoolean("fathom.hudProfile")
+            || net.fathom.optimizations.fabric.diag.ModuleSelfTest.ACTIVE;
 
     private static final List<String> ids = new ArrayList<String>();
     private static final List<long[]> totals = new ArrayList<long[]>();
@@ -68,5 +70,26 @@ final class WidgetProfile {
             System.out.println(String.format(Locale.ROOT, "    %-14s %8.4f ms/frame (%d draws)",
                     ids.get(index), entry[0] / 1_000_000.0 / frames, entry[1]));
         }
+    }
+
+    /** Start a fresh window. For the self-test. */
+    public static void qaReset() {
+        ids.clear();
+        totals.clear();
+        frames = 0;
+    }
+
+    /** Each widget's mean CPU time per frame since {@link #qaReset}, one line. */
+    public static String qaSummary() {
+        if (!ENABLED || frames == 0) {
+            return "not measured";
+        }
+        StringBuilder out = new StringBuilder();
+        for (int index = 0; index < ids.size(); index++) {
+            long[] entry = totals.get(index);
+            out.append(index == 0 ? "" : ", ").append(ids.get(index)).append(' ').append(String.format(Locale.ROOT,
+                    "%.3f ms", entry[0] / 1_000_000.0 / frames));
+        }
+        return out.append(" over ").append(frames).append(" frames").toString();
     }
 }

@@ -22,9 +22,11 @@
      reports `playing`, then fades in over the still, which is frame 0 of the
      same clip -- so the hand-over is invisible.
 
-  It pauses only while the document is hidden (minimised, or covered by the
-  game in full screen), never merely because the window lost focus: pausing on
-  blur is exactly what makes a launcher that sits beside the game look frozen.
+  It pauses while the document is hidden (minimised, or covered by the game in
+  full screen) and while the game is running (`quiet`), never merely because
+  the window lost focus: pausing on blur is what makes a launcher that sits
+  beside the menu look frozen, but decoding video behind a game that is being
+  played only takes GPU time from it. The still stays, so nothing goes black.
 
   Changing background crossfades the whole pair. The treatment on top is a light
   scrim and nothing else: each background keeps its colour, detail and motion,
@@ -37,6 +39,8 @@
   import { MOTION_SURFACE } from './motion';
 
   export let choice: string = DEFAULT_BACKGROUND;
+  /** The game is running: hold the current frame instead of decoding more. */
+  export let quiet = false;
 
   $: option = optionFor(choice);
 
@@ -44,6 +48,8 @@
   let playing = false;
   let failed = false;
   let hidden = false;
+  /* Minimised: WebView2 leaves the document "visible", so the shell says so. */
+  let minimised = false;
 
   /* A new background starts over: its still, then its video once it plays. */
   $: option, reset();
@@ -56,13 +62,13 @@
      rejected (a policy, a decoder still starting) must be retried rather than
      leave the still in place forever. */
   function start() {
-    if (!video || hidden || failed) return;
+    if (!video || hidden || minimised || quiet || failed) return;
     const attempt = video.play();
     if (attempt) attempt.catch(() => {});
   }
 
   $: if (video) {
-    if (hidden) video.pause();
+    if (hidden || minimised || quiet) video.pause();
     else start();
   }
 
@@ -70,7 +76,23 @@
     const sync = () => (hidden = document.visibilityState === 'hidden');
     sync();
     document.addEventListener('visibilitychange', sync);
-    return () => document.removeEventListener('visibilitychange', sync);
+    let stop: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        stop = await listen<boolean>('fathom://minimised', (event) => {
+          minimised = event.payload;
+          /* The rest of the backdrop's motion (glow.css, the bloom) pauses on this too. */
+          document.documentElement.toggleAttribute('data-minimised', minimised);
+        });
+      } catch {
+        /* Not in the app shell: the browser's own visibility is enough. */
+      }
+    })();
+    return () => {
+      document.removeEventListener('visibilitychange', sync);
+      stop?.();
+    };
   });
 </script>
 

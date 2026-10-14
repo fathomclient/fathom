@@ -96,7 +96,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     private static final float CARD_PAD = 24f;
     private static final float PRIMARY_WIDTH = GraphiteTokens.SIZE_PRIMARY_MIN_WIDTH;
     private static final float PRIMARY_HEIGHT = GraphiteTokens.SIZE_PRIMARY;
-    /** The launcher's wordmark: a 13px ascender, 24 in, centred in the header. */
+    /** The launcher's lockup: the mark and a 13px-ascender wordmark, 24 in, centred in the header. */
     private static final float WORDMARK_CAP = GraphiteTokens.WORDMARK_CAP_LAUNCHER;
 
     private static final float TRAVEL = GraphiteTokens.MOTION_TRAVEL;
@@ -156,7 +156,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     private final Box wordmarkBox = Box.leaf("header.wordmark", new Box.Measure() {
         @Override
         public float width(Renderer ui) {
-            return Graphite.wordmarkWidth(ui, WORDMARK_CAP);
+            return Graphite.lockupWidth(ui, WORDMARK_CAP);
         }
 
         @Override
@@ -524,7 +524,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     /** The launcher's header: wordmark at the left, version and account at the right. */
     private void header(Renderer ui) {
         Rect mark = wordmarkBox.rect();
-        Graphite.wordmark(ui, mark.x, Math.round(mark.y), WORDMARK_CAP);
+        Graphite.lockup(ui, mark.x, Math.round(mark.y), WORDMARK_CAP);
         version.draw(ui, Graphite.TEXT_SECONDARY);
 
         // The launcher's account capsule: clear glass that answers the
@@ -587,7 +587,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
             int ink = current || state.hover > 0.5f ? Graphite.TEXT : Graphite.TEXT_SECONDARY;
             float iconSize = 20f;
             ui.icon(Icon.valueOf(item[2]), row.x + (RAIL_ITEM - iconSize) / 2f, row.centreY() - iconSize / 2f,
-                    iconSize, ink);
+                    iconSize, current ? Graphite.BRAND_LIGHT : ink);
             if (open > 0.01f) {
                 ui.pushAlpha(open);
                 ui.text(item[1], row.x + RAIL_ITEM + GraphiteTokens.SPACE_1,
@@ -1243,9 +1243,28 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         MenuScenes.draw(client, scene, Runtime.menuBackgroundQuality());
     }
 
-    /** Stop background decoding when no Fathom screen is presenting it. */
+    /**
+     * Stop background decoding when no Fathom screen is presenting it, and, over
+     * a world, release what only a menu draws (see {@link #releaseForPlay}).
+     */
     public static void stopBackdropPlayback() {
-        MenuVideo.stop();
+        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        if (client != null && client.world != null) {
+            releaseForPlay();
+        } else {
+            MenuVideo.stop();
+        }
+    }
+
+    /**
+     * A world is being played: free the menu video's frame, the picker's
+     * thumbnails, the fallback poster and every background texture but the
+     * selected one, which the Hub draws over the world. Render thread only.
+     */
+    public static void releaseForPlay() {
+        MenuVideo.dispose();
+        MenuScenes.keepOnly(MenuScenes.selected());
+        MenuPoster.dispose();
     }
 
     // -----------------------------------------------------------------------
@@ -1348,7 +1367,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         MenuVideo.dispose();
         MenuScenes.dispose();
         MenuPoster.dispose();
-        GraphiteBackdrop.dispose();
     }
 
     /**

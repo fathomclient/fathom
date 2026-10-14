@@ -46,10 +46,13 @@
   import FathomIcon from './lib/ui/FathomIcon.svelte';
   import WindowControls from './lib/ui/WindowControls.svelte';
   import Wordmark from './lib/brand/Wordmark.svelte';
+  import OrbitMark from './lib/brand/OrbitMark.svelte';
+  import { BRAND } from './lib/brand/brand.generated';
   import { FATHOM_ICONS } from './lib/icons.generated';
   import { BACKGROUNDS, DEFAULT_BACKGROUND, PICKER_AVAILABLE } from './lib/backgrounds';
   import { EASE, EASE_EXIT, MOTION_EXIT, MOTION_PAGE, MOTION_SURFACE } from './lib/motion';
   import { tooltip } from './lib/tooltip';
+  import { elapsed } from './lib/session';
   import {
     background as loadBackground,
     accountsView,
@@ -78,6 +81,9 @@
     type AccountSummary,
     type LaunchProgress,
   } from './lib/api';
+
+  /** The header lockup's mark, sized to the 13px wordmark beside it. */
+  const LOCKUP_MARK = 13 * BRAND.lockupMark;
 
   /* One icon family throughout (Lucide geometry, Fathom ids), and one table.
      Screens reference a route, never an icon file. */
@@ -241,25 +247,33 @@
     }
   }
 
+  /* Once the game is up nothing changes faster than the elapsed-time line,
+     which counts minutes, so the launcher asks far less often while it runs. */
+  const POLL_RUNNING = 2000;
+
   function watch() {
     stopWatching();
+    const every = launch.phase === 'running' ? POLL_RUNNING : POLL;
     poll = setInterval(() => {
       void (async () => {
+        const wasRunning = launch.phase === 'running';
         launch = await launchProgress();
         if (!launch.active) {
           stopWatching();
           /* The install state and the selected profile may both have changed,
              so the launch composition is rebuilt rather than patched. */
           await refreshShell();
+        } else if ((launch.phase === 'running') !== wasRunning) {
+          watch();
         }
       })();
-    }, POLL);
+    }, every);
   }
 
-  async function startLaunch() {
+  async function startLaunch(withoutExternalMods = false) {
     if (launch.active) return;
     try {
-      launch = await play();
+      launch = await play(withoutExternalMods);
       watch();
     } catch (cause) {
       launch = {
@@ -354,8 +368,16 @@
     epoch += 1;
   }
 
-  function go(next: string, category?: string) {
+  /** Which tab the Mods page opens on: Issues after a failed launch. */
+  let modsTab: 'installed' | 'browse' | 'updates' | 'issues' = 'installed';
+
+  /** Which log the Logs page opens on: the game's, when Home sent you there. */
+  let logsSource = 'launcher';
+
+  function go(next: string, category?: string, tab?: typeof modsTab) {
     if (category) settingsCategory = category;
+    logsSource = 'launcher';
+    modsTab = tab ?? 'installed';
     route = next;
     railTop = railBottom = false;
   }
@@ -382,6 +404,26 @@
       ? 'Add OptiFine'
       : ([...ROUTES, ...UTILITY].find((r) => r.id === route)?.label ?? 'Home');
   $: backgroundLabel = BACKGROUNDS.find((b) => b.id === choice)?.label ?? 'Background';
+  /* Add OptiFine is reached from Installations and Mods; the rail keeps
+     Installations lit for it rather than lighting nothing. */
+  $: railRoute = route === 'add-optifine' ? 'installations' : route;
+  $: topIndex = ROUTES.findIndex((item) => item.id === railRoute);
+  $: bottomIndex = UTILITY.findIndex((item) => item.id === railRoute);
+
+  /* The header's session capsule. Settled launches stay in it until Home's
+     Dismiss puts the control back to Play, so a crash is never only reported
+     on a page the user is not looking at. */
+  $: sessionFailed = !launch.active && !!launch.failure;
+  $: sessionLabel =
+    launch.phase === 'running'
+      ? `Playing · ${elapsed(launch.elapsedSeconds)}`
+      : launch.active
+        ? `${launch.headline || 'Launching'}${launch.fraction != null ? ` ${Math.round(launch.fraction * 100)}%` : ''}`
+        : sessionFailed
+          ? launch.phase === 'failed'
+            ? 'Launch failed'
+            : 'Minecraft stopped'
+          : '';
 
   /**
    * F11 toggles fullscreen, from any page.
@@ -420,7 +462,7 @@
 
 <!-- One persistent player across every route: navigation never restarts the
      approved recording or replaces it with a page-specific image. -->
-<GraphiteBackdrop {choice} focus={route === 'home' ? 'home' : 'page'} />
+<GraphiteBackdrop {choice} focus={route === 'home' ? 'home' : 'page'} quiet={launch.phase === 'running'} />
 
 <LoadingScreen visible={loading} {pending} />
 
@@ -444,9 +486,10 @@
     on:dblclick={() => void windowToggleMaximize()}
   >
     <div class="brand" data-tauri-drag-region>
-      <!-- The lowercase wordmark, the same outlines the game and the icon
-           files draw, at a 13px ascender. -->
+      <!-- The lockup: the mark, then the lowercase wordmark at a 13px
+           ascender -- the same paths the game and the icon files draw. -->
       <span class="brand-mark" data-tauri-drag-region>
+        <OrbitMark height={LOCKUP_MARK} halo decorative />
         <Wordmark height={13} />
       </span>
       {#if route !== 'home'}
@@ -455,6 +498,23 @@
     </div>
 
     <div class="spacer" data-tauri-drag-region></div>
+
+    <!-- The session, from every page but Home (which shows it in full): a
+         launch working, a game running, or one that just went wrong. One
+         press goes back to it. -->
+    {#if sessionLabel && route !== 'home'}
+      <button
+        class="session-capsule ui-capsule material-clear material-interactive"
+        class:failed={sessionFailed}
+        in:fly={{ y: -4, duration: MOTION_SURFACE, easing: EASE }}
+        out:fade={{ duration: MOTION_EXIT, easing: EASE_EXIT }}
+        use:tooltip={sessionFailed ? 'See what happened' : 'Back to the session'}
+        on:click={() => go('home')}
+      >
+        <span class="session-dot" class:working={launch.active && launch.phase !== 'running'} aria-hidden="true"></span>
+        <span class="tnum">{sessionLabel}</span>
+      </button>
+    {/if}
 
     {#if home?.profile}
       <span class="version tnum legible" data-tauri-drag-region>{home.profile.version}</span>
@@ -552,10 +612,16 @@
       on:mouseenter={() => (railTop = true)}
       on:mouseleave={() => (railTop = false)}
     >
+      <!-- The current page's pill, one element that slides between items
+           rather than a fill that blinks from one to the next: the rail shows
+           where you went, not only where you are. -->
+      {#if topIndex >= 0}
+        <span class="indicator" style="--index: {topIndex}" aria-hidden="true" transition:fade={{ duration: MOTION_EXIT }}></span>
+      {/if}
       {#each ROUTES as item}
         <button
           class="nav"
-          class:active={route === item.id}
+          class:active={railRoute === item.id}
           aria-current={route === item.id ? 'page' : undefined}
           aria-label={item.label}
           use:tooltip={railTop ? '' : item.label}
@@ -573,10 +639,13 @@
       on:mouseenter={() => (railBottom = true)}
       on:mouseleave={() => (railBottom = false)}
     >
+      {#if bottomIndex >= 0}
+        <span class="indicator" style="--index: {bottomIndex}" aria-hidden="true" transition:fade={{ duration: MOTION_EXIT }}></span>
+      {/if}
       {#each UTILITY as item}
         <button
           class="nav"
-          class:active={route === item.id}
+          class:active={railRoute === item.id}
           aria-current={route === item.id ? 'page' : undefined}
           aria-label={item.label}
           use:tooltip={railBottom ? '' : item.label}
@@ -600,6 +669,12 @@
             {launch}
             onCancel={() => void stopLaunch()}
             onDismiss={dismissLaunch}
+            onRecover={() => go('mods', undefined, 'issues')}
+            onSafeLaunch={() => void startLaunch(true)}
+            onLogs={() => {
+              go('logs');
+              logsSource = 'game';
+            }}
             onProfileChanged={refreshShell}
             {epoch}
           />
@@ -608,7 +683,15 @@
         {:else if route === 'installations'}
           <Profiles onChanged={refreshShell} onAddOptiFine={() => go('add-optifine')} />
         {:else if route === 'mods'}
-          <Mods onChanged={refreshShell} onAddOptiFine={() => go('add-optifine')} />
+          <Mods
+            onChanged={refreshShell}
+            onAddOptiFine={() => go('add-optifine')}
+            initialTab={modsTab}
+            onSafeLaunch={() => {
+              go('home');
+              void startLaunch(true);
+            }}
+          />
         {:else if route === 'add-optifine'}
           <AddOptiFine onChanged={refreshShell} />
         {:else if route === 'performance'}
@@ -618,7 +701,7 @@
         {:else if route === 'recovery'}
           <Recovery />
         {:else if route === 'logs'}
-          <Logs />
+          <Logs initialSource={logsSource} />
         {:else if route === 'settings'}
           <Settings_
             bind:category={settingsCategory}
@@ -690,6 +773,8 @@
      them is brightest. Darker than the photograph, never a glow. */
   .brand-mark {
     display: flex;
+    align-items: center;
+    gap: calc(13px * var(--brand-lockup-gap));
     filter: var(--backdrop-mark-shadow);
   }
 
@@ -714,6 +799,49 @@
   .version {
     font-size: var(--type-caption-size);
     color: var(--color-text-secondary);
+  }
+
+  .session-capsule {
+    gap: var(--space-2);
+    font-size: var(--type-secondary-size);
+  }
+
+  .session-capsule.failed {
+    color: var(--color-text);
+  }
+
+  /* Telemetry blue while there is a game; the danger hue once it went wrong.
+     A small mark, never a wash over the capsule. */
+  .session-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-signal);
+  }
+
+  .session-capsule.failed .session-dot {
+    background: var(--color-danger-text);
+  }
+
+  /* Working: the dot breathes, slowly, the way the brand's wait symbol does.
+     Still under reduced motion. */
+  .session-dot.working {
+    animation: session-breathe 1.6s var(--ease-standard) infinite alternate;
+  }
+
+  @keyframes session-breathe {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.35;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .session-dot.working {
+      animation: none;
+    }
   }
 
   .account {
@@ -862,7 +990,12 @@
     transition:
       color var(--motion-hover) var(--ease-standard),
       background-color var(--motion-hover) var(--ease-standard),
-      box-shadow var(--motion-hover) var(--ease-standard);
+      box-shadow var(--motion-hover) var(--ease-standard),
+      transform var(--motion-press) var(--ease-standard);
+  }
+
+  .nav:active {
+    transform: scale(var(--press-scale));
   }
 
   .nav:hover {
@@ -875,8 +1008,33 @@
      rail that is lit. */
   .nav.active {
     color: var(--color-text);
+  }
+
+  .nav.active:hover {
+    background-color: transparent;
+  }
+
+  /* The current page's pill. Absolute, behind the items, moved by its index:
+     a 36 item and the 4 gap between items. It widens with the capsule, since
+     it is inset from both sides rather than given a width. */
+  .indicator {
+    position: absolute;
+    top: var(--surface-inset);
+    left: var(--surface-inset);
+    right: var(--surface-inset);
+    height: var(--metric-control);
+    border-radius: var(--metric-radius-control);
     background-color: var(--control-fill-selected);
     box-shadow: var(--control-rim-strong), var(--glow-selected);
+    transform: translateY(calc(var(--index) * (var(--metric-control) + var(--space-1))));
+    transition: transform var(--motion-state) var(--ease-standard);
+    pointer-events: none;
+  }
+
+  /* Its glyph takes the light of the icon's arc: the same blue as the
+     mark in the header, so the rail and the brand read as one. */
+  .nav.active .glyph {
+    color: var(--brand-orbit-light);
   }
 
   .nav:focus-visible {

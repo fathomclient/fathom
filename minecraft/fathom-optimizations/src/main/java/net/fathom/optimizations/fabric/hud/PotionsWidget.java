@@ -11,6 +11,7 @@ import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.util.Identifier;
 
+import net.fathom.optimizations.core.hud.EffectTime;
 import net.fathom.optimizations.core.module.FathomModule;
 import net.fathom.optimizations.core.module.HudStyle;
 import net.fathom.optimizations.core.module.Setting;
@@ -44,6 +45,9 @@ import net.fathom.optimizations.core.module.Setting;
  */
 final class PotionsWidget implements HudWidget {
 
+    /** Each line measured once while it is unchanged, not on every size asked for. */
+    private final MeasuredWidths widths = new MeasuredWidths(32);
+
     private static final Identifier SHEET = new Identifier("textures/gui/container/inventory.png");
     private static final int ICON = 18;
     private static final int COMPACT_ICON = 10;
@@ -63,7 +67,8 @@ final class PotionsWidget implements HudWidget {
     private static final Comparator<StatusEffectInstance> BY_TIME = new Comparator<StatusEffectInstance>() {
         @Override
         public int compare(StatusEffectInstance first, StatusEffectInstance second) {
-            return Integer.compare(first.getDuration(), second.getDuration());
+            return Integer.compare(EffectTime.sortKey(first.getDuration(), first.isPermanent()),
+                    EffectTime.sortKey(second.getDuration(), second.isPermanent()));
         }
     };
 
@@ -109,12 +114,14 @@ final class PotionsWidget implements HudWidget {
         boolean level = Widgets.option("potions", "level", true);
         for (int index = 0; index < effects.size(); index++) {
             names.add(name(effects.get(index), level));
-            times.add(duration(effects.get(index).getDuration()));
+            StatusEffectInstance effect = effects.get(index);
+            times.add(EffectTime.format(effect.getDuration(), effect.isPermanent()));
         }
         if ("Name".equals(order)) {
             sortByName();
         }
         builtSettings = Setting.revision();
+        buildLines();
         kept.clear();
         kept.addAll(names);
         keptTimes.clear();
@@ -206,11 +213,6 @@ final class PotionsWidget implements HudWidget {
         }
     }
 
-    private static String duration(int ticks) {
-        int seconds = ticks / 20;
-        return seconds / 60 + ":" + (seconds % 60 < 10 ? "0" : "") + seconds % 60;
-    }
-
     private static boolean icons() {
         return Widgets.option("potions", "icons", true);
     }
@@ -235,8 +237,10 @@ final class PotionsWidget implements HudWidget {
         return (int) Math.round(Widgets.optionNumber("potions", "spacing", 2));
     }
 
+    /** The chosen icon size; compact lines take it in proportion to their smaller height. */
     private static int iconSize() {
-        return compact() ? COMPACT_ICON : ICON;
+        int chosen = (int) Math.round(Widgets.optionNumber("potions", "icon.size", ICON));
+        return compact() ? Math.max(6, Math.round(chosen * COMPACT_ICON / (float) ICON)) : chosen;
     }
 
     /** The width of one entry, icon and text together. */
@@ -244,13 +248,13 @@ final class PotionsWidget implements HudWidget {
         int width = icons() ? iconSize() : 0;
         int text = 0;
         if (compact()) {
-            text = (int) Math.ceil(font.width(line(index)));
+            text = (int) Math.ceil(widths.of(font, line(index)));
         } else {
             if (showNames()) {
-                text = (int) Math.ceil(font.width(names.get(index)));
+                text = (int) Math.ceil(widths.of(font, names.get(index)));
             }
             if (showTimes()) {
-                text = Math.max(text, (int) Math.ceil(font.width(times.get(index))));
+                text = Math.max(text, (int) Math.ceil(widths.of(font, times.get(index))));
             }
         }
         if (text > 0) {
@@ -259,17 +263,26 @@ final class PotionsWidget implements HudWidget {
         return width;
     }
 
-    /** One compact line: name and time, whichever of them are on. */
+    /** One compact line: name and time, whichever of them are on. Built with the rest of the text. */
     private String line(int index) {
+        return index < lines.size() ? lines.get(index) : "";
+    }
+
+    private final List<String> lines = new ArrayList<String>();
+
+    private void buildLines() {
+        lines.clear();
         boolean showNames = showNames();
         boolean showTimes = showTimes();
-        if (showNames && showTimes) {
-            return names.get(index) + "  " + times.get(index);
+        for (int index = 0; index < names.size(); index++) {
+            if (showNames && showTimes) {
+                lines.add(names.get(index) + "  " + times.get(index));
+            } else if (showNames) {
+                lines.add(names.get(index));
+            } else {
+                lines.add(showTimes ? times.get(index) : "");
+            }
         }
-        if (showNames) {
-            return names.get(index);
-        }
-        return showTimes ? times.get(index) : "";
     }
 
     private int entryHeight(HudFont font) {
@@ -409,8 +422,10 @@ final class PotionsWidget implements HudWidget {
 
     /** Dimmer than the name, and red once the effect is nearly gone. */
     private int timeColour(FathomModule module, int index, int alpha) {
+        StatusEffectInstance effect = effects.get(index);
         if (Widgets.option("potions", "ending", true)
-                && effects.get(index).getDuration() <= ENDING_TICKS) {
+                && !EffectTime.permanent(effect.getDuration(), effect.isPermanent())
+                && effect.getDuration() <= ENDING_TICKS) {
             return (alpha << 24) | (net.fathom.optimizations.generated.GraphiteTokens.COLOR_STATUS_ERROR & 0x00FFFFFF);
         }
         int rgb = HudStyle.textColour(module);

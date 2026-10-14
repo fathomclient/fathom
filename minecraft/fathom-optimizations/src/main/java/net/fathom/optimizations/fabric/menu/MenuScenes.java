@@ -121,6 +121,33 @@ public final class MenuScenes {
 
     private MenuScenes() {}
 
+    /**
+     * Release every scene texture except {@code kept}'s, and every thumbnail.
+     * Each is re-read from the jar the next time something draws it. Render
+     * thread only.
+     */
+    static void keepOnly(Scene kept) {
+        GlStateManager.bindTexture(0);
+        java.util.Iterator<Map.Entry<String, Integer>> scenes = TEXTURES.entrySet().iterator();
+        while (scenes.hasNext()) {
+            Map.Entry<String, Integer> entry = scenes.next();
+            if (kept != null && entry.getKey().equals(kept.id)) {
+                continue;
+            }
+            Integer texture = entry.getValue();
+            if (texture != null && texture.intValue() > 0) {
+                GL11.glDeleteTextures(texture.intValue());
+            }
+            scenes.remove();
+        }
+        for (Integer texture : THUMBNAILS.values()) {
+            if (texture != null && texture.intValue() > 0) {
+                GL11.glDeleteTextures(texture.intValue());
+            }
+        }
+        THUMBNAILS.clear();
+    }
+
     /** Release every classpath scene texture on a resource reload. Render thread only. */
     static void dispose() {
         GlStateManager.bindTexture(0);

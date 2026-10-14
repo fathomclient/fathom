@@ -37,11 +37,12 @@ pub mod recovery;
 pub mod secret;
 pub mod services;
 pub mod session;
+pub mod session_pulse;
 pub mod tasks;
 pub mod update;
 
 pub use install::{InstallService, InstallationState, InstallationVerifier};
-pub use services::{Blocker, InstallSnapshot, Launcher, Readiness, ServiceError};
+pub use services::{Blocker, InstallSnapshot, LaunchOptions, Launcher, Readiness, ServiceError};
 pub use tasks::{Cancel, SignedIn, Tasks};
 
 /// Product identity. Used for the data directory and the `User-Agent`.
@@ -54,8 +55,14 @@ pub const PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The `User-Agent` sent on every request. Deliberately contains no identifier,
 /// no OS build, and no install id — just what we are and which version.
+///
+/// In the `owner/project/version` form Modrinth's API documentation asks of
+/// applications (a bare product name "increases the likelihood that we will
+/// block your traffic"), naming the public repository, so whoever runs an
+/// index can see what is calling it and where to report a problem. The same
+/// for every user of a build.
 pub fn user_agent() -> String {
-    format!("{PRODUCT_NAME}/{PRODUCT_VERSION}")
+    format!("fathomclient/fathom/{PRODUCT_VERSION}")
 }
 
 #[cfg(test)]
@@ -66,7 +73,7 @@ mod tests {
     #[test]
     fn user_agent_is_minimal() {
         let ua = user_agent();
-        assert_eq!(ua, format!("Fathom/{PRODUCT_VERSION}"));
+        assert_eq!(ua, format!("fathomclient/fathom/{PRODUCT_VERSION}"));
         assert!(!ua.contains(' '), "no room for an identifier to hide in");
     }
 }

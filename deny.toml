@@ -13,18 +13,8 @@ all-features = true
 version = 2
 yanked = "deny"
 ignore = [
-    # `ttf-parser` is marked unmaintained, not vulnerable. It reaches us three
-    # levels down through iced's text stack (cosmic-text, rustybuzz) and
-    # winit's Wayland decorations; there is no upgrade that removes it, and
-    # nothing short of changing UI toolkit would. Accepted deliberately, and
-    # it is a point in favour of revisiting the toolkit choice rather than a
-    # reason to silence the tool.
-    { id = "RUSTSEC-2026-0192", reason = "ttf-parser: unmaintained (not a vulnerability); pulled in transitively by iced 0.13's text stack, no upgrade path" },
-    { id = "RUSTSEC-2026-0206", reason = "rustybuzz: unmaintained (not a vulnerability); same iced text stack as above" },
-    { id = "RUSTSEC-2024-0384", reason = "instant: unmaintained (not a vulnerability); reaches us via iced_futures -> wasm-timer -> parking_lot 0.11" },
-
-    # RUSTSEC-2023-0071 (Marvin Attack) is a real vulnerability, and unlike the
-    # three above it arrives through a dependency WE chose: `rsa`, via
+    # RUSTSEC-2023-0071 (Marvin Attack) is a real vulnerability, and it
+    # arrives through a dependency we chose: `rsa`, via
     # jsonwebtoken's `rust_crypto` feature, which we use to verify Mojang's
     # entitlement signature.
     #

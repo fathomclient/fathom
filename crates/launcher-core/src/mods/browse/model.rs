@@ -196,6 +196,20 @@ impl std::fmt::Display for ProjectRef {
 }
 
 // ---------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------
+
+/// One topic a provider can filter by.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Category {
+    /// What the provider accepts in a query, e.g. `optimization`.
+    pub id: String,
+    /// What a person reads, e.g. "Optimization".
+    pub label: String,
+}
+
+// ---------------------------------------------------------------------------
 // Images
 // ---------------------------------------------------------------------------
 

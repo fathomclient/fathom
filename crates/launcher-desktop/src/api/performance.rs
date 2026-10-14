@@ -49,6 +49,11 @@ pub struct PerformanceView {
     /// OptiFine's Render Regions, for a profile that runs OptiFine. `None`
     /// otherwise: there is nothing to say about a setting the game does not have.
     pub render_regions: Option<RenderRegionsView>,
+    /// The game's own reading of this profile's most recent session -- or of
+    /// the one running now -- as its module wrote it. Not a benchmark: play as
+    /// it was played, with whatever was on screen. `None` until a Fathom
+    /// session started from this launcher has reached a world.
+    pub last_session: Option<launcher_core::session_pulse::SessionPulse>,
 }
 
 /// The one OptiFine setting the view-direction profile found worth raising.
@@ -84,7 +89,11 @@ fn render_regions(core: &Launcher, profile: &Profile) -> Option<RenderRegionsVie
         "OptiFine's Render Regions is off. Terrain is what slows down frames when you look at          the ground, and this groups it into fewer draws: measured on an RTX 4060 it took a          ground-facing frame from 0.68 to 0.36 ms with the same picture."
             .to_owned()
     };
-    Some(RenderRegionsView { on, vbo_off, summary })
+    Some(RenderRegionsView {
+        on,
+        vbo_off,
+        summary,
+    })
 }
 
 /// Turn Render Regions on or off in this profile's `optionsof.txt`, at the
@@ -313,7 +322,7 @@ pub struct OptimizationRow {
     /// `OptimizationPreset::includes` refuses to enable an unimplemented entry
     /// and the config bridge writes `false` for one regardless, so a toggle on a
     /// planned entry is decoration with a state — which is exactly the "fake
-    /// toggle" the brief asks to remove.
+    /// toggle" the spec asks to remove.
     pub can_toggle: bool,
     /// `switch`, `automatic` or `inGame`: whether the launcher is the place
     /// this is controlled at all.
@@ -522,6 +531,8 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
     let runs = launcher_core::optimizations::benchmarks::read_all(&game_directory);
 
     PerformanceView {
+        last_session: launcher_core::session_pulse::read(&game_directory)
+            .filter(|pulse| pulse.seconds_of_play > 0),
         benchmark: runs.iter().find(|run| run.is_usable()).map(summarise),
         benchmark_count: runs.len(),
         video_limits: video_limits(core, profile),

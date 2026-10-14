@@ -309,7 +309,7 @@
   .lede {
     margin: 0 0 var(--s4);
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--type-secondary-size);
     line-height: 1.5;
     max-width: 56ch;
   }

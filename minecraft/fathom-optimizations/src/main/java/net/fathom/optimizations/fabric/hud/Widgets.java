@@ -59,6 +59,8 @@ public final class Widgets {
         out.add(new ArmourWidget());
         out.add(new PotionsWidget());
         out.add(new PackDisplayWidget());
+        out.add(new ScoreboardWidget());
+        out.add(new DirectionWidget());
         out.add(new CrosshairWidget());
         return out;
     }
@@ -82,6 +84,22 @@ public final class Widgets {
     /** Which HUD frame this is, for per-frame memoisation. */
     static long frameNumber() {
         return frameNumber;
+    }
+
+    private static int session;
+
+    /**
+     * Which world, player and connection this is: moved on by
+     * {@code GameSession} whenever any of them changes. A widget that holds a
+     * reading between frames compares it, so nothing read on one server is
+     * shown on the next.
+     */
+    public static int session() {
+        return session;
+    }
+
+    public static void newSession() {
+        session++;
     }
 
     /**
@@ -284,12 +302,52 @@ public final class Widgets {
             super("coordinates", "-0000 / -00 / -0000");
         }
 
+        /** What the lines were last built from; the lines are kept until one of these moves. */
+        private long builtX = Long.MIN_VALUE;
+        private long builtY;
+        private long builtZ;
+        private int builtFacing;
+        private int builtSettings = -1;
+        private Object builtWorld;
+        private Object builtDimension;
+        private final List<String> built = new ArrayList<String>(4);
+        private String biomeName;
+        private int biomeX = Integer.MIN_VALUE;
+        private int biomeZ;
+
         @Override
         protected List<String> lines(MinecraftClient client) {
             ClientPlayerEntity player = client.player;
             if (player == null) {
+                builtX = Long.MIN_VALUE;
                 return Collections.emptyList();
             }
+            int places = (int) optionNumber("coordinates", "precision", 0);
+            double unit = places <= 0 ? 1.0 : Math.pow(10, places);
+            long x = (long) Math.floor(player.x * unit);
+            long y = (long) Math.floor(player.y * unit);
+            long z = (long) Math.floor(player.z * unit);
+            int facing = (int) Math.floor(((player.yaw % 360f) + 360f) % 360f / 45f + 0.5f) % 8;
+            int revision = net.fathom.optimizations.core.module.Setting.revision();
+            Object dimension = client.world == null ? null : client.world.dimension;
+            if (x == builtX && y == builtY && z == builtZ && facing == builtFacing && revision == builtSettings
+                    && client.world == builtWorld && dimension == builtDimension) {
+                return built;
+            }
+            builtX = x;
+            builtY = y;
+            builtZ = z;
+            builtFacing = facing;
+            builtSettings = revision;
+            builtWorld = client.world;
+            builtDimension = dimension;
+            build(client, player);
+            built.clear();
+            built.addAll(out);
+            return built;
+        }
+
+        private void build(MinecraftClient client, ClientPlayerEntity player) {
             out.clear();
             String layout = optionChoice("coordinates", "layout", "Single line");
             boolean compact = "Compact".equals(layout);
@@ -335,7 +393,6 @@ public final class Widgets {
                 out.add(line.toString());
                 line.setLength(0);
             }
-            return out;
         }
 
         /** One coordinate, either on its own line or appended to the current one. */
@@ -381,13 +438,21 @@ public final class Widgets {
          * <p>Null when the chunk is not loaded, which happens for a frame or two
          * after a teleport. A missing line reads better than "Unknown".
          */
-        private static String biome(MinecraftClient client) {
+        private String biome(MinecraftClient client) {
             if (client.world == null || client.player == null) {
                 return null;
             }
+            int blockX = (int) Math.floor(client.player.x);
+            int blockZ = (int) Math.floor(client.player.z);
+            if (blockX == biomeX && blockZ == biomeZ && biomeName != null) {
+                return biomeName;
+            }
             try {
                 Biome biome = client.world.getBiome(new BlockPos(client.player));
-                return biome == null ? null : biome.name;
+                biomeName = biome == null ? null : biome.name;
+                biomeX = blockX;
+                biomeZ = blockZ;
+                return biomeName;
             } catch (RuntimeException notLoaded) {
                 return null;
             }
@@ -546,8 +611,27 @@ public final class Widgets {
             return (int) optionNumber("cps", "window", 1);
         }
 
+        private int shownLeft = -1;
+        private int shownRight = -1;
+        private int shownSettings = -1;
+        private List<String> shown = Collections.emptyList();
+
         @Override
         protected List<String> lines(MinecraftClient client) {
+            int leftNow = clicks.left();
+            int rightNow = clicks.right();
+            int revision = net.fathom.optimizations.core.module.Setting.revision();
+            if (leftNow == shownLeft && rightNow == shownRight && revision == shownSettings) {
+                return shown;
+            }
+            shownLeft = leftNow;
+            shownRight = rightNow;
+            shownSettings = revision;
+            shown = build();
+            return shown;
+        }
+
+        private List<String> build() {
             String mode = optionChoice("cps", "mode", "Both");
             boolean letters = option("cps", "letters", false);
             String value;
@@ -576,10 +660,11 @@ public final class Widgets {
     /**
      * Whether you are sprinting or sneaking, and whether a toggle is holding it.
      *
-     * <p>The state comes from the player, not from the toggle: what is drawn is
-     * what the game is doing. The toggle only decides which of the two labels to
-     * use, so a latched sprint that vanilla has refused — no food, an obstacle,
-     * an item being eaten — reads as not sprinting, which is the truth.
+     * <p>A latched toggle is shown as latched, moving or not: it is the state
+     * the player set and will get back the moment they walk, and a status line
+     * that blinked off whenever they stopped read as the toggle letting go.
+     * Without a latch, the state comes from the player — what the game is
+     * doing, sprinting or not.
      */
     public static final class SprintSneak extends TextWidget {
         private final List<String> out = new ArrayList<String>(2);
@@ -598,11 +683,14 @@ public final class Widgets {
                 return out;
             }
             if (option("toggle-sprint", "sprint", true)) {
-                if (player.isSprinting()) {
-                    boolean toggled = MovementToggles.sprintLatched();
-                    add(optionText("toggle-sprint",
-                            toggled ? "label.sprint.toggled" : "label.sprinting",
-                            toggled ? "Sprinting (Toggled)" : "Sprinting"), toggled);
+                boolean toggled = MovementToggles.sprintLatched();
+                if (toggled) {
+                    // Latched: the toggle is on whether or not the player is
+                    // moving this instant. Standing still with it on used to show
+                    // nothing, which read as the toggle having let go.
+                    add(optionText("toggle-sprint", "label.sprint.toggled", "Sprinting (Toggled)"), true);
+                } else if (player.isSprinting()) {
+                    add(optionText("toggle-sprint", "label.sprinting", "Sprinting"), false);
                 } else {
                     add(optionText("toggle-sprint", "label.walking", ""), false);
                 }

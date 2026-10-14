@@ -8,10 +8,8 @@ cargo run -p launcher-ui
 ```
 
 That command calls `launcher_desktop::run()` and embeds the current
-`desktop/dist` bundle, exactly like the production launcher. The remaining
-iced-era source and asset files in this directory are quarantined historical
-material: Cargo does not reference or compile them, and release packaging does
-not copy them.
+`desktop/dist` bundle, exactly like the production launcher. The iced-era
+sources and assets that used to live here are in the git history.
 
 For hot frontend development, use `tools/dev.ps1`; it runs the same desktop
 shell against Vite's development server.

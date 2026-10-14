@@ -34,6 +34,8 @@ public final class HudRegistry {
     public static final String CATEGORY_INPUT = "Input";
     public static final String CATEGORY_WORLD = "World";
     public static final String CATEGORY_STATUS = "Status";
+    /** Widgets added by other mods through the public API. */
+    public static final String CATEGORY_MODS = "Mods";
 
     private final Map<String, Widget> byId;
 
@@ -44,12 +46,30 @@ public final class HudRegistry {
                 throw new IllegalStateException("duplicate widget id: " + widget.id());
             }
         }
-        this.byId = Collections.unmodifiableMap(map);
+        this.byId = map;
         this.allWidgets = Collections.unmodifiableList(new ArrayList<Widget>(map.values()));
     }
 
-    /** The registry never changes after construction; the HUD reads this every frame. */
-    private final List<Widget> allWidgets;
+    /**
+     * Every widget, in order. Replaced whole, never edited, when a widget is
+     * added: the HUD reads this every frame, so an addition must never be seen
+     * half-made.
+     */
+    private volatile List<Widget> allWidgets;
+
+    /**
+     * Add a widget another mod draws.
+     *
+     * @return false for an id that is already taken; the first one stays
+     */
+    public synchronized boolean add(Widget widget) {
+        if (widget == null || byId.containsKey(widget.id())) {
+            return false;
+        }
+        byId.put(widget.id(), widget);
+        allWidgets = Collections.unmodifiableList(new ArrayList<Widget>(byId.values()));
+        return true;
+    }
 
     public static HudRegistry standard() {
         return new HudRegistry(Entries.all());
@@ -140,7 +160,10 @@ public final class HudRegistry {
                     "Left and right clicks per second, counted over the last second.",
                     CATEGORY_INPUT,
                     Sensitivity.SAFE,
-                    Placement.at(Anchor.MIDDLE_LEFT, 4, 0)));
+                    // Above Keystrokes, which hangs below the middle of the
+                    // left edge and grows upwards as rows are switched on; at
+                    // the middle itself the two overlapped.
+                    Placement.at(Anchor.MIDDLE_LEFT, 4, -70)));
 
             out.add(Widget.of(
                     "keystrokes",
@@ -156,7 +179,10 @@ public final class HudRegistry {
                     "Whether you are sprinting or sneaking right now.",
                     CATEGORY_INPUT,
                     Sensitivity.SAFE,
-                    Placement.at(Anchor.BOTTOM_LEFT, 4, 30)));
+                    // In the top-left column, under FPS and Coordinates. At the
+                    // bottom left it sat on Keystrokes at the common 240-pixel
+                    // GUI height, and under the chat whenever chat was open.
+                    Placement.at(Anchor.TOP_LEFT, 4, 40)));
 
             // Ping is read from the client's own player list, which is the same
             // number the tab list shows. It is SERVER_SENSITIVE not because the
@@ -177,7 +203,10 @@ public final class HudRegistry {
                     "The durability left on what you are wearing and holding.",
                     CATEGORY_STATUS,
                     Sensitivity.SERVER_SENSITIVE,
-                    Placement.at(Anchor.BOTTOM_RIGHT, 4, 40)));
+                    // Just above Pack display, which the flow stacks it on when
+                    // both are on. Higher up it ran into the sidebar on a
+                    // 240-pixel-high GUI with room to spare beneath it.
+                    Placement.at(Anchor.BOTTOM_RIGHT, 4, 20)));
 
             out.add(Widget.of(
                     "potions",
@@ -194,6 +223,26 @@ public final class HudRegistry {
                     CATEGORY_STATUS,
                     Sensitivity.SAFE,
                     Placement.at(Anchor.BOTTOM_RIGHT, 4, 4)));
+
+            // Under the boss bar, which owns the very top of the screen.
+            out.add(Widget.of(
+                    "direction",
+                    "Direction",
+                    "A compass strip that turns with you.",
+                    CATEGORY_WORLD,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.TOP_CENTER, 0, 24)));
+
+            // Where vanilla's sidebar sits: the right edge, a pixel in, centred.
+            // Off unless the Scoreboard module is on, in which case vanilla's
+            // own sidebar is not drawn and this one is, wherever it is put.
+            out.add(Widget.of(
+                    "scoreboard",
+                    "Scoreboard",
+                    "The server's sidebar, wherever and however large you want it.",
+                    CATEGORY_STATUS,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.MIDDLE_RIGHT, 1, 0)));
 
             // The one widget whose default position is not a preference.
             //

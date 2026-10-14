@@ -129,6 +129,7 @@ public final class ProfileStore {
             throw new ProfileException("could not be read (" + failure.getMessage() + ")", failure);
         }
         FathomProfile profile = FathomProfile.fromJson(text);
+        remember(file);
         // The filename is the identity. A document whose id disagrees with its
         // file was copied by hand, and trusting the field would give two profiles
         // the same id the first time either was saved.
@@ -147,7 +148,9 @@ public final class ProfileStore {
         String json = prepare(profile);
         awaitWrites();
         try {
-            atomicWrite(fileFor(profile.id()), json);
+            File target = fileFor(profile.id());
+            atomicWrite(target, json);
+            remember(target);
         } catch (IOException failure) {
             throw new ProfileException("could not save " + profile.name() + " (" + failure.getMessage() + ")", failure);
         }
@@ -183,6 +186,43 @@ public final class ProfileStore {
      * writes first, so nothing can read a profile older than one already saved.
      */
     private final Object writeLock = new Object();
+
+    /**
+     * Each file as this store last read or wrote it: modification time and
+     * length. A file that no longer matches was written by someone else — the
+     * launcher, or another game using the same collection.
+     */
+    private final Map<String, Long> stamps = new java.util.HashMap<String, Long>();
+
+    private void remember(File file) {
+        long stamp = stamp(file);
+        synchronized (writeLock) {
+            stamps.put(file.getName(), Long.valueOf(stamp));
+        }
+    }
+
+    private static long stamp(File file) {
+        return file.lastModified() * 1_000_003L + file.length();
+    }
+
+    /**
+     * Whether {@code id} was written by something other than this store since
+     * this store last read or wrote it.
+     *
+     * <p>A stat, not a read, so it is cheap enough to ask on every save. False
+     * while a save of this store's own is still queued: that write is the
+     * newest the file is going to be.
+     */
+    public boolean changedElsewhere(String id) {
+        File file = fileFor(id);
+        synchronized (writeLock) {
+            if (pendingWrites.containsKey(id) || writesInFlight > 0) {
+                return false;
+            }
+            Long known = stamps.get(file.getName());
+            return known != null && file.isFile() && known.longValue() != stamp(file);
+        }
+    }
     private final Map<String, String> pendingWrites = new LinkedHashMap<String, String>();
     private int writesInFlight;
     private String backgroundFailure;
@@ -220,7 +260,9 @@ public final class ProfileStore {
         }
         try {
             if (json != null) {
-                atomicWrite(fileFor(id), json);
+                File target = fileFor(id);
+                atomicWrite(target, json);
+                remember(target);
             }
         } catch (IOException failure) {
             synchronized (writeLock) {

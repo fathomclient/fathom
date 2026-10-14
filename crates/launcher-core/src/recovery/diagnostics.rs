@@ -236,8 +236,9 @@ impl Builder {
 
     fn clean(&self, text: &str) -> String {
         // Order matters: normalise first so a path inside a log line is
-        // rewritten, then scrub so a credential inside the same line goes.
-        crate::logging::scrub(&self.normalizer.text(text))
+        // rewritten, then scrub so a credential inside the same line goes,
+        // then take out who the player is.
+        anonymise(&crate::logging::scrub(&self.normalizer.text(text)))
     }
 
     pub fn build(self) -> Report {
@@ -295,6 +296,89 @@ fn os_version() -> String {
     {
         std::env::consts::OS.to_owned()
     }
+}
+
+/// Take the player's identity out of a line bound for a report.
+///
+/// A report is written to be handed to somebody else, so it carries no name
+/// and no account: the Minecraft name after vanilla's `Setting user:` becomes
+/// `<player>`, and anything shaped like a UUID -- dashed or as 32 hex digits,
+/// which is how a Minecraft profile id is written and how anyone can look the
+/// name up again -- becomes `<uuid>`. The launcher's own log keeps neither in
+/// the first place; this is for the game's lines and for anything that slips.
+pub fn anonymise(line: &str) -> String {
+    const USER: &str = "Setting user: ";
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some((before, after)) = rest.split_once(USER) {
+        out.push_str(before);
+        out.push_str(USER);
+        let end = after.find(char::is_whitespace).unwrap_or(after.len());
+        let (name, tail) = after.split_at(end);
+        if !name.is_empty() {
+            out.push_str("<player>");
+        }
+        rest = tail;
+    }
+    out.push_str(rest);
+    replace_uuids(&out)
+}
+
+/// Replace every UUID, dashed (8-4-4-4-12) or plain (32 hex), with `<uuid>`.
+fn replace_uuids(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    let mut after_word = false;
+    while let Some(next) = rest.chars().next() {
+        if !after_word {
+            if let Some(length) = uuid_at(rest) {
+                out.push_str("<uuid>");
+                rest = rest.get(length..).unwrap_or_default();
+                after_word = true;
+                continue;
+            }
+        }
+        out.push(next);
+        after_word = next.is_ascii_alphanumeric();
+        rest = rest.get(next.len_utf8()..).unwrap_or_default();
+    }
+    out
+}
+
+/// The length of a UUID at the start of `text`, if one is there and ends on a boundary.
+fn uuid_at(text: &str) -> Option<usize> {
+    let ends_at = |length: usize| {
+        text.get(length..)
+            .and_then(|tail| tail.chars().next())
+            .is_none_or(|c| !c.is_ascii_alphanumeric())
+    };
+    let hex = |from: usize, width: usize| {
+        text.get(from..from + width)
+            .is_some_and(|run| run.chars().all(|c| c.is_ascii_hexdigit()))
+    };
+    let mut at = 0;
+    let mut dashed = true;
+    for (group, width) in [8usize, 4, 4, 4, 12].into_iter().enumerate() {
+        if group > 0 {
+            if text.get(at..=at) != Some("-") {
+                dashed = false;
+                break;
+            }
+            at += 1;
+        }
+        if !hex(at, width) {
+            dashed = false;
+            break;
+        }
+        at += width;
+    }
+    if dashed && ends_at(at) {
+        return Some(at);
+    }
+    if hex(0, 32) && ends_at(32) {
+        return Some(32);
+    }
+    None
 }
 
 /// Fields that must never appear in a report, checked as data.
@@ -502,10 +586,31 @@ mod tests {
             );
         }
         assert!(
-            text.contains("Setting user: Steve"),
-            "the useful part of the log must survive"
+            text.contains("Setting user: <player>") && !text.contains("Steve"),
+            "the line survives and the player's name does not:\n{text}"
         );
         assert!(audit(&text).is_empty(), "audit found: {:?}", audit(&text));
+    }
+
+    #[test]
+    fn a_report_carries_no_player_name_and_no_uuid() {
+        let (_tmp, paths) = paths();
+        let report = Builder::new(Normalizer::new(&paths))
+            .section("Recent log")
+            .line("Setting user: Notch")
+            .line("account=069a79f4-44e9-4726-a5be-fca90e38aaf5 restored")
+            .line("profile 069a79f444e94726a5befca90e38aaf5 cached")
+            .line("build 6a3302d73654 and sha1 69e8d0c23fa547e8ee08c4d40e0697a2dab0bb56")
+            .build();
+        let text = report.to_text();
+        assert!(!text.contains("Notch"), "{text}");
+        assert!(!text.contains("069a79f4"), "{text}");
+        assert_eq!(text.matches("<uuid>").count(), 2, "{text}");
+        assert!(
+            text.contains("6a3302d73654")
+                && text.contains("69e8d0c23fa547e8ee08c4d40e0697a2dab0bb56"),
+            "a commit or a 40-digit hash is not a UUID and stays: {text}"
+        );
     }
 
     /// The audit looks at what follows a marker, not at the marker.

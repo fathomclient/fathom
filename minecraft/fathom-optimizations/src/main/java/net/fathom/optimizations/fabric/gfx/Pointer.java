@@ -67,6 +67,17 @@ public final class Pointer {
         scriptedY = logicalY;
     }
 
+    /**
+     * Development self-tests only: hold the primary button down (true), let it
+     * go (false), or hand it back to the real mouse (null). A scripted press
+     * goes through exactly the edge detection a real one does.
+     */
+    public static void scriptPrimary(Boolean held) {
+        scriptedPrimary = held;
+    }
+
+    private static Boolean scriptedPrimary;
+
     /** Wheel notches for the next poll, positive away from the user. */
     public static void scriptWheel(int notches) {
         scriptedWheel += notches;
@@ -121,7 +132,8 @@ public final class Pointer {
                 down[button] = false;
                 continue;
             }
-            boolean now = Mouse.isButtonDown(button);
+            boolean now = button == 0 && scriptedPrimary != null
+                    ? scriptedPrimary.booleanValue() : Mouse.isButtonDown(button);
             boolean before = down[button];
             // On the very first frame every button counts as "was already down",
             // so nothing that was held when the screen opened fires.

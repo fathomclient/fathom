@@ -1003,6 +1003,15 @@ public final class SdfRenderer implements UiCanvas {
         return width;
     }
 
+    /**
+     * Whether text can be measured right now, frame or no frame. The HUD lays
+     * every widget out before it opens a frame for the ones in Fathom's
+     * typeface, so it asks before measuring them.
+     */
+    public boolean canMeasure() {
+        return !failed() && text.loaded();
+    }
+
     @Override
     public float measure(String string, Type type) {
         if (string == null || string.isEmpty()) {
@@ -1068,71 +1077,39 @@ public final class SdfRenderer implements UiCanvas {
             float top = snap(deviceY(y)) - pad;
             float right = left + entry.width * zoom;
             float bottom = top + entry.height * zoom;
-            shape(left, top, right, bottom, 0f, 0f, 0f, 0f, 0f, SdfShaders.KIND_IMAGE_MASK);
+            shape(left, top, right, bottom, 0f, 0f, 0f, 0f, 0f, SdfShaders.KIND_BRAND);
             quad(left, top, right, bottom, entry.u0, entry.v0, entry.u1, entry.v1, colour, colour,
                     brand.atlas().texture());
         }
         return BrandArt.wordmarkWidth(cap) / ui.scale();
     }
 
-    /**
-     * The Aperture lockup. The same construction as the launcher's
-     * ({@code desktop/src/lib/brand/aperture.ts}), solved in whole device
-     * pixels; see {@code GlRenderer.lockup} for the derivation.
-     */
     @Override
-    public float lockup(float x, float y, float capHeight, int frameArgb, int planeArgb) {
-        float scale = ui.scale() * zoom;
-        int wanted = Math.round(capHeight * ui.scale());
-        int unit = Math.max(2, Math.round(wanted * Wordmark.TEXT_X_HEIGHT / Wordmark.CAP
-                / (FathomTheme.Tokens.BRAND_GRID - FathomTheme.Tokens.BRAND_PLANE)));
-        int grid = Math.round(FathomTheme.Tokens.BRAND_GRID);
-        int plane = Math.round(FathomTheme.Tokens.BRAND_PLANE);
-        int cap = BrandArt.capForXHeight(unit * (grid - plane), wanted);
-        BrandArt.Layout layout = BrandArt.layout(cap);
-
-        float left = Math.round(deviceX(x));
-        float top = Math.round(deviceY(y));
-        float size = grid * unit;
-        float wall = FathomTheme.Tokens.BRAND_WALL * unit;
-        float reach = (grid - plane) * unit;
-        float tile = unit * FathomTheme.Tokens.BRAND_UNIT_DIVISOR;
-        float outer = tile >= FathomTheme.Tokens.BRAND_TIER_CURVE ? FathomTheme.Tokens.BRAND_CORNER_OUTER * unit : 0f;
-        float planeRadius = tile >= FathomTheme.Tokens.BRAND_TIER_FULL
-                ? FathomTheme.Tokens.BRAND_CORNER_PLANE * unit : 0f;
-
-        float l = logicalX(left);
-        float t = logicalY(top);
-        float r = logicalX(left + size);
-        float b = logicalY(top + size);
-        float open = logicalX(left + reach);
-        float openY = logicalY(top + reach);
-        float ring = wall / scale;
-        clip(l, t, open, b);
-        outline(l, t, r, b, outer / scale, ring, frameArgb);
-        unclip();
-        clip(open, t, r, openY);
-        outline(l, t, r, b, outer / scale, ring, frameArgb);
-        unclip();
-
-        float planeAt = reach - plane * unit;
-        rounded(logicalX(left + planeAt), logicalY(top + planeAt),
-                logicalX(left + planeAt + plane * unit), logicalY(top + planeAt + plane * unit),
-                planeRadius / scale, planeArgb);
-
-        float gap = FathomTheme.Tokens.BRAND_LOCKUP_GAP * unit;
-        float wordLeft = left + size + gap;
-        float wordTop = top + size - layout.ascender;
-        wordmark(logicalX(wordLeft), logicalY(wordTop), cap / ui.scale(), frameArgb);
-        return (size + gap + layout.width) / scale;
+    public float markWidth(float height) {
+        return BrandArt.markWidth(Math.round(height * ui.scale())) / ui.scale();
     }
 
+    /**
+     * The mark: its box's top-left at {@code x, y}, {@code height} tall, in
+     * its own inks with its halo, as the launcher's header draws it. One
+     * textured quad from the brand sheet, rasterised once per size.
+     */
     @Override
-    public float lockupHeight(float capHeight) {
-        int wanted = Math.round(capHeight * ui.scale());
-        int unit = Math.max(2, Math.round(wanted * Wordmark.TEXT_X_HEIGHT / Wordmark.CAP
-                / (FathomTheme.Tokens.BRAND_GRID - FathomTheme.Tokens.BRAND_PLANE)));
-        return FathomTheme.Tokens.BRAND_GRID * unit / (ui.scale() * zoom);
+    public float mark(float x, float y, float height, int argb) {
+        int pixels = Math.round(height * ui.scale());
+        BrandArt.Entry entry = brand.mark(pixels);
+        int colour = tint(argb);
+        if (entry.width > 0 && !Colour.invisible(colour)) {
+            float pad = entry.pad * zoom;
+            float left = snap(deviceX(x)) - pad;
+            float top = snap(deviceY(y)) - pad;
+            float right = left + entry.width * zoom;
+            float bottom = top + entry.height * zoom;
+            shape(left, top, right, bottom, 0f, 0f, 0f, 0f, 0f, SdfShaders.KIND_BRAND);
+            quad(left, top, right, bottom, entry.u0, entry.v0, entry.u1, entry.v1, colour, colour,
+                    brand.atlas().texture());
+        }
+        return BrandArt.markWidth(pixels) / ui.scale();
     }
 
     private float logicalX(float device) {

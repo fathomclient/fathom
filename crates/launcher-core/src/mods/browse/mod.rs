@@ -34,6 +34,7 @@
 //! checked there, per request, rather than trusted here.
 
 pub mod cache;
+pub mod compat;
 pub mod curseforge;
 pub mod dependencies;
 pub mod identity;
@@ -42,6 +43,7 @@ pub mod model;
 pub mod modrinth;
 pub mod provider;
 pub mod search;
+pub mod throttle;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -53,11 +55,13 @@ pub use cache::CatalogCache;
 pub use curseforge::{CurseForgeConfig, CurseForgeProvider};
 pub use dependencies::{Blocker, InstallPlan, PlannedMod};
 pub use install::{InstallOptions, InstallProgress, InstallReport, Installer, UninstallPlan};
-pub use model::{CatalogEntry, InstallState, ModFile, ModProject, ProjectRef, Provider, Target};
+pub use model::{
+    CatalogEntry, Category, InstallState, ModFile, ModProject, ProjectRef, Provider, Target,
+};
 pub use modrinth::ModrinthProvider;
 pub use provider::{
-    Availability, BrowseError, CatalogProvider, ProviderContext, ProviderStatus, SearchPage,
-    SearchQuery, Sort,
+    Availability, Breadth, BrowseError, CatalogProvider, ProviderContext, ProviderStatus,
+    SearchPage, SearchQuery, Sort,
 };
 pub use search::{Decision, SearchCoordinator, SearchTicket};
 
@@ -113,6 +117,9 @@ struct Inner {
     /// Operations in flight, keyed by profile and project, so a row shows
     /// "Installing" while the worker runs and a second click is refused.
     busy: Mutex<HashMap<String, InstallState>>,
+    /// Each provider's category vocabulary, read once per run. It changes on
+    /// the scale of years, and it is the same for every profile.
+    categories: Mutex<HashMap<Provider, Vec<Category>>>,
 }
 
 impl std::fmt::Debug for Inner {
@@ -203,6 +210,7 @@ impl ModCatalog {
                 http,
                 coordinator: SearchCoordinator::default(),
                 busy: Mutex::new(HashMap::new()),
+                categories: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -250,6 +258,31 @@ impl ModCatalog {
                 }
             })
             .collect()
+    }
+
+    /// The topics a provider can filter by. Read once, then remembered.
+    pub fn categories(
+        &self,
+        which: Provider,
+        grant: &PerActionGrant,
+        cancel: &Cancel,
+    ) -> Result<Vec<Category>, BrowseError> {
+        if let Some(known) = self
+            .inner
+            .categories
+            .lock()
+            .ok()
+            .and_then(|known| known.get(&which).cloned())
+        {
+            return Ok(known);
+        }
+        let found = self
+            .ready(which)?
+            .categories(ProviderContext::new(grant, cancel))?;
+        if let Ok(mut known) = self.inner.categories.lock() {
+            known.insert(which, found.clone());
+        }
+        Ok(found)
     }
 
     /// What a profile shows for a project, from the profile's own state.
@@ -437,8 +470,43 @@ impl ModCatalog {
         Ok(project)
     }
 
-    /// The project's builds for a target, newest release first. Cached, and
-    /// re-checked against the target whatever the provider said.
+    /// Every build of a project that lists the target's Minecraft version,
+    /// whatever its loader, each with the compatibility resolver's verdict.
+    /// Best first; see [`compat::assess_files`]. Cached.
+    pub fn assessed_files(
+        &self,
+        reference: &ProjectRef,
+        target: &Target,
+        grant: &PerActionGrant,
+        cancel: &Cancel,
+    ) -> Result<Vec<compat::AssessedFile>, BrowseError> {
+        // Keyed by Minecraft version alone: the list is no longer filtered by
+        // loader, and the verdicts are recomputed on every read rather than
+        // cached, so a change to the resolver applies to cached lists too.
+        let target_key = format!("{}|all-loaders", target.minecraft);
+        let files = if let Some(hit) =
+            self.inner
+                .cache
+                .files(reference.provider, &reference.id, &target_key)
+        {
+            hit
+        } else {
+            let files: Vec<ModFile> = self
+                .ready(reference.provider)?
+                .files(&reference.id, target, ProviderContext::new(grant, cancel))?
+                .into_iter()
+                .filter(|file| file.project == *reference)
+                .collect();
+            self.inner
+                .cache
+                .store_files(reference.provider, &reference.id, &target_key, &files);
+            files
+        };
+        Ok(compat::assess_files(files, target))
+    }
+
+    /// The builds an install may take, best first: compatible ones, then
+    /// unverified ones. Never an incompatible build.
     pub fn files(
         &self,
         reference: &ProjectRef,
@@ -446,24 +514,24 @@ impl ModCatalog {
         grant: &PerActionGrant,
         cancel: &Cancel,
     ) -> Result<Vec<ModFile>, BrowseError> {
-        let target_key = format!("{}|{}", target.minecraft, target.loader.label());
-        if let Some(hit) = self
-            .inner
-            .cache
-            .files(reference.provider, &reference.id, &target_key)
-        {
-            return Ok(hit);
-        }
-        let files: Vec<ModFile> = self
-            .ready(reference.provider)?
-            .files(&reference.id, target, ProviderContext::new(grant, cancel))?
+        Ok(self
+            .assessed_files(reference, target, grant, cancel)?
             .into_iter()
-            .filter(|file| file.project == *reference && file.supports(target))
-            .collect();
-        self.inner
-            .cache
-            .store_files(reference.provider, &reference.id, &target_key, &files);
-        Ok(files)
+            .filter(|assessed| assessed.assessment.installable())
+            .map(|assessed| assessed.file)
+            .collect())
+    }
+
+    /// The resolver's verdict on a whole project for this target.
+    pub fn verdict(
+        &self,
+        project: &ProjectRef,
+        target: &Target,
+        grant: &PerActionGrant,
+        cancel: &Cancel,
+    ) -> Result<compat::ProjectVerdict, BrowseError> {
+        let files = self.assessed_files(project, target, grant, cancel)?;
+        Ok(compat::summarise(project, &files, target))
     }
 
     /// A project as a row for this profile, with its update state resolved.
@@ -557,6 +625,50 @@ impl ModCatalog {
             chosen_optional,
             None,
         )
+    }
+
+    /// Plan fetching the exact build an entry records, again: for a jar that
+    /// is missing from the store or damaged there.
+    ///
+    /// The same build, by the index's version id, checked against the hash the
+    /// profile recorded; never a newer one, which would be an update the user
+    /// did not ask for.
+    pub fn plan_reinstall(
+        &self,
+        id: &ModId,
+        target: &Target,
+        installed: &[ProfileMod],
+        grant: &PerActionGrant,
+        cancel: &Cancel,
+    ) -> Result<InstallPlan, BrowseError> {
+        let entry = installed
+            .iter()
+            .find(|entry| &entry.id == id)
+            .ok_or_else(|| BrowseError::Refused("that mod is not installed".to_owned()))?;
+        let (Some(reference), Some(version_id)) =
+            (Self::reference_of(entry), entry.origin.version_id.clone())
+        else {
+            return Err(BrowseError::Refused(
+                "that mod was not installed from a mod index, so Fathom cannot fetch it again; \
+                 add the file again yourself"
+                    .to_owned(),
+            ));
+        };
+        let project = self.project(&reference, grant, cancel)?;
+        let source = Source {
+            catalog: self,
+            grant,
+            cancel,
+        };
+        let file = source.file(&reference, &version_id)?;
+        if !file.hash.sha1.eq_ignore_ascii_case(&entry.sha1) {
+            return Err(BrowseError::Refused(
+                "the index now publishes different bytes for that build than the ones that were \
+                 installed, so Fathom will not substitute them"
+                    .to_owned(),
+            ));
+        }
+        dependencies::plan(&source, target, installed, project, file, &[], Some(entry))
     }
 
     /// Plan updating one managed entry to its newest compatible build.

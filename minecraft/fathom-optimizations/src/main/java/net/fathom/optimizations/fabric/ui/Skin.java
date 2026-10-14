@@ -8,7 +8,8 @@ import net.fathom.optimizations.generated.FathomTheme;
 import net.fathom.optimizations.generated.FathomTheme.Tokens;
 
 /**
- * Fathom's visual system in the game: neutral Rainforest glass.
+ * Fathom's visual system in the game: Rainforest glass, tinted with the app
+ * icon's navy and marked with its arc blue.
  *
  * <h2>One source, two implementations</h2>
  *

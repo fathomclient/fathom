@@ -389,7 +389,9 @@ impl CatalogProvider for CurseForgeProvider {
             .data
             .into_iter()
             .filter_map(|file| file.into_file(id, &distribution))
-            .filter(|file| file.supports(target))
+            // Whether each build fits is the compatibility resolver's call
+            // (`compat.rs`); here only the Minecraft version is held to.
+            .filter(|file| file.game_versions.contains(&target.minecraft))
             .collect();
         // Releases first, then betas, then alphas; newest within each, which is
         // the order CurseForge already returns.
@@ -815,9 +817,13 @@ impl RawFile {
 /// Split `CurseForge`'s one list of "game versions" into versions and loaders.
 ///
 /// `["1.8.9", "Fabric", "Client"]` is how a 1.8.9 Fabric mod arrives. The
-/// loader names are mapped into Fathom's vocabulary, and a Fabric tag on a
-/// pre-1.14 file becomes `legacy-fabric`: that is what such a mod actually
-/// needs, and `CurseForge` has no separate tag for it.
+/// loader names are mapped into Fathom's vocabulary and nothing more.
+///
+/// A `Fabric` tag stays `fabric`, whatever the Minecraft version. This used to
+/// turn it into `legacy-fabric` on any pre-1.14 file, which claimed something
+/// `CurseForge` never said: it has no Legacy Fabric tag, and a 1.8.9 build
+/// tagged `Fabric` may equally be an Ornithe mod. The compatibility resolver
+/// marks such a build unverified and says why.
 fn facets_of<'a>(values: impl Iterator<Item = &'a str>) -> (BTreeSet<String>, BTreeSet<String>) {
     let mut versions: BTreeSet<String> = BTreeSet::new();
     let mut raw_loaders: BTreeSet<String> = BTreeSet::new();
@@ -833,21 +839,16 @@ fn facets_of<'a>(values: impl Iterator<Item = &'a str>) -> (BTreeSet<String>, BT
         }
     }
 
-    let legacy = versions.iter().any(|version| is_pre_1_14(version));
     let mut loaders: BTreeSet<String> = BTreeSet::new();
     for loader in &raw_loaders {
         match loader.as_str() {
-            "fabric" => {
-                if legacy {
-                    loaders.insert("legacy-fabric".to_owned());
-                } else {
-                    loaders.insert("fabric".to_owned());
-                }
-            }
-            "forge" => {
-                loaders.insert("forge".to_owned());
-            }
-            "neoforge" | "quilt" | "liteloader" | "rift" | "risugami's modloader" => {
+            "fabric"
+            | "forge"
+            | "neoforge"
+            | "quilt"
+            | "liteloader"
+            | "rift"
+            | "risugami's modloader" => {
                 loaders.insert(loader.clone());
             }
             // "Client", "Server" and the rest are environment tags, not
@@ -874,14 +875,6 @@ fn looks_like_a_minecraft_version(value: &str) -> bool {
         && parts.next().is_none_or(|third| {
             !third.is_empty() && third.chars().all(|c| c.is_ascii_alphanumeric())
         })
-}
-
-/// Whether a Minecraft version predates Fabric proper, which is 1.14.
-fn is_pre_1_14(version: &str) -> bool {
-    let mut parts = version.split('.');
-    let major: u32 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
-    let minor: u32 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
-    major == 1 && minor < 14
 }
 
 #[cfg(test)]
@@ -1011,7 +1004,7 @@ mod tests {
     }
 
     #[test]
-    fn fabric_on_an_old_minecraft_version_means_legacy_fabric() {
+    fn fabric_on_an_old_minecraft_version_is_unverified_not_assumed_legacy() {
         let file = parse_file(
             r#"{"id":9,"displayName":"1.0","fileName":"m.jar","releaseType":1,
                 "hashes":[{"value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","algo":1}],
@@ -1020,13 +1013,20 @@ mod tests {
             &Distribution::Allowed,
         )
         .expect("a file");
-        assert!(file.loaders.contains("legacy-fabric"));
+        assert!(file.loaders.contains("fabric"));
+        assert!(!file.loaders.contains("legacy-fabric"));
         assert!(
             !file.loaders.contains("client"),
             "an environment tag is not a loader"
         );
         assert!(file.game_versions.contains("1.8.9"));
-        assert!(file.supports(&Target::new("1.8.9", Loader::LegacyFabric)));
+        // CurseForge cannot say Legacy Fabric, so the resolver cannot either.
+        let target = Target::new("1.8.9", Loader::LegacyFabric);
+        assert!(!file.supports(&target));
+        assert_eq!(
+            super::super::compat::assess_file(&file, &target).verdict,
+            super::super::compat::Verdict::Unverified
+        );
         assert!(file.is_downloadable());
     }
 
@@ -1112,7 +1112,5 @@ mod tests {
         assert!(looks_like_a_minecraft_version("1.20"));
         assert!(!looks_like_a_minecraft_version("Fabric"));
         assert!(!looks_like_a_minecraft_version("Client"));
-        assert!(is_pre_1_14("1.8.9"));
-        assert!(!is_pre_1_14("1.20.1"));
     }
 }

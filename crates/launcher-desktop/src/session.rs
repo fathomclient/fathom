@@ -48,7 +48,10 @@ const CLIENT_PROOF_TIMEOUT: Duration = Duration::from_secs(30);
 const CLIENT_PROOF_POLL: Duration = Duration::from_millis(200);
 
 /// Start a launch. Returns as soon as the thread is running.
-pub fn start(app: &tauri::AppHandle) -> Result<LaunchProgress, String> {
+pub fn start(
+    app: &tauri::AppHandle,
+    options: launcher_core::LaunchOptions,
+) -> Result<LaunchProgress, String> {
     let cancel = {
         let state = app.state::<State>();
         state.launch.begin()?
@@ -62,9 +65,11 @@ pub fn start(app: &tauri::AppHandle) -> Result<LaunchProgress, String> {
     std::thread::Builder::new()
         .name("fathom-launch".to_owned())
         .spawn(move || {
-            let outcome = perform(&handle, &cancel);
+            let outcome = perform(&handle, &cancel, options);
             let state = handle.state::<State>();
-            state.launch.set(outcome);
+            state
+                .launch
+                .set(launch::safe(outcome, options.without_external_mods));
         })
         .map_err(|error| format!("could not start the launch: {error}"))?;
 
@@ -124,7 +129,31 @@ fn groundwork(core: &mut Launcher) -> Result<Groundwork, String> {
 /// Returns the progress the supervisor should settle on. Every early return is
 /// a sentence somebody can act on, because this is the only thing the interface
 /// will be able to show them.
-fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
+/// How long a session has to keep running before its mod set is recorded as
+/// one that works, if it has not exited cleanly before then. Long enough to
+/// get past loading a world, where most mod crashes happen.
+const WORKED_AFTER: Duration = Duration::from_secs(180);
+
+/// How often the running session's reading is re-read from the game directory.
+const PULSE_EVERY: Duration = Duration::from_secs(2);
+
+/// Record how the launch went, for mod recovery. Never fails a launch.
+fn judge(
+    app: &tauri::AppHandle,
+    profile: &launcher_core::profiles::ProfileId,
+    outcome: launcher_core::mods::history::Outcome,
+) {
+    let state = app.state::<State>();
+    if let Ok(core) = state.core.lock() {
+        core.judge_launch(profile, outcome);
+    };
+}
+
+fn perform(
+    app: &tauri::AppHandle,
+    cancel: &Cancel,
+    options: launcher_core::LaunchOptions,
+) -> LaunchProgress {
     let work = {
         let state = app.state::<State>();
         let Ok(mut core) = state.core.lock() else {
@@ -248,9 +277,16 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
         let Ok(core) = state.core.lock() else {
             return launch::failure("the launcher is in a bad state; restart Fathom");
         };
-        match core.launch(&work.profile, &version) {
+        match core.launch_with(&work.profile, &version, options) {
             Ok(status) => status,
-            Err(refusal) => return launch::failure(sentence(&refusal.to_string())),
+            Err(refusal) => {
+                let failed = launch::failure(sentence(&refusal.to_string()));
+                return if refusal.kind() == "mods-need-attention" {
+                    launch::with_recovery(failed)
+                } else {
+                    failed
+                };
+            }
         }
     };
 
@@ -267,12 +303,22 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
             .ok()
             .map(|core| core.dirs_for(&work.profile).minecraft_dir())
     };
+    // Where the game writes its own reading of the session, for the figures
+    // Home shows while it runs and the summary after.
+    let game_directory = descriptor_directory.clone();
     let _descriptor = descriptor_directory.map(SessionDescriptorGuard);
 
     if work.profile.owns_components() {
         report(launch::confirming_fathom());
         if let Err(reason) = confirm_fathom_client(app, &work.profile, launch_started) {
-            return launch::failure(reason);
+            judge(
+                app,
+                &work.profile.id,
+                launcher_core::mods::history::Outcome::Failed {
+                    message: reason.clone(),
+                },
+            );
+            return launch::with_recovery(launch::failure(reason));
         }
     }
 
@@ -298,9 +344,27 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
         open_console(app);
     }
 
+    // -- 4b. out of the way -------------------------------------------------
+    //
+    // "Keep Fathom open while playing" off means the launcher steps aside
+    // once the game is up: minimised, its WebView is hidden, so the background
+    // video and the interface's animation stop costing a frame of the game's
+    // GPU time. It comes back when the session ends, wherever that ends.
+    let stepped_aside = !work.profile.keep_launcher_open;
+    if stepped_aside {
+        set_main_window_minimised(app, true);
+    }
+    let _restore = StepAside(stepped_aside.then(|| app.clone()));
+
     // -- 5. wait ------------------------------------------------------------
     let started = launch::now();
     let profile_id = work.profile.id.clone();
+    // Whether this session has been recorded as one that works. Once it has,
+    // a later crash is still recorded -- as the last launch's outcome -- but
+    // the set that got this far stays the last good one.
+    let mut judged = false;
+    let mut pulse: Option<launcher_core::session_pulse::SessionPulse> = None;
+    let mut pulse_read: Option<std::time::Instant> = None;
     loop {
         std::thread::sleep(POLL);
 
@@ -322,17 +386,110 @@ fn perform(app: &tauri::AppHandle, cancel: &Cancel) -> LaunchProgress {
         };
 
         if current.is_running() {
-            app.state::<State>()
-                .launch
-                .set(launch::running(started.elapsed()));
+            if !judged && started.elapsed() >= WORKED_AFTER {
+                judge(
+                    app,
+                    &profile_id,
+                    launcher_core::mods::history::Outcome::Worked,
+                );
+                judged = true;
+            }
+            // The module rewrites its reading every five seconds; asking every
+            // two is enough to show each one, and a small file read on this
+            // thread costs the game nothing.
+            if pulse_read.is_none_or(|at| at.elapsed() >= PULSE_EVERY) {
+                pulse_read = Some(std::time::Instant::now());
+                if let Some(read) = game_directory
+                    .as_deref()
+                    .and_then(launcher_core::session_pulse::read)
+                {
+                    pulse = Some(read);
+                }
+            }
+            let live = pulse
+                .as_ref()
+                .is_some_and(|reading| reading.is_fresh(SystemTime::now()));
+            app.state::<State>().launch.set(launch::with_session(
+                launch::running(started.elapsed()),
+                started.elapsed(),
+                pulse.clone(),
+                live,
+            ));
             continue;
         }
+
+        // The module writes once more as the game closes, so the summary covers
+        // the whole session rather than ending at the last periodic write.
+        let summary = game_directory
+            .as_deref()
+            .and_then(launcher_core::session_pulse::read)
+            .or(pulse);
+        let elapsed = started.elapsed();
 
         let clean = current.outcome.is_clean_exit();
         if work.console.opens_on_exit(!clean) {
             raise_console_if_absent(app);
         }
-        return launch::finished(clean, current.outcome.message());
+        if clean {
+            if !judged {
+                judge(
+                    app,
+                    &profile_id,
+                    launcher_core::mods::history::Outcome::Worked,
+                );
+            }
+            return launch::with_session(
+                launch::finished(true, current.outcome.message()),
+                elapsed,
+                summary,
+                false,
+            );
+        }
+        judge(
+            app,
+            &profile_id,
+            launcher_core::mods::history::Outcome::Failed {
+                message: current.outcome.message(),
+            },
+        );
+        return launch::with_session(
+            launch::with_recovery(launch::finished(false, current.outcome.message())),
+            elapsed,
+            summary,
+            false,
+        );
+    }
+}
+
+/// Brings the launcher back when a session that minimised it ends, on every
+/// way out of the wait -- a clean exit, a crash, or losing track of the game.
+struct StepAside(Option<tauri::AppHandle>);
+
+impl Drop for StepAside {
+    fn drop(&mut self) {
+        if let Some(app) = self.0.take() {
+            set_main_window_minimised(&app, false);
+        }
+    }
+}
+
+/// Minimise or restore the main window. Posted to the main thread, never
+/// waited for: see [`open_console`] for the deadlock waiting caused.
+fn set_main_window_minimised(app: &tauri::AppHandle, minimised: bool) {
+    let handle = app.clone();
+    let posted = app.run_on_main_thread(move || {
+        if let Some(window) = handle.get_webview_window("main") {
+            if minimised {
+                let _ = window.minimize();
+            } else {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
+    });
+    if let Err(error) = posted {
+        tracing::debug!(%error, minimised, "could not post the launcher window change");
     }
 }
 

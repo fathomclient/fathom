@@ -683,7 +683,17 @@ def write_text(path, text):
     temporary = path + ".tmp"
     with open(temporary, "w", encoding="utf-8") as handle:
         handle.write(text + "\n")
-    os.replace(temporary, path)
+    # Windows refuses to replace a file another process has open, and the game
+    # polls these files every frame. A sharing violation lasts microseconds, so
+    # retry briefly rather than let one collision end a twenty-minute run.
+    for attempt in range(50):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if attempt == 49:
+                raise
+            time.sleep(0.02)
 
 
 def serve(args):

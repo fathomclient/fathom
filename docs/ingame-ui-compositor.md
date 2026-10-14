@@ -3,7 +3,7 @@
 Status: **implemented, migrated, visually verified and profiled**  
 Completed: 2026-10-04
 
-This report closes the renderer replacement requested after the in-game interface
+This closes out the renderer replacement I started after the in-game interface
 failed to match the launcher. The result is not another styling pass: production
 screens and the live HUD now use a retained layout tree feeding a layer-sorted,
 batched GLSL 1.20 compositor with signed-distance shapes, an offline MSDF font
@@ -50,7 +50,7 @@ Useful ideas were recovered rather than the implementation: a renderer-neutral
 API, framebuffer-derived logical coordinates, explicit state restoration and a
 representative proof screen. The retired NanoVG source set, LWJGL 3 dependencies,
 classloader, state guard and showcase screen have now been removed. The historical
-investigation remains in `docs/ingame-ui-nanovg.md`.
+investigation is in the git history.
 
 `GlRenderer` remains only as a compatibility fallback when GLSL 1.20 or framebuffer
 objects are unavailable. No production Fathom screen or HUD deliberately selects it.

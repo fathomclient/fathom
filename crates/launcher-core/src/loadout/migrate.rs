@@ -234,6 +234,7 @@ fn apply_features(
                 "rshift.background" => profile.client.rshift_background = Some(value.clone()),
                 "rshift.blur" => profile.client.rshift_blur = Some(value.clone()),
                 "rshift.dim" => profile.client.rshift_dim = Some(value.clone()),
+                "menu-background-quality" => profile.client.menu_background = Some(value.clone()),
                 other => report.unmapped.push(format!("client.{other}")),
             }
             continue;

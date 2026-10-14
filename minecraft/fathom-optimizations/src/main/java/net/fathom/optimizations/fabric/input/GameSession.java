@@ -41,10 +41,17 @@ public final class GameSession {
             }
             return;
         }
+        if (client.world != null && client.world != lastWorld) {
+            // A tick on the instrument's timeline: a new world or dimension is the
+            // commonest reason a frame rate changes, and the graph should say so.
+            net.fathom.optimizations.fabric.diag.SessionPulse.mark(
+                    net.fathom.optimizations.core.instrument.Pulse.Mark.WORLD);
+        }
         lastWorld = client.world;
         lastPlayer = client.player;
         MovementToggles.release();
         Zoom.sessionChanged();
+        net.fathom.optimizations.fabric.hud.Widgets.newSession();
         FathomHud hud = Runtime.hud();
         if (hud != null) {
             hud.clicks().reset();

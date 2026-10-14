@@ -18,6 +18,20 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'assets/backgrounds/
 const checkOnly = process.argv.includes('--check');
 const stale = [];
 
+// The glow each background lends the interface is its measured accent pulled
+// `graphite.glow.brand-mix` of the way to the icon's arc blue, so a pink or
+// gold scene still lights the glass but the interface reads as one system.
+const theme = JSON.parse(fs.readFileSync(path.join(root, 'assets/theme/fathom-theme.json'), 'utf8'));
+const BRAND_MIX = theme.graphite.glow['brand-mix'];
+const BRAND_GLOW = theme.system.palette[theme.system.brand['orbit-mid'].slice(1)];
+
+function glow(accent) {
+  const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const a = channels(accent);
+  const b = channels(BRAND_GLOW);
+  return '#' + a.map((c, i) => Math.round(c + (b[i] - c) * BRAND_MIX).toString(16).padStart(2, '0')).join('');
+}
+
 function emit(file, content) {
   let existing = null;
   try {
@@ -79,7 +93,7 @@ const ts = [
   "  minecraft: 'video' | 'still' | null;",
   '  /** Plain-text credit shown in Settings; the full record is ATTRIBUTION.md. */',
   '  credit: string;',
-  "  /** The glow colour while this background shows (tools/derive-background-accents.mjs). */",
+  "  /** The glow colour while this background shows: its measured accent, drawn toward the icon's blue. */",
   '  accent: string;',
   '}',
   '',
@@ -96,7 +110,7 @@ const ts = [
     `    height: ${bg.height},`,
     `    minecraft: ${bg.minecraft ? q(bg.minecraft.video ? 'video' : 'still') : 'null'},`,
     `    credit: ${q(bg.credit)},`,
-    `    accent: ${q(bg.accent)},`,
+    `    accent: ${q(glow(bg.accent))},`,
     '  },',
   ].join('\n')),
   '];',
@@ -154,7 +168,7 @@ const java = [
   '',
   '    /** The glow colour while each background shows, 0xRRGGBB. */',
   '    public static final int[] ACCENT = {',
-  ...inGame.map((bg) => `        0x${bg.accent.slice(1).toUpperCase()},`),
+  ...inGame.map((bg) => `        0x${glow(bg.accent).slice(1).toUpperCase()},`),
   '    };',
   '}',
   '',

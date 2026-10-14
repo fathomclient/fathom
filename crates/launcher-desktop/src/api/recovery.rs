@@ -149,6 +149,31 @@ pub fn view(core: &Launcher) -> RecoveryView {
             .then(|| "Nothing has been deleted.".to_owned()),
     });
 
+    // Deleted profiles keep their worlds in the recovery area until somebody
+    // says otherwise -- startup never removes anything that might be wanted --
+    // so this is where that space is given back, with its size on the button's
+    // line so the choice is an informed one.
+    let trashed_bytes: u64 = trashed.iter().map(|path| tree_bytes(path)).sum();
+    actions.push(RecoveryAction {
+        id: "empty-deleted",
+        label: "Permanently remove deleted profiles",
+        detail: if trashed.is_empty() {
+            "Nothing deleted is being kept.".to_owned()
+        } else {
+            format!(
+                "Frees {} held by {} deleted {}, worlds included. They cannot be restored afterwards.",
+                humanise_bytes(trashed_bytes),
+                trashed.len(),
+                if trashed.len() == 1 { "profile" } else { "profiles" }
+            )
+        },
+        verb: "Remove",
+        tone: "caution",
+        unavailable: trashed
+            .is_empty()
+            .then(|| "Nothing has been deleted.".to_owned()),
+    });
+
     actions.push(RecoveryAction {
         id: "diagnostics",
         label: "Save a diagnostics report",
@@ -250,6 +275,7 @@ pub fn run(core: &mut Launcher, id: &str) -> Result<ActionOutcome, String> {
             })
         }
         "restore" => restore_most_recent(core),
+        "empty-deleted" => Ok(empty_deleted(core)),
         "diagnostics" => save_diagnostics(core),
         other => Err(format!("unknown recovery action: {other}")),
     }
@@ -308,7 +334,7 @@ fn restore_most_recent(core: &Launcher) -> Result<ActionOutcome, String> {
     let stem = newest
         .file_name()
         .and_then(std::ffi::OsStr::to_str)
-        .and_then(|name| name.split('.').next())
+        .map(trashed_id)
         .ok_or_else(|| "that deleted profile cannot be read".to_owned())?;
     let id = launcher_core::profiles::ProfileId::new(stem)
         .map_err(|_| "that deleted profile cannot be read".to_owned())?;
@@ -316,6 +342,83 @@ fn restore_most_recent(core: &Launcher) -> Result<ActionOutcome, String> {
     match core.restore_profile(newest, &id) {
         Ok(()) => Ok(ActionOutcome::ok("The profile was restored.")),
         Err(error) => Ok(ActionOutcome::failed(error.to_string())),
+    }
+}
+
+/// Permanently remove everything in the recovery area.
+///
+/// Each entry goes through the core's purge, which confirms the path is inside
+/// the recovery area before any recursive removal.
+fn empty_deleted(core: &Launcher) -> ActionOutcome {
+    let trashed = core.trashed_profiles();
+    if trashed.is_empty() {
+        return ActionOutcome::failed("Nothing has been deleted.");
+    }
+    let mut freed = 0u64;
+    let mut removed = 0usize;
+    let mut failed = 0usize;
+    for path in &trashed {
+        let bytes = tree_bytes(path);
+        match core.purge_trashed_profile(path) {
+            Ok(()) => {
+                removed += 1;
+                freed += bytes;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "a deleted profile could not be removed");
+                failed += 1;
+            }
+        }
+    }
+    let message = format!(
+        "Removed {removed} deleted {} and freed {}.",
+        if removed == 1 { "profile" } else { "profiles" },
+        humanise_bytes(freed)
+    );
+    if failed == 0 {
+        ActionOutcome::ok(message)
+    } else {
+        ActionOutcome::failed(format!(
+            "{message} {failed} could not be removed; try again after closing the game."
+        ))
+    }
+}
+
+/// The bytes under `root`, not following links. Stat calls only.
+fn tree_bytes(root: &std::path::Path) -> u64 {
+    let mut total = 0u64;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                continue;
+            };
+            if meta.is_dir() {
+                pending.push(entry.path());
+            } else if meta.is_file() {
+                total += meta.len();
+            }
+        }
+    }
+    total
+}
+
+/// The profile id a recovery-area entry was deleted from. Entries are named
+/// `{id}-{unix seconds}`, with `-{n}` when two deletions shared a second.
+fn trashed_id(name: &str) -> &str {
+    let parts: Vec<&str> = name.split('-').collect();
+    let stamp = parts
+        .iter()
+        .rposition(|part| part.len() >= 9 && part.bytes().all(|b| b.is_ascii_digit()));
+    match stamp {
+        Some(at) if at > 0 => {
+            let cut: usize = parts[..at].iter().map(|part| part.len() + 1).sum::<usize>() - 1;
+            &name[..cut]
+        }
+        _ => name,
     }
 }
 
@@ -356,6 +459,14 @@ fn save_diagnostics(core: &Launcher) -> Result<ActionOutcome, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_trashed_entry_names_the_profile_it_came_from() {
+        assert_eq!(trashed_id("competitive-1791494837"), "competitive");
+        assert_eq!(trashed_id("my-pvp-setup-1791494837-2"), "my-pvp-setup");
+        assert_eq!(trashed_id("main-1791494837-overflow"), "main");
+        assert_eq!(trashed_id("odd"), "odd");
+    }
 
     /// Every id `view` renders must be one `run` handles.
     ///

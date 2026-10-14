@@ -182,6 +182,45 @@ every launch. Results are an artefact of one run, worth keeping several of, and
 produced at a moment nobody schedules. One file each way, each owned by whoever
 produces it.
 
+### The instrument: play as it was played
+
+A benchmark is a measurement somebody decides to make. The instrument is the
+other kind: always there, never started, and cheap enough that nobody has to
+decide to pay for it. `core/instrument/Pulse` (tested in `PulseTests`) is fed
+by the frame Mixin with the timestamp it has already read:
+
+| Per frame | Once per second of play | On demand |
+|---|---|---|
+| a subtraction, a ring store, a histogram increment | close the second (rate, slowest frame), read the heap, copy a snapshot for the launcher's writer | recent p95/p99 by nearest rank over the last five seconds (at most 2,048 frames), sorted at most once per closed second |
+
+Only frames **in a world with the window focused** count, and an interval over
+a second is a pause (a world load), not a frame. Seconds are seconds of play,
+not wall clock, so a minute in the pause menu is not a minute of graph. The
+session-wide p95/p99 come from a 0.1 ms histogram, so they cost nothing to keep;
+hitches are frames of 50 ms or more. A benchmark arm that bypasses Fathom's
+hooks bypasses the pulse too.
+
+Where it shows:
+
+- **The Hub's Performance page** (`hub/Instrument`): frame rate, p95, p99,
+  memory, modules and the profile, over a two-minute timeline of play, one
+  column per second, with a tick where a world was joined or a performance
+  setting changed. Hovering a column reads it out; hovering a figure explains
+  it. Its caption still says what the page itself costs.
+- **The launcher**, when it started the game (`fathom/session.json` is present):
+  a daemon thread writes `fathom/session-pulse.json` every five seconds and once
+  as the game closes (`fabric/diag/SessionPulse`, `PulseJson`).
+  `launcher_core::session_pulse` reads it as untrusted input (size cap, schema,
+  clamped numbers); the launch supervisor attaches it to the running session,
+  and to the finished one as its summary. Home shows it live and after; the
+  Performance page shows the last session. A launch clears the previous file
+  first. Nothing in it names a world, server or player, and it never leaves the
+  machine (`PRIVACY.md`).
+
+What it does not claim: it is play, not a controlled run. Two sessions in
+different places are not comparable, so the launcher keeps these figures in
+their own section, apart from Measured, and never computes a difference.
+
 ## 2. Presets
 
 Four, named for intent: **Balanced**, **Competitive**, **Maximum FPS**,

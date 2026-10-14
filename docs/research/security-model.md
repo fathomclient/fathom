@@ -7,7 +7,7 @@ Date of research: 2026-08-23.
 
 ## 1. Principles, stated as enforceable rules
 
-The product brief's principles are good, but principles that cannot be checked are marketing. Each
+My product spec's principles are good, but principles that cannot be checked are marketing. Each
 one below is restated as something a reviewer can verify against the code.
 
 | Principle | Enforceable rule |

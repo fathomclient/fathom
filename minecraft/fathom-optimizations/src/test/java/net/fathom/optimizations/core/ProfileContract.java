@@ -38,6 +38,7 @@ public final class ProfileContract {
         check("Gameplay glass".equals(startup.client().rshiftBackground)
                 && "Strong".equals(startup.client().rshiftBlur)
                 && "Deep".equals(startup.client().rshiftDim), "with Survival's RShift presentation");
+        check("Low".equals(startup.client().menuBackground), "and its menu background");
 
         FathomProfile bedwars = game.load("bedwars");
         check(Boolean.TRUE.equals(bedwars.modules().get("cps").enabled), "Bedwars' modules came across");
@@ -49,6 +50,8 @@ public final class ProfileContract {
         bedwars.client().rshiftBackground = "Fathom background";
         bedwars.client().rshiftBlur = "Soft";
         bedwars.client().rshiftDim = "Light";
+        bedwars.client().menuBackground = "Off";
+        bedwars.client().extra.put("futurePreference", "kept");
         game.save(bedwars);
         game.setLastProfileId("bedwars");
         System.out.println("  ok   switched to Bedwars in game, with an edit");

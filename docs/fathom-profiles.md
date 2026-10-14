@@ -132,6 +132,27 @@ Both sides write atomically — write a sibling temporary file, fsync, rename �
 so a profile is never half a document, and both validate `schema` before
 trusting the rest.
 
+A damaged widget number is repaired on load, by both sides and by the same rules,
+rather than failing the document: a scale that is not a positive finite number
+becomes 1, an opacity is clamped to 0–1 (1 if it is not a number at all), and an
+offset is rounded and kept within 100000 of its edge. Rust reads the four fields
+leniently (`lenient_offset`, `lenient_ratio`) and then `FathomProfile::repair`
+logs each fix; Java does it in `FathomProfile.fromJson`. One widget's bad number
+used to make the launcher list the profile as broken and the game lose every
+setting in it for the session. The file keeps the bad value until the next save.
+
+`client` also carries `rshiftBackground`, `rshiftBlur`, `rshiftDim` and
+`menuBackground` (the main menu's video: `High`, `Auto`, `Low` or `Off`). A
+`client` field either side does not know is kept and written back unchanged —
+`ClientPrefs.extra` in Rust, `Client.extra` in Java — so a preference added in a
+later version survives being saved by an earlier launcher or game. The game also
+keeps modules, widgets and switches it does not know through its own saves.
+
+Several writers can hold the same profile: the launcher, and every game using
+the collection. The game saves only what it changed since it last loaded or saved
+the file, on top of the file's newest contents (`ProfileMerge`), so edits made in
+two windows both survive.
+
 ## Live switching
 
 Switching is a transaction. It either happens or the current profile is left
@@ -139,7 +160,8 @@ exactly as it was; there is no state in which half a loadout is applied.
 
 0. Save the departing profile, so edits made in it are not lost to the switch.
 1. Load and validate the target. A document that will not parse, has a newer
-   schema, or holds an impossible value fails here and nothing has changed.
+   schema, or (after the repair above) still holds an impossible value fails
+   here and nothing has changed.
 2. Capture the running client, as a rollback point.
 3. Disable the departing modules, so a module that is leaving is switched off
    as itself rather than half-reconfigured first.

@@ -100,6 +100,5 @@ Less load-bearing, and worth stating so they are not invented later.
 threshold is encoded and the summary computes the verdict — but no benchmark has
 been run, so there is no number to compare against any of the above.
 
-`docs/performance/current-state-audit.md` §8 has single Diagnostics readings from
-a development session. They are not benchmarks and must not be quoted as any of
-the numbers on this page.
+Single Diagnostics readings from a development session are not benchmarks and
+must not be quoted as any of the numbers on this page.

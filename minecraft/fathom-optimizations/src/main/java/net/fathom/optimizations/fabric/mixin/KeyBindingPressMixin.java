@@ -29,19 +29,33 @@ public abstract class KeyBindingPressMixin {
         if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
             return;
         }
-        if (code != -100 && code != -99) {
+        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        if (client == null || client.options == null) {
+            return;
+        }
+        // The attack and use bindings, whatever they are bound to: somebody who
+        // attacks with a key is clicking with that key.
+        boolean attack = code == client.options.attackKey.getCode();
+        boolean use = code == client.options.useKey.getCode();
+        if (!attack && !use) {
             return;
         }
         FathomHud hud = Runtime.hud();
         if (hud == null) {
             return;
         }
-        hud.clicks().pressed(code);
-        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
-        if (code == -100 && client != null && client.currentScreen == null && client.player != null) {
-            // A click at the game, not at a menu: the crosshair flash is about
-            // swinging, and a click on a button is not a swing.
+        hud.clicks().pressed(attack);
+        if (attack && client.currentScreen == null && client.player != null && fathom$onEntity(client)) {
+            // An attack on an entity, not a swing at the air or a click on a
+            // button: that is what "flash when you hit one" promises.
             CrosshairWidget.attacked();
         }
+    }
+
+    /** Whether the crosshair is on an entity, as the attack that just happened will see it. */
+    private static boolean fathom$onEntity(net.minecraft.client.MinecraftClient client) {
+        return client.targetedEntity != null
+                || (client.result != null
+                        && client.result.type == net.minecraft.util.hit.BlockHitResult.Type.ENTITY);
     }
 }

@@ -16,7 +16,7 @@ import net.fathom.optimizations.core.bench.auto.BenchmarkResult;
  *
  * <h2>Why chat and not a screen</h2>
  *
- * <p>Because the brief for this feature was not to redesign anything, and a
+ * <p>Because the spec for this feature was not to redesign anything, and a
  * dedicated screen would have to be dismissed -- which means it must not appear
  * while somebody is in a fight on a server. Chat is already the place a client
  * tells you something happened, it works identically in singleplayer and

@@ -30,7 +30,7 @@ import java.util.TreeMap;
  * <h2>A document, not a live object</h2>
  *
  * <p>This is data. Applying it to the running client is
- * {@code fabric.profile.ProfileSwitch}'s job, and capturing the running client
+ * {@link ProfileSwitch}'s job, and capturing the running client
  * into one is {@code ProfileSwitch.capture}'s. Keeping the document free of any
  * Minecraft type is what lets it be tested with a bare JDK against exactly the
  * bytes the launcher writes.
@@ -45,6 +45,11 @@ public final class FathomProfile {
 
     /** What it is called when it has to be created. */
     public static final String DEFAULT_NAME = "Default";
+
+    /** The {@code client} fields this build reads; anything else is kept in {@link Client#extra}. */
+    static final java.util.Set<String> KNOWN_CLIENT_FIELDS = new java.util.HashSet<String>(java.util.Arrays.asList(
+            "hubKey", "uiScale", "highQualityUi", "hudFont", "rshiftBackground", "rshiftBlur", "rshiftDim",
+            "menuBackground"));
 
     static final int MAX_ID_LENGTH = 48;
     static final int MAX_NAME_LENGTH = 64;
@@ -73,7 +78,7 @@ public final class FathomProfile {
             return enabled == null && !favourite && settings.isEmpty() && keys.isEmpty();
         }
 
-        ModuleState copy() {
+        public ModuleState copy() {
             ModuleState out = new ModuleState();
             out.enabled = enabled;
             out.favourite = favourite;
@@ -93,7 +98,7 @@ public final class FathomProfile {
         public float opacity = 1f;
         public boolean hidden;
 
-        HudEntry copy() {
+        public HudEntry copy() {
             HudEntry out = new HudEntry();
             out.anchor = anchor;
             out.x = x;
@@ -114,10 +119,18 @@ public final class FathomProfile {
         public String rshiftBackground;
         public String rshiftBlur;
         public String rshiftDim;
+        public String menuBackground;
+        /**
+         * Fields a newer launcher or game wrote that this build does not know,
+         * kept as parsed JSON and written back unchanged, so a preference added
+         * later survives being saved by an older client.
+         */
+        public final TreeMap<String, Object> extra = new TreeMap<String, Object>();
 
         boolean isEmpty() {
             return hubKey == null && uiScale == null && highQualityUi == null && hudFont == null
-                    && rshiftBackground == null && rshiftBlur == null && rshiftDim == null;
+                    && rshiftBackground == null && rshiftBlur == null && rshiftDim == null
+                    && menuBackground == null && extra.isEmpty();
         }
 
         Client copy() {
@@ -129,6 +142,8 @@ public final class FathomProfile {
             out.rshiftBackground = rshiftBackground;
             out.rshiftBlur = rshiftBlur;
             out.rshiftDim = rshiftDim;
+            out.menuBackground = menuBackground;
+            out.extra.putAll(extra);
             return out;
         }
     }
@@ -239,6 +254,12 @@ public final class FathomProfile {
 
     void touch() {
         updatedAt = now();
+    }
+
+    /** Take another document's timestamps, for a merge built from a copy of it. */
+    void restoreTimes(FathomProfile other) {
+        createdAt = other.createdAt;
+        updatedAt = other.updatedAt;
     }
 
     /** Drop module entries that say nothing. */
@@ -420,10 +441,17 @@ public final class FathomProfile {
             if (anchor != null && !anchor.trim().isEmpty()) {
                 placement.anchor = anchor.trim().toLowerCase(Locale.ROOT).replace('_', '-');
             }
-            placement.x = (int) whole(fields.get("x"), 0L);
-            placement.y = (int) whole(fields.get("y"), 0L);
-            placement.scale = decimal(fields.get("scale"), 1f);
-            placement.opacity = decimal(fields.get("opacity"), 1f);
+            // Repaired, not refused. One impossible number in one widget --
+            // a hand edit, another tool's bug -- used to fail the whole
+            // document, and a profile that cannot load is every setting in it
+            // lost for the session. Each value is brought back into range on
+            // its own and nothing else is touched.
+            placement.x = (int) Math.max(-OFFSET_LIMIT, Math.min(OFFSET_LIMIT, whole(fields.get("x"), 0L)));
+            placement.y = (int) Math.max(-OFFSET_LIMIT, Math.min(OFFSET_LIMIT, whole(fields.get("y"), 0L)));
+            float scale = decimal(fields.get("scale"), 1f);
+            placement.scale = Float.isNaN(scale) || Float.isInfinite(scale) || scale <= 0f ? 1f : scale;
+            float opacity = decimal(fields.get("opacity"), 1f);
+            placement.opacity = Float.isNaN(opacity) ? 1f : Math.max(0f, Math.min(1f, opacity));
             placement.hidden = Boolean.TRUE.equals(fields.get("hidden"));
             profile.hud.put(String.valueOf(entry.getKey()), placement);
         }
@@ -438,6 +466,13 @@ public final class FathomProfile {
         profile.client.rshiftBackground = text(client.get("rshiftBackground"));
         profile.client.rshiftBlur = text(client.get("rshiftBlur"));
         profile.client.rshiftDim = text(client.get("rshiftDim"));
+        profile.client.menuBackground = text(client.get("menuBackground"));
+        for (Map.Entry<?, ?> entry : client.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            if (!KNOWN_CLIENT_FIELDS.contains(key) && entry.getValue() != null) {
+                profile.client.extra.put(key, entry.getValue());
+            }
+        }
 
         Map<?, ?> performance = object(document.get("performance"));
         profile.performance.preset = text(performance.get("preset"));
@@ -533,6 +568,14 @@ public final class FathomProfile {
         if (client.rshiftDim != null) {
             clientMap.put("rshiftDim", client.rshiftDim);
         }
+        if (client.menuBackground != null) {
+            clientMap.put("menuBackground", client.menuBackground);
+        }
+        for (Map.Entry<String, Object> entry : client.extra.entrySet()) {
+            if (!clientMap.containsKey(entry.getKey())) {
+                clientMap.put(entry.getKey(), entry.getValue());
+            }
+        }
         out.put("client", clientMap);
 
         Map<String, Object> performanceMap = new LinkedHashMap<String, Object>();
@@ -568,6 +611,9 @@ public final class FathomProfile {
         }
         return String.valueOf(value);
     }
+
+    /** Further than any screen from its edge: an offset beyond this is a broken number, not a choice. */
+    private static final long OFFSET_LIMIT = 100_000L;
 
     private static long whole(Object value, long fallback) {
         return value instanceof Number ? ((Number) value).longValue() : fallback;

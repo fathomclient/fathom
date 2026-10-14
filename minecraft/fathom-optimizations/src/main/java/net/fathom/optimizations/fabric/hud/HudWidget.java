@@ -69,6 +69,17 @@ public interface HudWidget {
     String placeholder();
 
     /**
+     * What the HUD editor shows while this widget has nothing to show: no
+     * effects, no armour, no server. Drawn on the widget's own plate in its own
+     * colours, a little faint, so the arrangement is made against something
+     * the size and look of the real thing. One line per entry; the placeholder
+     * unless a widget has something more representative.
+     */
+    default String[] preview() {
+        return new String[] {placeholder()};
+    }
+
+    /**
      * Where the widget sits across the screen, before it is measured and drawn.
      *
      * <p>0 for a left anchor, 0.5 centred, 1 for a right anchor. Text widgets
@@ -95,5 +106,14 @@ public interface HudWidget {
      */
     default long contentSignature(MinecraftClient client, HudFont font) {
         return 0L;
+    }
+
+    /**
+     * Whether what this widget draws is moving on its own right now, such as an
+     * enchantment glint. Such a frame is drawn live: replaying it from the
+     * cached layer, which records twenty times a second, would make it stutter.
+     */
+    default boolean animating(MinecraftClient client) {
+        return false;
     }
 }

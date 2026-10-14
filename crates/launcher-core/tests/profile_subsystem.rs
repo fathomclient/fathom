@@ -348,7 +348,7 @@ fn a_deleted_profile_can_be_restored() {
     );
 }
 
-/// The rule the brief is most emphatic about. `profile.json` is an ordinary
+/// The rule the spec is most emphatic about. `profile.json` is an ordinary
 /// file that a user, a bad merge or a hostile import can edit, and a recursive
 /// delete driven by its contents is the worst thing this program could do.
 #[test]

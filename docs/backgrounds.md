@@ -117,10 +117,9 @@ its full-resolution still from `textures/menu/scenes/`, the same picture the
 launcher shows. A game started without the launcher shows the default. The HUD
 is gameplay and never draws a menu background.
 
-The supported catalogue has eleven entries. `golden-hour` is intentionally not
-in it: its historical files remain for provenance, but the unconfirmed licence
-means neither generated picker exposes it and a stored value migrates to the
-default.
+The supported catalogue has eleven entries. `golden-hour` is not one of them:
+its licence was never confirmed, so its files were removed, and a stored value
+migrates to the default.
 
 ## Tokyo Tower and Aurora
 

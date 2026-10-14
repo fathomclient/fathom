@@ -16,8 +16,9 @@ import net.fathom.optimizations.core.ui.layout.Text;
 import net.fathom.optimizations.core.ui.render.Icon;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
+import net.fathom.optimizations.core.instrument.Pulse;
 import net.fathom.optimizations.fabric.Runtime;
-import net.fathom.optimizations.fabric.gfx.Gfx;
+import net.fathom.optimizations.fabric.diag.SessionPulse;
 import net.fathom.optimizations.fabric.ui.Controls;
 import net.fathom.optimizations.fabric.perf.PerfLayer;
 import net.fathom.optimizations.fabric.ui.FathomComponents;
@@ -41,24 +42,25 @@ import net.fathom.optimizations.fabric.ui.Skin;
  * started. Those rows say so and are not switchable, rather than offering a
  * control that would silently do nothing until next time.
  *
- * <h2>The strip at the top</h2>
+ * <h2>The instrument at the top</h2>
  *
- * <p>The frame cost of the thing you are looking at. A performance page that
- * cannot say what it costs to show you a performance page is asking to be taken
- * on faith.
+ * <p>How play is going, and how it went: frame rate, frame-time percentiles,
+ * memory, and two minutes of play as a timeline with what changed marked on it
+ * ({@link Instrument}). Its caption keeps the old strip's point: the frame cost
+ * of the page you are looking at. A performance page that cannot say what it
+ * costs to show you a performance page is asking to be taken on faith.
  */
 final class PerformanceSection implements Section {
 
     private static final float ROW = Skin.ROW_HEIGHT;
-    private static final float METER = 68f;
     private static final float GROUP = 34f;
 
     private final Scroller scroller = new Scroller();
     private List<Row> rows;
     private List<Optimization> cachedEngineEntries;
     private final Box page = Box.column("performance.page");
-    private final Box metersBox = Box.row("performance.meters").height(METER).gap(Skin.S3);
-    private final Box[] meterBoxes = new Box[3];
+    private final Box metersBox = Box.row("performance.instrument").height(Instrument.HEIGHT);
+    private final Instrument instrument = new Instrument();
     private final Box interfaceLabel = Box.column("performance.interface.label");
     private final Box interfaceBox = Box.column("performance.interface");
     private final Box presetLabel = Box.column("performance.preset.label");
@@ -70,10 +72,6 @@ final class PerformanceSection implements Section {
     private Box engineHeading;
 
     PerformanceSection() {
-        for (int index = 0; index < meterBoxes.length; index++) {
-            meterBoxes[index] = Box.row("performance.meter." + index).grow(1f);
-            metersBox.add(meterBoxes[index]);
-        }
         page.add(metersBox);
         page.add(Box.column("performance.meters.after").height(Skin.S5));
         page.add(interfaceLabel);
@@ -126,7 +124,7 @@ final class PerformanceSection implements Section {
         interfaceBox.height(interfaceLine * 2f + Skin.S3 + Skin.S3 * 2f);
         presetLabel.height(labelHeight);
         page.layout(ui, area.x, area.y, area.width, area.height);
-        meters(context, metersBox.rect());
+        instrument.draw(context, metersBox.rect());
 
         // Stacked on a cursor, on real line heights. Every group is a label,
         // then its control, then a gap to the next group — and each of those
@@ -358,6 +356,7 @@ final class PerformanceSection implements Section {
         private static void edited(HubContext context, FathomModule module, Setting setting) {
             module.settingChanged(setting);
             context.markDirty();
+            SessionPulse.mark(Pulse.Mark.SETTINGS);
         }
     }
 
@@ -398,34 +397,6 @@ final class PerformanceSection implements Section {
         }
     }
 
-    /** Three numbers: what the game is running at, and what this menu costs. */
-    private void meters(HubContext context, Rect area) {
-        Gfx.Frames frames = Gfx.frames();
-        meter(context, meterBoxes[0].rect(), "Frame rate",
-                String.valueOf(Math.round(frames.fps())), "fps");
-        meter(context, meterBoxes[1].rect(), "Frame time",
-                millis(frames.frameMeanMillis()), "ms · p99 " + millis(frames.framePercentileMillis(0.99f)));
-        meter(context, meterBoxes[2].rect(), "Fathom UI",
-                millis(frames.uiMeanMillis()), "ms of that");
-    }
-
-    /** Live measurements: Geist Mono, so the digits hold still as they change. */
-    private static final Type STAT = new Type(24f, Type.Weight.MONO_MEDIUM);
-
-    private void meter(HubContext context, Rect area, String label, String value, String unit) {
-        Renderer ui = context.ui();
-        FathomComponents.card(ui, area, 0f, 0f);
-        Controls.label(ui, label, area.x + Skin.S3, area.y + Skin.S3);
-        float baseline = area.bottom() - Skin.S4;
-        float width = ui.text(value, area.x + Skin.S3, baseline, STAT, Skin.TEXT);
-        ui.text(Text.fit(ui, unit, Type.SMALL, area.width - width - Skin.S5), area.x + Skin.S3 + width + Skin.S2,
-                baseline, Type.SMALL, Skin.TEXT_FAINT);
-    }
-
-    private static String millis(float value) {
-        return String.format(java.util.Locale.ROOT, "%.2f", Float.valueOf(value));
-    }
-
     private void presets(HubContext context, SwitchBoard switches, Rect area) {
         Preset[] presets = Preset.values();
         // The launcher's preset control: a segmented choice that says which
@@ -442,6 +413,7 @@ final class PerformanceSection implements Section {
         if (chosen != selected && chosen >= 0 && chosen < presets.length) {
             switches.applyPreset(presets[chosen]);
             context.markDirty();
+            SessionPulse.mark(Pulse.Mark.SETTINGS);
         }
     }
 
@@ -479,6 +451,7 @@ final class PerformanceSection implements Section {
             if (controls.toggle(ui, "perf.toggle." + entry.id(), toggle, on, true)) {
                 switches.setByUser(entry.id(), !on);
                 context.markDirty();
+                SessionPulse.mark(Pulse.Mark.SETTINGS);
             }
             room = toggle.x - row.x - Skin.S5;
         } else {

@@ -96,6 +96,18 @@ public abstract class TextWidget implements HudWidget {
     /** 0 at a left anchor, 0.5 centred, 1 at a right anchor. */
     private float alignment;
 
+    /** Each line measured once while it is unchanged, rather than three times a frame. */
+    private final MeasuredWidths widths = new MeasuredWidths(6);
+
+    /** A resource reload: every remembered width may be wrong. */
+    public static void fontsReloaded() {
+        MeasuredWidths.reloaded();
+    }
+
+    protected final float widthOf(HudFont font, String text) {
+        return widths.of(font, text);
+    }
+
     @Override
     public void align(float horizontal) {
         alignment = horizontal;
@@ -122,10 +134,10 @@ public abstract class TextWidget implements HudWidget {
             return;
         }
         List<String> lines = currentLines(client);
-        float widest = font.width(placeholder);
+        float widest = widthOf(font, placeholder);
         if (lines != null) {
             for (int index = 0; index < lines.size(); index++) {
-                widest = Math.max(widest, font.width(lines.get(index)));
+                widest = Math.max(widest, widthOf(font, lines.get(index)));
             }
         }
         int pad = padding();
@@ -222,7 +234,7 @@ public abstract class TextWidget implements HudWidget {
         for (int index = 0; index < lines.size(); index++) {
             String line = lines.get(index);
             int colour = (alpha << 24) | (colourFor(index, line, textColour) & 0x00FFFFFF);
-            float lineX = x + pad + Math.round((room - font.width(line)) * alignment);
+            float lineX = x + pad + Math.round((room - widthOf(font, line)) * alignment);
             font.draw(line, lineX, lineY, colour, shadow);
             lineY += font.lineHeight() + LINE_GAP;
         }

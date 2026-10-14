@@ -32,7 +32,7 @@ public final class BenchmarkState {
      */
     public static final boolean ACTIVE = detect();
 
-    /** Dedicated short diagnosis requested after the optional-module benchmark. */
+    /** A short follow-up diagnosis, run after the optional-module benchmark. */
     public static final boolean CORE = "core".equalsIgnoreCase(
             System.getProperty("fathom.benchmark", ""));
 
@@ -60,8 +60,11 @@ public final class BenchmarkState {
     private static boolean detect() {
         try {
             String property = System.getProperty("fathom.benchmark", "");
+            // "none" is off too: it reads as off, and a harness that passed it
+            // to cancel another benchmark armed this one, which then switched
+            // every module off in the middle of a self-test.
             if (!property.isEmpty() && !"false".equalsIgnoreCase(property)
-                    && !"off".equalsIgnoreCase(property)) {
+                    && !"off".equalsIgnoreCase(property) && !"none".equalsIgnoreCase(property)) {
                 return true;
             }
             String command = System.getProperty("sun.java.command", "");

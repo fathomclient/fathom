@@ -42,6 +42,10 @@ pub enum DisabledReason {
     UserChoice,
     /// The launcher turned it off because of a conflict, and recorded which.
     Conflict { with: ModId, detail: String },
+    /// Turned off by "restore the last working set", because it was added or
+    /// changed after the last launch that worked. The user's to switch back on:
+    /// it is a precaution, not a finding about the mod.
+    Recovery { detail: String },
 }
 
 /// Where a mod in a profile came from.
@@ -189,6 +193,9 @@ pub struct ProfileMod {
     /// dropped in, which is the honest answer for one.
     #[serde(default, skip_serializing_if = "Origin::is_empty")]
     pub origin: Origin,
+    /// Builds this entry used before, newest first. See [`PreviousBuild`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub previous: Vec<PreviousBuild>,
 }
 
 fn default_true() -> bool {
@@ -206,7 +213,52 @@ impl ProfileMod {
             version: None,
             source: ModSource::default(),
             origin: Origin::default(),
+            previous: Vec::new(),
         }
+    }
+
+    /// Carry `old`'s build into this entry's history, as the build this one
+    /// replaced, along with whatever history `old` already had.
+    ///
+    /// A no-op when the bytes did not change: reinstalling the same file is not
+    /// a new version to step back from.
+    pub fn succeed(&mut self, old: &ProfileMod, replaced_at: u64) {
+        let mut history = old.previous.clone();
+        if !old.sha1.eq_ignore_ascii_case(&self.sha1) {
+            history.insert(0, PreviousBuild::of(old, replaced_at));
+        }
+        history.retain(|build| !build.sha1.eq_ignore_ascii_case(&self.sha1));
+        history.dedup_by(|a, b| a.sha1.eq_ignore_ascii_case(&b.sha1));
+        history.truncate(MAX_PREVIOUS);
+        self.previous = history;
+    }
+
+    /// Put back an earlier build, remembering the current one in its place.
+    ///
+    /// Only the build's own facts change (bytes, file name, version, the
+    /// index's version id, what it was tagged for). Whether the mod is on, why
+    /// it is off, and what it requires stay as they are.
+    pub fn restore_previous(&mut self, sha1: &str, now: u64) -> Result<PreviousBuild, String> {
+        let index = self
+            .previous
+            .iter()
+            .position(|build| build.sha1.eq_ignore_ascii_case(sha1))
+            .ok_or_else(|| "that build is not one this mod used before".to_owned())?;
+        let chosen = self.previous.remove(index);
+        let current = PreviousBuild::of(self, now);
+        self.sha1.clone_from(&chosen.sha1);
+        self.file_name.clone_from(&chosen.file_name);
+        self.version.clone_from(&chosen.version);
+        self.origin.version_id.clone_from(&chosen.version_id);
+        if !chosen.minecraft.is_empty() {
+            self.origin.minecraft.clone_from(&chosen.minecraft);
+        }
+        if !chosen.loaders.is_empty() {
+            self.origin.loaders.clone_from(&chosen.loaders);
+        }
+        self.previous.insert(0, current);
+        self.previous.truncate(MAX_PREVIOUS);
+        Ok(chosen)
     }
 
     /// Record what the repository said about it.
@@ -243,6 +295,59 @@ impl ProfileMod {
     pub fn disabled_automatically(&self) -> bool {
         matches!(self.disabled_reason, Some(DisabledReason::Conflict { .. }))
     }
+}
+
+/// How many earlier builds of one mod an entry remembers.
+///
+/// Enough to step back past a bad update and the one before it; few enough
+/// that the store does not quietly keep every build ever installed.
+pub const MAX_PREVIOUS: usize = 3;
+
+/// A build this entry used before, kept so it can be put back.
+///
+/// The bytes stay in the content-addressed store for as long as this record
+/// exists: the store's garbage collection counts every hash a profile file
+/// mentions, and this record is in the profile file. So restoring needs no
+/// network and cannot fetch something different from what was there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviousBuild {
+    pub sha1: String,
+    pub file_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<ModVersion>,
+    /// The index's id for that build, when it came from one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_id: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub minecraft: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub loaders: BTreeSet<String>,
+    /// When it stopped being the current build, in Unix seconds.
+    #[serde(default)]
+    pub replaced_at: u64,
+}
+
+impl PreviousBuild {
+    /// What `entry` is now, as a build to remember.
+    pub fn of(entry: &ProfileMod, replaced_at: u64) -> Self {
+        Self {
+            sha1: entry.sha1.clone(),
+            file_name: entry.file_name.clone(),
+            version: entry.version.clone(),
+            version_id: entry.origin.version_id.clone(),
+            minecraft: entry.origin.minecraft.clone(),
+            loaders: entry.origin.loaders.clone(),
+            replaced_at,
+        }
+    }
+}
+
+/// Seconds since the Unix epoch, for records a person reads as dates.
+pub fn now_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
 }
 
 /// Everything a profile records about its mods.

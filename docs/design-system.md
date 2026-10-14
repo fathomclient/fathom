@@ -222,12 +222,12 @@ work.
 | `.ui-item`, `.ui-mark`, `.ui-item-title`, `-meta`, `-controls` | `controls.css` | One object in a manager list (profiles, installations): hairline-separated inside a `Section material`; `.current` is a faint fill, never a coloured edge |
 | `use:tooltip` | `tooltip.ts` | Replaces `title` on icon-only controls |
 | `Button` | `lib/ui` | `normal`, `primary` (denser, never coloured), `caution` |
-| `Switch`, `Segmented` | `lib/ui` | Selection is champagne luminance or a denser pill |
+| `Switch`, `Segmented` | `lib/ui` | On is the icon's arc blue; selection a denser pill |
 | `Section`, `Row` | `lib/ui` | Standard-glass panel; rows wrap instead of truncating, and the control drops under the text when the row is narrow |
 | `Page` | `lib/ui` | Document frame with an edgeless readability veil |
 | `Sheet` | `lib/ui` | The one modal: inset dense glass, scrim, Escape closes |
 | `Notice` | `lib/ui` | The notification surface (inline; no toasts by design). Standard glass on the photograph; flat inside a pane that is already glass, so blur never stacks |
-| `Progress`, `ApertureMark` | `lib/ui`, `lib/brand` | Loading states; still under reduced motion |
+| `Progress`, `OrbitMark working` | `lib/ui`, `lib/brand` | Loading states; still under reduced motion |
 
 **Deepening one pane.** Where a pane crosses the brightest part of the
 photograph and its type falls short of 4.5:1, deepen that pane locally with
@@ -248,12 +248,12 @@ product. Each has one implementation per side.
 | Element | Launcher | Game | Rule |
 | --- | --- | --- | --- |
 | Icons | `svg.lucide` rule in `theme.css`; `FathomIcon` for Fathom ids | `Icons.strokeUnits` | Lucide geometry only. Sizes 20 (navigation), 18 (standalone action), 16 (inline), 14/12 (status). Stroke fixed in screen units by size: 1.5 / 1.6 / 1.7 / 1.75. Call sites never set a stroke. |
-| Focus | `--focus-ring-width` + `--color-focus` | `Skin.FOCUS`, `Controls.focusRing` | 1.5px signal cyan, 2px outside the shape, keyboard focus only. |
-| Signal cyan | `--color-signal` | `Tokens.COLOR_SIGNAL` | Focus, live telemetry (the running-now dot, FPS dot, graphs) and HUD-editor guides/selection. Never "enabled", never a fill. |
+| Focus | `--focus-ring-width` + `--color-focus` | `Skin.FOCUS`, `Controls.focusRing` | 1.5px signal blue, 2px outside the shape, keyboard focus only. |
+| Signal blue | `--color-signal`, `--brand-orbit-light` | `Tokens.COLOR_SIGNAL`, `Graphite.BRAND_LIGHT` | The icon's arc blue (`#8fc8ff`, `#a5d6ff`): focus, live telemetry (the running-now dot, FPS dot, graphs), HUD-editor guides/selection, a switch that is on, a slider's fill and the current page's glyph in the rail. Small marks only: never a panel, never a large fill. |
 | Buttons | `Button` (`primary`, `normal`, `ghost`, `caution`) | `Controls.primary/secondary/ghost/danger` | Primary is the bright neutral fill with dark type, one per surface. No lift, no glow, no scale on hover. |
 | Switch | `Switch` | `Controls.toggle` | 38x22, 16 knob; off a faint track and grey knob, on a brighter track and near-white knob. 120ms. |
 | Slider | `input[type=range]` + `use:rangeFill` | `Controls.slider` | 4px translucent channel, brighter neutral fill, 14px thumb. Values beside it are Geist Mono, fixed width. |
-| Segmented | `Segmented` | `Controls.segmented*` | Light track; selection a denser pill with the strong rim. No shadow, no colour. |
+| Segmented | `Segmented` | `Controls.segmented*` | Light track; selection a denser pill with the strong rim, lit by the glow. No shadow. |
 | Search | `SearchField` | `ModsSection.graphiteSearch` | Glyph in a 16px slot; clear button only while there is a value; Escape clears. |
 | Tooltip | `use:tooltip` | `Controls.tooltip` | Dense glass, 6px radius, rim only, 12px type. 400ms hover delay, immediate on keyboard focus, 120ms fade, no travel. Never the native `title`. |
 | Popover | `.ui-popover` | `Controls.drawList` | Dense glass, one `md` shadow. In: fade + 6px over 180ms. Out: fade over 120ms. |
@@ -261,7 +261,12 @@ product. Each has one implementation per side.
 | Hairline | `--hairline` (one device pixel, set in `main.ts`) | `Graphite.hairline` | Only where structure needs it; never a gradient. |
 | Status | `Notice`, `Row` badges, `.status` dots | `Skin.GOOD/WARN/BAD` on marks only | A 6px dot or a 14-16px icon in the status colour beside neutral text. Panels are never washed green, amber or red. |
 | Empty | `EmptyState` | -- | Small icon in a faint circle, a short heading, one line, optionally one action. |
-| Loading | `Progress` (3px line; drifts when there is no fraction) | -- | No spinners, no fake percentages. The Play control reserves the line's space so nothing moves. |
+| Loading | `Progress` (3px line; drifts when there is no fraction) | -- | No spinners, no fake percentages. The Play control reserves the line's space so nothing moves. Under it, the launch's four steps (Check, Download, Start, Confirm) in caption type: the furthest reached is held, a step not needed is passed over. |
+| Timeline | `FrameTimeline` | `hub/Instrument` | One column per bucket of play: the mean frame time as a faint signal-blue column with a lit top; a whisker up to a cap at the slowest frame only when it stands 2.5x clear of the mean, in the warning colour at a hitch (50 ms). A faint hairline at a 60 fps frame. Ceiling: the 90th-percentile slowest frame x 1.25, never under 20 ms; a rare spike clips. A tertiary hairline marks a change (world, settings). Newest on the right. Hover reads a column out in words. |
+| Figures | `SessionFigures` | `Instrument.figure` | Caption label over a Geist Mono value and a caption unit; every figure explains itself on hover or focus (tooltip). |
+| Session | Home's session block, the header's session capsule | -- | The capsule appears on every page but Home while a launch works, a game runs, or one went wrong; one press goes back. Its dot is signal blue (breathing only while working), danger once it went wrong. |
+| Current page | `.indicator` in each rail group | Hub rail | One pill that slides between items (`--motion-state`), not a fill that blinks from one to the next. |
+| Press | `--press-scale` (0.985) on every control, Play and the rail included | `Controls` press | A denser fill and a slight compression; nothing lifts. |
 | Shell | `App.svelte` (Home included) | Hub header and rail | One header, account capsule and rail on every page, in the same place. Home drops only the crumb and the status line. |
 | Avatar | header capsule, account sheet | -- | Round everywhere, pixel-scaled at a whole multiple of the 8px face, rim drawn over the image. |
 | Presets | `Segmented` with the current preset | `Controls.segmentedNatural` + `SwitchBoard.matchingPreset` | The preset in effect is selected; "Custom" once a switch is changed by hand. |
@@ -269,25 +274,37 @@ product. Each has one implementation per side.
 
 ## 7b. The brand
 
-Aperture: the mark is drawn from one construction in
-[`desktop/src/lib/brand/aperture.ts`](../desktop/src/lib/brand/aperture.ts),
-with its numbers and inks in the manifest (`system.brand`, emitted to CSS as
-`--brand-*`, to `brand.generated.ts`, and to Java as
-`FathomTheme.Tokens.BRAND_*`). The wordmark is lowercase Geist, outlined by
+The interface is the icon's system. Its neutrals lean to the tile's navy
+(glass tints, hairlines, rims and scrims are cool rather than warm grey), and
+its one accent is the arc's light blue, used only in small marks: focus,
+telemetry, what is on, a slider's fill, the current page's glyph. The glows
+that a background lends the interface are pulled 60% of the way to that blue
+(`graphite.glow.brand-mix`), so every scene lights the glass in the same family.
+
+Orbit: the mark is drawn from one set of paths in
+[`desktop/src/lib/brand/orbit.ts`](../desktop/src/lib/brand/orbit.ts), on the
+icon's 512 grid, with its inks and the lockup's proportions in the manifest
+(`system.brand`, emitted to CSS as `--brand-*`, to `brand.generated.ts`, and to
+Java as `FathomTheme.Tokens.BRAND_*`; the paths themselves reach the game as
+`generated/Mark.java`). The wordmark is lowercase Geist, outlined by
 `tools/generate-wordmark.py` into `wordmark.generated.ts` and
-`generated/Wordmark.java`, with its optical tiers in `graphite.wordmark`. In the
-launcher the header wordmark is `lib/brand/Wordmark.svelte` and the loading
-mark is `lib/brand/ApertureMark.svelte`; the icon files and installer bitmaps
-are rendered from the same geometry by `assets/brand/build-brand.mjs`. See
+`generated/Wordmark.java`, with its optical tiers in `graphite.wordmark`; its
+ink is ivory warming to the arc's blue over the last letters. In the launcher
+the mark is `lib/brand/OrbitMark.svelte` and the wordmark
+`lib/brand/Wordmark.svelte`; the icon files and installer bitmaps are rendered
+from the same paths by `assets/brand/build-brand.mjs`. See
 [`assets/brand/README.md`](../assets/brand/README.md) for the rules.
 
-- The header shows the lowercase wordmark at a 13px ascender, the same outlines
-  the game's Hub and title screen draw. It does not animate, and the Standard
-  capitalization setting does not change it.
-- The mark is the loading symbol: the open corner closes as work completes.
-  Nothing in the brand spins.
-- Editing a brand colour or number means running `node assets/brand/build-brand.mjs`
-  as well as the theme generator, so the icon files follow.
+- The header shows the lockup, the mark with its halo and the wordmark at a
+  13px ascender, the same drawing the game's Hub and title screen show. It
+  does not animate, and the Standard capitalization setting does not change it.
+- The splash and the loading screen stand on the icon's own ground (its tile's
+  three stops and its halo), with the stacked lockup and a sweeping line in the
+  arc's blues.
+- `OrbitMark working` is the small wait symbol: the star breathes, the arc
+  holds still. Nothing in the brand spins.
+- Editing a brand colour means running `node assets/brand/build-brand.mjs` as
+  well as the theme generator, so the icon files follow.
 
 ## 8. Accessibility
 
@@ -324,10 +341,10 @@ snapshot, taken once when the screen opens. HUD modules never get a live blur.
 | `.material-*` with blur | `Skin.MATERIAL_*`: the `tint-game` fill, `VisualEffects.glass` draws fill + rim ring + a hairline highlight across the top's straight run |
 | `--control-*` fills | `Tokens.CONTROL_*` (generated), read through `Skin.SURFACE`, `ELEVATED`, `RECESSED`, `FILL_*` |
 | `--color-text*` | `Skin.TEXT`, `TEXT_MUTED` (champagne), `TEXT_FAINT`, `TEXT_DISABLED` |
-| Primary button | `Skin.PROMINENT`: the dark dense fill, ivory type, never coloured |
-| Selection / on | a denser fill and `Skin.EDGE_ELEVATED`; switches and sliders in champagne with an ivory knob |
-| The old red | `Skin.ENERGY*`: ivory luminance only. There is no hue but the status tones |
-| `Wordmark.svelte` | `Graphite.wordmark`: the outlines are `generated/Wordmark.java`, from the same generator as the launcher's; `GlRenderer` rasterises them once per size into their own sheet with the same optical tiers and x-height snapping |
+| Primary button | `Skin.PROMINENT`: the cool ivory fill with the tile's navy type |
+| Selection / on | a denser, faintly blue fill and `Skin.EDGE_ELEVATED`; switches and sliders in the arc's blue with a near-white knob |
+| The old red | `Skin.ENERGY*`: ivory luminance only. The only hues are the icon's blue and the status tones |
+| `Wordmark.svelte`, `OrbitMark.svelte` | `Graphite.lockup`: the outlines are `generated/Wordmark.java` and `generated/Mark.java`, from the same generators as the launcher's; `BrandArt` rasterises them once per size, in their own inks, into their own sheet with the same optical tiers and x-height snapping |
 | `Background.svelte` | `MenuScenes` + `MenuPoster`: the generated approved set, the launcher's neutral scrim, and the fallback field only when the picture cannot load. The Hub opened from the title screen draws the same selected scene (`FathomMenuScreen.drawBackdrop`) |
 
 The Hub has no window. The background -- the world under the light scrim, or

@@ -3,7 +3,7 @@
 **Status: open question. Nothing here is implemented.**
 
 This document exists so that a known weakness is written down rather than
-half-fixed. The brief for the launch milestone was explicit: *do not invent a
+half-fixed. The spec for the launch milestone was explicit: *do not invent a
 fragile workaround now*. What follows is the problem, what we already do about
 it, and what would have to be true before we did anything more.
 
@@ -95,7 +95,7 @@ needs a secret on the command line. Neither is written.
    read? Which entrypoint, and is it stable across Legacy Fabric versions?
 2. Can the session be set at that point without reflection into obfuscated
    1.8.9 internals? Reflection against obfuscated names is exactly the fragility
-   the brief warned against.
+   the spec warned against.
 3. What does vanilla do with the placeholder if the bootstrap fails to run — a
    confusing "invalid session" at the multiplayer screen, or a clean failure?
    A silent degradation to an unusable session is worse than the exposure.
@@ -109,7 +109,7 @@ needs a secret on the command line. Neither is written.
 ### What we will not do
 
 - **Ship a bootstrap that reflects into obfuscated internals** and breaks on
-  every mod-loader update. The brief is explicit, and it is right: a fragile
+  every mod-loader update. The spec is explicit, and it is right: a fragile
   mitigation that fails open is worse than a documented exposure.
 - **Patch or repackage the client jar.** That is redistribution, which
   `mod-policies.md` §1 rules out.

@@ -20,6 +20,7 @@
     Eraser,
     Undo2,
     FileText,
+    Trash2,
   } from '@lucide/svelte';
 
   import Page from '../lib/ui/Page.svelte';
@@ -43,8 +44,13 @@
     java: Coffee,
     'clear-cache': Eraser,
     restore: Undo2,
+    'empty-deleted': Trash2,
     diagnostics: FileText,
   };
+
+  /* Actions that cannot be undone ask once, in the row, before they run. */
+  const CONFIRM = new Set(['empty-deleted']);
+  let confirming: string | null = null;
 
   onMount(() => {
     void (async () => {
@@ -54,6 +60,11 @@
 
   async function act(id: string) {
     if (running) return;
+    if (CONFIRM.has(id) && confirming !== id) {
+      confirming = id;
+      return;
+    }
+    confirming = null;
     running = id;
     try {
       outcomes = { ...outcomes, [id]: await runRecovery(id) };
@@ -98,6 +109,10 @@
                   {outcomes[action.id].message}
                 </span>
               {/if}
+              {#if confirming === action.id}
+                <span class="confirm">Remove for good?</span>
+                <Button onClick={() => (confirming = null)}>Keep</Button>
+              {/if}
               <Button
                 variant={action.tone === 'caution' ? 'caution' : 'normal'}
                 disabled={Boolean(action.unavailable) || running !== null}
@@ -116,6 +131,11 @@
 {/if}
 
 <style>
+  .confirm {
+    font-size: var(--type-secondary-size);
+    color: var(--color-text-secondary);
+  }
+
   /* What the action did: a small success dot and a neutral sentence. */
   .done {
     display: inline-flex;

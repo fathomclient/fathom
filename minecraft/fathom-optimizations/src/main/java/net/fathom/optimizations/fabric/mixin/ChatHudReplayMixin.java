@@ -78,6 +78,8 @@ public abstract class ChatHudReplayMixin {
         signature = VanillaHudReplay.mix(signature, getVisibleLineCount());
         signature = VanillaHudReplay.mix(signature, client.options.chatVisibilityType.ordinal());
         signature = VanillaHudReplay.mix(signature, System.identityHashCode(client.textRenderer));
+        // The Chat module's background and shadow change what is drawn.
+        signature = VanillaHudReplay.mix(signature, net.fathom.optimizations.fabric.visual.ChatStyle.signature());
         if (signature != fathom$checkedSignature) {
             fathom$checkedSignature = signature;
             fathom$recordable = !fathom$obfuscatedOnScreen();

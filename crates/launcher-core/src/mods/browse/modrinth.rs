@@ -12,30 +12,71 @@
 //! no SHA-1 is not a file.
 
 use super::model::{
-    clip, limits, safe_file_name, safe_link, sanitise_slug, DependencyKind, Distribution,
+    clip, limits, safe_file_name, safe_link, sanitise_slug, Category, DependencyKind, Distribution,
     FileDependency, FileDownload, ImageRef, ModFile, ModProject, ProjectRef, Provider,
     ReleaseChannel, Target,
 };
 use super::provider::{
-    Availability, BrowseError, CatalogProvider, ProviderContext, SearchPage, SearchQuery, Sort,
+    Availability, Breadth, BrowseError, CatalogProvider, ProviderContext, SearchPage, SearchQuery,
+    Sort,
 };
+use super::throttle::{Throttle, Wait};
 use crate::mods::definition::License;
 use crate::mods::modrinth::{
-    Channel, DependencyType, Hit, Modrinth, ModrinthError, Project, SearchOptions, Version,
+    Channel, DependencyType, Hit, LoaderScope, Modrinth, ModrinthError, Project, SearchOptions,
+    Version,
 };
 use crate::network::{descriptor_from_url, Feature, HttpClient, Purpose};
+use std::sync::Arc;
+use std::time::Duration;
 
-/// The Modrinth adapter. Cheap to clone; holds nothing but the client.
+/// The Modrinth adapter. Cheap to clone; clones share one request pacer.
 #[derive(Debug, Clone)]
 pub struct ModrinthProvider {
     client: Modrinth,
+    throttle: Arc<Throttle>,
 }
+
+/// How long a request will sit out a Modrinth-imposed pause before giving up
+/// and saying so. Long enough to absorb a one-second reset, short enough that
+/// a search box never looks frozen.
+const PATIENCE: Duration = Duration::from_secs(3);
 
 impl ModrinthProvider {
     pub fn new(http: HttpClient) -> Self {
         Self {
             client: Modrinth::new(http),
+            throttle: Arc::new(Throttle::modrinth()),
         }
+    }
+
+    /// Wait for this request's turn, then make it, and remember a 429's wait
+    /// so every other request honours it too.
+    fn paced<T>(
+        &self,
+        ctx: ProviderContext<'_>,
+        request: impl FnOnce() -> Result<T, ModrinthError>,
+    ) -> Result<T, BrowseError> {
+        match self.throttle.acquire(ctx.cancel, PATIENCE) {
+            Ok(()) => {}
+            Err(Wait::Cancelled) => return Err(BrowseError::Cancelled),
+            Err(Wait::Paused { seconds }) => {
+                return Err(BrowseError::RateLimited {
+                    provider: Provider::Modrinth,
+                    retry_after_seconds: Some(seconds),
+                })
+            }
+        }
+        let result = request().map_err(browse_error);
+        if let Err(BrowseError::RateLimited {
+            retry_after_seconds,
+            ..
+        }) = &result
+        {
+            self.throttle.back_off(retry_after_seconds.unwrap_or(10));
+        }
+        ctx.check()?;
+        result
     }
 
     fn index(sort: Sort) -> &'static str {
@@ -56,7 +97,10 @@ fn browse_error(error: ModrinthError) -> BrowseError {
     let provider = Provider::Modrinth;
     match error {
         ModrinthError::Network(network) => BrowseError::from_network(provider, &network),
-        ModrinthError::Status { status } => BrowseError::from_status(provider, status, None),
+        ModrinthError::Status {
+            status,
+            retry_after,
+        } => BrowseError::from_status(provider, status, retry_after),
         ModrinthError::Malformed(detail) => BrowseError::Malformed {
             provider,
             detail: clip(&detail, 200),
@@ -110,6 +154,15 @@ fn capped(values: impl IntoIterator<Item = String>, max: usize) -> Vec<String> {
         .take(max)
         .map(|value| clip(&value, limits::NAME))
         .collect()
+}
+
+/// `game-mechanics` as "Game mechanics".
+fn title_case(name: &str) -> String {
+    let spaced = name.replace('-', " ");
+    let mut chars = spaced.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().collect::<String>() + chars.as_str()
+    })
 }
 
 fn page_for(slug: &str, id: &str) -> String {
@@ -269,15 +322,28 @@ impl CatalogProvider for ModrinthProvider {
         Availability::Ready
     }
 
+    fn categories(&self, ctx: ProviderContext<'_>) -> Result<Vec<Category>, BrowseError> {
+        Ok(self
+            .paced(ctx, || self.client.categories(ctx.grant))?
+            .into_iter()
+            // Modrinth files loaders, resolutions and "performance impact"
+            // under the same endpoint; only the topical ones filter mods.
+            .filter(|category| category.header == "categories")
+            .map(|category| Category {
+                label: title_case(&category.name),
+                id: category.name,
+            })
+            .collect())
+    }
+
     fn search(
         &self,
         query: &SearchQuery,
         ctx: ProviderContext<'_>,
     ) -> Result<SearchPage, BrowseError> {
         ctx.check()?;
-        let search = self
-            .client
-            .search_with(
+        let search = self.paced(ctx, || {
+            self.client.search_with(
                 &SearchOptions {
                     query: query.text.trim(),
                     loader: query.target.loader,
@@ -287,11 +353,15 @@ impl CatalogProvider for ModrinthProvider {
                     category: query.category.as_deref(),
                     index: Self::index(query.sort),
                     compatible_only: !query.include_incompatible,
+                    loader_scope: match query.breadth {
+                        Breadth::Tagged => LoaderScope::Exact,
+                        Breadth::Plausible => LoaderScope::WithFabric,
+                        Breadth::AnyLoader => LoaderScope::Any,
+                    },
                 },
                 ctx.grant,
             )
-            .map_err(browse_error)?;
-        ctx.check()?;
+        })?;
         Ok(SearchPage {
             total: search.total,
             offset: query.offset,
@@ -302,14 +372,14 @@ impl CatalogProvider for ModrinthProvider {
     fn project(&self, id: &str, ctx: ProviderContext<'_>) -> Result<ModProject, BrowseError> {
         ctx.check()?;
         let id = project_id(id)?;
-        let project = self.client.project(id, ctx.grant).map_err(browse_error)?;
-        ctx.check()?;
+        let project = self.paced(ctx, || self.client.project(id, ctx.grant))?;
         // Authorship is a second request. Losing it is not losing the project,
         // so a failure here leaves the list empty rather than failing the page.
-        let authors = match self.client.members(id, ctx.grant) {
+        let authors = match self.paced(ctx, || self.client.members(id, ctx.grant)) {
+            Err(BrowseError::Cancelled) => return Err(BrowseError::Cancelled),
             Ok(authors) => authors,
             Err(error) => {
-                tracing::debug!(error = %browse_error(error), "Modrinth members unavailable");
+                tracing::debug!(%error, "Modrinth members unavailable");
                 Vec::new()
             }
         };
@@ -330,17 +400,19 @@ impl CatalogProvider for ModrinthProvider {
             return Ok(Vec::new());
         }
         let id = project_id(id)?;
-        let versions = self
-            .client
-            .versions(id, target.loader, &target.minecraft, ctx.grant)
-            .map_err(browse_error)?;
+        // Every build for this Minecraft version, whatever its loader tag:
+        // whether each one fits is the compatibility resolver's question
+        // (`compat.rs`), and it cannot explain a Forge-only or Ornithe-only
+        // project if those builds are filtered out here.
+        let versions = self.paced(ctx, || {
+            self.client
+                .versions_for_game(id, &target.minecraft, ctx.grant)
+        })?;
         Ok(versions
             .into_iter()
             .take(limits::VERSIONS)
             .filter_map(from_version)
-            // The client filtered already; this is the unified model's rule,
-            // checked again because the two are allowed to disagree.
-            .filter(|file| file.supports(target))
+            .filter(|file| file.game_versions.contains(&target.minecraft))
             .collect())
     }
 
@@ -353,10 +425,7 @@ impl CatalogProvider for ModrinthProvider {
         ctx.check()?;
         let project = project_id(project)?;
         let version_id = project_id(version_id)?;
-        let version = self
-            .client
-            .version_by_id(version_id, ctx.grant)
-            .map_err(browse_error)?;
+        let version = self.paced(ctx, || self.client.version_by_id(version_id, ctx.grant))?;
         let file = from_version(version).ok_or_else(|| BrowseError::Malformed {
             provider: Provider::Modrinth,
             detail: "that build has no installable file".to_owned(),
@@ -378,7 +447,7 @@ impl CatalogProvider for ModrinthProvider {
         ctx: ProviderContext<'_>,
     ) -> Result<Option<(ModProject, ModFile)>, BrowseError> {
         ctx.check()?;
-        let Some(version) = self.client.by_hash(sha1, ctx.grant).map_err(browse_error)? else {
+        let Some(version) = self.paced(ctx, || self.client.by_hash(sha1, ctx.grant))? else {
             return Ok(None);
         };
         let Some(file) = from_version(version) else {
@@ -513,11 +582,17 @@ mod tests {
     #[test]
     fn statuses_become_structured_errors() {
         assert!(matches!(
-            browse_error(ModrinthError::Status { status: 429 }),
+            browse_error(ModrinthError::Status {
+                status: 429,
+                retry_after: Some(30)
+            }),
             BrowseError::RateLimited { .. }
         ));
         assert!(matches!(
-            browse_error(ModrinthError::Status { status: 404 }),
+            browse_error(ModrinthError::Status {
+                status: 404,
+                retry_after: None
+            }),
             BrowseError::NotFound { .. }
         ));
     }

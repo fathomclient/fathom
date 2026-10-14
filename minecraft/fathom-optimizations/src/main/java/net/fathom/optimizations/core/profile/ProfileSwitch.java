@@ -1,4 +1,4 @@
-package net.fathom.optimizations.fabric.profile;
+package net.fathom.optimizations.core.profile;
 
 import java.util.HashSet;
 import java.util.List;
@@ -16,13 +16,10 @@ import net.fathom.optimizations.core.module.FathomModule;
 import net.fathom.optimizations.core.module.Keybind;
 import net.fathom.optimizations.core.module.ModuleRegistry;
 import net.fathom.optimizations.core.module.Setting;
-import net.fathom.optimizations.core.profile.FathomProfile;
-import net.fathom.optimizations.core.profile.ProfileException;
 import net.fathom.optimizations.core.registry.Optimization;
 import net.fathom.optimizations.core.registry.OptimizationId;
 import net.fathom.optimizations.core.registry.OptimizationRegistry;
 import net.fathom.optimizations.core.registry.SwitchBoard;
-import net.fathom.optimizations.fabric.hud.FathomHud;
 
 /**
  * A profile document, applied to the running client — and the running client,
@@ -78,7 +75,7 @@ public final class ProfileSwitch {
      * @param skipped receives one line per id this build does not have
      * @throws ProfileException when a value cannot be applied; the caller rolls back
      */
-    public static void apply(FathomProfile target, FathomHud hud, SwitchBoard switches,
+    public static void apply(FathomProfile target, ProfileHost hud, SwitchBoard switches,
             OptimizationRegistry optimizations, Map<String, Boolean> baseline, List<String> skipped)
             throws ProfileException {
         // 1. validate the document before touching anything.
@@ -165,7 +162,7 @@ public final class ProfileSwitch {
             }
         }
         Keybind hubKey = hud.hubKey();
-        if (target.client().hubKey == null) {
+        if (target.client().hubKey == null || !hubKey.accepts(target.client().hubKey.intValue())) {
             hubKey.reset();
         } else {
             hubKey.set(target.client().hubKey.intValue());
@@ -180,6 +177,8 @@ public final class ProfileSwitch {
                 ? ClientPrefs.RSHIFT_BLUR_CHOICES[1] : target.client().rshiftBlur);
         prefs.setRshiftDimLabel(target.client().rshiftDim == null
                 ? ClientPrefs.RSHIFT_DIM_CHOICES[1] : target.client().rshiftDim);
+        prefs.setMenuBackgroundLabel(target.client().menuBackground == null
+                ? ClientPrefs.MENU_BACKGROUND_CHOICES[0] : target.client().menuBackground);
 
         // 8. live-safe performance switches.
         Set<String> owned = ownedByModules(features);
@@ -213,6 +212,50 @@ public final class ProfileSwitch {
         }
     }
 
+    /**
+     * Apply one module's part of {@code profile}: its switch, settings,
+     * favourite, keys, and where its widgets sit.
+     *
+     * <p>For a module that registered after the profile was applied. The rest
+     * of the client is not touched.
+     */
+    public static void adopt(FathomProfile profile, ProfileHost hud, FathomModule module, List<String> skipped) {
+        FathomProfile.ModuleState state = profile.modules().get(module.id());
+        module.setFavourite(state != null && state.favourite);
+        for (Setting setting : module.settings()) {
+            String stored = state == null ? null : state.settings.get(setting.id());
+            if (stored == null) {
+                setting.reset();
+            } else if (!setting.parse(stored)) {
+                setting.reset();
+                skipped.add("setting " + module.id() + "." + setting.id() + "=\"" + stored + "\"");
+            }
+        }
+        module.settingChanged(null);
+        for (Keybind keybind : module.keybinds()) {
+            String stored = state == null ? null : state.keys.get(keybind.id());
+            Integer code = stored == null ? null : keyCode(stored);
+            if (code == null) {
+                keybind.reset();
+            } else {
+                keybind.set(code.intValue());
+            }
+        }
+        if (module.switchable()) {
+            module.setEnabled(wanted(module, profile));
+        }
+        HudRegistry widgets = hud.registry();
+        for (String id : module.widgets()) {
+            FathomProfile.HudEntry stored = profile.hud().get(id);
+            Widget widget = widgets.find(id);
+            if (stored == null || widget == null) {
+                continue;
+            }
+            Anchor anchor = anchor(stored.anchor, widget.defaultPlacement().anchor(), id, skipped);
+            hud.layout().put(id, new Placement(anchor, stored.x, stored.y, stored.scale, stored.opacity));
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Capture
     // -----------------------------------------------------------------------
@@ -225,7 +268,7 @@ public final class ProfileSwitch {
      * the registry put it writes nothing, a switch at its launcher baseline writes
      * nothing.
      */
-    public static FathomProfile capture(FathomProfile identity, FathomHud hud, SwitchBoard switches,
+    public static FathomProfile capture(FathomProfile identity, ProfileHost hud, SwitchBoard switches,
             OptimizationRegistry optimizations, Map<String, Boolean> baseline) {
         FathomProfile out = identity.emptied();
 
@@ -288,6 +331,9 @@ public final class ProfileSwitch {
         if (prefs.rshiftDimChangedFromDefault()) {
             out.client().rshiftDim = prefs.rshiftDimLabel();
         }
+        if (prefs.menuBackgroundChangedFromDefault()) {
+            out.client().menuBackground = prefs.menuBackgroundLabel();
+        }
 
         Set<String> owned = ownedByModules(hud.features());
         for (Optimization optimization : optimizations.all()) {
@@ -304,6 +350,31 @@ public final class ProfileSwitch {
                 out.performance().switches.put(id, Boolean.valueOf(now));
             }
         }
+
+        // What this build does not know is kept, not dropped. A module from a
+        // mod that is not installed today, a widget it drew, a switch a newer
+        // build has, a preference a newer launcher wrote: saving a profile must
+        // not be the thing that deletes somebody's settings for them.
+        for (Map.Entry<String, FathomProfile.ModuleState> entry : identity.modules().entrySet()) {
+            if (hud.features().find(entry.getKey()) == null && !entry.getValue().isEmpty()) {
+                out.modules().put(entry.getKey(), entry.getValue().copy());
+            }
+        }
+        for (Map.Entry<String, FathomProfile.HudEntry> entry : identity.hud().entrySet()) {
+            if (widgets.find(entry.getKey()) == null && !out.hud().containsKey(entry.getKey())) {
+                out.hud().put(entry.getKey(), entry.getValue().copy());
+            }
+        }
+        Set<String> known = new HashSet<String>();
+        for (Optimization optimization : optimizations.all()) {
+            known.add(optimization.id().value());
+        }
+        for (Map.Entry<String, Boolean> entry : identity.performance().switches.entrySet()) {
+            if (!known.contains(entry.getKey())) {
+                out.performance().switches.put(entry.getKey(), entry.getValue());
+            }
+        }
+        out.client().extra.putAll(identity.client().extra);
         return out;
     }
 

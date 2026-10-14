@@ -3,7 +3,7 @@
 
   ONE DRAWER, NOT A WIZARD.
 
-  The brief asked for five steps and explicitly asked for them not to become
+  The spec asked for five steps and explicitly asked for them not to become
   six pages. So this is a single scrolling surface with numbered sections: every
   answer is visible at once, changing an earlier one does not throw away a later
   one, and Create is reachable from the first second because every question

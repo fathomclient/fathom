@@ -11,8 +11,9 @@ rules that keep it fast.
    first frame, so nothing here may read or hash large files.
 2. **Setup** starts two background threads and returns at once: the Java scan
    (`JavaScan`) and the saved-session restore (`signin::restore`).
-3. **The WebView loads `index.html`**, which paints a static splash (wordmark
-   and sweeping line) in plain HTML and CSS before any script runs.
+3. **The WebView loads `index.html`**, which paints a static splash (the mark
+   and wordmark on the icon's ground, and a sweeping line) in plain HTML and
+   CSS before any script runs.
 4. **`main.ts` shows the window** immediately, on that splash. The window is
    created hidden only so the OS never shows an empty frame before the WebView
    has drawn; its native background is the splash colour.

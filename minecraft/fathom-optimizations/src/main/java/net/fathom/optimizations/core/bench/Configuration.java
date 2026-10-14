@@ -44,8 +44,7 @@ import java.util.List;
  *
  * <p>Lunar Client. It cannot be automated, its configuration cannot be verified
  * from outside it, and a number taken from it by hand is a reference point
- * rather than a comparison. {@code docs/performance/fathom-vs-lunar.md} covers
- * how to record one honestly, separately.
+ * rather than a comparison.
  */
 public final class Configuration {
 

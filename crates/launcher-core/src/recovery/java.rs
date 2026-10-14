@@ -434,7 +434,7 @@ mod tests {
         assert!(verdict.may_reacquire(), "a managed runtime may be replaced");
     }
 
-    /// The specific failure the brief names: the archive was extracted partway
+    /// The specific failure the spec names: the archive was extracted partway
     /// and the process died.
     #[test]
     fn an_incomplete_extraction_is_detected_before_anything_is_run() {

@@ -64,15 +64,16 @@ public final class ClickTracker {
      *
      * @param code Minecraft's key code: {@code -100} left, {@code -99} right
      */
-    public void pressed(int code) {
-        if (code != -100 && code != -99) {
-            return;
-        }
+    /**
+     * A press of the attack binding ({@code attack}) or the use binding, as the
+     * game processed it.
+     */
+    public void pressed(boolean attack) {
         if (!playing()) {
             return;
         }
         long now = System.nanoTime();
-        if (code == -100) {
+        if (attack) {
             left.click(now);
         } else {
             right.click(now);
@@ -94,8 +95,9 @@ public final class ClickTracker {
             leftDown = false;
             rightDown = false;
         } else {
-            leftDown = Mouse.isButtonDown(0);
-            rightDown = Mouse.getButtonCount() > 1 && Mouse.isButtonDown(1);
+            MinecraftClient client = MinecraftClient.getInstance();
+            leftDown = down(client.options.attackKey.getCode());
+            rightDown = down(client.options.useKey.getCode());
         }
         leftPerSecond = left.perSecond(now, window);
         rightPerSecond = right.perSecond(now, window);
@@ -114,10 +116,12 @@ public final class ClickTracker {
     /** Whether the player is at the game, rather than at a screen or elsewhere. */
     private static boolean playing() {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null || client.player == null || client.currentScreen != null || !client.focused) {
+        if (client == null || client.player == null || client.currentScreen != null
+                || (!client.focused && !net.fathom.optimizations.fabric.diag.ModuleSelfTest.focusAssumed())) {
             return false;
         }
-        return Display.isCreated() && Display.isActive();
+        return Display.isCreated()
+                && (Display.isActive() || net.fathom.optimizations.fabric.diag.ModuleSelfTest.focusAssumed());
     }
 
     public int left() {
@@ -134,5 +138,15 @@ public final class ClickTracker {
 
     public boolean rightDown() {
         return rightDown;
+    }
+
+    /** Whether a binding's key or button is physically held, read this frame rather than this tick. */
+    private static boolean down(int code) {
+        if (code >= -100 && code < 0) {
+            int button = code + 100;
+            return Mouse.isCreated() && button < Mouse.getButtonCount() && Mouse.isButtonDown(button);
+        }
+        return code > 0 && org.lwjgl.input.Keyboard.isCreated() && code < org.lwjgl.input.Keyboard.KEYBOARD_SIZE
+                && org.lwjgl.input.Keyboard.isKeyDown(code);
     }
 }

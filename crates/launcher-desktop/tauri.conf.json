@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Fathom Client",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "identifier": "net.fathom.launcher",
   "build": {
     "frontendDist": "../../desktop/dist",
@@ -20,7 +20,7 @@
         "resizable": true,
         "center": true,
         "theme": "Dark",
-        "backgroundColor": "#071015",
+        "backgroundColor": "#080e13",
         "decorations": false,
         "visible": false,
         "label": "main"
@@ -34,6 +34,7 @@
   "bundle": {
     "active": true,
     "publisher": "Fathom",
+    "copyright": "Copyright © 2026 Fathom contributors. Apache License 2.0.",
     "homepage": "https://github.com/fathomclient/fathom",
     "category": "Game",
     "shortDescription": "A private, performance-focused Minecraft 1.8.9 client.",
@@ -56,7 +57,8 @@
         "headerImage": "icons/nsis-header.bmp",
         "sidebarImage": "icons/nsis-sidebar.bmp",
         "startMenuFolder": "Fathom",
-        "compression": "lzma"
+        "compression": "lzma",
+        "installerHooks": "installer/hooks.nsh"
       }
     },
     "icon": [

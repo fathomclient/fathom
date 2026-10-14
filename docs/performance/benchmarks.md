@@ -50,7 +50,7 @@ about 10% as no difference**, regardless of what the noise floor says.
 
 ## 2. Environment
 
-Every run on this page, unless a row says otherwise. Full detail in `baseline.md` §3.
+Every run on this page, unless a row says otherwise.
 
 | | |
 |---|---|
@@ -355,6 +355,5 @@ Numbers will differ. The comparisons should not.
 ## 9. References
 
 - `docs/performance/benchmark-methodology.md` — the method these follow
-- `docs/performance/optimizations.md` — what was implemented and why
+- `docs/performance/optimization-registry.md` — what was implemented and why
 - `docs/performance/optimization-registry.md` — the register and the experiments
-- `docs/performance/baseline.md` — the environment record

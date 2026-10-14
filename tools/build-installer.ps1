@@ -113,3 +113,12 @@ Write-Host "Windows installer: $published"
 Write-Host "SHA-256: $hash"
 Write-Host "UI transport: embedded Tauri protocol (no localhost server)"
 Write-Host "Install mode: current user (no elevation required)"
+# Sign-in needs the approved Azure registration compiled in (see AzureApp in
+# launcher-core). Without it every tester sees "this build cannot sign in".
+# A personal FATHOM_AZURE_CLIENT_ID is deliberately not used: only the release
+# variable is compiled in.
+if ($env:FATHOM_RELEASE_AZURE_CLIENT_ID -and $env:FATHOM_RELEASE_AZURE_CLIENT_ID.Trim()) {
+    Write-Host "Microsoft sign-in: release application id embedded"
+} else {
+    Write-Warning "Microsoft sign-in: NO application id embedded; testers will not be able to sign in. Set FATHOM_RELEASE_AZURE_CLIENT_ID to Fathom's approved registration before building anything for other people."
+}

@@ -2,8 +2,8 @@
 
 How we measure Minecraft 1.8.9, and what our measurements can and cannot support.
 
-This document is a **method**, not results. It contains no performance numbers,
-because none have been taken. `baseline.md` is where the first ones will go.
+This document is a **method**, not results. Results are in `benchmarks.md` and the
+dated reports beside it.
 
 ---
 
@@ -262,7 +262,7 @@ consequence of not being able to measure it.
 
 ## 5. Running a comparison
 
-1. Record the environment exactly as `baseline.md` §1 specifies. A benchmark with
+1. Record the environment exactly as §2 specifies. A benchmark with
    no recorded environment is a number with no meaning.
 2. Fix everything except the one variable. One optimization, or one JVM flag arm,
    at a time.
@@ -293,7 +293,7 @@ easily skipped and the one that makes everything else meaningful.
 | Measured on a live server | "Indicative." Not comparable between sessions. |
 
 **Never** state a figure that was not produced by a run recorded in
-`baseline.md` or a successor document.
+`benchmarks.md` or one of the dated reports.
 
 ---
 
@@ -351,6 +351,5 @@ prefer and the reference we cite.
 - `docs/research/PERFORMANCE_MATRIX.md` — the classification this registry encodes
 - `docs/research/mod-policies.md` §3, §7, §8 — licensing and conflicts
 - `docs/performance/optimization-registry.md` — the entries and the experiments
-- `docs/performance/optimizations.md` — what has been implemented, and what was rejected
+- `docs/performance/optimization-registry.md` — what has been implemented, and what was rejected
 - `docs/performance/benchmarks.md` — every run taken so far, with its limitations
-- `docs/performance/baseline.md` — the environment record, and where results go

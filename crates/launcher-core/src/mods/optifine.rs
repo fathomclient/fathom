@@ -59,7 +59,10 @@ pub struct OptiFineIdentity {
 impl OptiFineIdentity {
     /// How to name this build in the interface.
     pub fn display_name(&self) -> String {
-        format!("OptiFine {} {} {}", self.minecraft, self.edition, self.release)
+        format!(
+            "OptiFine {} {} {}",
+            self.minecraft, self.edition, self.release
+        )
     }
 }
 
@@ -151,7 +154,12 @@ pub fn inspect(path: &Path) -> Result<OptiFineIdentity, OptiFineError> {
         })?;
 
     let constants = string_constants(&config).ok_or(OptiFineError::NoVersion)?;
-    let take = |field: &str| constants.iter().find(|(n, _)| n == field).map(|(_, v)| v.clone());
+    let take = |field: &str| {
+        constants
+            .iter()
+            .find(|(n, _)| n == field)
+            .map(|(_, v)| v.clone())
+    };
 
     let name = take("OF_NAME").ok_or(OptiFineError::NoVersion)?;
     if name != "OptiFine" {
@@ -303,8 +311,7 @@ mod tests {
     }
 
     fn dirs_downloads() -> Option<std::path::PathBuf> {
-        std::env::var_os("USERPROFILE")
-            .map(|home| std::path::PathBuf::from(home).join("Downloads"))
+        std::env::var_os("USERPROFILE").map(|home| std::path::PathBuf::from(home).join("Downloads"))
     }
 
     #[test]
@@ -476,8 +483,10 @@ mod tests {
     fn a_build_for_another_minecraft_is_refused_with_both_versions() {
         let jar = synthetic_optifine("1.12.2");
         let refusal = inspect_for(jar.path(), "1.8.9").unwrap_err();
-        assert!(matches!(&refusal, OptiFineError::WrongMinecraft { found, required }
-            if found == "1.12.2" && required == "1.8.9"));
+        assert!(
+            matches!(&refusal, OptiFineError::WrongMinecraft { found, required }
+            if found == "1.12.2" && required == "1.8.9")
+        );
     }
 
     #[test]

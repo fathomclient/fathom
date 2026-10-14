@@ -51,6 +51,10 @@ public final class Zoom {
     private static double level = Double.NaN;
     /** The divisor applied this frame, for sensitivity. */
     private static double current = 1.0;
+    /** Toggle mode: whether a press has latched the zoom on. */
+    private static boolean latched;
+    /** Toggle mode: the key's state last time it was looked at, for edges. */
+    private static boolean keyWasDown = true;
 
     private Zoom() {}
 
@@ -86,15 +90,31 @@ public final class Zoom {
 
     private static boolean wanted(FathomModule module) {
         MinecraftClient client = MinecraftClient.getInstance();
-        return module != null
+        boolean able = module != null
                 && module.enabled()
                 && module.switchable()
                 && client != null
                 && client.player != null
                 && client.currentScreen == null
                 && Display.isCreated()
-                && Display.isActive()
-                && held(module);
+                && (Display.isActive() || net.fathom.optimizations.fabric.diag.ModuleSelfTest.focusAssumed());
+        boolean down = able && held(module);
+        boolean toggle = able && "Toggle".equals(module.choice("mode", "Hold"));
+        if (!toggle) {
+            latched = false;
+        } else if (down && !keyWasDown) {
+            latched = !latched;
+        }
+        keyWasDown = down;
+        // OptiFine has its own zoom, on C by default, the same key as this one.
+        // Both at once would multiply: OptiFine narrows the field of view and
+        // this would divide the narrowed one again. While OptiFine's key is
+        // held, its zoom is the one that happens.
+        if (OptiFineZoom.held(client)) {
+            latched = false;
+            return false;
+        }
+        return toggle ? latched : down;
     }
 
     /**
@@ -104,7 +124,21 @@ public final class Zoom {
      * than handing a negative code to {@code Keyboard.isKeyDown} -- which is an
      * array index, and would throw inside the render loop.
      */
+    /**
+     * The in-game self-test's stand-in for the physical key: null in every
+     * normal run, where the key is read from the keyboard.
+     */
+    public static Boolean qaHeld;
+
+    /** The divisor applied this frame, 1 when not zoomed. For the self-test. */
+    public static double current() {
+        return current;
+    }
+
     private static boolean held(FathomModule module) {
+        if (qaHeld != null) {
+            return qaHeld.booleanValue();
+        }
         for (Keybind binding : module.keybinds()) {
             if (!"zoom".equals(binding.id()) || !binding.isBound()) {
                 continue;
@@ -204,6 +238,8 @@ public final class Zoom {
         progress = 0f;
         current = 1.0;
         wasWanted = false;
+        latched = false;
+        keyWasDown = true;
         FathomModule module = module();
         if (module == null || !"Remember".equals(module.choice("release", "Reset"))) {
             level = Double.NaN;

@@ -982,13 +982,9 @@ silenced):
 | Advisory | Crate | Why accepted |
 |---|---|---|
 | RUSTSEC-2023-0071 | `rsa` | **A real vulnerability.** Marvin is a timing sidechannel in RSA *private key* operations. We only verify RS256 signatures with a public key; we hold no private key and never decrypt or sign, so the affected paths are unreachable. Escape hatch: jsonwebtoken's `aws_lc_rs` backend drops `rsa` entirely, at the cost of needing a C toolchain. |
-| RUSTSEC-2026-0192 | `ttf-parser` | Unmaintained, not vulnerable. Arrives via iced's text stack. No upgrade path. |
-| RUSTSEC-2026-0206 | `rustybuzz` | Unmaintained, not vulnerable. Same stack. |
-| RUSTSEC-2024-0384 | `instant` | Unmaintained, not vulnerable. Via `iced_futures` → `wasm-timer` → `parking_lot` 0.11. |
 
-The three unmaintained crates are all in the UI toolkit's dependency tree and
-none has a fix available. They are a genuine argument for revisiting the toolkit
-choice, and they are why that decision was deliberately kept cheap to reverse.
+The three unmaintained crates the iced toolkit brought in (`ttf-parser`,
+`rustybuzz`, `instant`) left with it.
 
 ### The Java module's build (added by the review of 2026-08-27)
 

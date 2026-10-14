@@ -387,7 +387,10 @@ mod tests {
 
         let accepted = accept(&engine, &disguised).expect("the jar should be accepted");
 
-        assert_eq!(accepted.id, "optifine", "identified by name rather than content");
+        assert_eq!(
+            accepted.id, "optifine",
+            "identified by name rather than content"
+        );
         assert_eq!(accepted.minecraft.as_deref(), Some("1.8.9"));
         assert_eq!(accepted.version.as_deref(), Some("HD_U_M5"));
         assert!(accepted.verified, "should be identified from the bytecode");

@@ -97,7 +97,7 @@ a client somebody is playing on.
 and `Scenario` names which ones each scene cares about, but nothing increments
 them, because the Mixins that would are the same ones the optimizations
 themselves need and those are not written. A run reports zero for them, and zero
-is honest: `docs/performance/current-state-audit.md` §2 explains why.
+is honest.
 
 ### 2.5 One thing deliberately not timed
 

@@ -116,12 +116,7 @@ impl AuthProgress {
     }
 
     /// The code, and where to type it.
-    pub(crate) fn waiting(
-        code: &str,
-        uri: &str,
-        browser_opened: bool,
-        code_copied: bool,
-    ) -> Self {
+    pub(crate) fn waiting(code: &str, uri: &str, browser_opened: bool, code_copied: bool) -> Self {
         let mut progress = if browser_opened {
             Self::new(
                 AuthPhase::Waiting,
@@ -369,12 +364,7 @@ mod tests {
     /// nowhere to type it is not an instruction.
     #[test]
     fn the_code_and_the_page_arrive_together() {
-        let progress = AuthProgress::waiting(
-            "ABCD-EFGH",
-            "https://microsoft.com/link",
-            true,
-            true,
-        );
+        let progress = AuthProgress::waiting("ABCD-EFGH", "https://microsoft.com/link", true, true);
         assert_eq!(progress.user_code.as_deref(), Some("ABCD-EFGH"));
         assert_eq!(
             progress.verification_uri.as_deref(),

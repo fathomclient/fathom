@@ -128,6 +128,13 @@ pub enum LaunchRefusal {
     #[error("{0}")]
     FathomClientUnavailable(String),
 
+    /// A mod in the profile needs a library that is missing or switched off,
+    /// as recorded when it was installed. Starting would end in the loader's
+    /// own "requires" error, so the launcher says it first, in words, and
+    /// offers the launch without external mods instead.
+    #[error("{0}")]
+    ModsNeedAttention(String),
+
     /// The profile's game directory is the user's own Minecraft folder.
     #[error(
         "this profile's game directory is your normal Minecraft folder ({}). Fathom launches \
@@ -177,6 +184,7 @@ impl LaunchRefusal {
             LaunchRefusal::Process(_) => "spawn-failed",
             LaunchRefusal::FathomClientUnavailable(_) => "fathom-client-unavailable",
             LaunchRefusal::SharedMinecraftDirectory(_) => "shared-minecraft-directory",
+            LaunchRefusal::ModsNeedAttention(_) => "mods-need-attention",
         }
     }
 }

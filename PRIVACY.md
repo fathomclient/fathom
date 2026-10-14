@@ -48,6 +48,7 @@ It stays on your machine; no code transmits it.
 | Profiles, mods, settings | Yes | your data directory |
 | The request journal | **No** — memory only, cleared on exit | — |
 | Launcher logs | **No** — stderr only, no log file is written | — |
+| The last session's performance reading | Yes: frame rates, frame times, heap size, module count — nothing that names a world, server or player | `fathom/session-pulse.json` in the profile's game directory; replaced at the next launch, never sent anywhere |
 
 The credential store is Windows Credential Manager (DPAPI-backed), macOS
 Keychain, or the Secret Service on Linux, whichever your system provides.

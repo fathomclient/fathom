@@ -32,6 +32,7 @@
 pub mod cache;
 pub mod diagnostics;
 pub mod java;
+pub mod mods;
 pub mod startup;
 
 use std::path::{Path, PathBuf};
@@ -99,7 +100,7 @@ impl RecoveryService {
     /// Takes `SharedInstallation` because `.partial` files live beside the
     /// artifacts they are becoming, and `GlobalUpdate` because update staging
     /// is one of the things cleared. A download in progress therefore blocks
-    /// this, which is the conflict the brief names.
+    /// this, which is the conflict the spec names.
     ///
     /// See [`cache`] for exactly what counts as cache. Worlds, screenshots,
     /// resource packs, profile configuration, credentials and user-supplied

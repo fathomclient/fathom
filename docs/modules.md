@@ -54,30 +54,61 @@ editor's "Hide" switches the module off rather than setting a flag beside it. A
 
 ## 3. The modules
 
-Position, anchor and scale are not settings for any HUD module: they are spatial,
-and they are set by dragging in the HUD editor. Every HUD module except the
+Position, anchor, scale and opacity are not `Setting`s for any HUD module: they
+are the widget's placement, stored in the profile's `hud` section. They are set
+in the HUD editor (§8) and, for the numbers, in the **Position and size** group
+on the module's own page, which writes the same placement the editor does. Every HUD module except the
 crosshair also carries the eight common style settings from `HudStyle` — text
 colour, text shadow, background, background colour, background opacity, border,
 border colour, border width, padding, corner radius, drop shadow — declared in
 one call and read in one place (`TextWidget`), so they cannot drift apart. The
 three widgets that are not text (Keystrokes, Armour HUD, Potion HUD) draw their
-plate through that same code.
+plate through that same code. The common settings include two visibility
+rules, **Hide with F3** and **Hide behind menus** (chat does not count), off by
+default and applied by `FathomHud` before a widget is measured.
 
 | Module | Category | State | Effect | Needs | On by default | Its own settings |
 | --- | --- | --- | --- | --- | --- | --- |
 | FPS | HUD | Working | `fps` widget | — | **yes** | Reading (Raw/Light/Smooth/Average), Format, Custom prefix and suffix, Update every |
 | Coordinates | HUD | Working | `coordinates` widget | A world | **yes** | Layout, Format, Show X/Y/Z, Decimal places, Direction and its style, Biome, Dimension, Chunk |
+| Direction | HUD | Working | `direction` widget | A world | no | Width, Field, NE/SE/SW/NW, Heading, Marker colour |
 | Clock | HUD | Working | `clock` widget | — | no | Format (12/24 hour/Custom), Seconds, Date, Custom pattern, Time zone |
 | Pack Display | HUD | Working | `pack-display` widget | — | no | Pack icon, Format, Description, Packs shown |
 | Ping | HUD | Working | `ping` widget | A server | no | Display (Number/Bars/both), Format, Update every, Colour by quality, Good below, Poor above |
+| Scoreboard | HUD | Working | `scoreboard` widget + `scoreboard` behaviour | A world | no | Hide sidebar, Score numbers, Title, Row background — plus the common style, defaulting to vanilla's look |
+| Chat | HUD | Working | `chat` behaviour | — | no | Timestamps, their format and seconds, Fold repeats, Background, Text shadow |
 | CPS | PvP | Working | `cps` widget | — | no | Buttons (Both/Left/Right/Combined), Button letters, Label, Sample window |
 | Keystrokes | PvP | Working | `keystrokes` widget | — | no | Movement keys, Mouse buttons, Space bar, Sneak key, CPS on buttons, Key size, Spacing, Key background and its two colours, Opacity, Two text colours, Border, its colour and width, Press fade |
-| Armour HUD | PvP | Working | `armour` widget | A world | no | Display, Durability, Label, Held item, Layout, Reverse order, Spacing, Durability bar, Colour by condition, Amber below, Red below |
-| Potion HUD | PvP | Working | `potions` widget | A world | no | Icons, Names, Level, Time left, Compact, Layout, Order, Spacing, Effect colour, Warn when ending |
+| Armour HUD | PvP | Working | `armour` widget | A world | no | Display, Icon size, Durability, Label, Held item, Arrow count, Layout, Reverse order, Spacing, Durability bar, Colour by condition, Amber below, Red below |
+| Potion HUD | PvP | Working | `potions` widget | A world | no | Icons, Icon size, Names, Level, Time left, Compact, Layout, Order, Spacing, Effect colour, Warn when ending |
 | Sprint and sneak | Utility | Working | `toggle-sprint` widget + `movement-toggle` behaviour | A world | no | Sprint key and Sneak key (Hold/Toggle), Show status, Show sprinting, Show sneaking, five labels, Toggled colour, Walking colour |
-| Zoom | Utility | Working | `zoom` behaviour | A world | no | Amount, Scroll to adjust, Scroll step, Minimum, Maximum, On release, Smooth zoom, Zoom duration, Sensitivity compensation and its strength, Cinematic camera, Hide hand — plus its keybind |
+| Zoom | Utility | Working | `zoom` behaviour | A world | no | Key (Hold/Toggle), Amount, Scroll to adjust, Scroll step, Minimum, Maximum, On release, Smooth zoom, Zoom duration, Sensitivity compensation and its strength, Cinematic camera, Hide hand — plus its keybind |
+| Fathom main menu | Visual | Working | `main-menu` behaviour | — | **yes** | Cinematic background |
 | Crosshair | Visual | Working | `crosshair` widget + `crosshair` behaviour | A world | no | Preset, Shape, Length, Thickness, Gap, Centre dot and size, Outline and thickness, Colour, Outline colour, Opacity, Dynamic, Target colour, three hide rules |
+| Fullbright | Visual | Working | `fullbright` behaviour | A world | no | Brightness — plus a Toggle key |
+| Time Changer | Visual | Working | `time-changer` behaviour | A world | no | Time (seven presets or Custom), Custom hour — plus a Toggle key |
 | Unfocused FPS limit | Performance | Working | `input.unfocused-fps-cap` | — | **yes** | Limit |
+| Performance layer | Performance | Working | `performance-layer` behaviour | — | **yes** | Its own page: `docs/performance-module.md` |
+
+### 3.0 The public-beta baseline
+
+| Wanted for v1 | Module |
+| --- | --- |
+| Zoom | Zoom |
+| Toggle Sprint / Toggle Sneak | Sprint and sneak |
+| Keystrokes, CPS, FPS, Coordinates | the modules of those names |
+| Armour status / durability | Armour HUD |
+| Potion status | Potion HUD |
+| Custom crosshair | Crosshair |
+| Scoreboard customisation | Scoreboard |
+| Fullbright | Fullbright |
+| Time changer | Time Changer |
+| Ping display | Ping |
+| Direction HUD | Direction (and Coordinates' direction line) |
+| Chat customisation | Chat |
+
+`BaselineTests.theBaselineModulesAreAllThere` fails the build if any of them goes
+missing, loses its switch, or starts switched on.
 
 Nothing is currently `UNAVAILABLE`. If something becomes so — a hook that a
 future Minecraft version removes, say — it loses its toggle and keeps its row.
@@ -90,9 +121,10 @@ inventing one would mean traffic the server did not ask for, to measure somethin
 it already tells us. In singleplayer the number is zero and useless, so the module
 declares `MULTIPLAYER` and its row says "Only on a multiplayer server".
 
-**CPS** counts presses the player made at the game, observed at
-`KeyBinding.onKeyPressed` — the call the tick's input loop makes for every press
-it processes — so a click shorter than a frame is still counted. Clicks are
+**CPS** counts presses of the attack and use bindings the player made at the
+game, observed at `KeyBinding.onKeyPressed` — the call the tick's input loop
+makes for every press it processes — so a click shorter than a frame is still
+counted, and somebody who attacks with a key is counted on that key. Clicks are
 ignored while a screen is open, while the window does not have focus, and before
 a player exists, so arranging the HUD or clicking back into the window does not
 inflate the number. The sample window is a setting; a longer window reports the
@@ -116,10 +148,62 @@ slower whatever the player's sensitivity is.
 
 **Crosshair** hides vanilla's by cancelling `InGameHud.showCrosshair()Z`, and the
 setting that does so can be switched off, because drawing both is a reasonable
-thing to want while deciding between them. Its shape comes from
+thing to want while deciding between them. It is drawn at the point in vanilla's
+HUD where vanilla's crosshair is, just after the hotbar, so the boss bar, the
+scoreboard, the chat and the player list are all drawn over it. Target colour
+flashes on an attack at an entity, not on every swing. Its shape comes from
 `core/hud/CrosshairShape`, which rasterises the settings into whole-pixel
 rectangles; the preview in the settings drawer draws the same rectangles, so it
-cannot show a crosshair the game will not.
+cannot show a crosshair the game will not. Centred, it is placed on whole
+*screen* pixels from the framebuffer's exact middle (`FathomHud.centredOnPixels`),
+not on whole GUI pixels: the GUI width is a rounded-up fraction (1366 / 3 is
+455.33, drawn as 456), and the two roundings together put a GUI-aligned
+crosshair — vanilla's included — up to two and a half screen pixels from where
+the game aims. Checked from screenshots at every GUI scale (§4.2).
+
+**The other widgets** are drawn just before the chat and the player list, so
+both stay on top: holding Tab in a minigame shows the names, not the clock and
+the ping over them.
+
+**Zoom** steps aside for OptiFine's own zoom. OptiFine zooms on C by default, the
+same key; while OptiFine's zoom key is held, Fathom's does nothing, rather than
+dividing a field of view OptiFine has already narrowed. The log says so once
+when the two share a key. In Toggle mode a press zooms in and the next zooms
+out; opening a screen zooms out.
+
+**Scoreboard** takes over vanilla's sidebar while it is on: the objective vanilla
+was about to draw is handed to the `scoreboard` widget, which draws the same
+rows — hidden names left out, the fifteen highest kept, vanilla's bands and red
+numbers — wherever the HUD editor puts it. Off, vanilla's sidebar and its replay
+cache are untouched.
+
+**Fullbright** supplies a larger gamma where the lightmap reads the brightness
+setting, and writes nothing to `options.txt`. Its redirect is the one Fathom
+Mixin allowed to find nothing (`require = 0`): a renderer that builds the
+lightmap itself, such as OptiFine's custom colours, leaves Fullbright with no
+effect rather than the game refusing to start. Shaders ignore it, and its row
+says so.
+
+**Time Changer** answers the client world's sky angle for the chosen hour. Only
+the client's world: in singleplayer the integrated server's world is a separate
+object, and its time — spawning, beds — is never touched.
+
+**Chat** restyles a message when it arrives, before vanilla stores it, so a
+re-wrap on resize keeps the timestamp and does not add it twice. A message
+identical to the one before it — the whole component, click and hover targets
+included, not just its words — is folded into it with a count; two lines that
+read the same but run different commands stay two lines. The timestamp is a
+separate component in front, so the message's own click and hover targets are
+untouched. Chat's text opacity, scale, width and heights stay vanilla's own
+Chat Settings (they already exist and persist in `options.txt`); the module adds
+the background's darkness and the text shadow, timestamps and folding. Background and
+shadow are changed at the two calls that draw them. Off, every hook passes
+vanilla's values through.
+
+**Toggle keys.** A module may declare a keybind called `toggle` (Fullbright and
+Time Changer do). It is unbound until somebody binds it; a press, only while
+playing with no screen open, switches the module exactly as the Hub does, saves
+the profile and says so in the action bar.
 
 **Pack Display** draws the pack's own icon through `ResourcePackLoader.Entry`,
 the same object and the same `bindIcon` call the resource pack screen uses:
@@ -139,17 +223,24 @@ Printed by `ModuleTests`, which fails if any row is not five passes.
   ------------------  -----  -------  ----------  --------  --------
   FPS                 yes    yes      yes         yes       yes
   Coordinates         yes    yes      yes         yes       yes
+  Direction           yes    yes      yes         yes       yes
   Clock               yes    yes      yes         yes       yes
   Pack Display        yes    yes      yes         yes       yes
   Ping                yes    yes      yes         yes       yes
+  Scoreboard          yes    yes      yes         yes       yes
+  Chat                yes    yes      yes         yes       yes
   CPS                 yes    yes      yes         yes       yes
   Keystrokes          yes    yes      yes         yes       yes
   Armour HUD          yes    yes      yes         yes       yes
   Potion HUD          yes    yes      yes         yes       yes
   Sprint and sneak    yes    yes      yes         yes       yes
   Zoom                yes    yes      yes         yes       yes
+  Fathom main menu    yes    yes      yes         yes       yes
   Crosshair           yes    yes      yes         yes       yes
+  Fullbright          yes    yes      yes         yes       yes
+  Time Changer        yes    yes      yes         yes       yes
   Unfocused FPS limit yes    yes      yes         yes       yes
+  Performance layer   yes    yes      yes         yes       yes
 ```
 
 What each column means:
@@ -159,11 +250,80 @@ What each column means:
   `widgetAllowed` and `SwitchBoard` the renderer and the client use. Testing a
   copy of the rule would have passed while the client was broken.
 - **disappears** — with it off, it is not.
-- **persists** — written and read back through `ModuleStore` into a fresh
-  registry.
-- **isolated** — written in one game directory and not visible from another.
+- **persists** — the running client captured into a profile, written to a
+  collection on disk, and read back and applied by a fresh client: the path a
+  restart takes (`ProfileSwitch` and `ProfileStore`, through `ProfileRig`).
+  This column used to go through the old properties store, which the game had
+  stopped writing, so it passed while proving nothing about a restart.
+- **isolated** — saved in one profile and gone when another profile in the same
+  collection is applied.
 
-### 4.1 What the table does not prove
+### 4.1 The in-game self-test
+
+The table proves the model; `fabric/diag/ModuleSelfTest` proves the running
+game. It joins a world through the normal path, drives the modules through the
+same hooks a player's input reaches, and prints one `[Fathom] QA modules` line
+per check:
+
+```
+gradle runClient -PqaModules=run    -PprofilesDir=<scratch collection>
+gradle runClient -PqaModules=verify -PprofilesDir=<the same collection>
+```
+
+For a production launch with OptiFine against the local multiplayer server, the
+same properties go through `tools/mp-bench/run_client.py --extra
+fathom.qaModules=run --extra fathom.qaServer=127.0.0.1:25599 --extra
+fathom.benchmark=none --extra fathom.profilesDir=...`. It is off unless asked
+for; a normal run reads one constant.
+
+| Area | What it checks |
+| --- | --- |
+| Cost | Bytes the HUD pass allocates per frame and per second, per widget; nothing left changed in GL by the HUD pass or the crosshair (buffers, program, matrix stacks, client arrays, masks, viewport) and no `GlStateManager` cache left disagreeing with GL |
+| Zoom | Hold zooms and leaves `fov`, `sensitivity` and the smooth camera untouched; scrolling zooms further while held and is left to the hotbar otherwise; release restores; Toggle latches on a press, lets go when a screen opens and stays out after it closes; nothing in a window without focus |
+| Sprint and sneak | Toggle sneak latches and lets go; toggle sprint latches, sprints while walking, stays latched standing still and lets go on the next press |
+| Input and menus | Clicks count in game and not behind a menu; no button reads as held behind a menu; a container and chat are both left alone by the Hub key; Hide behind menus and Hide with F3 each take their widget out |
+| World changes | Vanilla's own Disconnect sequence, then the same world or server again: latches released, zoom out, clicks cleared, the session moved on (so nothing read on one server is shown on the next), the sidebar dropped, the HUD drawing again |
+| Restart | `run` writes a choice, a slider, a stepper, a colour, a mode, a mouse keybind, a switch and a widget position to the live profile; `verify`, in the next launch, checks all eight came back and puts them back |
+
+Both self-tests hold the player's pause-on-lost-focus off while they run (a
+test window behind others would otherwise open the pause menu and every in-game
+check would rightly refuse to act behind it), and the sprint check turns to
+open ground first, skipping with the reason if the save left the player walled
+in.
+
+Re-run 2026-10-10 after the HUD flow (§8): 38/38 and 8/8 in the development
+client, and 38/38 and 8/8 with OptiFine on the local server.
+
+Last results (2026-10-09): 38/38 and 8/8 in the development client
+(singleplayer, no OptiFine), and 38/38 and 8/8 in a production launch with
+OptiFine HD U M5 through OptiFabric on the local server with twenty players.
+The HUD pass allocated about 150–250 bytes a frame (about 7 KB a second) with
+eight widgets on, almost all of it in the shared font hooks' callbacks; no GL
+state was left changed and no cache was left lying.
+
+### 4.2 The secondary modules, in game
+
+`ModuleSelfTest` continues (steps 40–65) with Direction, Clock, Scoreboard, Chat
+and Pack Display switched on beside the rest:
+
+| Area | What it checks |
+| --- | --- |
+| Cost | Each widget's allocation and CPU time a frame; nothing over 256 bytes a frame but the sidebar, which is judged against vanilla's: the whole HUD's allocation with no sidebar, with vanilla's, and with the widget's; GL state with a sidebar up |
+| Scoreboard | A sidebar laid out the way large servers lay theirs out (bold title, invisible entry names, text split across 16-character team prefixes and suffixes, spacer lines, more lines than fit, a `#` entry): the widget takes it over, draws the title and the fifteen highest lines exactly as vanilla would format them, and switched off hands it back to vanilla |
+| Chat | With timestamps and folding: a repeat folds with a count and keeps its click and hover; the same words with another command do not fold; every wrapped line stays clickable; the timestamp leads. With neither: 120 messages leave exactly vanilla's newest 100 in order, and a message is stored as the very object the server's packet made |
+| Fullbright | The darkest lightmap cell is lit with it on and back to the player's own with it off; `gamma` in the options is never written |
+| Time Changer | The client sky is at the chosen hour; the world's time is still the server's; off, the sky follows the server again |
+| Crosshair | A magenta crosshair found in a screenshot at GUI scales 1, 2, 3 and 4 is centred on the window to within half a screen pixel |
+| Resource packs (this found a bug: Fathom's reload listener was registered from the client entrypoint, which runs before Minecraft has a resource manager, so it had never been installed and a pack change left widgets' cached text widths and the renderer's textures from the old pack; it is now installed on the first frame if initialisation was too early) | A generated pack whose font is a full cell wide: selected and reloaded, widgets measure the wider font; removed and reloaded, the default again; the HUD draws and GL state is clean across both reloads |
+
+Last results (2026-10-11): 66/66 in the development client in singleplayer
+(one skip where the save had walled the player in), and the full sweep —
+800×600, 1279×719, 1280×720, 1366×768 and 2560×1080 — with the crosshair within
+half a screen pixel of the centre at GUI scales 1–4 in every one. On the local
+server with twenty players: 67/67 and 8/8 with OptiFine HD U M5 through
+OptiFabric, and 67/67 and 8/8 without it.
+
+### 4.3 What the table does not prove
 
 That the widget looks right, that the zoom feels right, or that a setting has the
 effect its label claims. Those need a running game and eyes, and the table is
@@ -175,6 +335,16 @@ Format change moved the FPS readout on the next frame, Zoom narrowed the field o
 view, and the crosshair Mixin hid vanilla's. See the mod's README for the full
 list, including what that session did **not** cover — no other resolution, no
 multiplayer, and no mouse-button keybind.
+
+The baseline modules were then captured in game with `gradle runClient
+-PcaptureUi=hud -PcaptureHudItems` and a profile with all of them on (1280x720,
+singleplayer): the chat drawn over the widgets, with timestamps and a folded
+`(x3)`; the sidebar as a moved widget with its title and red numbers; the
+Direction strip; `**:**` for an effect with no end; a bow's arrow count; the
+armour list mirrored against the right edge; Keystrokes labelled from the
+bindings with clicks under the mouse keys; the crosshair at the centre. The
+capture also logs the sky angle Time Changer produced (0.237 for Dusk, against
+the server's 6000) and that Fullbright's lightmap hook ran.
 
 ---
 
@@ -188,7 +358,7 @@ multiplayer, and no mouse-button keybind.
 | `SLIDER` | track | "roughly where in this range" — zoom amount, crosshair size |
 | `INTEGER` | stepper | "exactly how many" — padding, decimal places, sample window |
 | `CHOICE` | dropdown | one of a short list |
-| `COLOUR` | swatch | a colour, from a palette |
+| `COLOUR` | hex field and swatch | a colour: typed as `#RRGGBB` or `#RGB`, or picked from the palette, the setting's own default (marked) and the colour it has now |
 | `TEXT` | field | a short string, length-capped so it cannot push a widget off screen |
 | `KEY` | rebinding control | a key belonging to a value rather than to the module |
 
@@ -214,31 +384,81 @@ both actions.
 While a control is listening: **Escape cancels** and leaves the old key,
 **Backspace or Delete clears** the binding — the only way to have no key — and a
 mouse button binds as itself. The Hub key cannot be cleared; clearing it puts it
-back to Right Shift, because with no key there is no way back into the Hub.
+back to Right Shift, because with no key there is no way back into the Hub. Nor
+can it be the left or right mouse button — every swing or every block placed
+would open the Hub — so a right click while it is listening keeps listening.
+
+The Hub key opens the Hub only with no screen open or over a menu with nothing
+to type into (`HubKeyPolicy`). In chat, on a sign, in a book, in any screen with
+a text field, and over a container it does nothing: Right Shift there is a
+capital letter, and closing a chest's screen under the server is a desync. In
+the Hub it closes the Hub unless the Hub is typing — the search box, a text
+setting, a hex colour, a profile name — or listening for a key.
 
 ---
 
+### 5.2 The module page
+
+Each configurable module opens as a tab of the Mods page: its switch and
+description, a preview where there is one, then **Behaviour**, **Appearance**,
+**Position and size** (HUD modules) and **Keybinds**, with **Open HUD editor**
+(the widget selected) and **Reset to defaults** at the foot.
+
+- **Off is said.** A module that is off shows a notice with **Turn on** above
+  its settings; they stay editable and are kept.
+- **Reset to defaults** resets settings and keys only (`resetSettings`). The
+  switch and the widget's position are separate preferences with their own
+  controls; resetting a page used to turn the module off as well. It is greyed
+  out while nothing differs.
+- **Navigation keeps state.** Each tab remembers where it was scrolled to, the
+  list remembers its own position, and leaving Mods and coming back keeps the
+  tabs, the list position and the On/Off filter. Escape on a page goes back to
+  the list (an open dropdown closes first).
+- **Focus.** A press anywhere outside the text or hex field being typed into
+  ends the entry (a hex value is applied if it is one), as leaving a field does
+  anywhere else.
+- **Saving.** Changes are written when the Hub closes and also after 1.5 s
+  without another change while it stays open, through the profile store's
+  background writer.
+- A slider's value sits inside its control, so a long label cannot run under it.
+
 ## 6. Where settings are stored
 
-| What | File, relative to the profile's game directory |
+| What | Where |
 | --- | --- |
-| Module switches, setting values, keybinds | `config/fathom-features.properties` |
-| HUD layouts | `config/fathom-hud.properties` (and one file per named layout) |
-| HUD editor preferences (snap strength, grid, bounds) | `config/fathom-hud-editor.properties` |
+| Module switches, setting values, keybinds, the HUD layout, the Hub key and the client's own preferences | a Fathom Profile: `profiles/<id>.json` in the launcher's one collection (see `docs/fathom-profiles.md`) |
+| HUD editor preferences (snap strength, grid, bounds) | `config/fathom-hud-editor.properties` in the game directory |
+| The old properties files | `config/fathom-features.properties`, `config/fathom-hud.properties` — read once, migrated into a profile with a backup, and only written again if the profile collection cannot be opened at all |
 
 The editor's own preferences are deliberately outside the profile: they describe
 the tool, not the loadout, and a profile sent to somebody else should not change
 how their editor behaves.
 
-Both are written under the game directory the launcher hands the game, and the
-launcher gives each profile its own — `profiles/<id>/minecraft`, unless the user
-deliberately points a profile at a directory they chose. So per-profile storage is
-a consequence of the path rather than a feature of the store, which is exactly
-why `ModuleTests.oneProfileDoesNotSeeAnother` exists: it would be lost silently
-the day something decided to resolve the path for itself.
-
 Only changed values are written. A file listing every default is a file where a
 real change is invisible, and it freezes a default that later improves.
+
+**What a save keeps.** Anything in the profile this build does not know — a
+module from a mod that is not installed today, its widget's place, a switch or a
+client preference a newer build wrote — is carried through a save unchanged
+rather than dropped. The launcher keeps unknown client preferences too.
+
+**Two windows, one file.** Every installation shares the collection, so two
+games, or a game and the launcher, can have the same profile open. A save writes
+only what this client changed since it last loaded or saved, on top of the file's
+newest contents (`ProfileMerge`), so two windows that changed different things
+both keep their change, and a clash goes to the later save.
+
+**A damaged value.** One impossible number in a widget's placement — a scale
+of zero or infinity, an opacity outside 0–1, an offset of a trillion — is
+repaired on load (normal size, clamped, brought back within 100000 of its edge)
+instead of failing the document. A profile that cannot be read is every setting
+in it lost for the session; one widget's number is not worth that. An anchor
+that does not exist falls back to the widget's own, and a setting value that
+does not parse keeps its default, as before. `EditorTests` covers each.
+
+**A late module.** A module registered through `FathomApi` after the profile was
+applied — a mod that initialised after Fathom — is given what the profile saved
+for it, switch, settings, keys and widget position, when it registers.
 
 ---
 
@@ -254,3 +474,84 @@ Nothing per frame, and this is checked by construction rather than measured:
   key is unbound, or a screen is open.
 - With the hub closed, no settings interface exists: the sections are objects on
   a screen that is not instantiated.
+
+---
+
+## 8. The HUD editor
+
+`HudEditorScreen` draws the real HUD over the running world with its own chrome
+on top: a floating toolbar (Done, Undo, Grid, Bounds, Snap strength, Duplicate,
+Reset all, the profile picker) and an inspector for the selected widget.
+
+| To | Do |
+| --- | --- |
+| Move | Drag. The widget takes the anchor of the screen third it is dropped in and the offset from that anchor's edges, so it keeps its corner at every resolution and GUI scale. Snapping pulls edges and centres together and draws the guide; the grid, when on, rounds to 10; Alt places freely |
+| Resize | Drag the corner handle (5% steps, Alt for free), Shift-scroll, or the Scale slider. 50%–200% |
+| Fade | Scroll, or the Opacity slider. 10%–100% |
+| Place exactly | The inspector's **From left/right/centre** and **From top/bottom/middle** fields: type a number (Enter applies, Escape cancels, Tab moves to the other axis) or step with −/+ (Shift for ten). Arrow keys nudge by 1, Shift-arrows by 10 |
+| Anchor | The inspector's dropdown. The widget stays exactly where it is; only the edge it follows changes |
+| Undo | Ctrl+Z or **Undo**: one step per gesture (a whole drag, one slider pull, a run of nudges), 48 deep, for the profile being edited |
+| Reset | **Reset position** (anchor and offset), **Reset all of it** (scale and opacity too), or **Reset all** on the toolbar for every widget — each undoable |
+| Reach a covered widget | Tab steps through the widgets; the toolbar and inspector fade and let clicks through while the widget in play is under them |
+| Configure | **Settings** closes the editor onto the module's page in the Hub; **Turn off** switches the module off |
+
+**Widgets do not land on each other.** `HudFlow` runs every frame, in game and
+in the editor alike: a widget that would overlap one placed before it moves
+along its anchor's direction (down from the top or middle, up from the bottom),
+or the other way if that runs off the screen, until it is clear. Widgets nearer
+their own edge go first, so a stack grows away from its corner, and it closes up
+again when a widget above it shrinks. The stored placements never change. The
+widget being dragged is held exactly under the pointer while the others move
+off it; a widget dropped on another is nudged to the nearest clear spot (not
+with Alt); the crosshair takes no part. A widget with nowhere clear to go stays
+where it was put, outlined in the warning colour, and the inspector names what
+it overlaps. The shipped layout has no overlaps with every widget on at 426x240,
+480x270, 640x360 and 960x540 (`EditorTests`).
+
+**Nothing to show is not nothing to place.** A widget with no data — no effects,
+no armour, no server, no sidebar — is drawn in the editor as a preview on its own
+plate, in its own colours at two-thirds strength, at the size it will have; the
+inspector says it is a preview.
+
+**The HUD's size is Minecraft's.** Widgets follow Minecraft's GUI Scale, as the
+hotbar they sit beside does, and each widget's own scale. The Fathom UI scale
+in Quick sizes the Hub and the editor's chrome only; it used to multiply every
+widget and offset too, which rearranged the HUD (and overlapped it) whenever the
+Hub was made larger.
+
+The editor's panels are near-opaque graphite ink with no backdrop blur: the world
+behind them changes every frame, and a blurred copy of it would be a full-screen
+pass per frame for a toolbar.
+
+### 8.1 The editor self-test
+
+`fabric/diag/EditorSelfTest` uses the editor and the Mods page as a player does:
+the pointer through `Pointer`'s scripted position and primary button (the same
+press, move and release edge detection a mouse goes through), keys through the
+screens' own handlers, and a few development-only hooks for controls whose
+rectangles only the screen knows.
+
+```
+gradle runClient -PqaEditor=run    -PprofilesDir=<scratch collection>
+gradle runClient -PqaEditor=verify -PprofilesDir=<the same collection>
+```
+
+or, for a production launch with OptiFine on the local server,
+`tools/mp-bench/run_client.py --extra fathom.qaEditor=run --extra
+fathom.qaServer=127.0.0.1:25599 --extra fathom.benchmark=none --extra
+fathom.profilesDir=...`.
+
+It switches ten HUD modules on at their defaults and checks none overlap; drags
+the clock from the Hub-opened editor and checks it is selected, re-anchored by
+where it was dropped, under the pointer and clear of everything; undoes the drag
+in one step; nudges with the arrows; types a Y (and checks a letter is
+ignored); re-anchors without moving; fades with the wheel; resizes from the
+corner; follows **Settings** to the clock's page; checks a page keeps its scroll
+across tabs and Escape returns to the list; closes; and, after a restart,
+checks the clock's anchor, position, scale and opacity came back, then puts
+everything back.
+
+Last results (2026-10-10): 19/19 and 3/3 in the development client
+(singleplayer, 1280x720, GUI Auto), and 19/19 and 3/3 in a production launch
+with OptiFine HD U M5 on the local server with twenty players (960x540 GUI).
+

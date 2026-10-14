@@ -1,0 +1,41 @@
+{
+  "_about": "Approved product media for the public website. Each slot names a real capture by its path in this repository, or null until one is approved. `gradle exportWebData` copies approved files into web-export/media/ and reports every null slot as unavailable. Never point a slot at a mock-up, a render or an edited image: these are shown as what Fathom looks like.",
+  "slots": [
+    {
+      "id": "launcher",
+      "title": "Launcher home",
+      "alt": "The Fathom launcher's home screen",
+      "source": "assets/web/media/launcher-home.png"
+    },
+    {
+      "id": "rshift",
+      "title": "In-game hub (Right Shift)",
+      "alt": "Fathom's in-game hub, opened with Right Shift",
+      "source": "assets/web/media/rshift-hub.png"
+    },
+    {
+      "id": "modules",
+      "title": "Module settings",
+      "alt": "The Keystrokes module's settings in Fathom's in-game hub",
+      "source": "assets/web/media/module-settings.png"
+    },
+    {
+      "id": "appearance",
+      "title": "Appearance and background picker",
+      "alt": "Fathom's in-game appearance page: presentation mode and the background picker",
+      "source": "assets/web/media/appearance.png"
+    },
+    {
+      "id": "gameplay-glass",
+      "title": "Gameplay Glass",
+      "alt": "Fathom's frosted glass interface over a running game",
+      "source": "assets/web/media/gameplay-glass.png"
+    },
+    {
+      "id": "gameplay",
+      "title": "Gameplay capture",
+      "alt": "Minecraft 1.8.9 with Fathom and OptiFine: FPS, clock and keystrokes HUD over a mountain view",
+      "source": "assets/web/media/gameplay.png"
+    }
+  ]
+}

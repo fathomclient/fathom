@@ -112,7 +112,7 @@ approximately 10 FPS":
 
 ### What was not separated, and why
 
-The brief asked whether the world behind an open menu could be throttled
+The spec asked whether the world behind an open menu could be throttled
 independently of the interface in front of it — world at 30, interface at the
 display's rate. **It could, and this milestone did not do it.** The honest
 version of why:

@@ -180,7 +180,7 @@ output-identical and does nothing without a cap.
 
 Vanilla 1.8.9 builds chunks on 2 threads with 5 buffers; this uses half the
 hardware threads (2-5) and workers + 3 buffers. Not under OptiFine, which sizes
-its own pool. Run `view-2026-10-03-chunk-workers`: the user's profile *without*
+its own pool. Run `view-2026-10-03-chunk-workers`: my own profile *without*
 OptiFine, scene `reload` (renderer reload at window start; the window ends after
 0.5 s with no rebuild), four launches on/off/off/on because the pool is fixed
 when the renderer is built, 3 reloads each. Window length (rebuild + 0.5 s):

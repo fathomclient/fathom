@@ -9,6 +9,8 @@
   /** Where the light gathers: behind Home's launch panel, or low and centred
       under a page's content. */
   export let focus: 'home' | 'page' = 'page';
+  /** The game is running: the scene holds still and the light stops drifting. */
+  export let quiet = false;
 
   /* The scene's accent lights the whole interface (glow.css). */
   $: accent = optionFor(choice).accent;
@@ -40,8 +42,8 @@
   as the scene breathing rather than as animation. The grain above dithers
   them, so a large dark gradient never bands.
 -->
-<div class="graphite-backdrop" aria-hidden="true" data-focus={focus}>
-  <Background {choice} />
+<div class="graphite-backdrop" class:quiet aria-hidden="true" data-focus={focus}>
+  <Background {choice} {quiet} />
   <div class="vignette"></div>
   <div class="bloom main"></div>
   <div class="bloom echo"></div>
@@ -126,6 +128,13 @@
     .bloom {
       animation: none;
     }
+  }
+
+  /* Paused rather than removed, so the light is where it was when play ends
+     or the window comes back. */
+  .quiet .bloom,
+  :global(html[data-minimised]) .bloom {
+    animation-play-state: paused;
   }
 
   .grain {

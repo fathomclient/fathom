@@ -107,6 +107,11 @@ final class SdfText {
         return texture;
     }
 
+    /** Whether the faces are loaded, so a string can be measured outside a frame. */
+    boolean loaded() {
+        return faces[0] != null;
+    }
+
     FontAtlas.Face face(Type type) {
         return faces[type.weight().ordinal()];
     }

@@ -27,6 +27,24 @@ public final class HudCapture {
 
     private static int frames;
     private static boolean captured;
+    private static long firstFrameNanos;
+
+    /**
+     * Seconds in the world before the shot, on top of the settling frames:
+     * {@code -Dfathom.captureDelay=30} waits for a server scene to be built.
+     */
+    private static final double DELAY_SECONDS = doubleProperty("fathom.captureDelay", 0.0);
+
+    /** {@code -Dfathom.captureHoldTab=true}: the player list is held open for the shot. */
+    private static final boolean HOLD_TAB = Boolean.getBoolean("fathom.captureHoldTab");
+
+    private static double doubleProperty(String name, double fallback) {
+        try {
+            return Double.parseDouble(System.getProperty(name, String.valueOf(fallback)));
+        } catch (NumberFormatException notANumber) {
+            return fallback;
+        }
+    }
 
     private HudCapture() {}
 
@@ -47,12 +65,57 @@ public final class HudCapture {
         worn[2] = damaged(new net.minecraft.item.ItemStack(net.minecraft.item.Items.IRON_CHESTPLATE), 0.55f);
         worn[1] = damaged(new net.minecraft.item.ItemStack(net.minecraft.item.Items.LEATHER_LEGGINGS), 0.85f);
         worn[0] = damaged(new net.minecraft.item.ItemStack(net.minecraft.item.Items.GOLDEN_BOOTS), 0.40f);
+        // A bow and a quiver, so the armour widget's arrow count has something to count.
         player.inventory.main[player.inventory.selectedSlot] =
-                damaged(new net.minecraft.item.ItemStack(net.minecraft.item.Items.DIAMOND_SWORD), 0.10f);
+                damaged(new net.minecraft.item.ItemStack(net.minecraft.item.Items.BOW), 0.10f);
+        int quiver = player.inventory.selectedSlot == 8 ? 7 : 8;
+        player.inventory.main[quiver] = new net.minecraft.item.ItemStack(net.minecraft.item.Items.ARROW, 37);
         // Speed II and Fire Resistance: one with a level, one without, both with
         // icons, which is every case the potion widget lays out.
         player.addStatusEffect(new net.minecraft.entity.effect.StatusEffectInstance(1, 60 * 20, 1));
         player.addStatusEffect(new net.minecraft.entity.effect.StatusEffectInstance(12, 8 * 20, 0));
+        // Night vision with no end, as a lobby gives it: the potion widget
+        // prints **:** for it rather than a timer.
+        net.minecraft.entity.effect.StatusEffectInstance forever =
+                new net.minecraft.entity.effect.StatusEffectInstance(16, 32767, 0);
+        forever.setPermanent(true);
+        player.addStatusEffect(forever);
+        stage(client);
+        // Looking up at the sky, so Time Changer's hour is in the shot.
+        player.pitch = -35f;
+        player.prevPitch = -35f;
+    }
+
+    private static boolean staged;
+
+    /**
+     * Once per run: a sidebar on the client's scoreboard and a few chat lines,
+     * for the Scoreboard and Chat modules. The client's own copies only; the
+     * integrated server never hears of either.
+     */
+    private static void stage(MinecraftClient client) {
+        if (staged || client.world == null || client.inGameHud == null) {
+            return;
+        }
+        staged = true;
+        net.minecraft.scoreboard.Scoreboard scoreboard = client.world.getScoreboard();
+        net.minecraft.scoreboard.ScoreboardObjective objective = scoreboard.getNullableObjective("fathomqa");
+        if (objective == null) {
+            objective = scoreboard.method_4884("fathomqa", net.minecraft.scoreboard.ScoreboardCriterion.DUMMY);
+            objective.setDisplayName("\u00a7e\u00a7lBED WARS");
+        }
+        String[] lines = {"\u00a77Map: \u00a7aLighthouse", "", "\u00a7cR \u00a7fRed: \u00a7a\u2714",
+            "\u00a79B \u00a7fBlue: \u00a7a\u2714", "\u00a7aG \u00a7fGreen: \u00a77YOU", " ", "\u00a7ewww.example.net"};
+        for (int index = 0; index < lines.length; index++) {
+            scoreboard.getPlayerScore(lines[index], objective).setScore(lines.length - index);
+        }
+        scoreboard.setObjectiveSlot(1, objective);
+        net.minecraft.client.gui.hud.ChatHud chat = client.inGameHud.getChatHud();
+        chat.addMessage(new net.minecraft.text.LiteralText("\u00a7aWelcome to the Fathom QA world."));
+        for (int index = 0; index < 3; index++) {
+            chat.addMessage(new net.minecraft.text.LiteralText("\u00a7eYou have 3 seconds to respawn!"));
+        }
+        chat.addMessage(new net.minecraft.text.LiteralText("\u00a77This line sits over the Sprint widget."));
     }
 
     private static net.minecraft.item.ItemStack damaged(net.minecraft.item.ItemStack stack, float wear) {
@@ -98,13 +161,17 @@ public final class HudCapture {
             // syncs it back, so a one-off change is undone before the shot.
             dress(client);
         }
+        if (HOLD_TAB && client.options != null) {
+            net.minecraft.client.option.KeyBinding.setKeyPressed(client.options.playerListKey.getCode(), true);
+        }
         if (frames == 0) {
+            firstFrameNanos = System.nanoTime();
             // Timing starts with the first in-world frame, not with the client,
             // so world load and terrain generation are not averaged into what a
             // HUD costs to draw.
             net.fathom.optimizations.core.instrument.Probe.begin();
         }
-        if (++frames < SETTLE) {
+        if (++frames < SETTLE || (System.nanoTime() - firstFrameNanos) / 1e9 < DELAY_SECONDS) {
             return;
         }
         captured = true;
@@ -130,6 +197,19 @@ public final class HudCapture {
                 client.width, client.height, client.getFramebuffer());
         // What the HUD costs with the configured per-module typefaces. A
         // command-line override is only used for controlled comparison runs.
+        if (client.getNetworkHandler() != null && !client.isInSingleplayer()) {
+            net.minecraft.client.network.PlayerListEntry own = PingWidget.ownEntry(client);
+            System.out.println("[Fathom] UI QA ping: own player-list row "
+                    + (own == null ? "missing" : "found, latency " + own.getLatency() + " ms")
+                    + ", widget reads " + PingWidget.latencyOf(client));
+        }
+        if (client.world != null) {
+            System.out.println("[Fathom] UI QA world: time of day " + client.world.getTimeOfDay()
+                    + ", sky angle " + client.world.getSkyAngle(0f)
+                    + ", Time Changer ticks " + net.fathom.optimizations.fabric.visual.WorldLighting.skyTicks()
+                    + ", lightmap hook seen " + net.fathom.optimizations.fabric.visual.WorldLighting.lightmapSeen()
+                    + ", gamma " + net.fathom.optimizations.fabric.visual.WorldLighting.gamma(client.options.gamma));
+        }
         System.out.println("[Fathom] UI QA hud " + font + ": "
                 + net.fathom.optimizations.fabric.Runtime.hud().widgetCount()
                 + " widgets, "

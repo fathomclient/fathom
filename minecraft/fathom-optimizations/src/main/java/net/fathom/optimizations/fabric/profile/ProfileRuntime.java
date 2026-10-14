@@ -13,8 +13,10 @@ import net.fathom.optimizations.core.module.ModuleLog;
 import net.fathom.optimizations.core.profile.FathomProfile;
 import net.fathom.optimizations.core.profile.ProfileException;
 import net.fathom.optimizations.core.profile.ProfileLocation;
+import net.fathom.optimizations.core.profile.ProfileMerge;
 import net.fathom.optimizations.core.profile.ProfileMigration;
 import net.fathom.optimizations.core.profile.ProfileStore;
+import net.fathom.optimizations.core.profile.ProfileSwitch;
 import net.fathom.optimizations.core.registry.OptimizationRegistry;
 import net.fathom.optimizations.core.registry.SwitchBoard;
 import net.fathom.optimizations.fabric.hud.FathomHud;
@@ -51,6 +53,12 @@ public final class ProfileRuntime {
     private final List<String> complaints = new ArrayList<String>();
 
     private FathomProfile live;
+    /**
+     * The running client as it was when it last agreed with the live profile's
+     * file: captured after every apply and every save. A save writes only what
+     * changed since this, on top of the file -- see {@link ProfileMerge}.
+     */
+    private FathomProfile synced;
     private String notice = "";
     private long noticeAt;
 
@@ -98,6 +106,7 @@ public final class ProfileRuntime {
             List<String> skipped = new ArrayList<String>();
             ProfileSwitch.apply(last, hud, switches, optimizations, runtime.baseline, skipped);
             runtime.live = last;
+            runtime.synced = runtime.captureNow(last);
             if (!skipped.isEmpty()) {
                 ModuleLog.say("profiles: " + last.name() + " names things this build does not have: " + skipped);
             }
@@ -107,6 +116,7 @@ public final class ProfileRuntime {
             ModuleLog.say("profiles: could not open the live profile (" + failure.getMessage() + ")");
             runtime.live = ProfileSwitch.capture(FathomProfile.defaultProfile(), hud, switches, optimizations,
                     runtime.baseline);
+            runtime.synced = runtime.live;
         }
         return runtime;
     }
@@ -208,6 +218,7 @@ public final class ProfileRuntime {
         }
 
         live = target;
+        synced = captureNow(target);
         try {
             store.setLastProfileId(target.id());
         } catch (ProfileException failure) {
@@ -232,11 +243,58 @@ public final class ProfileRuntime {
         }
     }
 
+    /**
+     * A module registered after the live profile was applied -- a mod that
+     * initialised after Fathom -- takes what the live profile saved for it.
+     * Its state then counts as already in sync, so the next save does not
+     * mistake the loaded values for an edit.
+     */
+    public void adopt(net.fathom.optimizations.core.module.FathomModule module) {
+        List<String> skipped = new ArrayList<String>();
+        ProfileSwitch.adopt(live, hud, module, skipped);
+        if (!skipped.isEmpty()) {
+            ModuleLog.say("profiles: " + module.id() + " could not use " + skipped);
+        }
+        synced = captureNow(live);
+    }
+
     /** Write the running client into the live profile. */
     public void saveLive() throws ProfileException {
-        FathomProfile captured = ProfileSwitch.capture(live, hud, switches, optimizations, baseline);
-        store.save(captured);
-        live = captured;
+        FathomProfile captured = captureNow(live);
+        FathomProfile merged = toWrite(captured);
+        store.save(merged);
+        live = merged;
+        synced = captured;
+    }
+
+    private FathomProfile captureNow(FathomProfile identity) {
+        return ProfileSwitch.capture(identity, hud, switches, optimizations, baseline);
+    }
+
+    /**
+     * What a save should write: this client's changes since it last synced,
+     * on top of the newest the file holds.
+     *
+     * <p>The newest is {@link #live} -- what this client last read or wrote --
+     * unless something else has written the file since, in which case it is
+     * read again. Merging against {@code live} every time, rather than only
+     * when the file moved, is what keeps another window's edit from being
+     * reverted on this client's second save after it.
+     */
+    private FathomProfile toWrite(FathomProfile captured) {
+        FathomProfile theirs = live;
+        if (store.changedElsewhere(live.id())) {
+            try {
+                theirs = store.load(live.id());
+                ModuleLog.say("profiles: " + live.name()
+                        + " was changed by another Fathom window; keeping both sets of changes");
+            } catch (ProfileException unreadable) {
+                // A file that cannot be read now is not one to merge with; this
+                // client's state is the best there is.
+                complaints.add("could not re-read " + live.name() + " before saving: " + unreadable.getMessage());
+            }
+        }
+        return synced == null ? captured : ProfileMerge.merge(synced, captured, theirs);
     }
 
     /**
@@ -248,9 +306,11 @@ public final class ProfileRuntime {
      */
     public String saveLiveQuietly() {
         try {
-            FathomProfile captured = ProfileSwitch.capture(live, hud, switches, optimizations, baseline);
-            store.saveInBackground(captured);
-            live = captured;
+            FathomProfile captured = captureNow(live);
+            FathomProfile merged = toWrite(captured);
+            store.saveInBackground(merged);
+            live = merged;
+            synced = captured;
             return store.takeBackgroundFailure();
         } catch (ProfileException failure) {
             return failure.getMessage();

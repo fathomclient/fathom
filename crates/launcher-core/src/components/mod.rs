@@ -627,13 +627,14 @@ fn install_bundled(
     // remembered form skips reading the jar when it has not changed -- this
     // runs for every Fathom profile on every start, and the client jar is
     // tens of megabytes.
-    let stored = engine
-        .store()
-        .adopt_remembered(&jar)
-        .map_err(|source| ComponentError::Install {
-            component: component.id,
-            source,
-        })?;
+    let stored =
+        engine
+            .store()
+            .adopt_remembered(&jar)
+            .map_err(|source| ComponentError::Install {
+                component: component.id,
+                source,
+            })?;
 
     if existing
         .as_ref()
@@ -883,11 +884,264 @@ fn newest_source_after(module: &Path, built: Option<std::time::SystemTime>) -> O
     }
 }
 
+// ---------------------------------------------------------------------------
+// Superseded first-party jars
+// ---------------------------------------------------------------------------
+
+/// Remove Fathom's own jars from the shared mod store once nothing refers to
+/// them. Returns the hashes removed.
+///
+/// Every Fathom build adopts its client jar into the store under a new hash
+/// and moves its profiles onto it ([`ensure`]); the jar they moved off stayed
+/// behind, about 37 MB an update, for good. The store's own
+/// [`collect_garbage`](crate::mods::ModStore::collect_garbage) only runs when
+/// a user removes a mod, so nothing ever took these away.
+///
+/// Deliberately narrow:
+///
+/// - **Only first-party jars**, recognised by the mod id inside them, never by
+///   name. Those can always be staged again from the launcher itself. A jar a
+///   user supplied is never touched here, referenced or not.
+/// - **Referenced means mentioned anywhere.** Every profile manifest is read
+///   as text, live and in the recovery area (so a restored profile still
+///   finds its jar), and any 40-character hex string in it counts. Reading too
+///   much keeps a file; reading too little would delete one.
+pub fn collect_superseded(paths: &DataPaths, engine: &ModEngine) -> Vec<String> {
+    let store = engine.store();
+    let referenced = referenced_hashes(paths);
+    let mut removed = Vec::new();
+    for hash in store.contents() {
+        if referenced.contains(&hash) {
+            continue;
+        }
+        let Ok(path) = store.path_for(&hash) else {
+            continue;
+        };
+        if !is_first_party_jar(&path) {
+            continue;
+        }
+        if std::fs::remove_file(&path).is_ok() {
+            removed.push(hash);
+        }
+    }
+    if !removed.is_empty() {
+        forget_adoptions(&store.root(), &removed);
+    }
+    removed
+}
+
+/// Every hash any profile file mentions, live or deleted.
+///
+/// Includes each profile's backup when its main file is unreadable (the only
+/// time a backup is used), its launch history (the last set that
+/// worked, which recovery can restore) and any mod entries set aside when a
+/// profile was salvaged — every place a hash can be the only record of bytes
+/// somebody may want back. Shared with ordinary mod removal, so that removing
+/// a mod never deletes a jar an unreadable or trashed profile still names.
+pub(crate) fn referenced_hashes(paths: &DataPaths) -> std::collections::BTreeSet<String> {
+    referenced_hashes_except(paths, None)
+}
+
+/// [`referenced_hashes`], without one live profile's own `profile.json` and
+/// its backup: for a caller holding that profile in memory, whose copy is the
+/// newer truth about it. Its launch history and set-aside entries still count.
+pub(crate) fn referenced_hashes_except(
+    paths: &DataPaths,
+    except: Option<&crate::profiles::ProfileId>,
+) -> std::collections::BTreeSet<String> {
+    let mut manifests = Vec::new();
+    for root in [paths.profiles_dir(), paths.trash_dir()] {
+        let Ok(entries) = std::fs::read_dir(&root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let own = root == paths.profiles_dir()
+                    && except.is_some_and(|id| {
+                        path.file_name().and_then(|n| n.to_str()) == Some(id.as_str())
+                    });
+                if !own {
+                    let primary = path.join("profile.json");
+                    // The backup is only ever read when the profile file
+                    // itself is unreadable, so only then does what it names
+                    // still matter. A readable profile that removed a mod
+                    // does not keep that mod's bytes alive through its backup.
+                    let readable = std::fs::read(&primary).is_ok_and(|bytes| {
+                        serde_json::from_slice::<serde_json::Value>(&bytes).is_ok()
+                    });
+                    if !readable {
+                        manifests.push(path.join("profile.json.bak"));
+                    }
+                    manifests.push(primary);
+                }
+                manifests.push(path.join(crate::mods::history::HISTORY_FILE));
+                manifests.push(path.join(crate::profiles::store::QUARANTINE_FILE));
+            } else if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                manifests.push(path);
+            }
+        }
+    }
+    let mut out = std::collections::BTreeSet::new();
+    for manifest in manifests {
+        if let Ok(text) = std::fs::read_to_string(&manifest) {
+            hex_runs_of_40(&text, &mut out);
+        }
+    }
+    out
+}
+
+/// Every maximal run of exactly 40 hex digits in `text`, lowercased.
+fn hex_runs_of_40(text: &str, out: &mut std::collections::BTreeSet<String>) {
+    let bytes = text.as_bytes();
+    let mut start = None;
+    for at in 0..=bytes.len() {
+        let hex = bytes.get(at).is_some_and(u8::is_ascii_hexdigit);
+        match (hex, start) {
+            (true, None) => start = Some(at),
+            (false, Some(from)) => {
+                if at - from == 40 {
+                    out.insert(text[from..at].to_ascii_lowercase());
+                }
+                start = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Whether a jar's `fabric.mod.json` names one of Fathom's own mods.
+fn is_first_party_jar(jar: &Path) -> bool {
+    let Ok(file) = std::fs::File::open(jar) else {
+        return false;
+    };
+    let Ok(mut archive) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let Ok(mut entry) = archive.by_name("fabric.mod.json") else {
+        return false;
+    };
+    let mut text = String::new();
+    if std::io::Read::read_to_string(&mut entry, &mut text).is_err() {
+        return false;
+    }
+    let Ok(document) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return false;
+    };
+    let Some(id) = document.get("id").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    ALL.iter().any(|component| {
+        component.mod_id == id
+            && matches!(
+                component.supply,
+                Supply::Bundled { .. } | Supply::PartOf { .. }
+            )
+    })
+}
+
+/// Drop the adoption memos that name removed hashes, so the memo directory
+/// does not keep growing alongside the store.
+fn forget_adoptions(store_root: &Path, removed: &[String]) {
+    let Ok(entries) = std::fs::read_dir(store_root.join(".adopted")) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let named = std::fs::read_to_string(entry.path())
+            .map(|recorded| recorded.trim().to_ascii_lowercase())
+            .unwrap_or_default();
+        if removed.contains(&named) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use crate::profiles::ProfileId;
+
+    #[test]
+    fn hashes_are_found_wherever_a_manifest_mentions_them() {
+        let mut found = std::collections::BTreeSet::new();
+        let a = "a".repeat(40);
+        let b = "B".repeat(40);
+        hex_runs_of_40(
+            &format!(
+                r#"{{"sha1":"{a}","x":"{b}","short":"abc","long":"{}"}}"#,
+                "c".repeat(41)
+            ),
+            &mut found,
+        );
+        assert!(found.contains(&a));
+        assert!(found.contains(&"b".repeat(40)));
+        assert_eq!(found.len(), 2, "a 41-digit run is not a hash");
+    }
+
+    fn jar_with_id(path: &Path, id: &str) {
+        let file = std::fs::File::create(path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+        writer.start_file("fabric.mod.json", options).unwrap();
+        // The file name goes in too, so jars with the same id differ in bytes.
+        let name = path.file_name().unwrap().to_string_lossy();
+        let body = format!(r#"{{"id":"{id}","built":"{name}"}}"#);
+        std::io::Write::write_all(&mut writer, body.as_bytes()).unwrap();
+        writer.finish().unwrap();
+    }
+
+    #[test]
+    fn only_unreferenced_first_party_jars_are_collected() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = DataPaths::rooted_at(dir.path());
+        paths.ensure().unwrap();
+        let engine = ModEngine::new(paths.clone());
+        let staging = dir.path().join("staging");
+        std::fs::create_dir_all(&staging).unwrap();
+
+        let adopt = |name: &str, id: &str| {
+            let jar = staging.join(name);
+            jar_with_id(&jar, id);
+            engine.store().adopt(&jar).unwrap().sha1
+        };
+        let old_client = adopt("old.jar", "fathom-optimizations");
+        let current_client = adopt("new.jar", "fathom-optimizations");
+        let users_mod = adopt("theirs.jar", "somebody-elses-mod");
+        let in_trash = adopt("trashed.jar", "fathom-optimizations");
+
+        let live = paths.profiles_dir().join("main");
+        std::fs::create_dir_all(&live).unwrap();
+        std::fs::write(
+            live.join("profile.json"),
+            format!(r#"{{"mods":[{{"sha1":"{current_client}"}}]}}"#),
+        )
+        .unwrap();
+        let deleted = paths.trash_dir().join("old-1791494837");
+        std::fs::create_dir_all(&deleted).unwrap();
+        std::fs::write(
+            deleted.join("profile.json"),
+            format!(r#"{{"mods":[{{"sha1":"{in_trash}"}}]}}"#),
+        )
+        .unwrap();
+
+        let removed = collect_superseded(&paths, &engine);
+        assert_eq!(
+            removed,
+            vec![old_client.clone()],
+            "only the superseded client jar goes"
+        );
+        assert!(!engine.store().contains(&old_client));
+        assert!(
+            engine.store().contains(&users_mod),
+            "a user's jar is never collected here"
+        );
+        assert!(
+            engine.store().contains(&in_trash),
+            "a deleted profile can still be restored"
+        );
+        assert!(engine.store().contains(&current_client));
+    }
 
     fn profile(kind: ProfileKind, loader: Loader) -> Profile {
         let mut profile = Profile::new(ProfileId::new("p").unwrap(), "P");
@@ -954,7 +1208,13 @@ mod tests {
     fn the_bridge_may_be_fetched_and_optifine_may_not() {
         let bridge = find("optifabric").expect("optifabric is in the registry");
         assert!(
-            matches!(bridge.supply, Supply::Managed { repository: "modrinth", .. }),
+            matches!(
+                bridge.supply,
+                Supply::Managed {
+                    repository: "modrinth",
+                    ..
+                }
+            ),
             "{:?}",
             bridge.supply
         );

@@ -55,7 +55,9 @@ fn read_bool(dirs: &ProfileDirs, wanted: &str) -> Option<bool> {
     let text = std::fs::read_to_string(file(dirs)).ok()?;
     text.lines().find_map(|line| {
         let (key, value) = line.split_once(':')?;
-        (key.trim() == wanted).then(|| value.trim().parse().ok()).flatten()
+        (key.trim() == wanted)
+            .then(|| value.trim().parse().ok())
+            .flatten()
     })
 }
 
@@ -72,7 +74,10 @@ pub fn set_render_regions(dirs: &ProfileDirs, on: bool) -> Result<bool, fs_safet
     let mut found = false;
     let mut rewritten = String::with_capacity(existing.len() + 24);
     for line in existing.lines() {
-        let key = line.split_once(':').map(|(key, _)| key.trim()).unwrap_or("");
+        let key = line
+            .split_once(':')
+            .map(|(key, _)| key.trim())
+            .unwrap_or("");
         if key == RENDER_REGIONS {
             found = true;
             rewritten.push_str(RENDER_REGIONS);
@@ -136,7 +141,10 @@ mod tests {
 
         assert!(set_render_regions(&dirs, true).unwrap());
         let after = std::fs::read_to_string(file(&dirs)).unwrap();
-        assert_eq!(after, "ofFogType:1\nofRenderRegions:true\nkey_of.key.zoom:46\nunknown line\n");
+        assert_eq!(
+            after,
+            "ofFogType:1\nofRenderRegions:true\nkey_of.key.zoom:46\nunknown line\n"
+        );
         assert_eq!(render_regions(&dirs), Some(true));
     }
 

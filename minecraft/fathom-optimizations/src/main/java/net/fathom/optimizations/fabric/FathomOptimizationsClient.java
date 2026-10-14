@@ -166,11 +166,24 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
                 if (widgetRenderer != null && !(widgetRenderer instanceof HudWidget)) {
                     return FathomApi.Result.BAD_WIDGET;
                 }
+                if (widgetRenderer != null) {
+                    HudWidget widget = (HudWidget) widgetRenderer;
+                    // Checked before anything is registered, so a refusal leaves nothing half-added.
+                    if (!feature.widgets().contains(widget.id()) || hud.registry().contains(widget.id())
+                            || hud.renderer(widget.id()) != null) {
+                        return FathomApi.Result.BAD_WIDGET;
+                    }
+                }
                 if (!features.register(feature)) {
                     return FathomApi.Result.DUPLICATE;
                 }
-                if (widgetRenderer != null && !hud.addRenderer((HudWidget) widgetRenderer)) {
+                if (widgetRenderer != null && !hud.addRenderer((HudWidget) widgetRenderer, feature, placement)) {
                     return FathomApi.Result.BAD_WIDGET;
+                }
+                // The live profile was applied before this mod registered; give
+                // the module, and its widget's place, what that profile says.
+                if (hud.profiles() != null) {
+                    hud.profiles().adopt(feature);
                 }
                 return FathomApi.Result.ACCEPTED;
             }
@@ -185,6 +198,8 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
         // was loaded and that Fathom completed client initialization. It is
         // deliberately after the registries, HUD and public API above.
         ClientMarker.write(gameDirectory, features.size());
+        // The launcher's live view of the session, when a launcher started it.
+        net.fathom.optimizations.fabric.diag.SessionPulse.start(gameDirectory, features);
 
         net.fathom.optimizations.core.module.ModuleLog.say(
                 "" + registry.size() + " optimizations registered, "
@@ -201,16 +216,36 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
         net.fathom.optimizations.fabric.diag.FramePerf.start();
     }
 
+    private static boolean reloadHookInstalled;
+
+    /**
+     * Install the reload hook once the game has a resource manager. Called at
+     * initialisation and then once a frame until it has taken: the client
+     * entrypoint can run before Minecraft creates its resource manager, and a
+     * hook that quietly declined then was never installed at all -- so a
+     * resource pack change left every widget's cached text width, and the
+     * renderer's textures, from the pack before.
+     */
+    public static void ensureReloadHook() {
+        if (!reloadHookInstalled) {
+            installRendererReloadHook();
+        }
+    }
+
     /** Recreate renderer-owned textures after a resource-pack reload. */
     private static void installRendererReloadHook() {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null || !(client.getResourceManager() instanceof ReloadableResourceManager)) {
+        if (reloadHookInstalled || client == null
+                || !(client.getResourceManager() instanceof ReloadableResourceManager)) {
             return;
         }
+        reloadHookInstalled = true;
+        System.out.println("[Fathom] resource reload hook installed");
         ((ReloadableResourceManager) client.getResourceManager()).registerListener(new ResourceReloadListener() {
             @Override
             public void reload(ResourceManager manager) {
                 net.fathom.optimizations.fabric.gfx.Gfx.dispose();
+                net.fathom.optimizations.fabric.hud.TextWidget.fontsReloaded();
                 net.fathom.optimizations.fabric.menu.FathomMenuScreen.disposeResources();
             }
         });

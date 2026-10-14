@@ -390,7 +390,10 @@ pub fn find(id: &str) -> Option<Optimization> {
 
 /// Described, not built: what the Performance page lists as planned work.
 pub fn planned() -> Vec<Optimization> {
-    all().into_iter().filter(|o| o.status == Status::Planned).collect()
+    all()
+        .into_iter()
+        .filter(|o| o.status == Status::Planned)
+        .collect()
 }
 
 /// How many optimizations are doing something right now.
@@ -556,9 +559,7 @@ mod tests {
     fn a_named_preset_outranks_a_stale_stored_false() {
         let measured = all()
             .iter()
-            .find(|o| {
-                o.is_actionable() && o.category == Category::Safe && o.evidence.is_some()
-            })
+            .find(|o| o.is_actionable() && o.category == Category::Safe && o.evidence.is_some())
             .copied()
             .expect("at least one measured, safe, active optimization");
 
@@ -650,7 +651,11 @@ mod tests {
     #[test]
     fn the_registry_file_is_read_whole() {
         let declared = REGISTRY_JSON.matches("\"id\":").count();
-        assert_eq!(game().len(), declared, "an entry in registry.json was not read");
+        assert_eq!(
+            game().len(),
+            declared,
+            "an entry in registry.json was not read"
+        );
         assert!(!game().is_empty());
         for optimization in game() {
             assert_eq!(optimization.surface, Surface::Game, "{}", optimization.id);

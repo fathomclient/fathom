@@ -219,7 +219,7 @@ entire network-side model, which is what this subsystem is for.
 
 ## 7. Artifacts: hash-bound rather than individually signed
 
-The brief allows "signed **or** hash-bound artifacts". We hash-bind, and the
+The spec allows "signed **or** hash-bound artifacts". We hash-bind, and the
 reason is worth stating: a SHA-256 inside a signed document is exactly as strong
 as a signature on the artifact, and it is **cheaper to verify and harder to get
 wrong**. One signature check covers every artifact in the release, and there is

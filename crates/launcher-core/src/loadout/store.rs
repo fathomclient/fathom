@@ -149,7 +149,14 @@ impl ProfileStore {
 
     fn read_file(path: &Path) -> Result<FathomProfile, String> {
         let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-        let profile: FathomProfile = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let mut profile: FathomProfile =
+            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        // Repaired in memory, not refused: one bad widget number is not worth
+        // every setting in the file. The file itself is left as it is until
+        // the next save writes the repaired values.
+        for line in profile.repair() {
+            tracing::warn!(path = %path.display(), "{line}");
+        }
         profile.validate().map_err(|e| e.to_string())?;
         // The filename is the identity. A document whose `id` disagrees with the
         // file it is in was renamed by hand, and trusting the field would give
@@ -342,11 +349,14 @@ impl ProfileStore {
     /// "default" must not overwrite their own, and an import that silently
     /// replaced a profile would be a data-loss bug that looks like a feature.
     pub fn import(&self, json: &str) -> Result<FathomProfile, StoreError> {
-        let incoming: FathomProfile =
+        let mut incoming: FathomProfile =
             serde_json::from_str(json).map_err(|source| StoreError::Parse {
                 path: self.dir.join("<import>"),
                 source,
             })?;
+        for line in incoming.repair() {
+            tracing::warn!("import: {line}");
+        }
         incoming.validate()?;
         let taken = self.ids();
         let id = ProfileId::from_display_name(&incoming.name, &taken)
@@ -453,6 +463,38 @@ mod tests {
         assert_eq!(store.list().profiles.len(), 1, "no Default was invented");
         // And the pointer was repaired rather than left dangling.
         assert_eq!(store.last_profile_id().unwrap(), live.id);
+    }
+
+    #[test]
+    fn a_profile_with_one_bad_widget_value_still_loads() {
+        let (guard, store) = store();
+        let created = store.create("Mine").unwrap();
+        let path = guard
+            .path()
+            .join("profiles")
+            .join(format!("{}.json", created.id.as_str()));
+        std::fs::write(
+            &path,
+            format!(
+                r#"{{"schema":1,"id":"{}","name":"Mine","modules":{{"cps":{{"enabled":true}}}},
+                "hud":{{"cps":{{"anchor":"top-right","x":9,"y":50,"scale":0,"opacity":3}}}}}}"#,
+                created.id.as_str()
+            ),
+        )
+        .unwrap();
+        let loaded = store.load(&created.id).unwrap();
+        assert_eq!(
+            loaded.modules["cps"].enabled,
+            Some(true),
+            "the rest of the profile is there"
+        );
+        let cps = &loaded.hud["cps"];
+        assert_eq!((cps.x, cps.y), (9, 50));
+        assert!((cps.scale - 1.0).abs() < f32::EPSILON && (cps.opacity - 1.0).abs() < f32::EPSILON);
+        assert!(
+            store.list().profiles.iter().any(|p| p.id == created.id),
+            "and it is listed"
+        );
     }
 
     #[test]

@@ -1,90 +1,147 @@
-# Mod browser (backend)
+# Mod browser
 
-One catalogue over Modrinth and CurseForge, in `crates/launcher-core/src/mods/browse/`.
-This document covers the domain layer; the interface is not wired to it yet (see the last
-section).
+(What happens to a mod once it is installed — updates, earlier builds, safe launches and
+recovery — is in `docs/mod-management.md`.)
+
+Find third-party mods for a profile, see whether they will load, and install them, without
+downloading or moving jars by hand. The backend is `crates/launcher-core/src/mods/browse/`; the
+desktop commands are `crates/launcher-desktop/src/api/browse.rs`; the interface is the **Browse**
+tab of the Mods page (`desktop/src/routes/mods/`).
 
 ## Layers
 
 ```
-interface ─► Launcher (services.rs) ─► ModCatalog (browse/mod.rs)
-                                          ├─ CatalogProvider: ModrinthProvider, CurseForgeProvider
-                                          ├─ CatalogCache (search / projects / files in memory, images on disk)
-                                          ├─ dependencies::plan ─► InstallPlan
-                                          └─ install::Installer ─► ModStore + ProfileModConfiguration
+Browse tab (Svelte) ─► catalog_* commands (async, on workers, outside the launcher lock)
+                         └─► ModCatalog (browse/mod.rs)
+                               ├─ CatalogProvider: ModrinthProvider, CurseForgeProvider  (+ Throttle each)
+                               ├─ compat: the compatibility resolver (verdict + reasons per build)
+                               ├─ CatalogCache (search / projects / files in memory, images on disk)
+                               ├─ dependencies::plan ─► InstallPlan (blockers, unverified, optional)
+                               └─ install::Installer ─► ModStore + ProfileModConfiguration
 ```
 
 Nothing outside `browse/modrinth.rs` and `browse/curseforge.rs` sees a provider's wire types.
-The rest of Fathom sees `ModProject`, `ModFile`, `CatalogEntry`, `InstallPlan` and, once
-installed, an ordinary `ProfileMod`. There is no second mod system: the browser writes the same
-profile records, into the same content-addressed store, that materialize and launch already use.
+Installed mods are ordinary `ProfileMod` records in the same content-addressed store that
+materialize and launch already use; there is no second mod system.
 
-| File | Responsibility |
+| Concern | Where |
 |---|---|
-| `model.rs` | Unified model, limits on remote data, `safe_file_name`, `Target`, `InstallState` |
-| `provider.rs` | `CatalogProvider` trait, `SearchQuery`, `BrowseError` (structured, serialisable) |
-| `modrinth.rs` | Adapter over the existing `mods::modrinth` client |
-| `curseforge.rs` | CurseForge Core API client, key configuration, distribution flag |
-| `cache.rs` | TTL + size-bounded caches; disk image cache with a byte ceiling |
-| `search.rs` | Debounce, cancel-previous, stale-result dropping |
-| `identity.rs` | Cross-provider duplicate detection and merging |
-| `dependencies.rs` | Recursive dependency planning |
-| `install.rs` | Stage → verify → record; update rollback; dependency-safe uninstall |
+| Provider API clients | `mods/modrinth.rs` (wire), `browse/modrinth.rs`, `browse/curseforge.rs` |
+| Request pacing | `browse/throttle.rs` |
+| Discovery data model | `browse/model.rs`, `browse/provider.rs` |
+| Compatibility resolution | `browse/compat.rs` |
+| Dependency planning | `browse/dependencies.rs` |
+| Download / install | `browse/install.rs` over `install::download::DownloadManager` and `ModStore` |
+| Persistent mod state | `ProfileModConfiguration` in the profile (unchanged) |
+| Desktop commands | `launcher-desktop/src/api/browse.rs`, registered in `commands.rs` |
+| Interface | `routes/mods/Browse.svelte`, `CatalogDetail.svelte`, `InstallSheet.svelte`, `lib/richtext.ts` |
 
-## CurseForge configuration
+## Compatibility
 
-CurseForge requires an API key. Fathom does not ship one. The user supplies their own, either:
+Fathom runs Minecraft 1.8.9 on Legacy Fabric (loader 0.19.3). The resolver answers, for each
+*build*, one of three verdicts with the reasons behind it:
 
-- in `curseforge-api-key.txt` in Fathom's data directory, or
-- in the `FATHOM_CURSEFORGE_API_KEY` environment variable (takes precedence).
+| Verdict | When | Install |
+|---|---|---|
+| **Compatible** | Tagged `legacy-fabric` for 1.8.9, nothing it requires contradicts that | Yes |
+| **Unverified** | Nothing rules it out, nothing proves it: chiefly a 1.8.9 build tagged plain `fabric` (Modrinth had no `legacy-fabric` tag before 2023; CurseForge has none at all), or a build that states no loader or no version | Only after the user ticks "Install anyway" |
+| **Incompatible** | Another Minecraft version; Forge, NeoForge, Quilt-only, Ornithe, Babric; requires Ornithe Standard Libraries or modern Fabric API; or a project Fathom manages itself (Legacy OptiFabric) | Never |
 
-A key containing whitespace or control characters, or longer than 256 bytes, is rejected (it
-would otherwise be able to forge an HTTP header). The key is held as a `Secret` and never
-logged. Without a key, CurseForge reports `NotConfigured` in every search status, makes no
-requests, and Modrinth works as normal.
+Evidence is the index's metadata for the file (game versions, loader tags, declared
+dependencies) plus a short table of projects checked by hand (`compat::KNOWN`). The jar is never
+opened to ask it (`mods/mod.rs` rule 6), so a mod's `fabric.mod.json` requirements, notably the
+Fabric Loader version it demands, are not known before launch. The launch-time resolver remains
+the last word.
 
-Projects whose authors have turned off third-party distribution come back with
-`FileDownload::Withheld { where_to_get }`. They can be browsed; they cannot be installed, and
-nothing tries to work around that (`research/mod-policies.md` §7).
+A project's verdict is the best of its builds. Search hits are only candidates: index facets are
+project-wide, so a project with Legacy Fabric builds for 1.12 and Forge builds for 1.8.9 matches a
+"Legacy Fabric + 1.8.9" search. Every card therefore starts as **Checking** and is resolved by
+reading the project's real version list (`catalog_verdicts`, a few cards at a time).
 
-## Guarantees and where they are enforced
+The **compatibility filter** decides what is asked of the index and what is shown:
 
-| Guarantee | Enforced in |
-|---|---|
-| Results default to the profile's Minecraft version and loader | `SearchQuery::new(Target::of(profile))` |
-| Incompatible files are refused at install whatever search said | `ModFile::supports` in `dependencies::plan` **and** `Installer::validate`; `ModCatalog::files` also filters provider output |
-| No half-written jar anywhere | `DownloadManager` writes `.partial`, hashes, renames; materialize now copies to `.partial` then renames |
-| Only verified bytes are recorded | Every file is fetched and SHA-1-verified, and must start with `PK`, before the profile changes |
-| Profile isolation | Installs change `profile.mods`; files reach disk only via materialize into that profile's `ProfileDirs` |
-| No silent optional dependencies | Optional deps are listed in `InstallPlan::optional`; installed only if named in `chosen_optional` |
-| No duplicates | Same hash / same project → blocker; probable cross-index duplicate → `possible_duplicate`, install refused until `accept_possible_duplicates` |
-| Never two versions active | An update reuses the entry's `ModId`; the report carries the old entry for `install::rollback` |
-| Shared dependencies survive uninstall | `Origin::requires` records resolved dependencies; `plan_uninstall` lists `needed_by` and refuses |
-| One provider failing never breaks browsing | `ModCatalog::search` returns per-provider `ProviderStatus` |
-| Consent | Every call needs a `PerActionGrant`; the HTTP client enforces the allowlist and the Privacy switch per request |
+| Filter | Asked for | Shown |
+|---|---|---|
+| Verified Legacy Fabric | `legacy-fabric` + 1.8.9 | compatible (and still checking) |
+| Include unverified (default) | (`legacy-fabric` or `fabric`) + 1.8.9 | everything except incompatible |
+| All 1.8.9 mods | 1.8.9, any loader | everything, incompatible ones marked with the reason |
 
-Remote data is clipped (`model::limits`), slugs are reduced to slug characters, links must be
-HTTPS, image and download URLs must be on the compile-time allowlist, file names must be plain
-`.jar` names (no separators, `..`, leading dots or Windows device names), and ids are validated
-before they become URL path segments. Downloaded files are never opened beyond the two-byte zip
-check, never unpacked and never executed.
+Verified against live Modrinth on 2026-10-12 (`tests/live_catalog.rs`): ksyxis and AxolotlClient
+(its 3.0.6 Legacy Fabric build, ahead of newer Ornithe builds) are compatible, yosbr is
+unverified, Chatting (Forge/Ornithe) and EntityCulling (Forge) are incompatible.
 
-## Threading
+## Installing
 
-Every `ModCatalog` / `Launcher` browser method that takes a `Cancel` blocks on network or disk
-and must run on a worker thread. `ModCatalog` is `Clone + Send + Sync`; clones share caches and
-in-flight state. `SearchCoordinator` gives a search box debounce and stale-result dropping.
+Install always opens a sheet with a **plan** first: the build chosen, every required dependency
+(recursively), what the profile already has, optional extras (never ticked for the user),
+blockers, unverified builds and possible duplicates. The plan is rebuilt in Rust when Install is
+pressed, and the installer re-checks every verdict, so nothing the interface holds is trusted.
 
-## Launcher entry points
+The install runs in two passes so the launcher lock is never held across the network:
 
-`mod_catalog`, `search_mod_catalog`, `mod_catalog_entry`, `plan_mod_install`, `plan_mod_update`,
-`mod_catalog_updates`, `install_mod_plan`, `plan_mod_uninstall`, `uninstall_mod`.
-`install_mod_from_repository` now goes through the same planner and installer.
+1. **Fetch**, on a worker, against a copy of the profile: every file downloaded into the store
+   and SHA-1-verified, progress sent as `fathom://mod-install` events. Cancellable.
+2. **Record**, under the lock, against the profile as it is now: the plan is re-validated and
+   applied (every file is already in the store), and the profile is saved, or rolled back if the
+   save fails.
+
+Updates are the same plan with `replacing` set; the entry keeps its id, its enabled state, and
+the old bytes stay in the store until garbage collection. Removal refuses while another installed
+mod requires it.
+
+## Network behaviour
+
+- Off until **Allow mod repositories** is switched on (Privacy, or the button on the Browse tab).
+  Every request also needs a `PerActionGrant` from the user's action.
+- Search is debounced 300 ms; a new search cancels the previous one down to the HTTP request, and
+  stale answers are dropped.
+- Each provider has one `Throttle`: Modrinth a burst of 12 then 2.5 requests/s (half its published
+  300/min); CurseForge 8 then 2/s. A 429 pauses every request to that index for its `Retry-After`
+  or `X-Ratelimit-Reset`; a search will not wait more than 3 s and says so instead.
+- Metadata requests time out after 20 s (downloads keep the 300 s budget).
+- Pages of 24, loaded as the list scrolls; caches: search 3 min, projects 15 min, version lists
+  10 min, images 14 days on disk (64 MB ceiling).
+- User-Agent `fathomclient/fathom/<version>`, as Modrinth's API documentation asks.
+
+## Safety of remote content
+
+Remote data is clipped (`model::limits`); slugs and ids are validated before they become URL path
+segments; download and image URLs must be HTTPS on the compile-time allowlist; file names must be
+plain `.jar` names. Descriptions (Markdown on Modrinth, HTML on CurseForge) are parsed by
+`lib/richtext.ts` into a small tree rendered with ordinary elements — never `{@html}` — so a
+description cannot create an element, attribute or script. Images are fetched by Rust and shown as
+`data:` URLs (PNG, JPEG, GIF, WebP only). A link in a description is opened only if that exact URL
+is in the description Rust fetched, and every external link passes `pages::external_url`.
+
+## CurseForge
+
+The provider is implemented (search, project, files, dependencies, the third-party distribution
+flag honoured as `FileDownload::Withheld`), but it is **off** unless an API key is configured, via
+`FATHOM_CURSEFORGE_API_KEY` or `curseforge-api-key.txt` in the data directory. Fathom ships no key.
+
+Blocker, as of 2026-10-12: CurseForge issues API keys to third-party applications through an
+application form, and Fathom has not been issued one. The CurseForge for Studios terms restrict
+providing the platform to third parties, and whether a launcher may embed its key, or let users
+supply their own, is governed by CurseForge's third-party API terms, which need reading before any
+build enables it by default. Even with a key, CurseForge has no Legacy Fabric loader tag, so every
+1.8.9 Fabric build there is **Unverified**, and category filtering is Modrinth-only.
+
+## Not supported
+
+- Judging a mod by its jar's `fabric.mod.json` (Fabric Loader version, entrypoints): by design.
+- Libraries that do not list 1.8.9 (for example Fabric Language Kotlin): the planner blocks mods
+  that require them rather than guess.
+- Resource packs, shaders and modpacks: mods only.
+- Forge profiles: the resolver supports a Forge target, but Fathom has no Forge profile yet.
 
 ## Tests
 
-- Unit tests in each `browse/*.rs` (planner, installer, catalogue, providers' parsing).
-- `crates/launcher-core/tests/mod_browser.rs`: profile isolation, update leaves one version,
-  shared-dependency uninstall, Privacy switch.
-- Live, ignored by default: `cargo test -p launcher-core -- --ignored catalog_live`
-  (CurseForge part runs only with `FATHOM_CURSEFORGE_API_KEY` set).
+- Unit: `browse/compat.rs` (verdict rules), `browse/throttle.rs`, `browse/install.rs` (consent:
+  unverified needs it, incompatible ignores it), planner, providers' parsing.
+- `crates/launcher-core/tests/mod_browser.rs`: profile isolation, updates, shared dependencies,
+  Privacy switch.
+- Live, ignored by default:
+  `cargo test -p launcher-core --test live_catalog -- --ignored --nocapture`
+  (search and paging, real verdicts, real dependency planning, categories).
+- Description parser: `npm test` in `desktop/` (hostile HTML, links, Markdown structure).
+- Desktop: `cargo test -p launcher-desktop` (image sniffing, link validation).

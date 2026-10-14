@@ -1,8 +1,8 @@
 <!--
   The loading screen, while the launcher gathers what Home needs.
 
-  It continues the static splash in `index.html` exactly -- same field, same
-  wordmark, same sweeping line -- so the hand-over from HTML to Svelte is
+  It continues the static splash in `index.html` exactly -- the icon's ground
+  and halo, the same mark and wordmark, the same sweeping line -- so the hand-over from HTML to Svelte is
   invisible, and adds one line saying what is still being waited for. That
   line names the slowest thing still outstanding, not a script of fake steps:
   if Java is being looked for, it says so.
@@ -13,6 +13,10 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import Wordmark from '../brand/Wordmark.svelte';
+  import OrbitMark from '../brand/OrbitMark.svelte';
+  import { BRAND } from '../brand/brand.generated';
+
+  const ASCENDER = 18;
 
   /** What is still being loaded, most important first. Empty when done. */
   export let pending: string[] = [];
@@ -24,7 +28,10 @@
 {#if visible}
   <div class="loading" role="status" aria-live="polite" out:fade={{ duration: 260 }}>
     <div class="mark">
-      <Wordmark height={18} />
+      <div class="lockup">
+        <OrbitMark height={ASCENDER * BRAND.stackedMark} halo decorative />
+        <Wordmark height={ASCENDER} />
+      </div>
       <div class="line" aria-hidden="true"></div>
       <p class="step">{step}</p>
     </div>
@@ -39,7 +46,9 @@
     z-index: 900;
     display: grid;
     place-items: center;
-    background: linear-gradient(180deg, #172630 0%, #0d181e 56%, #071015 100%);
+    background:
+      radial-gradient(ellipse 460px 340px at 50% 47%, rgba(76, 154, 251, 0.1), rgba(76, 154, 251, 0) 70%),
+      linear-gradient(180deg, var(--brand-tile-top) 0%, var(--brand-tile-mid) 48%, var(--brand-tile-bottom) 100%);
     color: var(--color-text);
   }
 
@@ -49,8 +58,10 @@
     gap: 22px;
   }
 
-  .mark :global(svg) {
-    opacity: 0.94;
+  .lockup {
+    display: grid;
+    justify-items: center;
+    gap: calc(18px * var(--brand-stacked-gap));
   }
 
   .line {
@@ -59,7 +70,7 @@
     height: 2px;
     overflow: hidden;
     border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(165, 214, 255, 0.12);
   }
 
   .line::after {
@@ -68,7 +79,7 @@
     inset: 0;
     width: 40%;
     border-radius: inherit;
-    background: rgba(237, 237, 237, 0.78);
+    background: linear-gradient(90deg, rgba(91, 156, 235, 0), var(--brand-orbit-light) 60%, var(--brand-orbit-tip));
     animation: sweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
 

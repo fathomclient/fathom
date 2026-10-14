@@ -19,6 +19,7 @@ import net.fathom.optimizations.core.module.ModuleStore;
 import net.fathom.optimizations.core.module.FathomModule;
 import net.fathom.optimizations.core.module.HudStyle;
 import net.fathom.optimizations.core.module.Keybind;
+import net.fathom.optimizations.core.hud.HudFlow;
 import net.fathom.optimizations.core.hud.HudLayout;
 import net.fathom.optimizations.core.hud.HudRegistry;
 import net.fathom.optimizations.core.hud.Placement;
@@ -48,7 +49,7 @@ import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
  * on screen, and the bug is invisible until somebody complains that a widget is hard to
  * grab.
  */
-public final class FathomHud {
+public final class FathomHud implements net.fathom.optimizations.core.profile.ProfileHost {
 
     private final HudRegistry registry = HudRegistry.standard();
     private final ClickTracker clicks = new ClickTracker();
@@ -72,10 +73,28 @@ public final class FathomHud {
      * for one reason: a feature can be switched off, and switching off the only
      * way to open the menu is a state nobody should be able to reach.
      */
-    private final Keybind hubKey = new Keybind("hub", "Open Fathom Hub", 54);
+    private final Keybind hubKey = new Keybind("hub", "Open Fathom Hub", 54).withoutPrimaryButtons();
 
     private HudLayout layout;
     private final ClientPrefs prefs = new ClientPrefs();
+
+    /**
+     * The widget the editor is dragging, or null. It is drawn exactly where the
+     * pointer puts it -- the others still move off it -- so a drag never fights
+     * the pointer. See {@link HudFlow}.
+     */
+    private String pinned;
+
+    /** {@link HudFlow}'s arrays, grown when a widget is added and otherwise reused. */
+    private int[] flowX = new int[16];
+    private int[] flowY = new int[16];
+    /** Where each widget was before the flow moved it, for the editor's note. */
+    private int[] flowNaturalY = new int[16];
+    private int[] flowW = new int[16];
+    private int[] flowH = new int[16];
+    private int[] flowDirection = new int[16];
+    private int[] flowOrder = new int[16];
+    private boolean[] flowFixed = new boolean[16];
 
     /** The live Fathom Profile and its collection. Null until startup attaches it. */
     private net.fathom.optimizations.fabric.profile.ProfileRuntime profiles;
@@ -186,7 +205,29 @@ public final class FathomHud {
      *     replacing a widget somebody else is drawing.
      */
     public boolean addRenderer(HudWidget renderer) {
-        if (renderer == null || renderers.containsKey(renderer.id())) {
+        return addRenderer(renderer, null, null);
+    }
+
+    /**
+     * Register a widget renderer supplied through the public API, and the
+     * widget it draws, so the HUD draws it and the editor can move it.
+     *
+     * @param owner the module whose switch shows and hides it; it must name the
+     *     widget, or the widget would have no switch
+     * @param where where it starts, or null for the top-left corner
+     */
+    public boolean addRenderer(HudWidget renderer, FathomModule owner, Placement where) {
+        if (renderer == null || renderers.containsKey(renderer.id()) || registry.contains(renderer.id())) {
+            return false;
+        }
+        if (owner != null && !owner.widgets().contains(renderer.id())) {
+            return false;
+        }
+        Placement start = where == null ? Placement.at(net.fathom.optimizations.core.hud.Anchor.TOP_LEFT, 4, 4) : where;
+        String name = owner == null ? renderer.id() : owner.name();
+        String summary = owner == null || owner.description().isEmpty() ? renderer.placeholder() : owner.description();
+        if (!registry.add(Widget.of(renderer.id(), name, summary, HudRegistry.CATEGORY_MODS,
+                owner == null ? net.fathom.optimizations.core.hud.Sensitivity.SAFE : owner.sensitivity(), start))) {
             return false;
         }
         renderers.put(renderer.id(), renderer);
@@ -281,6 +322,11 @@ public final class FathomHud {
         return features.owningWidget(widgetId);
     }
 
+    /** Hold one widget exactly where it is placed while the editor drags it; null lets go. */
+    public void pin(String widgetId) {
+        pinned = widgetId;
+    }
+
     /** Put everything back where the registry says it belongs. */
     public void resetLayout() {
         String kept = layout.name();
@@ -349,6 +395,9 @@ public final class FathomHud {
         // typeface decision about text that is never drawn.
         drawing.clear();
         int drawableCursor = 0;
+        boolean debugOpen = client.options != null && client.options.debugEnabled;
+        boolean menuOpen = client.currentScreen != null
+                && !(client.currentScreen instanceof net.minecraft.client.gui.screen.ChatScreen);
         for (Widget widget : registry.all()) {
             HudWidget renderer = renderers.get(widget.id());
             if (renderer == null) {
@@ -371,6 +420,14 @@ public final class FathomHud {
             if (!editing && !renderer.visible(client)) {
                 continue;
             }
+            if (!editing && HudStyle.hiddenBy(features.owningWidget(widget.id()), debugOpen, menuOpen)) {
+                continue;
+            }
+            // In game the crosshair is drawn where vanilla draws its own, by
+            // renderCrosshair; the editor draws it here with everything else.
+            if (!editing && CROSSHAIR.equals(widget.id())) {
+                continue;
+            }
             Drawable drawable;
             if (drawableCursor == drawablePool.size()) {
                 drawable = new Drawable();
@@ -380,12 +437,13 @@ public final class FathomHud {
             }
             drawableCursor++;
             drawing.add(drawable.set(
-                    renderer, placement(widget.id()), features.owningWidget(widget.id())));
+                    renderer, placement(widget.id()), features.owningWidget(widget.id()), client));
         }
 
         if (ViewProbe.REQUESTED) ViewProbe.exit(ViewSection.FATHOM_HUD_DECIDE);
         if (!drawing.isEmpty()) {
             HudFont minecraftFont = HudFonts.vanilla(vanilla);
+            arrange(client, minecraftFont, vanilla, screenWidth, screenHeight);
 
             // Minecraft-font widgets stay entirely on Minecraft's renderer. In
             // the fresh/default configuration that is every textual widget, so
@@ -405,8 +463,7 @@ public final class FathomHud {
                         for (int index = 0; index < drawing.size(); index++) {
                             Drawable each = drawing.get(index);
                             if (!usesFathom(each.owner) && layered(each)) {
-                                drawOne(client, minecraftFont, each.renderer, each.placement,
-                                        screenWidth, screenHeight, false);
+                                drawOne(client, minecraftFont, each, false);
                             }
                         }
                     } finally {
@@ -425,8 +482,7 @@ public final class FathomHud {
                     for (int index = 0; index < drawing.size(); index++) {
                         Drawable each = drawing.get(index);
                         if (each.steady) {
-                            drawOne(client, minecraftFont, each.renderer, each.placement,
-                                    screenWidth, screenHeight, false);
+                            drawOne(client, minecraftFont, each, false);
                         }
                     }
                 } finally {
@@ -436,8 +492,7 @@ public final class FathomHud {
             for (int index = 0; index < drawing.size(); index++) {
                 Drawable each = drawing.get(index);
                 if (!usesFathom(each.owner) && !(cached && layered(each)) && !(steady != 0L && each.steady)) {
-                    drawOne(client, minecraftFont, each.renderer, each.placement,
-                            screenWidth, screenHeight, editing);
+                    drawOne(client, minecraftFont, each, editing);
                 }
             }
 
@@ -459,8 +514,7 @@ public final class FathomHud {
                     for (int index = 0; index < drawing.size(); index++) {
                         Drawable each = drawing.get(index);
                         if (usesFathom(each.owner)) {
-                            drawOne(client, fathom, each.renderer, each.placement,
-                                    screenWidth, screenHeight, editing);
+                            drawOne(client, fathom, each, editing);
                         }
                     }
                 }
@@ -473,9 +527,62 @@ public final class FathomHud {
                 net.fathom.optimizations.core.instrument.Probe.Section.HUD, probe);
     }
 
+    private static final String CROSSHAIR = "crosshair";
+
+    /** How many widgets the last in-game pass drew. For the self-test. */
+    public int drawnLastFrame() {
+        return drawing.size();
+    }
+
+    /**
+     * Draw the crosshair widget on its own, at the point in vanilla's HUD where
+     * vanilla's crosshair goes.
+     *
+     * @return whether anything was drawn, so the caller knows to restore state
+     */
+    public boolean renderCrosshair(MinecraftClient client) {
+        HudWidget renderer = renderers.get(CROSSHAIR);
+        TextRenderer vanilla = client.textRenderer;
+        if (renderer == null || vanilla == null || !features.widgetAllowed(CROSSHAIR) || !renderer.visible(client)) {
+            return false;
+        }
+        MinecraftGuiSize viewport = MinecraftGuiSize.get(client);
+        HudFont font = HudFonts.vanilla(vanilla);
+        Placement placement = placement(CROSSHAIR);
+        // The crosshair takes no part in the flow: it is where the game aims.
+        locate(client, font, renderer, placement, viewport.width(), viewport.height());
+        float x = locatedX;
+        float y = locatedY;
+        if (placement.anchor() == net.fathom.optimizations.core.hud.Anchor.CENTER) {
+            int factor = viewport.scaleFactor();
+            x = centredOnPixels(client.width, locatedWidth, placement.offsetX(), factor);
+            y = centredOnPixels(client.height, locatedHeight, placement.offsetY(), factor);
+        }
+        drawOne(client, font, renderer, placement, x, y, false);
+        return true;
+    }
+
+    /**
+     * Where a centred crosshair's left (or top) edge goes, in GUI units, so its
+     * middle is on the screen's middle to within half a screen pixel.
+     *
+     * <p>Laid out in whole GUI pixels, as every other widget is, a centred box
+     * is off by up to half a GUI pixel -- and the GUI width itself is rounded
+     * up from a fraction (1366 / 3 is 455.33, drawn as 456). Together that put
+     * the crosshair up to two and a half screen pixels from where the game
+     * aims; vanilla's own crosshair has the same error. This places the edge on
+     * a whole screen pixel nearest the exact centre instead, and the projection
+     * GUI drawing uses spans the window exactly, so one GUI unit is exactly
+     * {@code factor} screen pixels.
+     */
+    static float centredOnPixels(int screenPixels, int guiSize, int guiOffset, int factor) {
+        float edge = screenPixels / 2f - guiSize * factor / 2f + guiOffset * factor;
+        return Math.round(edge) / (float) factor;
+    }
+
     /** Whether a drawable belongs in the cached layer rather than the realtime pass. */
-    private static boolean layered(Drawable each) {
-        return net.fathom.optimizations.fabric.perf.HudLayerCache.cacheable(each.renderer.id());
+    private boolean layered(Drawable each) {
+        return each.layered;
     }
 
     /**
@@ -495,6 +602,10 @@ public final class FathomHud {
             members++;
             hash = (hash ^ System.identityHashCode(each.renderer)) * 0x100000001b3L;
             hash = (hash ^ System.identityHashCode(each.placement)) * 0x100000001b3L;
+            // Where the flow put it, which the placement alone does not say:
+            // a widget above it that grew moves it without its placement changing.
+            hash = (hash ^ each.x) * 0x100000001b3L;
+            hash = (hash ^ each.y) * 0x100000001b3L;
         }
         if (members == 0) {
             return 0L;
@@ -505,7 +616,6 @@ public final class FathomHud {
         hash = (hash ^ client.height) * 0x100000001b3L;
         hash = (hash ^ System.identityHashCode(layout)) * 0x100000001b3L;
         hash = (hash ^ net.fathom.optimizations.core.module.Setting.revision()) * 0x100000001b3L;
-        hash = (hash ^ Float.floatToIntBits(interfaceScale())) * 0x100000001b3L;
         return hash == 0L ? 1L : hash;
     }
 
@@ -537,6 +647,8 @@ public final class FathomHud {
             hash = (hash ^ System.identityHashCode(each.renderer)) * 0x100000001b3L;
             hash = (hash ^ System.identityHashCode(each.placement)) * 0x100000001b3L;
             hash = (hash ^ content) * 0x100000001b3L;
+            hash = (hash ^ each.x) * 0x100000001b3L;
+            hash = (hash ^ each.y) * 0x100000001b3L;
             hash = (hash ^ each.renderer.width(client, font)) * 0x100000001b3L;
             hash = (hash ^ each.renderer.height(client, font)) * 0x100000001b3L;
         }
@@ -549,7 +661,6 @@ public final class FathomHud {
         hash = (hash ^ client.height) * 0x100000001b3L;
         hash = (hash ^ System.identityHashCode(layout)) * 0x100000001b3L;
         hash = (hash ^ net.fathom.optimizations.core.module.Setting.revision()) * 0x100000001b3L;
-        hash = (hash ^ Float.floatToIntBits(interfaceScale())) * 0x100000001b3L;
         return hash == 0L ? 1L : hash;
     }
 
@@ -560,12 +671,19 @@ public final class FathomHud {
         FathomModule owner;
         /** In this frame's steady set: replayed or recorded, not drawn live. */
         boolean steady;
+        /** In this frame's cached layer: slow-changing, and not animating right now. */
+        boolean layered;
+        /** Where it is drawn this frame, after {@link HudFlow}: Minecraft's scaled pixels. */
+        int x;
+        int y;
 
-        Drawable set(HudWidget renderer, Placement placement, FathomModule owner) {
+        Drawable set(HudWidget renderer, Placement placement, FathomModule owner, MinecraftClient client) {
             this.renderer = renderer;
             this.placement = placement;
             this.owner = owner;
             this.steady = false;
+            this.layered = net.fathom.optimizations.fabric.perf.HudLayerCache.cacheable(renderer.id())
+                    && !renderer.animating(client);
             return this;
         }
     }
@@ -627,17 +745,24 @@ public final class FathomHud {
                 / Math.max(0.0001f, renderer.scale());
     }
 
+    private void drawOne(MinecraftClient client, HudFont font, Drawable each, boolean editing) {
+        // Told its edge again: arrange() measured every widget before any was
+        // drawn, and the last one measured is not necessarily this one.
+        each.renderer.align(each.placement.anchor().horizontal());
+        drawOne(client, font, each.renderer, each.placement, each.x, each.y, editing);
+    }
+
     private void drawOne(
             MinecraftClient client,
             HudFont font,
             HudWidget renderer,
             Placement placement,
-            int screenWidth,
-            int screenHeight,
+            float boxX,
+            float boxY,
             boolean editing) {
         long profiled = WidgetProfile.start();
-        Snap.Box box = box(client, font, renderer, placement, screenWidth, screenHeight);
-        float scale = placement.scale() * interfaceScale();
+        long allocation = net.fathom.optimizations.fabric.diag.ModuleSelfTest.allocationMark();
+        float scale = placement.scale();
 
         GlStateManager.pushMatrix();
         // Scale about the widget's own top-left rather than the screen origin, so
@@ -648,20 +773,20 @@ public final class FathomHud {
         // driver's state to be, and a raw call desyncs the cache. See the note
         // on `Surface` -- this exact mistake made every translucent quad in the
         // client vanish from the second frame onwards.
-        GlStateManager.translate(box.x, box.y, 0f);
+        GlStateManager.translate(boxX, boxY, 0f);
         GlStateManager.scale(scale, scale, 1f);
         Renderer activeUi = Gfx.activeRenderer();
         boolean sdfTransform = activeUi instanceof SdfRenderer;
         if (sdfTransform) {
-            float logical = mcToLogical(client, screenWidth, activeUi);
-            activeUi.pushTransform(box.x * logical, box.y * logical, scale, 0f, 0f);
+            float logical = mcToLogical(client, MinecraftGuiSize.get(client).width(), activeUi);
+            activeUi.pushTransform(boxX * logical, boxY * logical, scale, 0f, 0f);
         }
         GlStateManager.enableBlend();
         try {
             if (renderer.visible(client)) {
                 renderer.draw(client, font, 0, 0, placement.alpha());
             } else if (editing) {
-                drawPlaceholder(font, renderer, placement.alpha());
+                drawPreview(font, renderer, features.owningWidget(renderer.id()), placement.alpha());
             }
         } finally {
             // Submitted under this widget's matrix, while it is still current.
@@ -676,23 +801,52 @@ public final class FathomHud {
             // next thing to draw would be the rest of the game.
             GlStateManager.popMatrix();
             WidgetProfile.stop(renderer.id(), profiled);
+            net.fathom.optimizations.fabric.diag.ModuleSelfTest.widgetAllocated(renderer.id(), allocation);
         }
     }
 
-    private static void drawPlaceholder(HudFont font, HudWidget renderer, int alpha) {
-        int width = placeholderWidth(font, renderer);
-        int height = placeholderHeight(font);
-        net.minecraft.client.gui.DrawableHelper.fill(0, 0, width, height, (alpha * 30 / 100) << 24);
-        font.draw(renderer.placeholder(), 2f, 2f, (alpha << 24) | 0x00888888, true);
+    /**
+     * A widget with nothing to show, as the editor shows it: its preview lines
+     * on its own plate, in its own colours, at about two thirds strength -- so
+     * it reads as the widget, and as standing in for it.
+     */
+    private static void drawPreview(HudFont font, HudWidget renderer, FathomModule owner, int alpha) {
+        int faint = alpha * 2 / 3;
+        int width = previewWidth(font, renderer, owner);
+        int height = previewHeight(font, renderer, owner);
+        int pad = HudStyle.padding(owner);
+        QuadBatch.begin();
+        try {
+            if (owner != null) {
+                TextWidget.backdrop(owner, 0, 0, width, height, faint);
+            } else {
+                QuadBatch.rect(0, 0, width, height, (faint * 40 / 100) << 24);
+            }
+        } finally {
+            QuadBatch.end();
+        }
+        int colour = (Math.max(0, Math.min(255, faint)) << 24) | (HudStyle.textColour(owner) & 0x00FFFFFF);
+        boolean shadow = HudStyle.textShadow(owner);
+        float line = font.lineHeight() + TextWidget.LINE_GAP;
+        String[] lines = renderer.preview();
+        for (int index = 0; index < lines.length; index++) {
+            font.draw(lines[index], pad, pad + index * line, colour, shadow);
+        }
     }
 
-    /** The placeholder's own size, so the box the editor grabs is the box it draws. */
-    private static int placeholderWidth(HudFont font, HudWidget renderer) {
-        return (int) Math.ceil(font.width(renderer.placeholder())) + 4;
+    /** The preview's own size, so the box the editor grabs is the box it draws. */
+    private static int previewWidth(HudFont font, HudWidget renderer, FathomModule owner) {
+        float widest = 0f;
+        for (String line : renderer.preview()) {
+            widest = Math.max(widest, font.width(line));
+        }
+        return (int) Math.ceil(widest) + HudStyle.padding(owner) * 2;
     }
 
-    private static int placeholderHeight(HudFont font) {
-        return (int) Math.ceil(font.lineHeight()) + 4;
+    private static int previewHeight(HudFont font, HudWidget renderer, FathomModule owner) {
+        int lines = Math.max(1, renderer.preview().length);
+        return (int) Math.ceil(lines * (font.lineHeight() + TextWidget.LINE_GAP) - TextWidget.LINE_GAP)
+                + HudStyle.padding(owner) * 2;
     }
 
     // -----------------------------------------------------------------------
@@ -723,9 +877,25 @@ public final class FathomHud {
             Placement placement,
             int screenWidth,
             int screenHeight) {
+        locate(client, font, renderer, placement, screenWidth, screenHeight);
+        return new Snap.Box(locatedX, locatedY, locatedWidth, locatedHeight);
+    }
+
+    private int locatedX;
+    private int locatedY;
+    private int locatedWidth;
+    private int locatedHeight;
+
+    /** {@link #box}, into fields: the drawing path asks once per widget per frame. */
+    private void locate(
+            MinecraftClient client,
+            HudFont font,
+            HudWidget renderer,
+            Placement placement,
+            int screenWidth,
+            int screenHeight) {
         renderer.align(placement.anchor().horizontal());
-        float interfaceScale = interfaceScale();
-        float scale = placement.scale() * interfaceScale;
+        float scale = placement.scale();
         int width;
         int height;
         if (renderer.visible(client)) {
@@ -733,39 +903,34 @@ public final class FathomHud {
             height = Math.round(renderer.height(client, font) * scale);
         } else {
             // A widget with nothing to say is only ever drawn by the editor, as
-            // its placeholder, and the box has to be the placeholder's -- an
-            // armour readout with no armour measures a few pixels wide, so its
-            // label would hang off the edge of its own hit box.
-            width = Math.round((placeholderWidth(font, renderer)) * scale);
-            height = Math.round((placeholderHeight(font)) * scale);
+            // its preview, and the box has to be the preview's -- an armour
+            // readout with no armour measures a few pixels wide, so its label
+            // would hang off the edge of its own hit box.
+            FathomModule owner = features.owningWidget(renderer.id());
+            width = Math.round(previewWidth(font, renderer, owner) * scale);
+            height = Math.round(previewHeight(font, renderer, owner) * scale);
         }
-        int x = placement.anchor().x(
-                screenWidth, width, Math.round(placement.offsetX() * interfaceScale));
-        int y = placement.anchor().y(
-                screenHeight, height, Math.round(placement.offsetY() * interfaceScale));
+        int x = placement.anchor().x(screenWidth, width, placement.offsetX());
+        int y = placement.anchor().y(screenHeight, height, placement.offsetY());
         if (width <= screenWidth) {
             x = Math.max(0, Math.min(x, screenWidth - width));
         }
         if (height <= screenHeight) {
             y = Math.max(0, Math.min(y, screenHeight - height));
         }
-        return new Snap.Box(x, y, width, height);
+        locatedX = x;
+        locatedY = y;
+        locatedWidth = width;
+        locatedHeight = height;
     }
 
     /**
-     * The one global multiplier for Fathom-owned HUD geometry.
+     * Every enabled widget's rectangle, newest on top, for hit testing and snapping.
      *
-     * <p>Widget placements remain stored in their unscaled, Minecraft-GUI coordinate
-     * space. Applying the preference here, where both drawing and hit-box measurement
-     * pass, keeps anchors, text, plates and editor interaction on the same transform and
-     * prevents a scale change from being written back into the saved layout.
+     * <p>Laid out exactly as {@link #render} lays them out in the editor -- the
+     * same measurement, the same {@link HudFlow} -- so what can be grabbed is
+     * what is drawn.
      */
-    private static float interfaceScale() {
-        float scale = net.fathom.optimizations.fabric.Runtime.uiScale();
-        return Float.isNaN(scale) || scale <= 0f ? 1f : scale;
-    }
-
-    /** Every enabled widget's rectangle, newest on top, for hit testing and snapping. */
     public List<Positioned> boxes(MinecraftClient client, int screenWidth, int screenHeight) {
         positioned.clear();
         TextRenderer vanilla = client.textRenderer;
@@ -787,11 +952,14 @@ public final class FathomHud {
             HudFont font = minecraftFont;
             if (usesFathom(owner)) {
                 if (fathomFont == null) {
-                    fathomFont = fathomFont(client, screenWidth, vanilla, null);
+                    fathomFont = measuringFont(client, screenWidth, vanilla);
                 }
                 font = fathomFont;
             }
             Placement placement = placement(widget.id());
+            ensureFlow(cursor + 1);
+            locate(client, font, renderer, placement, screenWidth, screenHeight);
+            stage(cursor, widget.id(), placement);
             Positioned entry;
             if (cursor == positionedPool.size()) {
                 entry = new Positioned();
@@ -800,10 +968,90 @@ public final class FathomHud {
                 entry = positionedPool.get(cursor);
             }
             cursor++;
-            positioned.add(entry.set(widget, placement,
-                    box(client, font, renderer, placement, screenWidth, screenHeight)));
+            positioned.add(entry.set(widget, placement, null));
+        }
+        HudFlow.resolve(cursor, flowX, flowY, flowW, flowH, flowDirection, flowFixed, flowOrder, screenHeight);
+        for (int index = 0; index < cursor; index++) {
+            Positioned entry = positioned.get(index);
+            entry.box = new Snap.Box(flowX[index], flowY[index], flowW[index], flowH[index]);
+            entry.flowed = flowY[index] != flowNaturalY[index];
+            entry.naturalY = flowNaturalY[index];
         }
         return positioned;
+    }
+
+    /**
+     * Where every widget in this frame's selection goes: measured once each,
+     * then moved off one another by {@link HudFlow}. Before anything is drawn,
+     * because a widget's place can depend on the size of one drawn after it.
+     */
+    private void arrange(MinecraftClient client, HudFont minecraftFont, TextRenderer vanilla,
+            int screenWidth, int screenHeight) {
+        int count = drawing.size();
+        ensureFlow(count);
+        HudFont fathomFont = null;
+        for (int index = 0; index < count; index++) {
+            Drawable each = drawing.get(index);
+            HudFont font = minecraftFont;
+            if (usesFathom(each.owner)) {
+                if (fathomFont == null) {
+                    fathomFont = measuringFont(client, screenWidth, vanilla);
+                }
+                font = fathomFont;
+            }
+            locate(client, font, each.renderer, each.placement, screenWidth, screenHeight);
+            stage(index, each.renderer.id(), each.placement);
+        }
+        HudFlow.resolve(count, flowX, flowY, flowW, flowH, flowDirection, flowFixed, flowOrder, screenHeight);
+        for (int index = 0; index < count; index++) {
+            Drawable each = drawing.get(index);
+            each.x = flowX[index];
+            each.y = flowY[index];
+        }
+    }
+
+    /** The last {@link #locate} into the flow's arrays, at {@code index}. */
+    private void stage(int index, String widgetId, Placement placement) {
+        flowX[index] = locatedX;
+        flowY[index] = locatedY;
+        flowNaturalY[index] = locatedY;
+        flowW[index] = locatedWidth;
+        flowH[index] = locatedHeight;
+        flowDirection[index] = CROSSHAIR.equals(widgetId) ? 0 : HudFlow.direction(placement.anchor());
+        flowFixed[index] = widgetId.equals(pinned);
+    }
+
+    private void ensureFlow(int count) {
+        if (count <= flowX.length) {
+            return;
+        }
+        int size = Math.max(count, flowX.length * 2);
+        flowX = new int[size];
+        flowY = new int[size];
+        flowNaturalY = new int[size];
+        flowW = new int[size];
+        flowH = new int[size];
+        flowDirection = new int[size];
+        flowOrder = new int[size];
+        flowFixed = new boolean[size];
+    }
+
+    /**
+     * The typeface Fathom-font widgets are measured in before their frame is
+     * open. The compositor measures without a frame once its faces are loaded;
+     * until the first frame ever drawn, Minecraft's font stands in, which is
+     * the same eight-pixel cell and so very nearly the same size.
+     */
+    private HudFont measuringFont(MinecraftClient client, int screenWidth, TextRenderer vanilla) {
+        Renderer active = Gfx.activeRenderer();
+        if (active != null) {
+            return fathomFont(client, screenWidth, vanilla, active);
+        }
+        SdfRenderer compositor = Gfx.peekCompositor();
+        if (compositor != null && compositor.canMeasure()) {
+            return fathomFont(client, screenWidth, vanilla, compositor);
+        }
+        return HudFonts.vanilla(vanilla);
     }
 
     /** How many widgets are switched on, for the visual-QA log. */
@@ -826,6 +1074,10 @@ public final class FathomHud {
         public Widget widget;
         public Placement placement;
         public Snap.Box box;
+        /** Moved off another widget by {@link HudFlow} rather than standing where it was put. */
+        public boolean flowed;
+        /** Where its placement alone puts its top edge, before the flow. */
+        public int naturalY;
 
         Positioned() {}
 
@@ -833,6 +1085,7 @@ public final class FathomHud {
             this.widget = widget;
             this.placement = placement;
             this.box = box;
+            this.flowed = false;
             return this;
         }
     }

@@ -130,10 +130,9 @@ access to the Fabric maven. `fabric/` is the glue that needs the game to exist,
 and it has never been compiled. `minecraft/fathom-optimizations/README.md` is the
 authority on which is which.
 
-Nothing in the module is enabled. Promotion requires an in-game measurement, and
-no frame has been rendered by this code; the gate is enforced in
-`Optimization.defaultEnabled()` rather than trusted to discipline. See
-`docs/performance/optimizations.md`.
+An optimization only turns on by default once it has an in-game measurement
+behind it; the gate is enforced in `Optimization.defaultEnabled()` rather than
+trusted to discipline. See `docs/performance/optimization-registry.md`.
 
 ---
 
@@ -449,7 +448,7 @@ complete is the install engine's question (§5b); this takes its answer as an
 
 ## 4b. Authentication state
 
-`auth/session.rs`. Six states, matching the product brief one for one, with the
+`auth/session.rs`. Six states, matching the product spec one for one, with the
 data each actually needs — not a pile of booleans:
 
 ```text
@@ -564,8 +563,10 @@ provider present without the feature reports `is_production()`.
 
 ## 5a. Background work
 
-Nothing slow runs on the interface thread. `crates/launcher-ui/src/worker.rs`
-holds a single long-lived subscription:
+Nothing slow runs on the interface thread. (This section describes the iced
+build's worker, which is in the git history; the Tauri launcher keeps the same
+rule with a thread per job behind its commands.) It held a single long-lived
+subscription:
 
 ```text
   App  --Job-->  [ dispatch loop ]  --spawns-->  std::thread (blocking work)
@@ -1245,14 +1246,15 @@ FATHOM_AZURE_CLIENT_ID=<your-application-id> cargo run -p launcher-ui
 `directories`, `ureq` (rustls, no cookies), `sha1`, `sha2`, `base64`,
 `jsonwebtoken`, `keyring`, `zip`.
 
-`launcher-ui` (5 direct): `iced` (wgpu + tiny-skia fallback and `svg` for the
-icon set -- see §2.2), `image` (JPEG, for the background frames), `iced_futures`
-(`thread-pool`, to get a real executor — see §2.2), `rfd` (file picker),
-`tracing`.
+`launcher-desktop`: `tauri` (no plugins), `rfd` (file picker), `serde`,
+`serde_json`, `base64`, `tracing`.
+
+`launcher-ui` (2 direct): `launcher-desktop` and `tauri`, only to keep
+`cargo run -p launcher-ui` starting the same launcher.
 
 `launcher-cli` (0 beyond the core).
 
-**Features.** `dev-auth` on `launcher-core`, forwarded by `launcher-ui`. Not
+**Features.** `dev-auth` on `launcher-core`, forwarded by `launcher-desktop` and `launcher-ui`. Not
 default anywhere, and unbuildable in release. See §4a.
 
 `deny.toml` enforces the licence allowlist recommended in `mod-policies.md` §9

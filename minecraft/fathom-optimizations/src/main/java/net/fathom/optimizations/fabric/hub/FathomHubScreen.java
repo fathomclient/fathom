@@ -150,7 +150,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
     private final Box wordmarkBox = Box.leaf("hub.wordmark", new Box.Measure() {
         @Override
         public float width(Renderer ui) {
-            return Graphite.wordmarkWidth(ui, GraphiteTokens.WORDMARK_CAP_GAME);
+            return Graphite.lockupWidth(ui, GraphiteTokens.WORDMARK_CAP_GAME);
         }
 
         @Override
@@ -191,6 +191,51 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
     /** Select section {@code index} next frame exactly as clicking its rail item does. Development only. */
     public void scriptSection(int index) {
         scriptedSection = index;
+    }
+
+    /**
+     * A module whose page should open the next time a Hub is shown: the HUD
+     * editor's "Settings" sets it and closes, and the Hub it returns to (or a
+     * new one) takes it. Render thread only.
+     */
+    private static String requestedModule;
+
+    public static void requestModule(String moduleId) {
+        requestedModule = moduleId;
+    }
+
+    /** The requested module, once: the Mods page asks, and opens its tab. */
+    static String takeModuleRequest() {
+        String requested = requestedModule;
+        requestedModule = null;
+        return requested;
+    }
+
+    // -- development self-test hooks (EditorSelfTest) ------------------------
+
+    /** The section showing. */
+    public String qaSection() {
+        return sections.isEmpty() ? "" : sections.get(current).title();
+    }
+
+    /** The Mods page's open module, or null for the list or another section. */
+    public String qaOpenModule() {
+        Section section = sections.isEmpty() ? null : sections.get(current);
+        return section instanceof ModsSection ? ((ModsSection) section).qaOpenModule() : null;
+    }
+
+    /** Where the Mods page showing is scrolled to. */
+    public float qaScroll() {
+        Section section = sections.isEmpty() ? null : sections.get(current);
+        return section instanceof ModsSection ? ((ModsSection) section).qaScroll() : -1f;
+    }
+
+    /** As clicking a Mods tab: a module's, or "All mods" for null. */
+    public void qaTab(String moduleId) {
+        Section section = sections.isEmpty() ? null : sections.get(current);
+        if (section instanceof ModsSection) {
+            ((ModsSection) section).qaTab(context, moduleId);
+        }
     }
 
     /** How many sections the rail lists. */
@@ -237,6 +282,14 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             previous = current;
             sections.get(current).opened(context);
             selectCaptureSection();
+        }
+        // Back from the HUD editor's "Settings": show Mods, which opens the page.
+        if (requestedModule != null) {
+            for (int index = 0; index < sections.size(); index++) {
+                if (sections.get(index) instanceof ModsSection && index != current) {
+                    scriptedSection = index;
+                }
+            }
         }
         // Also reset on return from a child screen. A release that happened in
         // the editor must not click a Hub control on the first frame back.
@@ -291,8 +344,22 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
     // The frame
     // -----------------------------------------------------------------------
 
+    /** Unsaved changes are written after this long without another. */
+    private static final long AUTOSAVE_QUIET_NANOS = 1_500_000_000L;
+
     @Override
     public void render(int ignoredMouseX, int ignoredMouseY, float ignoredDelta) {
+        // Changes are written when the Hub closes, and also after a moment's
+        // quiet while it stays open: a crash or a killed process with the Hub
+        // up must not cost the last ten minutes of settings. The write itself
+        // is the profile store's background one; this only hands it over.
+        if (context != null && context.quietNanos() > AUTOSAVE_QUIET_NANOS && !closing) {
+            String failure = hud.saveAll();
+            if (failure != null) {
+                System.out.println("[Fathom] could not save settings: " + failure);
+            }
+            context.saved();
+        }
         // Gameplay glass leaves the freshly rendered world in the target
         // framebuffer. Fathom background retains the existing scene pass.
         if (!gameplayGlass()) {
@@ -561,13 +628,13 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
     }
 
     /**
-     * The wordmark at the frame's left, centred on y 78; Close at the right
+     * The lockup, mark and wordmark, at the frame's left, centred on y 78; Close at the right
      * edge, Edit HUD 8dp to its left. No bar, no picker, no session line.
      */
     private void header(Renderer ui) {
         float cap = GraphiteTokens.WORDMARK_CAP_GAME;
         Rect mark = wordmarkBox.rect();
-        Graphite.wordmark(ui, mark.x, mark.y, cap);
+        Graphite.lockup(ui, mark.x, mark.y, cap);
 
         // The launcher's window controls: a round 32dp target, secondary ink
         // that comes up to full strength under the pointer, a denser veil
@@ -634,7 +701,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             // exactly as the launcher's rail draws its icons.
             float glyph = Graphite.ICON_NAV;
             float lead = (RAIL_ITEM - glyph) / 2f;
-            ui.icon(section.icon(), item.x + lead, Skin.snap(ui, item.centreY() - glyph / 2f), glyph, ink);
+            ui.icon(section.icon(), item.x + lead, Skin.snap(ui, item.centreY() - glyph / 2f), glyph,
+                    Colour.mix(ink, Graphite.BRAND_LIGHT, on));
             ui.text(section.title(), item.x + lead + glyph + Graphite.S3,
                     Graphite.baseline(ui, item, label), label, ink);
             if ((state.clicked || index == scriptedSection) && !selected) {
@@ -788,6 +856,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
                 controls.closePopover();
             } else if (!context.search().isEmpty() && sections.get(current).searchable()) {
                 context.setSearch("");
+                // Done typing: the Hub key closes the Hub again.
+                controls.clearFocus();
             } else {
                 beginClose();
             }
@@ -827,6 +897,17 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
 
     public boolean capturingKeybind() {
         return context != null && context.keybindCapture().active();
+    }
+
+    /**
+     * Whether a press of the Hub key belongs to something in the Hub: a key
+     * being listened for, the search box after somebody has typed into it, or
+     * a field on the current page.
+     */
+    public boolean busy() {
+        return capturingKeybind()
+                || controls.focused(SEARCH_ID)
+                || (!sections.isEmpty() && sections.get(current).typing());
     }
 
     /** Keep a mouse-bound Hub close gesture out of the control under it. */

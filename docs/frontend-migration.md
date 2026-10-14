@@ -12,10 +12,9 @@ The presentation layer moved from `iced` to Tauri 2 + Svelte 5 + TypeScript.
 | `desktop/` | Svelte frontend. Renders; decides nothing. |
 | `crates/launcher-ui` | A compatibility command that calls `launcher_desktop::run()` and embeds `desktop/dist`. |
 
-The iced-era files remain quarantined as historical reference, but Cargo does
-not compile them and packaging does not copy them. There is one application
-implementation and one frontend bundle; the old package name cannot select a
-different launcher.
+The iced-era sources and assets were removed; they are in the git history.
+There is one application implementation and one frontend bundle; the old
+package name cannot select a different launcher.
 
 ## WebView transport
 
@@ -197,5 +196,5 @@ what happened; that has no equivalent yet.
 **Sign-in is not wired.** Settings shows account state and routes to itself; the
 device-code flow is not reachable from the new frontend.
 
-**The iced crate still exists** and still compiles. It is no longer the product,
-and nothing in this milestone was added to it.
+**The iced crate is gone.** Only its package name survives, as the
+compatibility command above.

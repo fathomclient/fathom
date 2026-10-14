@@ -34,6 +34,9 @@
   import Notice from '../lib/ui/Notice.svelte';
   import Button from '../lib/ui/Button.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
+  import FrameTimeline from '../lib/ui/FrameTimeline.svelte';
+  import SessionFigures from '../lib/ui/SessionFigures.svelte';
+  import { elapsed } from '../lib/session';
   import { tooltip } from '../lib/tooltip';
   import { EASE, FAST, NORMAL, STAGGER } from '../lib/motion';
   import {
@@ -127,6 +130,19 @@
   }
 
   $: selectedPreset = view?.presets.find((preset) => preset.selected);
+
+  /* A reading written in the last half-minute belongs to a game that is still
+     running; anything older is the last session's. */
+  $: sessionLive = !!view?.lastSession && Date.now() - view.lastSession.updatedAt < 30_000;
+
+  function ago(epochMillis: number) {
+    const minutes = Math.round((Date.now() - epochMillis) / 60_000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return `${hours} h ago`;
+    return `${Math.round(hours / 24)} days ago`;
+  }
 </script>
 
 {#if view}
@@ -222,6 +238,39 @@
         </span>
       </Row>
     </Section>
+
+    <!-- THE INSTRUMENT -->
+    <!--
+      Play as it was played: what the game measured during the most recent
+      session in this profile (or the one running now), in a world with the
+      window focused. Not a benchmark and not a comparison -- the Measured
+      section below is where controlled runs go. The same figures and timeline
+      the Hub's Performance page draws in game.
+    -->
+    {#if view.lastSession}
+      <Section
+        label={sessionLive ? 'This session' : 'Last session'}
+        summary={sessionLive ? 'live from the game' : `ended ${ago(view.lastSession.updatedAt)}`}
+        material
+      >
+        <div class="instrument" in:fade={{ duration: FAST, easing: EASE }}>
+          <SessionFigures pulse={view.lastSession} />
+          <FrameTimeline
+            pulse={view.lastSession}
+            caption="Frame time over {elapsed(view.lastSession.secondsOfPlay)} of play · newest on the right"
+          />
+        </div>
+      </Section>
+    {:else if view.module.installed}
+      <Section label="Last session" material>
+        <EmptyState
+          compact
+          icon={Gauge}
+          title="No session measured yet"
+          detail="Play in this profile. The game measures its own frame rate and frame times in a world, and they appear here."
+        />
+      </Section>
+    {/if}
 
     <!-- MEASUREMENTS -->
     <!--
@@ -392,6 +441,13 @@
 <style>
   /* A one-off condition with an action, not a setting: a notice that removes
      itself when `videoLimits` comes back null. */
+  .instrument {
+    display: flex;
+    flex-direction: column;
+    gap: var(--g-s-4);
+    padding: var(--g-s-4);
+  }
+
   .notice-text {
     display: flex;
     flex-direction: column;

@@ -676,7 +676,8 @@ fn signed_in(head: Option<Vec<u8>>) -> launcher_core::SignedIn {
 fn signing_in_records_the_public_profile_and_signing_out_removes_it() {
     let (tmp, mut core) = launcher();
     let head = b"\x89PNG\r\n\x1a\n pretend head".to_vec();
-    core.adopt_session(signed_in(Some(head.clone()))).expect("adopted");
+    core.adopt_session(signed_in(Some(head.clone())))
+        .expect("adopted");
 
     let account = core.account().expect("an account to show");
     assert!(account.signed_in);
@@ -695,7 +696,11 @@ fn signing_in_records_the_public_profile_and_signing_out_removes_it() {
             } else if let Ok(bytes) = std::fs::read(&path) {
                 let text = String::from_utf8_lossy(&bytes);
                 for secret in ["the-refresh-token-value", "mc-access-token-value"] {
-                    assert!(!text.contains(secret), "{} contains a token", path.display());
+                    assert!(
+                        !text.contains(secret),
+                        "{} contains a token",
+                        path.display()
+                    );
                 }
             }
         }
@@ -710,7 +715,11 @@ fn signing_in_records_the_public_profile_and_signing_out_removes_it() {
 
     core.sign_out().expect("signed out");
     assert!(core.account().is_none());
-    assert!(!tmp.path().join("accounts").join("986dec87b7ec47ff89ff033fdb95c4b5.json").exists());
+    assert!(!tmp
+        .path()
+        .join("accounts")
+        .join("986dec87b7ec47ff89ff033fdb95c4b5.json")
+        .exists());
 }
 
 #[test]

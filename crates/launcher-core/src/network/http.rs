@@ -18,7 +18,7 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 
 use super::journal::{NetworkJournal, Outcome};
-use super::policy::{NetworkPolicy, PerActionGrant, PolicyDenial, RequestDescriptor};
+use super::policy::{NetworkPolicy, PerActionGrant, PolicyDenial, Purpose, RequestDescriptor};
 use crate::secret::Secret;
 
 /// Cap on any single in-memory response. Metadata documents are far smaller
@@ -32,6 +32,18 @@ pub const MAX_STREAMED_DOWNLOAD: u64 = 512 * 1024 * 1024;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const GLOBAL_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// The whole of one mod-index metadata request: connect, send, read.
+///
+/// The global timeout above is sized for a large download. A search or a
+/// project page is a few kilobytes, and somebody waiting on a results list is
+/// better told after twenty seconds that the index is not answering than left
+/// with a spinner for five minutes.
+const METADATA_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// The longest wait a server's `Retry-After` is believed for. Past this it is
+/// either a misconfiguration or not worth waiting on inside a launcher.
+const MAX_RETRY_AFTER: u64 = 15 * 60;
 
 #[derive(Debug, thiserror::Error)]
 pub enum NetworkError {
@@ -106,6 +118,30 @@ struct RawResponse {
     status: u16,
     body: Vec<u8>,
     location: Option<String>,
+    retry_after: Option<u64>,
+}
+
+/// Read a wait in whole seconds from a rate-limit response's headers.
+///
+/// Only the delta-seconds form of `Retry-After` is understood; the HTTP-date
+/// form would need a clock comparison against a server we do not trust to have
+/// one, and no index Fathom talks to sends it.
+fn retry_after(status: u16, headers: &ureq::http::HeaderMap) -> Option<u64> {
+    if status != 429 && status != 503 {
+        return None;
+    }
+    ["retry-after", "x-ratelimit-reset"]
+        .iter()
+        .find_map(|name| {
+            headers
+                .get(*name)?
+                .to_str()
+                .ok()?
+                .trim()
+                .parse::<u64>()
+                .ok()
+        })
+        .map(|seconds| seconds.min(MAX_RETRY_AFTER))
 }
 
 #[derive(Debug)]
@@ -160,6 +196,10 @@ pub enum Method {
 pub struct Response {
     pub status: u16,
     pub body: Vec<u8>,
+    /// How long the server asked us to wait before the next request, in
+    /// seconds, when it said so on a 429 or 503 (`Retry-After`, or Modrinth's
+    /// `X-Ratelimit-Reset`). Capped; `None` when it did not say.
+    pub retry_after: Option<u64>,
 }
 
 impl Response {
@@ -282,6 +322,7 @@ impl HttpClient {
                 return Ok(Response {
                     status: response.status,
                     body: response.body,
+                    retry_after: response.retry_after,
                 });
             };
 
@@ -326,6 +367,15 @@ impl HttpClient {
         // ureq 3 uses a typestate on the builder: GET is `WithoutBody`, POST is
         // `WithBody`, so the two paths cannot be unified into one binding.
         let sent = match (method, body) {
+            (Method::Get, _) if request.purpose == Purpose::ResolveModMetadata => apply_headers(
+                self.agent
+                    .get(&url)
+                    .config()
+                    .timeout_global(Some(METADATA_TIMEOUT))
+                    .build(),
+                headers,
+            )
+            .call(),
             (Method::Get, _) => apply_headers(self.agent.get(&url), headers).call(),
             (Method::Post, Body::Empty) => {
                 apply_headers(self.agent.post(&url), headers).send_empty()
@@ -351,6 +401,7 @@ impl HttpClient {
         };
 
         let status = response.status().as_u16();
+        let retry_after = retry_after(status, response.headers());
 
         // A redirect on a GET is reported so `send` can re-check the next hop.
         // On anything else it is ignored: replaying a body at a host the caller
@@ -394,6 +445,7 @@ impl HttpClient {
             status,
             body: bytes,
             location,
+            retry_after,
         })
     }
 

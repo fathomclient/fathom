@@ -69,6 +69,11 @@ final class ProfilesSection implements Section {
     private String selectedId;
     private String renamingId;
     private String renameText = "";
+
+    @Override
+    public boolean typing() {
+        return renamingId != null;
+    }
     private String confirmingDelete;
     private long confirmAt;
     private String problem = "";

@@ -76,7 +76,12 @@ public final class ModuleStore {
         String raw = properties.getProperty("client.hub.key");
         if (hubKey != null && raw != null) {
             try {
-                hubKey.set(Integer.parseInt(raw.trim()));
+                int code = Integer.parseInt(raw.trim());
+                if (hubKey.accepts(code)) {
+                    hubKey.set(code);
+                } else {
+                    complaints.add("client.hub.key: " + raw + " cannot open the Hub; using the default");
+                }
             } catch (NumberFormatException notANumber) {
                 complaints.add("client.hub.key: " + raw + " is not a key code");
             }
@@ -254,12 +259,28 @@ public final class ModuleStore {
             }
         }
 
+        // Written beside the file and moved over it, so a crash or a full disk
+        // mid-write leaves the previous settings rather than half a file.
+        File temporary = File.createTempFile(file.getName() + ".", ".tmp", parent);
         OutputStream out = null;
         try {
-            out = new FileOutputStream(file);
+            out = new FileOutputStream(temporary);
             properties.store(out, "Fathom features. Edited in game: Right Shift.");
+            close(out);
+            out = null;
+            try {
+                java.nio.file.Files.move(temporary.toPath(), file.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException notAtomic) {
+                java.nio.file.Files.move(temporary.toPath(), file.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         } finally {
             close(out);
+            if (temporary.exists() && !temporary.delete()) {
+                temporary.deleteOnExit();
+            }
         }
     }
 

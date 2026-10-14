@@ -392,6 +392,25 @@ public final class UiTour {
             FathomNavigation.openHub(client, Runtime.hud(), step.substring(4));
             return true;
         }
+        if (step.startsWith("wheel:")) {
+            // Scroll whatever is open by N notches (negative is down), with the
+            // pointer over the middle of the page, then shoot it.
+            net.fathom.optimizations.fabric.gfx.Pointer.script(560f, 360f);
+            net.fathom.optimizations.fabric.gfx.Pointer.scriptWheel(Integer.parseInt(step.substring(6).trim()));
+            return client.currentScreen != null;
+        }
+        if (step.startsWith("gui:")) {
+            // Minecraft's GUI Scale for the shots that follow, which carry it
+            // in their names: 0 is Auto, as in the options screen.
+            int guiScale = Integer.parseInt(step.substring(4).trim());
+            client.options.guiScale = guiScale;
+            if (client.currentScreen != null) {
+                net.minecraft.client.util.Window window = new net.minecraft.client.util.Window(client);
+                client.currentScreen.init(client, window.getWidth(), window.getHeight());
+            }
+            tag = "-gui" + guiScale;
+            return false;
+        }
         if ("proof".equals(step)) {
             // The compositor's proof scene (development only).
             FathomNavigation.push(client, new net.fathom.optimizations.fabric.gfx.RendererProofScreen());

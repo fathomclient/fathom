@@ -116,9 +116,14 @@ fn run_shipping(
     }
 
     if recorded != already {
-        if let Err(error) = std::fs::write(&marker, recorded.join("
-") + "
-") {
+        if let Err(error) = std::fs::write(
+            &marker,
+            recorded.join(
+                "
+",
+            ) + "
+",
+        ) {
             tracing::warn!(%error, "could not record that profiles were seeded");
         }
     }
@@ -126,12 +131,7 @@ fn run_shipping(
     created
 }
 
-fn seed_one(
-    paths: &DataPaths,
-    store: &ProfileStore,
-    raw_id: &str,
-    name: &str,
-) -> Vec<ProfileId> {
+fn seed_one(paths: &DataPaths, store: &ProfileStore, raw_id: &str, name: &str) -> Vec<ProfileId> {
     let Ok(id) = ProfileId::new(raw_id) else {
         // The ids are constants, so this is unreachable -- but a panic during
         // launcher startup is not the way to find that out.
@@ -205,7 +205,11 @@ mod tests {
         let store = ProfileStore::new(paths.clone());
 
         let created = run(&paths, &store);
-        assert_eq!(created.len(), SHIPPED.len(), "every shipped profile should be seeded");
+        assert_eq!(
+            created.len(),
+            SHIPPED.len(),
+            "every shipped profile should be seeded"
+        );
 
         let profile = store
             .load(&ProfileId::new(FATHOM_ID).unwrap())

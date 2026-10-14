@@ -35,6 +35,7 @@ use std::io::Read;
 
 use serde::Serialize;
 
+use super::compat::{assess_file, Verdict};
 use super::dependencies::{Blocker, InstallPlan, PlannedMod};
 use super::identity::{already_installed, same_project, Duplicate};
 use super::model::{clip, limits, safe_file_name, FileDownload, Provider, Target};
@@ -54,6 +55,10 @@ pub struct InstallOptions {
     /// The user saw the "this may already be installed from the other index"
     /// warning and chose to install anyway.
     pub accept_possible_duplicates: bool,
+    /// The user saw why the compatibility resolver could not vouch for a build
+    /// (see `compat.rs`) and chose to install it anyway. Never set by default,
+    /// and it never admits an *incompatible* build.
+    pub accept_unverified: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -229,6 +234,9 @@ impl Installer {
     /// A plan is a snapshot. The profile may have changed version, gained a
     /// mod, or lost the entry being updated since it was made; and a plan is a
     /// value the interface held, so it is re-validated rather than trusted.
+    // One list of every reason to refuse, in the order they are checked;
+    // splitting it would scatter the checks a reviewer has to see together.
+    #[allow(clippy::too_many_lines)]
     fn validate(
         plan: &InstallPlan,
         target: &Target,
@@ -251,6 +259,13 @@ impl Installer {
                 Blocker::Incompatible { detail, .. } => BrowseError::Incompatible(detail.clone()),
                 other => BrowseError::Refused(describe(other)),
             });
+        }
+        if plan.needs_unverified_confirmation() && !options.accept_unverified {
+            return Err(BrowseError::Refused(
+                "Fathom cannot confirm this build works on Legacy Fabric 1.8.9; confirm before \
+                 installing"
+                    .to_owned(),
+            ));
         }
         if plan.needs_duplicate_confirmation() && !options.accept_possible_duplicates {
             return Err(BrowseError::Refused(
@@ -277,14 +292,26 @@ impl Installer {
         let mut names = BTreeSet::new();
         for planned in plan.installs() {
             let file = &planned.file;
-            if !file.supports(target) {
-                return Err(BrowseError::Incompatible(format!(
-                    "{} {} is not built for Minecraft {} on {}",
-                    planned.project.name,
-                    file.number,
-                    target.minecraft,
-                    target.loader.label()
-                )));
+            // Re-asked here rather than read from the plan: the plan is a value
+            // the interface held, and the resolver is the authority.
+            let assessment = assess_file(file, target);
+            match assessment.verdict {
+                Verdict::Compatible => {}
+                Verdict::Unverified if options.accept_unverified => {}
+                Verdict::Unverified => {
+                    return Err(BrowseError::Refused(format!(
+                        "{} {} is unverified for this profile; confirm before installing",
+                        planned.project.name, file.number
+                    )))
+                }
+                Verdict::Incompatible => {
+                    return Err(BrowseError::Incompatible(format!(
+                        "{} {}: {}",
+                        planned.project.name,
+                        file.number,
+                        assessment.headline()
+                    )))
+                }
             }
             if !safe_file_name(&file.file_name) {
                 return Err(BrowseError::Refused(
@@ -499,10 +526,12 @@ impl Installer {
                     requires,
                 });
             entry.version = Some(file.version());
-            // An update must not switch back on something the user turned off.
+            // An update must not switch back on something the user turned off,
+            // and keeps the build it replaced so that build can be put back.
             if let Some(previous) = &previous {
                 entry.enabled = previous.enabled;
                 entry.disabled_reason.clone_from(&previous.disabled_reason);
+                entry.succeed(previous, crate::mods::config::now_seconds());
             }
             ids.insert(project.reference.qualified(), id.to_string());
             next.upsert(entry.clone());
@@ -730,6 +759,64 @@ mod tests {
     }
 
     #[test]
+    fn an_unverified_build_needs_consent_and_an_incompatible_one_is_never_taken() {
+        let fixture = fixture();
+        let root = ProjectRef::new(Provider::Modrinth, "root");
+        let mut fabric = stored(&fixture, file(&root, "1", vec![]));
+        // Tagged plain Fabric for 1.8.9: the resolver's unverified case.
+        fabric.loaders = ["fabric".to_owned()].into_iter().collect();
+        let index = FakeIndex::default();
+        let planned = plan(
+            &index,
+            &target(),
+            &[],
+            project(Provider::Modrinth, "root", "root-mod"),
+            fabric,
+            &[],
+            None,
+        )
+        .unwrap();
+        assert!(planned.blockers.is_empty(), "unverified is not a blocker");
+        assert_eq!(planned.unverified.len(), 1);
+        assert!(planned.unverified[0].reasons[0].contains("Ornithe"));
+
+        let mut mods = ProfileModConfiguration::default();
+        let refused = run(&fixture, &planned, &mut mods, InstallOptions::default()).unwrap_err();
+        assert!(matches!(refused, BrowseError::Refused(_)), "{refused:?}");
+        assert!(mods.is_empty(), "nothing is recorded without consent");
+
+        let accepted = run(
+            &fixture,
+            &planned,
+            &mut mods,
+            InstallOptions {
+                accept_unverified: true,
+                ..InstallOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(accepted.added.len(), 1);
+
+        // Consent to "unverified" is not consent to "incompatible": a Forge
+        // build slipped into the same plan is still refused.
+        let mut forged = planned.clone();
+        forged.root.file.loaders = ["forge".to_owned()].into_iter().collect();
+        let mut fresh = ProfileModConfiguration::default();
+        let error = run(
+            &fixture,
+            &forged,
+            &mut fresh,
+            InstallOptions {
+                accept_unverified: true,
+                accept_possible_duplicates: true,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(error, BrowseError::Incompatible(_)), "{error:?}");
+        assert!(fresh.is_empty());
+    }
+
+    #[test]
     fn an_incompatible_plan_is_refused_at_install_even_if_planning_missed_it() {
         let fixture = fixture();
         let (index, root_file) = with_library(&fixture);
@@ -853,6 +940,7 @@ mod tests {
             &mut mods,
             InstallOptions {
                 accept_possible_duplicates: true,
+                ..InstallOptions::default()
             },
         )
         .unwrap();
@@ -909,6 +997,24 @@ mod tests {
             fixture.installer.store().contains(&old_file.hash.sha1),
             "the old bytes remain until garbage collection"
         );
+        assert_eq!(now.previous.len(), 1, "the replaced build is remembered");
+        assert_eq!(now.previous[0].sha1, old_file.hash.sha1);
+        assert_eq!(
+            now.previous[0].version_id.as_deref(),
+            Some(old_file.version_id.as_str())
+        );
+
+        // Putting the old build back is offline and swaps the two.
+        let mut restored = now.clone();
+        restored.restore_previous(&old_file.hash.sha1, 1).unwrap();
+        assert_eq!(restored.sha1, old_file.hash.sha1);
+        assert_eq!(
+            restored.origin.version_id.as_deref(),
+            Some(old_file.version_id.as_str())
+        );
+        assert_eq!(restored.previous[0].sha1, new_file.hash.sha1);
+        assert!(!restored.enabled, "restoring does not switch it on");
+        assert!(restored.restore_previous(&"f".repeat(40), 2).is_err());
 
         rollback(&report, &mut mods);
         assert_eq!(mods.get(&id).unwrap().sha1, old_file.hash.sha1);

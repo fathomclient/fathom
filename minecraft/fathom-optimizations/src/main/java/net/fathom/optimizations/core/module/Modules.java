@@ -136,6 +136,23 @@ final class Modules {
                 .setting(new Setting.Toggle("chunk", "Chunk", "Which chunk you are in.", false)))
                 .build());
 
+        out.add(HudStyle.declare(FathomModule.builder("direction")
+                .name("Direction")
+                .description("A compass strip that turns with you.")
+                .category(Category.HUD)
+                .icon(Icon.COMPASS)
+                .widget("direction")
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Whole("width", "Width", "", 140, 80, 260, 10, "px"))
+                .setting(new Setting.Whole("span", "Field", "How much of the horizon the strip shows.",
+                        180, 90, 360, 15, "°"))
+                .setting(new Setting.Toggle("between", "NE, SE, SW, NW", "Letter the points between.", true))
+                .setting(new Setting.Toggle("degrees", "Heading", "The heading in degrees, under the strip.", true))
+                .setting(new Setting.Colour("marker.colour", "Marker colour", "The line where you are facing.",
+                        0xFF5555)))
+                .build());
+
         out.add(HudStyle.declare(FathomModule.builder("clock")
                 .name("Clock")
                 .description("The real-world time and date.")
@@ -203,6 +220,48 @@ final class Modules {
                 .setting(new Setting.Whole("bad", "Poor above", "", 300, 50, 1000, 25, "ms")))
                 .build());
 
+        // The sidebar, moved and styled. Its defaults are vanilla's look --
+        // white text, no shadow, vanilla's dark bands, no plate -- so switching
+        // it on changes nothing until something is changed.
+        out.add(HudStyle.declareVanilla(FathomModule.builder("scoreboard")
+                .name("Scoreboard")
+                .description("The sidebar, moved and restyled.")
+                .category(Category.HUD)
+                .icon(Icon.GRID)
+                .widget("scoreboard")
+                .behaviour(Behaviour.SCOREBOARD)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Toggle("hide", "Hide sidebar",
+                        "Draw no sidebar at all. The server still sends it.", false))
+                .setting(new Setting.Toggle("numbers", "Score numbers",
+                        "The red number beside each line.", true))
+                .setting(new Setting.Toggle("title", "Title", "The objective's name above the lines.", true))
+                .setting(new Setting.Whole("rows", "Row background",
+                        "How dark the bands behind the lines are. 100% is vanilla.", 100, 0, 100, 5, "%")),
+                0xFFFFFF, false, 0)
+                .build());
+
+        // Chat, restyled. Off, it is vanilla's chat exactly: every hook passes
+        // vanilla's values through.
+        out.add(FathomModule.builder("chat")
+                .name("Chat")
+                .description("Timestamps and tidier chat.")
+                .category(Category.HUD)
+                .icon(Icon.SLIDERS)
+                .behaviour(Behaviour.CHAT)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Toggle("timestamps", "Timestamps", "When each message arrived.", false))
+                .setting(new Setting.Choice("timestamp.format", "Timestamp format", "",
+                        "24 hour", "24 hour", "12 hour"))
+                .setting(new Setting.Toggle("timestamp.seconds", "Timestamp seconds", "", false))
+                .setting(new Setting.Toggle("stack", "Fold repeats",
+                        "A message identical to the one before it adds a count instead of a copy.", false))
+                .setting(new Setting.Whole("background", "Background",
+                        "How dark the band behind chat is. 100% is vanilla.", 100, 0, 100, 5, "%"))
+                .setting(new Setting.Toggle("shadow", "Text shadow", "Vanilla's dark edge under the letters.", true))
+                .build());
+
         // -- PvP -----------------------------------------------------------
 
         out.add(HudStyle.declare(FathomModule.builder("cps")
@@ -261,10 +320,13 @@ final class Modules {
                 .implementation(Implementation.WORKING)
                 .setting(new Setting.Choice("display", "Display", "",
                         "Icons and values", "Icons and values", "Icons only", "Values only"))
+                .setting(new Setting.Whole("icon.size", "Icon size", "", 16, 8, 32, 1, "px"))
                 .setting(new Setting.Choice("style", "Durability", "",
                         "Percent", "Percent", "Remaining", "Remaining / max"))
                 .setting(new Setting.Choice("label", "Label", "", "None", "None", "Slot", "Item name"))
                 .setting(new Setting.Toggle("held", "Held item", "Include what is in your hand.", true))
+                .setting(new Setting.Toggle("arrows", "Arrow count",
+                        "With a bow in hand, how many arrows you are carrying.", true))
                 .setting(new Setting.Choice("layout", "Layout", "", "Vertical", "Vertical", "Horizontal"))
                 .setting(new Setting.Toggle("reverse", "Reverse order", "Boots first instead of the helmet.", false))
                 .setting(new Setting.Whole("spacing", "Spacing", "", 1, 0, 10, 1, "px"))
@@ -285,6 +347,7 @@ final class Modules {
                 .needs(Compatibility.IN_GAME)
                 .implementation(Implementation.WORKING)
                 .setting(new Setting.Toggle("icons", "Icons", "", true))
+                .setting(new Setting.Whole("icon.size", "Icon size", "", 18, 8, 36, 1, "px"))
                 .setting(new Setting.Toggle("names", "Names", "", true))
                 .setting(new Setting.Toggle("level", "Level", "Show the effect level.", true))
                 .setting(new Setting.Toggle("duration", "Time left", "", true))
@@ -346,6 +409,9 @@ final class Modules {
                 .needs(Compatibility.IN_GAME)
                 .implementation(Implementation.WORKING)
                 .keybind(new Keybind("zoom", "Zoom", 46 /* C */))
+                .setting(new Setting.Choice("mode", "Key",
+                        "Toggle zooms on one press and out on the next; opening a screen zooms out.",
+                        "Hold", "Hold", "Toggle"))
                 .setting(new Setting.Slider("amount", "Amount", "How far in a press starts.",
                         4, 1.5, 20, 0.5, 1, "x"))
                 .setting(new Setting.Toggle("scroll", "Scroll to adjust",
@@ -380,9 +446,11 @@ final class Modules {
                 .behaviour(Behaviour.MAIN_MENU)
                 .implementation(Implementation.WORKING)
                 .onByDefault()
-                // Keep the persisted id for compatibility with existing profiles.
-                .setting(new Setting.Toggle("panorama", "Cinematic background",
-                        "Fathom's Rainforest Storm sequence behind the menu.", true))
+                // No "Cinematic background" switch: nothing read it. Which
+                // background the menu shows is Appearance's, and whether it
+                // moves is Performance's menu-background quality. A profile
+                // that stored "panorama" keeps the line, unread.
+                //
                 // No "scene" setting while the launcher's approved set holds one
                 // picture: a choice of one is not a choice (and `Setting.Choice`
                 // rightly refuses it). A profile that stored a retired recording
@@ -427,7 +495,7 @@ final class Modules {
                 .setting(new Setting.Toggle("dynamic", "Dynamic",
                         "The gap opens while you move, sprint or fall, and closes when you stop.", false))
                 .setting(new Setting.Toggle("feedback", "Target colour",
-                        "Change colour while aiming at an entity, and flash when you hit one.", false))
+                        "Change colour while aiming at an entity, and flash when you attack one.", false))
                 .setting(new Setting.Colour("feedback.colour", "Target colour value", "", 0xFF5555))
                 .setting(new Setting.Toggle("hide.third-person", "Hide in third person",
                         "Minecraft hides its own crosshair there too.", true))
@@ -436,6 +504,39 @@ final class Modules {
                 .setting(new Setting.Toggle("hide-vanilla", "Hide vanilla crosshair",
                         "Otherwise both are drawn, one over the other.", true))
                 .onChange(CrosshairPresets.LISTENER)
+                .build());
+
+        // Fullbright changes the gamma the lightmap is built with, for that
+        // build only: the brightness slider in options.txt is never touched,
+        // so turning it off -- or a crash -- leaves the player's own setting.
+        out.add(FathomModule.builder("fullbright")
+                .name("Fullbright")
+                .description("See clearly in the dark.")
+                .category(Category.VISUAL)
+                .icon(Icon.SPARK)
+                .behaviour(Behaviour.FULLBRIGHT)
+                .needs(Compatibility.IN_GAME.saying("Shaders ignore it"))
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Whole("strength", "Brightness",
+                        "100% is the brightest vanilla allows; higher lights caves completely.",
+                        1000, 100, 1600, 100, "%"))
+                .build());
+
+        // The sky at a chosen hour. Only the client's world is answered, so
+        // the server's time -- spawning, beds, daylight sensors -- is unchanged.
+        out.add(FathomModule.builder("time-changer")
+                .name("Time Changer")
+                .description("The sky at an hour you choose.")
+                .category(Category.VISUAL)
+                .icon(Icon.CLOCK)
+                .behaviour(Behaviour.TIME_CHANGER)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Choice("time", "Time", "Custom uses the hour below.",
+                        "Noon", net.fathom.optimizations.core.visual.Lighting.TIMES))
+                .setting(new Setting.Whole("hour", "Custom hour", "On a 24-hour clock.", 12, 0, 23, 1, "h"))
                 .build());
 
         // -- Performance ---------------------------------------------------

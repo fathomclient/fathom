@@ -7,7 +7,7 @@
 > NanoVG. The foundation — an isolated LWJGL 3 backend behind the `Renderer` seam this
 > document created — is proven but not yet used by any production screen. Measurements
 > that update §3.2 and §3.5 (native size, stencil buffer, GL state) are in
-> [`ingame-ui-nanovg.md`](ingame-ui-nanovg.md). The analysis below is kept as written.
+> [`ingame-ui-compositor.md`](ingame-ui-compositor.md). The analysis below is kept as written.
 
 **Outcome first: Fathom draws its in-game interface with its own GPU renderer —
 batched geometry through Minecraft's own vertex pipeline, glyphs rasterised from the
@@ -18,7 +18,7 @@ The renderer sits behind a `Renderer` interface with one implementation today, s
 NanoVG backend can be added later for a version of the game that already ships
 LWJGL 3 — without any of the code above it changing.
 
-This document is the research the brief asked for: eight candidates, the criteria they
+This document is the research the spec asked for: eight candidates, the criteria they
 were judged against, why seven were rejected, and what the surviving one had to prove.
 
 ---
@@ -34,7 +34,7 @@ every rectangle, every glyph, every corner — was quantised to that 427×240 gr
 then magnified 3× by the projection. The interface was, quite literally, drawn at 240
 lines and blown up.
 
-| Symptom the brief lists | What actually caused it |
+| Symptom the spec lists | What actually caused it |
 |---|---|
 | Extremely pixelated typography | 3× magnification of a 240-line raster |
 | Minecraft bitmap font | `TextRenderer`, a 1-bit atlas designed for Minecraft 1.0 |
@@ -56,7 +56,7 @@ changes that.
 
 ## 2. The criteria
 
-Sixteen, from the brief, grouped by what they actually decide.
+Sixteen, from the spec, grouped by what they actually decide.
 
 **Can it look right** — visual quality, anti-aliased fonts, rounded rectangles,
 clipping, animation.
@@ -134,7 +134,7 @@ LWJGL 3 is already loaded.
 ### 3.3 PolyUI (Polyfrost)
 
 A genuinely good declarative UI framework for the JVM: Kotlin, rendering through
-NanoVG. Its architecture is close to the target architecture in the brief, which is no
+NanoVG. Its architecture is close to the target architecture in the spec, which is no
 coincidence — a UI tree, a layout pass, an animation system and a swappable renderer is
 the shape this problem has.
 
@@ -146,7 +146,7 @@ Rejected as a dependency for three reasons, in order of weight:
    its dependencies to licences that ask nothing of the distribution.
 3. The Kotlin runtime, for a mod whose entire jar is 463 KB.
 
-Its *architecture* is another matter, and the brief explicitly permits taking the
+Its *architecture* is another matter, and the spec explicitly permits taking the
 concepts. The layering in §5 is that shape. No PolyUI source was read while writing
 this renderer; the pattern is general and pre-dates it.
 
@@ -201,7 +201,7 @@ context, and a browser engine's patch cadence inside a game client. For a launch
 whose `PRIVACY.md` opens with what it does *not* do, embedding Chromium is also a large
 new statement about what runs on the user's machine.
 
-**Rejected.** The brief's warning was right: the launcher using WebView2 is an argument
+**Rejected.** The spec's warning was right: the launcher using WebView2 is an argument
 for a shared *design system*, not a shared renderer.
 
 ### 3.8 Ultralight
@@ -235,7 +235,7 @@ Scored for **this** problem: a 1.8.9 client menu, shipped by a privacy-first lau
 
 ## 5. The architecture that follows
 
-Exactly the layering the brief asked for, split so that everything above the last line
+Exactly the layering the spec asked for, split so that everything above the last line
 is testable without a game.
 
 ```
@@ -277,7 +277,7 @@ duration of our draw. Nothing is rasterised small and magnified, which is the wh
 Screen input in 1.8.9 arrives on the **tick**: `MinecraftClient.tick` calls
 `Screen.handleInput`, which drains one LWJGL queue at 20 Hz. Hover computed there is up
 to 50 ms stale and every click is quantised to a tick boundary. That is the "delayed
-hover" and "delayed button feedback" in the brief, and it is not fixable inside the
+hover" and "delayed button feedback" in the spec, and it is not fixable inside the
 vanilla callbacks.
 
 So Fathom's screens do not use them. Mouse position and button state are **polled once
@@ -294,7 +294,7 @@ Keyboard stays on the event queue: character input needs the queue's translation
 ## 7. What the spike had to prove
 
 A comparison screen — Diagnostics → **Renderer spike** — drawing the exact list from
-the brief: the launcher's font at 12/14/18 dp, an icon, a rounded dark panel, a red
+the spec: the launcher's font at 12/14/18 dp, an icon, a rounded dark panel, a red
 button, a toggle, a dropdown, a scrollable area, a hover transition and an open/close
 transition. It reports live: frame time (mean, p95, p99), the renderer's own draw cost,
 batch and draw-call counts, and bytes allocated per frame.

@@ -352,7 +352,7 @@ Key structural properties:
   matters. It is also what makes the iced-vs-egui decision cheap to reverse.
 - **One launcher process. No daemon. No tray agent. No service.** The launcher may exit entirely once
   the JVM is spawned (a user preference), or stay to show logs.
-- **Every optimization lives in category A, B, C, or D** of the product brief: inside the game
+- **Every optimization lives in category A, B, C, or D** of the product spec: inside the game
   process (the Mixin mod), in the JVM command line (launch module), in launcher-owned files
   (install module), or as an explicit reversible preference. Nothing in this diagram can touch the
   registry, a driver, or another process. That is an architectural guarantee, not a policy promise.

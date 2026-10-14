@@ -31,8 +31,8 @@
 use std::collections::BTreeSet;
 
 use super::definition::{
-    Conflict, ConflictKind, DownloadSource, License, MinecraftCompatibility,
-    ModDefinition, ModId, ModVersion, PrivacyClassification, Provenance, RedistributionPolicy,
+    Conflict, ConflictKind, DownloadSource, License, MinecraftCompatibility, ModDefinition, ModId,
+    ModVersion, PrivacyClassification, Provenance, RedistributionPolicy,
 };
 use crate::profiles::Loader;
 
@@ -371,7 +371,7 @@ fn mouse_delay_fix() -> ModDefinition {
 /// Apache-2.0, the same permissive stack as the loader itself. Recorded as a
 /// dependency target; no download source is claimed, because the launcher does
 /// not have a verified one and inventing a URL would be exactly the scraping
-/// the brief forbids.
+/// the spec forbids.
 fn fabric_api() -> ModDefinition {
     ModDefinition {
         id: id("fabric-api"),

@@ -31,7 +31,10 @@ fn the_launcher_and_the_game_share_one_profile_collection() {
         return;
     };
     let store = ProfileStore::new(PathBuf::from(root).join("profiles"));
-    match std::env::var("FATHOM_CONTRACT_STAGE").unwrap_or_default().as_str() {
+    match std::env::var("FATHOM_CONTRACT_STAGE")
+        .unwrap_or_default()
+        .as_str()
+    {
         "launcher-writes" => launcher_writes(&store),
         "launcher-reads" => launcher_reads(&store),
         other => panic!("unknown contract stage {other:?}"),
@@ -83,6 +86,7 @@ fn launcher_writes(store: &ProfileStore) {
     survival.client.rshift_background = Some("Gameplay glass".to_owned());
     survival.client.rshift_blur = Some("Strong".to_owned());
     survival.client.rshift_dim = Some("Deep".to_owned());
+    survival.client.menu_background = Some("Low".to_owned());
     store.save(&survival).unwrap();
 
     // Chosen in the launcher: the next game opens Survival.
@@ -94,7 +98,11 @@ fn launcher_reads(store: &ProfileStore) {
     let listing = store.list();
     assert!(listing.complaints.is_empty(), "{:?}", listing.complaints);
     let names: Vec<&str> = listing.profiles.iter().map(|p| p.name.as_str()).collect();
-    assert_eq!(names, ["Bedwars", "Default", "Survival"], "no duplicate Default");
+    assert_eq!(
+        names,
+        ["Bedwars", "Default", "Survival"],
+        "no duplicate Default"
+    );
 
     // The game switched to Bedwars and that is what the launcher now shows as live.
     let live = store.resolve_live().unwrap();
@@ -102,7 +110,10 @@ fn launcher_reads(store: &ProfileStore) {
 
     // And the edit the game saved into Bedwars is here, byte-compatible.
     let bedwars = store.load(&live.id).unwrap();
-    let zoom = bedwars.modules.get("zoom").expect("the game's edit arrived");
+    let zoom = bedwars
+        .modules
+        .get("zoom")
+        .expect("the game's edit arrived");
     assert_eq!(zoom.enabled, Some(true));
     assert_eq!(bedwars.hud.get("fps").unwrap().anchor, "top-right");
     assert_eq!(
@@ -111,5 +122,18 @@ fn launcher_reads(store: &ProfileStore) {
     );
     assert_eq!(bedwars.client.rshift_blur.as_deref(), Some("Soft"));
     assert_eq!(bedwars.client.rshift_dim.as_deref(), Some("Light"));
+    assert_eq!(bedwars.client.menu_background.as_deref(), Some("Off"));
+    // A preference this launcher has never heard of is kept, not dropped,
+    // when the launcher itself rewrites the profile.
+    assert_eq!(
+        bedwars.client.extra.get("futurePreference"),
+        Some(&serde_json::json!("kept"))
+    );
+    store.save(&bedwars).unwrap();
+    let rewritten = store.load(&live.id).unwrap();
+    assert_eq!(
+        rewritten.client.extra.get("futurePreference"),
+        Some(&serde_json::json!("kept"))
+    );
     assert_eq!(store.list().profiles.len(), 3, "reading created nothing");
 }

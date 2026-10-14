@@ -40,6 +40,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use launcher_core::install::InstallStage;
+use launcher_core::session_pulse::SessionPulse;
 use launcher_core::network::policy::Feature;
 use launcher_core::tasks::Cancel;
 
@@ -116,6 +117,26 @@ pub struct LaunchProgress {
     /// Set when the launch ended badly, whether before or after the process
     /// started. One sentence, already suitable for display.
     pub failure: Option<String>,
+    /// Set when the failure may be about mods, so the interface offers the
+    /// recovery page and a launch without external mods. Not a diagnosis:
+    /// recovery says what it can actually show.
+    pub recovery: bool,
+    /// True while (or after) a launch without external mods.
+    pub safe: bool,
+    /// Seconds since the game started, while it runs and after it ended.
+    /// Whole seconds; the interface rounds it to minutes, so nothing ticks.
+    pub elapsed_seconds: Option<u64>,
+    /// The game's own reading of the session (`launcher_core::session_pulse`),
+    /// when its module has written one. While running, `pulse_live` says
+    /// whether it is recent; after the session, it is the summary.
+    pub pulse: Option<SessionPulse>,
+    /// Whether `pulse` was written in the last few seconds. False in a menu or
+    /// with the window in the background, when the game has nothing new to say.
+    pub pulse_live: bool,
+    /// Which of the launch's steps this is, for the step line under Play:
+    /// 0 check, 1 download, 2 start, 3 confirm the Fathom client, 4 running.
+    /// A step that is not needed is passed over, never shown as work.
+    pub step: u8,
 }
 
 impl LaunchProgress {
@@ -128,6 +149,17 @@ impl LaunchProgress {
             active: phase.is_active(),
             cancellable: phase.is_cancellable(),
             failure: None,
+            recovery: false,
+            safe: false,
+            elapsed_seconds: None,
+            pulse: None,
+            pulse_live: false,
+            step: match phase {
+                Phase::Downloading | Phase::Unpacking => 1,
+                Phase::Starting => 2,
+                Phase::Running => 4,
+                _ => 0,
+            },
         }
     }
 
@@ -285,16 +317,33 @@ impl LaunchProgress {
 /// The process exists, but it is not called a Fathom session until the client
 /// module proves that the expected jar completed initialization.
 pub(crate) fn confirming_fathom() -> LaunchProgress {
-    LaunchProgress::new(Phase::Starting, "Starting", "Confirming the Fathom client")
+    let mut progress = LaunchProgress::new(Phase::Starting, "Starting", "Confirming the Fathom client");
+    progress.step = 3;
+    progress
 }
 
 /// What the interface says while the game is up.
 pub(crate) fn running(elapsed: Duration) -> LaunchProgress {
-    LaunchProgress::new(
+    let mut progress = LaunchProgress::new(
         Phase::Running,
         "Minecraft is running",
         elapsed_phrase(elapsed),
-    )
+    );
+    progress.elapsed_seconds = Some(elapsed.as_secs());
+    progress
+}
+
+/// Attach the game's reading of the session, and how long it lasted.
+pub(crate) fn with_session(
+    mut progress: LaunchProgress,
+    elapsed: Duration,
+    pulse: Option<SessionPulse>,
+    live: bool,
+) -> LaunchProgress {
+    progress.elapsed_seconds = Some(elapsed.as_secs());
+    progress.pulse_live = live && pulse.is_some();
+    progress.pulse = pulse;
+    progress
 }
 
 /// A settled, finished launch.
@@ -322,6 +371,18 @@ pub(crate) fn failure(message: impl Into<String>) -> LaunchProgress {
     LaunchProgress::failed(message)
 }
 
+/// A failure the mod recovery page may be able to help with.
+pub(crate) fn with_recovery(mut progress: LaunchProgress) -> LaunchProgress {
+    progress.recovery = progress.failure.is_some();
+    progress
+}
+
+/// Mark a progress snapshot as belonging to a launch without external mods.
+pub(crate) fn safe(mut progress: LaunchProgress, safe: bool) -> LaunchProgress {
+    progress.safe = safe;
+    progress
+}
+
 /// How long the session has been up, in words.
 ///
 /// Rounded on purpose. A seconds counter ticking on the launch screen is a
@@ -333,7 +394,10 @@ fn elapsed_phrase(elapsed: Duration) -> String {
     }
     let minutes = seconds / 60;
     if minutes < 60 {
-        return format!("Running for {minutes} minutes");
+        return format!(
+            "Running for {minutes} {}",
+            if minutes == 1 { "minute" } else { "minutes" }
+        );
     }
     let hours = minutes / 60;
     let rest = minutes % 60;
@@ -512,10 +576,65 @@ mod tests {
         assert!(!cancel.is_cancelled());
     }
 
+    fn reading() -> SessionPulse {
+        launcher_core::session_pulse::parse(
+            "{\"schema\":1,\"updatedAt\":1,\"secondsOfPlay\":20,\"frames\":2000,             \"currentFps\":100.0,\"averageFps\":100.0,\"p95Ms\":10.0,\"p99Ms\":10.0,             \"worstMs\":10.0,\"hitches\":0,\"heapUsedMb\":512,\"heapMaxMb\":4096,             \"modules\":7,\"bucketSeconds\":10,\"timelineFps\":[100.0],             \"timelineWorstMs\":[10.0],\"marks\":[]}",
+        )
+        .expect("a reading")
+    }
+
+    /// The steps under Play follow the phases, and confirming the Fathom
+    /// client is its own step rather than more of "Starting".
+    #[test]
+    fn each_phase_names_its_step() {
+        assert_eq!(LaunchProgress::from_stage(&InstallStage::ResolvingMetadata).step, 0);
+        assert_eq!(LaunchProgress::from_stage(&InstallStage::ExtractingNatives).step, 1);
+        assert_eq!(LaunchProgress::starting().step, 2);
+        assert_eq!(confirming_fathom().step, 3);
+        assert_eq!(running(Duration::from_secs(1)).step, 4);
+    }
+
+    #[test]
+    fn a_running_session_carries_its_time_and_reading() {
+        let live = with_session(
+            running(Duration::from_secs(600)),
+            Duration::from_secs(600),
+            Some(reading()),
+            true,
+        );
+        assert_eq!(live.elapsed_seconds, Some(600));
+        assert!(live.pulse_live);
+        assert_eq!(live.pulse.as_ref().map(|p| p.frames), Some(2000));
+        // No reading yet: never called live, whatever the caller says.
+        let early = with_session(running(Duration::from_secs(5)), Duration::from_secs(5), None, true);
+        assert!(!early.pulse_live);
+    }
+
+    /// The summary outlives the session: a crash keeps both its failure and
+    /// the game's last reading, so Home can show what it was doing.
+    #[test]
+    fn a_finished_session_keeps_its_summary() {
+        let ended = with_session(
+            with_recovery(finished(false, "Minecraft crashed (exit 1).".to_owned())),
+            Duration::from_secs(300),
+            Some(reading()),
+            false,
+        );
+        assert!(ended.failure.is_some());
+        assert!(ended.recovery);
+        assert_eq!(ended.elapsed_seconds, Some(300));
+        assert!(ended.pulse.is_some());
+        assert!(!ended.active);
+    }
+
     #[test]
     fn elapsed_time_is_rounded_rather_than_ticking() {
         assert_eq!(elapsed_phrase(Duration::from_secs(3)), "Started just now");
         assert_eq!(elapsed_phrase(Duration::from_secs(89)), "Started just now");
+        assert_eq!(
+            elapsed_phrase(Duration::from_secs(100)),
+            "Running for 1 minute"
+        );
         assert_eq!(
             elapsed_phrase(Duration::from_secs(600)),
             "Running for 10 minutes"

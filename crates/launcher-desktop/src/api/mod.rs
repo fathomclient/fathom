@@ -23,6 +23,8 @@
 //! would let the caller do something not on this list.
 
 pub mod auth;
+pub mod browse;
+pub mod installed;
 pub mod launch;
 pub mod logs;
 pub mod mods;

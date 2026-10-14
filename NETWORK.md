@@ -63,6 +63,10 @@ first thing on the Privacy screen.
 | `api.adoptium.net` | Java runtime download | opt-in |
 | `api.modrinth.com` | Mod metadata | per action |
 | `cdn.modrinth.com` | Mod download | per action |
+| `textures.minecraft.net` | The signed-in account's own skin, for the account picture | core |
+| `api.curseforge.com` | Mod search and metadata, **only with an API key the user supplies** | per action |
+| `edge.forgecdn.net`, `mediafilez.forgecdn.net` | Mod download from CurseForge, only for mods whose authors allow it | per action |
+| `media.forgecdn.net` | CurseForge project icons and screenshots while browsing | per action |
 
 "core" means the request is implied by something the user just did: pressing
 Sign in, pressing Play, installing a profile. Nothing marked core happens on
@@ -80,9 +84,12 @@ Mojang's real 1.8.9 document and asserting each resolves to an allowlisted host.
 Without it, asset installation would have failed. That is the test earning its
 keep, and it is why it exists.
 
-**Not in this table, and worth stating:** skin and cape textures come from
-`textures.minecraft.net`, and they are fetched **by the game, not by the
-launcher**. The launcher never requests them.
+**Worth stating:** the launcher fetches one texture from
+`textures.minecraft.net` -- the signed-in account's own skin, for its picture.
+Other players' skins and capes come from the same host and are fetched **by
+the game**, as vanilla Minecraft does. The CurseForge hosts are unused unless a
+key is configured (`FATHOM_CURSEFORGE_API_KEY` or `curseforge-api-key.txt` in
+the data directory); without one, CurseForge is not a provider at all.
 
 ---
 
@@ -110,7 +117,9 @@ is refused before a socket is opened, including sign-in.
 
 **Carried:**
 
-- `User-Agent: Fathom/0.1.0` — the product name and version, and nothing else.
+- `User-Agent: fathomclient/fathom/0.3.0` — the project and version, and nothing
+  else. The `owner/project/version` form is what Modrinth's API documentation
+  asks applications to send; it is identical for every user of a build.
 - `Accept: application/json`.
 - `Authorization: Bearer <token>` on the two Minecraft Services calls that need
   it, held as a `Secret` so it cannot land in a log.
@@ -269,9 +278,33 @@ for updates, or installs anything on a timer.
 applications an API licence to query and download the content it indexes.
 CurseForge's API carries a per-project third-party-distribution flag that can
 forbid automated delivery regardless of the software licence; honouring it
-properly means refusing a large part of its catalogue, and a source we would
-have to refuse half the time is worse than a link to the official page. So the
-catalogue links, and does not fetch.
+properly means refusing a large part of its catalogue. The browser has a
+CurseForge provider that honours that flag (a withheld file is shown with a
+link to its page and is never fetched), but it is **off unless a key is
+configured**: CurseForge issues API keys to third-party applications by
+application, and Fathom has not been issued one, so no key ships in any build.
+
+**What browsing sends, and how often.** A search sends the typed text (after
+a 300 ms pause in typing), the chosen category and sort, and the Minecraft
+version and loader. Each result card then reads that project's version list,
+a few at a time, to check compatibility; opening a mod reads its project,
+team and version list, and the names of its dependencies. Icons and
+screenshots come from `cdn.modrinth.com` through the launcher, never from the
+WebView. No account, profile name or installed-mod list is sent. Requests to
+each index go through one pacer (`mods/browse/throttle.rs`): a burst of
+twelve, then two and a half a second — half of Modrinth's published 300 a
+minute — and a 429 pauses every request to that index for as long as its
+`Retry-After` or `X-Ratelimit-Reset` says. Metadata requests time out after
+twenty seconds. Results are cached in memory for minutes and images on disk
+for two weeks (`mods/browse/cache.rs`); nothing about what was searched is
+written to disk.
+
+**Recognising mods the user added.** With mod repositories on, opening the
+Mods page asks Modrinth about jars the user added by hand that Fathom has no
+record of, by their SHA-1 (`/v2/version_file/<sha1>`): the hash of the file
+and nothing else — no file name, no path, no account. A match records the
+mod's name, version and what it was built for in the profile; no match changes
+nothing. Off whenever mod repositories are off.
 
 **What is checked before bytes are written.**
 
@@ -282,9 +315,11 @@ catalogue links, and does not fetch.
    path.
 2. The **query** is built here and percent-encoded, so a search for `a&b=c` is
    one parameter rather than two.
-3. The **compatibility** filter is applied to the query *and* re-applied to the
-   response, because what a server returns is its own business and a
-   compatibility claim is not a compatibility check.
+3. The **compatibility** of every build is decided by Fathom's resolver
+   (`mods/browse/compat.rs`) from the build's own metadata, never from the
+   search filter that found it, and decided again by the installer. A build
+   the resolver cannot vouch for is installed only after the user confirms it;
+   an incompatible one never is.
 4. The **hash** is the publisher's. `ModStore::adopt_bytes` computes SHA-1 over
    what actually arrived and refuses to write anything that does not match what
    the API said. A version whose file carries no usable hash is dropped from the

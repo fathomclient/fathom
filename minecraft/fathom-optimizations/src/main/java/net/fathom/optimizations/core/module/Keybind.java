@@ -58,6 +58,7 @@ public final class Keybind {
     private final String label;
     private final int fallback;
     private int key;
+    private boolean primaryButtonsAllowed = true;
 
     public Keybind(String id, String label, int fallback) {
         if (id == null || id.isEmpty()) {
@@ -79,6 +80,26 @@ public final class Keybind {
 
     public int key() {
         return key;
+    }
+
+    /**
+     * Refuse the left and right mouse buttons for this binding.
+     *
+     * <p>For the Hub key. Bound to right click, every block placed, every
+     * bite of food and every bow drawn opened the Hub; bound to left click,
+     * every swing did. Neither is a key anybody means to give up.
+     */
+    public Keybind withoutPrimaryButtons() {
+        primaryButtonsAllowed = false;
+        return this;
+    }
+
+    /** Whether this binding may be set to {@code code}. */
+    public boolean accepts(int code) {
+        if (!primaryButtonsAllowed && (code == MOUSE_BASE || code == MOUSE_BASE + 1)) {
+            return false;
+        }
+        return true;
     }
 
     public void set(int next) {

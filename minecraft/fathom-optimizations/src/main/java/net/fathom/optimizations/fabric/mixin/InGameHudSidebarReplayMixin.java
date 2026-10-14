@@ -35,6 +35,17 @@ public abstract class InGameHudSidebarReplayMixin {
     @Inject(method = "renderScoreboardObjective(Lnet/minecraft/scoreboard/ScoreboardObjective;Lnet/minecraft/client/util/Window;)V",
             at = @At("HEAD"), cancellable = true)
     private void fathom$replaySidebar(ScoreboardObjective objective, Window window, CallbackInfo callback) {
+        // The Scoreboard module draws the sidebar itself, where the player put
+        // it. Checked first, in the same handler, so the order against the
+        // replay below is fixed rather than left to Mixin priority.
+        if (net.fathom.optimizations.fabric.hud.ScoreboardWidget.takeOver(objective)) {
+            callback.cancel();
+            if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
+                net.fathom.optimizations.core.bench.view.ViewProbe.exit(
+                        net.fathom.optimizations.core.bench.view.ViewSection.HUD_SCOREBOARD);
+            }
+            return;
+        }
         if (!Runtime.vanillaHudReplay || PerfLayer.shadersActive || objective == null) {
             return;
         }

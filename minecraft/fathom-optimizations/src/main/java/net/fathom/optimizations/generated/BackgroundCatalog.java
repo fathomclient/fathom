@@ -86,30 +86,30 @@ public final class BackgroundCatalog {
 
     public static final String[] CREDITS = {
         "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-        "Recorded in vanilla Minecraft by the Fathom project owner",
+        "Recorded in vanilla Minecraft",
         "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-        "Recorded in vanilla Minecraft by the Fathom project owner",
+        "Recorded in vanilla Minecraft",
         "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
         "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
         "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
         "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
-        "Recorded in vanilla Minecraft by the Fathom project owner",
-        "Recorded in vanilla Minecraft by the Fathom project owner",
+        "Recorded in vanilla Minecraft",
+        "Recorded in vanilla Minecraft",
         "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
     };
 
     /** The glow colour while each background shows, 0xRRGGBB. */
     public static final int[] ACCENT = {
-        0x7B9FD5,
-        0xCF81A8,
-        0xC2938E,
-        0x95BBB4,
-        0xC48D90,
-        0x7F9CD2,
-        0x8DADC3,
-        0x809BD0,
-        0xE7CE6A,
-        0x96BBAF,
-        0x8ABBC7,
+        0x87B8EE,
+        0xA9ACDC,
+        0xA3B3D2,
+        0x91C3E1,
+        0xA4B0D3,
+        0x89B6ED,
+        0x8EBDE7,
+        0x89B6EC,
+        0xB2CAC3,
+        0x92C3DF,
+        0x8DC3E9,
     };
 }

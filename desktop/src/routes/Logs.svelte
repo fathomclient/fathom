@@ -24,8 +24,11 @@
   import { FAST } from '../lib/motion';
   import { logsView, type LogSource } from '../lib/api';
 
+  /** Which log to open on: `game` after a session that went wrong. */
+  export let initialSource = 'launcher';
+
   let sources: LogSource[] = [];
-  let active = 'launcher';
+  let active = initialSource;
   let query = '';
   let autoScroll = true;
   let copied = false;

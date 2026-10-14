@@ -28,7 +28,6 @@ Per background:
 | `bg_6midnight` | Midnight Metropolis | video | 1920×1080 | 6 s loop; unblurred, CRF 23 |
 | `bg_6tokyo` | Tokyo Tower | video | 1920×1080 | unblurred, CRF 23 |
 | `bg_6aurora` | Aurora | video | 1920×1080 | unblurred, CRF 23 |
-| `golden-hour` | Golden Hour | retired asset | 1920×1080 | not in the manifest; licence not confirmed |
 
 The legacy videos were encoded with a Gaussian blur (sigma 3.5) at 1600×900,
 CRF 30. That cannot be undone from these files: rebuild them from the original

@@ -517,8 +517,14 @@ mod tests {
     fn only_the_known_commands_parse() {
         assert_eq!(Command::parse("sign-in"), Some(Command::SignIn));
         assert_eq!(Command::parse("add-account"), Some(Command::AddAccount));
-        assert_eq!(Command::parse("sign-in-status"), Some(Command::SignInStatus));
-        assert_eq!(Command::parse("cancel-sign-in"), Some(Command::CancelSignIn));
+        assert_eq!(
+            Command::parse("sign-in-status"),
+            Some(Command::SignInStatus)
+        );
+        assert_eq!(
+            Command::parse("cancel-sign-in"),
+            Some(Command::CancelSignIn)
+        );
         assert_eq!(Command::parse("add-account someone@example.com"), None);
         assert_eq!(Command::parse("account"), Some(Command::Account));
         assert_eq!(Command::parse("accounts"), Some(Command::Accounts));

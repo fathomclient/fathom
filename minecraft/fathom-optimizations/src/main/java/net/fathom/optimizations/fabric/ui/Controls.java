@@ -155,6 +155,10 @@ public final class Controls {
         String[] options;
         int selected;
         boolean swatches;
+        /** For a swatch popover: the colours, in the order they are drawn. */
+        int[] colours;
+        /** For a swatch popover: which of {@link #colours} is the setting's default, or -1. */
+        int defaultIndex = -1;
 
         Overlay set(String id, Rect anchor, String[] options, int selected, boolean swatches) {
             this.id = id;
@@ -162,6 +166,8 @@ public final class Controls {
             this.options = options;
             this.selected = selected;
             this.swatches = swatches;
+            this.colours = PALETTE;
+            this.defaultIndex = -1;
             return this;
         }
     }
@@ -1272,6 +1278,53 @@ public final class Controls {
 
     /** A colour with a palette behind it. @return the chosen RGB */
     public int colour(Renderer ui, String id, Rect area, int rgb) {
+        return colour(ui, id, area, rgb, -1);
+    }
+
+    /**
+     * The swatches a colour setting offers: its own default first, then the
+     * palette, then the colour it has now if that is none of those.
+     *
+     * <p>The default has to be there. Several shipped colours -- the key fills
+     * of Keystrokes, the crosshair's target colour -- are not palette colours,
+     * and before this a setting changed once could only get its colour back by
+     * resetting the whole module.
+     */
+    private static int[] swatchesFor(int rgb, int defaultRgb) {
+        int count = PALETTE.length;
+        boolean hasDefault = defaultRgb >= 0;
+        boolean defaultInPalette = hasDefault && indexOf(defaultRgb) >= 0;
+        boolean custom = rgb != defaultRgb && indexOf(rgb) < 0;
+        int[] out = new int[count + (hasDefault && !defaultInPalette ? 1 : 0) + (custom ? 1 : 0)];
+        int cursor = 0;
+        if (hasDefault && !defaultInPalette) {
+            out[cursor++] = defaultRgb;
+        }
+        for (int colour : PALETTE) {
+            out[cursor++] = colour;
+        }
+        if (custom) {
+            out[cursor] = rgb;
+        }
+        return out;
+    }
+
+    private static int indexIn(int[] colours, int rgb) {
+        for (int index = 0; index < colours.length; index++) {
+            if (colours[index] == rgb) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * A colour with a palette behind it, and the setting's own default.
+     *
+     * @param defaultRgb the colour the setting shipped with, or -1 for none
+     * @return the chosen RGB
+     */
+    public int colour(Renderer ui, String id, Rect area, int rgb, int defaultRgb) {
         boolean open = id.equals(openId);
         Rect box = area.vcentreRight(0f, SWATCH, SWATCH);
         State s = state(id, box, true);
@@ -1294,15 +1347,22 @@ public final class Controls {
         ui.popTransform();
         focusRing(ui, s, box, Skin.R_SMALL);
 
-        if (open) {
-            overlays.add(overlay(id, box, PALETTE_LABELS, indexOf(rgb), true));
-        }
-        if (id.equals(choiceId)) {
-            int chosen = choiceIndex;
-            choiceId = null;
-            choiceIndex = -1;
-            if (chosen >= 0 && chosen < PALETTE.length) {
-                return PALETTE[chosen];
+        boolean choosing = id.equals(choiceId);
+        if (open || choosing) {
+            int[] colours = swatchesFor(rgb, defaultRgb);
+            if (open) {
+                Overlay shown = overlay(id, box, PALETTE_LABELS, indexIn(colours, rgb), true);
+                shown.colours = colours;
+                shown.defaultIndex = defaultRgb >= 0 ? indexIn(colours, defaultRgb) : -1;
+                overlays.add(shown);
+            }
+            if (choosing) {
+                int chosen = choiceIndex;
+                choiceId = null;
+                choiceIndex = -1;
+                if (chosen >= 0 && chosen < colours.length) {
+                    return colours[chosen];
+                }
             }
         }
         return rgb;
@@ -1498,9 +1558,10 @@ public final class Controls {
     }
 
     private void drawSwatches(Renderer ui, Overlay overlay, float grown, boolean interactive) {
-        int columns = 3;
+        int[] colours = overlay.colours == null ? PALETTE : overlay.colours;
+        int columns = colours.length > 9 ? 4 : 3;
         float cell = 30f;
-        int rows = (PALETTE.length + columns - 1) / columns;
+        int rows = (colours.length + columns - 1) / columns;
         float width = columns * cell + Skin.S2 * 2f;
         float height = rows * cell + Skin.S2 * 2f;
         boolean upwards = overlay.anchor.bottom() + height > ui.height() - Skin.S4;
@@ -1513,13 +1574,19 @@ public final class Controls {
         VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
         ui.rim(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.EDGE_ELEVATED);
 
-        for (int index = 0; index < PALETTE.length; index++) {
+        for (int index = 0; index < colours.length; index++) {
             float cx = panel.x + Skin.S2 + (index % columns) * cell;
             float cy = panel.y + Skin.S2 + (index / columns) * cell;
             Rect swatch = new Rect(cx + 3f, cy + 3f, cell - 6f, cell - 6f);
             boolean over = interactive && inputEnabled && pointer != null
                     && swatch.inset(-3f).contains(pointer.x(), pointer.y());
-            ui.rounded(swatch.x, swatch.y, swatch.right(), swatch.bottom(), Skin.R_SMALL, 0xFF000000 | PALETTE[index]);
+            ui.rounded(swatch.x, swatch.y, swatch.right(), swatch.bottom(), Skin.R_SMALL, 0xFF000000 | colours[index]);
+            if (index == overlay.defaultIndex) {
+                // The setting's own default: a small mark in the corner, in
+                // whichever of black or white reads on it.
+                int mark = luminance(colours[index]) > 0.55f ? 0xCC000000 : 0xE6FFFFFF;
+                ui.rounded(swatch.right() - 8f, swatch.y + 3f, swatch.right() - 3f, swatch.y + 8f, 2.5f, mark);
+            }
             // The chosen swatch is the brightest rim, not a thicker one.
             ui.rim(swatch.x, swatch.y, swatch.right(), swatch.bottom(), Skin.R_SMALL,
                     index == overlay.selected ? Skin.TEXT : (over ? Skin.TEXT_MUTED : Skin.EDGE_STRONG));
@@ -1531,6 +1598,10 @@ public final class Controls {
         }
         ui.popAlpha();
         blockIfOver(panel);
+    }
+
+    private static float luminance(int rgb) {
+        return (0.2126f * ((rgb >> 16) & 0xFF) + 0.7152f * ((rgb >> 8) & 0xFF) + 0.0722f * (rgb & 0xFF)) / 255f;
     }
 
     private void blockIfOver(Rect panel) {

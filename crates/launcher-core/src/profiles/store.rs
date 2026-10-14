@@ -44,6 +44,12 @@ pub const SCHEMA_VERSION: u32 = 5;
 /// Suffix for the last known-good copy of a profile.
 const BACKUP_SUFFIX: &str = ".bak";
 
+/// Mod entries set aside when a profile could only be read without them.
+///
+/// Kept beside the profile, never deleted by the launcher, and read by the mod
+/// store's garbage collection so the jars those entries name are kept too.
+pub const QUARANTINE_FILE: &str = "mods-set-aside.json";
+
 /// A ceiling on the size of a profile document.
 ///
 /// A profile is a few kilobytes. Anything vastly larger is either corrupt or
@@ -65,6 +71,10 @@ pub enum LoadOutcome {
     Migrated { from: u32 },
     /// The main file was unusable; this came from the backup.
     RecoveredFromBackup { why: String },
+    /// The profile and its backup were only readable without some of their
+    /// mod entries. Those were set aside in [`QUARANTINE_FILE`]; everything
+    /// else, including every other mod, was kept.
+    Salvaged { set_aside: usize, why: String },
 }
 
 impl LoadOutcome {
@@ -80,6 +90,10 @@ impl LoadOutcome {
             )),
             LoadOutcome::RecoveredFromBackup { why } => Some(format!(
                 "The profile file was unreadable and the last good copy was used instead. {why}"
+            )),
+            LoadOutcome::Salvaged { set_aside, why } => Some(format!(
+                "{set_aside} unreadable mod {} set aside so the profile could open; the                  rest of the profile and its other mods are unchanged. The entries are kept                  in {QUARANTINE_FILE}. {why}",
+                if *set_aside == 1 { "entry was" } else { "entries were" }
             )),
         }
     }
@@ -225,10 +239,17 @@ impl ProfileStore {
                 profile: loaded.profile,
                 outcome: LoadOutcome::RecoveredFromBackup { why },
             }),
-            Err(_) => Err(ProfileError::Corrupt {
-                profile: id.to_string(),
-                detail: why,
-            }),
+            // Last resort: the damage may be confined to the mods, which are
+            // the one part of a profile a third party's metadata can reach.
+            // A profile that cannot open cannot launch at all -- not even
+            // without its mods -- so keep everything that does parse.
+            Err(_) => match salvage(&file, id, &self.dirs(id)) {
+                Some(loaded) => Ok(loaded),
+                None => Err(ProfileError::Corrupt {
+                    profile: id.to_string(),
+                    detail: why,
+                }),
+            },
         }
     }
 
@@ -370,6 +391,64 @@ fn read_and_parse(file: &Path, id: &ProfileId) -> Result<Loaded, ProfileError> {
             LoadOutcome::Clean
         } else {
             LoadOutcome::Migrated { from }
+        },
+    })
+}
+
+/// Read a profile whose only problem is some of its mod entries.
+///
+/// Each entry in `mods.mods` is parsed on its own; the ones that do not parse
+/// are written to [`QUARANTINE_FILE`] (appended, never overwritten) and the
+/// profile is read with the rest. `None` when the document is not JSON, or
+/// when it still does not parse with every mod set aside -- the problem is
+/// elsewhere, and guessing at the rest of a profile is not this function's job.
+fn salvage(file: &Path, id: &ProfileId, dirs: &crate::profiles::ProfileDirs) -> Option<Loaded> {
+    let bytes = std::fs::read(file).ok()?;
+    if bytes.len() as u64 > MAX_PROFILE_BYTES {
+        return None;
+    }
+    let raw: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let (mut value, _) = migrate(raw, id).ok()?;
+    let object = value.as_object_mut()?;
+    let entries: Vec<serde_json::Value> = object
+        .get("mods")
+        .and_then(|mods| mods.get("mods"))
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let (kept, set_aside): (Vec<_>, Vec<_>) = entries.into_iter().partition(|entry| {
+        serde_json::from_value::<crate::mods::ProfileMod>(entry.clone()).is_ok()
+    });
+    object.insert("mods".to_owned(), serde_json::json!({ "mods": kept }));
+    let profile: Profile = serde_json::from_value(value).ok()?;
+    if &profile.id != id {
+        return None;
+    }
+
+    if !set_aside.is_empty() {
+        let quarantine = dirs.root().join(QUARANTINE_FILE);
+        let mut existing: Vec<serde_json::Value> = std::fs::read(&quarantine)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default();
+        existing.push(serde_json::json!({
+            "setAsideAt": crate::mods::config::now_seconds(),
+            "entries": set_aside,
+        }));
+        let body = serde_json::to_vec_pretty(&existing).unwrap_or_default();
+        if crate::fs_safety::atomic_write(&quarantine, &body).is_err() {
+            // Not written means not safe to drop them from the profile: the
+            // next save would lose them for good.
+            tracing::warn!(profile = %id, "could not set damaged mod entries aside; not salvaging");
+            return None;
+        }
+    }
+    tracing::warn!(profile = %id, set_aside = set_aside.len(), "profile salvaged without its unreadable mod entries");
+    Some(Loaded {
+        profile,
+        outcome: LoadOutcome::Salvaged {
+            set_aside: set_aside.len(),
+            why: "The profile file did not parse as written.".to_owned(),
         },
     })
 }
@@ -1017,6 +1096,60 @@ mod tests {
         assert!(loaded.outcome.message().is_some());
         // The backup holds the *previous* content.
         assert_eq!(loaded.profile.display_name, "Main");
+    }
+
+    /// One damaged mod entry -- in the file and in its backup -- must not cost
+    /// the whole profile: everything else is kept, the bad entry is set aside
+    /// rather than deleted, and the profile can launch.
+    #[test]
+    fn a_damaged_mod_entry_is_set_aside_and_the_profile_still_opens() {
+        let (_tmp, store) = store();
+        let mut profile = Profile::new(id("main"), "Main");
+        profile.mods.upsert(crate::mods::ProfileMod::new(
+            crate::mods::ModId::new("good").unwrap(),
+            "a".repeat(40),
+            "good.jar",
+        ));
+        store.create(&profile).unwrap();
+        store.save(&profile).unwrap();
+
+        let manifest = store.dirs(&id("main")).manifest_file();
+        let text = std::fs::read_to_string(&manifest).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        value["mods"]["mods"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({ "id": "../not an id", "sha1": "b".repeat(40), "file_name": "bad.jar" }));
+        let damaged = serde_json::to_vec(&value).unwrap();
+        std::fs::write(&manifest, &damaged).unwrap();
+        std::fs::write(backup_path(&manifest), &damaged).unwrap();
+
+        let loaded = store.load_detailed(&id("main")).unwrap();
+        assert!(
+            matches!(loaded.outcome, LoadOutcome::Salvaged { set_aside: 1, .. }),
+            "{:?}",
+            loaded.outcome
+        );
+        assert_eq!(loaded.profile.display_name, "Main");
+        assert_eq!(loaded.profile.mods.len(), 1, "the good entry is kept");
+        let aside =
+            std::fs::read_to_string(store.dirs(&id("main")).root().join(QUARANTINE_FILE)).unwrap();
+        assert!(
+            aside.contains("bad.jar"),
+            "the bad entry is kept, not dropped"
+        );
+        assert!(
+            aside.contains(&"b".repeat(40)),
+            "with the hash that keeps its bytes"
+        );
+
+        // Saved back, the profile reads clean from then on.
+        assert!(loaded.outcome.needs_rewrite());
+        store.save(&loaded.profile).unwrap();
+        assert_eq!(
+            store.load_detailed(&id("main")).unwrap().outcome,
+            LoadOutcome::Clean
+        );
     }
 
     /// With no usable backup there is nothing to recover, and the honest answer

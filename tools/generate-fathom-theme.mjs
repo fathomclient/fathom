@@ -264,7 +264,7 @@ emit(path.join(root, 'desktop', 'src', 'lib', 'motion.generated.ts'), motionTs.j
 
 // The brand's construction numbers and colours, for the geometry module that
 // both the launcher and `assets/brand/build-brand.mjs` draw from
-// (`desktop/src/lib/brand/aperture.ts`). Colours are resolved to hex so the
+// (`desktop/src/lib/brand/orbit.ts`). Colours are resolved to hex so the
 // icon rasteriser can use them directly.
 const brandTs = [
   '// Generated from assets/theme/fathom-theme.json. Do not edit.',
@@ -453,8 +453,7 @@ function systemJava(system) {
     out.push(`        public static final float MOTION_${javaName(name)} = ${(Number(value) / 1000).toFixed(3)}f;`);
   }
   out.push('');
-  // The brand: the Aperture construction (in units of the six-unit grid, and
-  // tile sizes in px) and its inks.
+  // The brand: the Orbit mark's inks and the lockup's proportions.
   for (const [name, value] of Object.entries(system.brand)) {
     if (name.startsWith('_')) continue;
     const resolved = resolve(system, value);

@@ -3,6 +3,7 @@ package net.fathom.optimizations.fabric.hud;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.util.Formatting;
 
 import net.fathom.optimizations.core.module.FathomModule;
@@ -37,23 +38,36 @@ import net.fathom.optimizations.core.module.Setting;
  */
 final class ArmourWidget implements HudWidget {
 
+    /** Each line measured once while it is unchanged, not on every size asked for. */
+    private final MeasuredWidths widths = new MeasuredWidths(16);
+
     private static final String[] SLOT_NAMES = {"Boots", "Legs", "Chest", "Helmet"};
-    private static final int ICON = 16;
+    /** Item icons are drawn at 16 pixels and scaled to the chosen size. */
+    private static final int ITEM = 16;
+
+    private static int icon() {
+        return (int) Math.round(Widgets.optionNumber("armour", "icon.size", ITEM));
+    }
 
     /** Up to five entries: the held item and four armour slots. */
-    private final ItemStack[] stacks = new ItemStack[5];
-    private final String[] labels = new String[5];
-    private final String[] values = new String[5];
-    private final int[] percents = new int[5];
+    private final ItemStack[] stacks = new ItemStack[6];
+    private final String[] labels = new String[6];
+    private final String[] values = new String[6];
+    private final int[] percents = new int[6];
     /** Which slot each entry came from: -1 held, 0 boots to 3 helmet. */
-    private final int[] slots = new int[5];
+    private final int[] slots = new int[6];
     private int count;
     private long collectedFrame = -1L;
+    /** Where the widget is anchored, 0 left to 1 right: a right-hand readout mirrors. */
+    private float alignment;
+    /** Arrows carried, shown under a held bow. One stack object, its count updated. */
+    private ItemStack arrows;
+    private static final int ARROWS = -2;
 
     /** What the strings were built from, so they are not rebuilt for nothing. */
-    private final Object[] builtStacks = new Object[5];
-    private final int[] builtDamage = new int[5];
-    private final int[] builtCount = new int[5];
+    private final Object[] builtStacks = new Object[6];
+    private final int[] builtDamage = new int[6];
+    private final int[] builtCount = new int[6];
     private int builtEntries = -1;
     private int builtSettings = -1;
 
@@ -85,9 +99,21 @@ final class ArmourWidget implements HudWidget {
             return;
         }
         boolean reverse = Widgets.option("armour", "reverse", false);
-        if (Widgets.option("armour", "held", true) && player.inventory.getMainHandStack() != null) {
+        ItemStack held = player.inventory.getMainHandStack();
+        if (Widgets.option("armour", "held", true) && held != null) {
             slots[count] = -1;
-            stacks[count++] = player.inventory.getMainHandStack();
+            stacks[count++] = held;
+            if (held.getItem() == Items.BOW && Widgets.option("armour", "arrows", true)) {
+                int carried = arrowsCarried(player.inventory.main);
+                if (carried > 0) {
+                    if (arrows == null) {
+                        arrows = new ItemStack(Items.ARROW);
+                    }
+                    arrows.count = carried;
+                    slots[count] = ARROWS;
+                    stacks[count++] = arrows;
+                }
+            }
         }
         ItemStack[] worn = player.inventory.armor;
         // The array is stored feet first; the default reading order is the way
@@ -128,7 +154,7 @@ final class ArmourWidget implements HudWidget {
             ItemStack stack = stacks[index];
             labels[index] = label(stack, slotName(slots[index]), labelStyle);
             percents[index] = percentLeft(stack);
-            values[index] = value(stack, valueStyle);
+            values[index] = slots[index] == ARROWS ? "x" + stack.count : value(stack, valueStyle);
             builtStacks[index] = stack;
             builtDamage[index] = stack.getDamage();
             builtCount[index] = stack.count;
@@ -139,7 +165,42 @@ final class ArmourWidget implements HudWidget {
 
     /** What to call the slot an entry came from, for the Slot label style. */
     private static String slotName(int slot) {
+        if (slot == ARROWS) {
+            return "Arrows";
+        }
         return slot < 0 || slot >= SLOT_NAMES.length ? "Held" : SLOT_NAMES[slot];
+    }
+
+    private static int arrowsCarried(ItemStack[] main) {
+        int total = 0;
+        if (main == null) {
+            return 0;
+        }
+        for (ItemStack stack : main) {
+            if (stack != null && stack.getItem() == Items.ARROW) {
+                total += stack.count;
+            }
+        }
+        return total;
+    }
+
+    @Override
+    public void align(float horizontal) {
+        alignment = horizontal;
+    }
+
+    @Override
+    public boolean animating(MinecraftClient client) {
+        if (!icons()) {
+            return false;
+        }
+        collect(client);
+        for (int index = 0; index < count; index++) {
+            if (stacks[index] != null && stacks[index].hasEnchantmentGlint()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String label(ItemStack stack, String slotName, String style) {
@@ -188,8 +249,23 @@ final class ArmourWidget implements HudWidget {
         if (label == null || label.isEmpty()) {
             return value == null ? "" : value;
         }
-        return value == null || value.isEmpty() ? label : label + " " + value;
+        if (value == null || value.isEmpty()) {
+            return label;
+        }
+        // Joined once per change, not per call: it is asked for to size the
+        // box and again to draw, every frame, and its width is cached by the
+        // string object.
+        if (joinedLabels[index] != label || joinedValues[index] != value) {
+            joinedLabels[index] = label;
+            joinedValues[index] = value;
+            joined[index] = label + " " + value;
+        }
+        return joined[index];
     }
+
+    private final String[] joined = new String[6];
+    private final String[] joinedLabels = new String[6];
+    private final String[] joinedValues = new String[6];
 
     private static boolean icons() {
         return !"Values only".equals(Widgets.optionChoice("armour", "display", "Icons and values"));
@@ -238,7 +314,7 @@ final class ArmourWidget implements HudWidget {
             return pad * 2;
         }
         if (horizontal()) {
-            int height = icons() ? ICON : 0;
+            int height = icons() ? icon() : 0;
             if (text()) {
                 height += (icons() ? 1 : 0) + (int) Math.ceil(font.lineHeight());
             }
@@ -249,24 +325,24 @@ final class ArmourWidget implements HudWidget {
 
     private int rowHeight(HudFont font) {
         int textHeight = text() ? (int) Math.ceil(font.lineHeight()) : 0;
-        return icons() ? Math.max(ICON, textHeight) : textHeight;
+        return icons() ? Math.max(icon(), textHeight) : textHeight;
     }
 
     private int rowWidth(HudFont font, int index) {
-        int width = icons() ? ICON : 0;
+        int width = icons() ? icon() : 0;
         if (text()) {
             String line = text(index);
             if (!line.isEmpty()) {
-                width += (icons() ? 2 : 0) + (int) Math.ceil(font.width(line));
+                width += (icons() ? 2 : 0) + (int) Math.ceil(widths.of(font, line));
             }
         }
         return width;
     }
 
     private int cellWidth(HudFont font, int index) {
-        int width = icons() ? ICON : 0;
+        int width = icons() ? icon() : 0;
         if (text()) {
-            width = Math.max(width, (int) Math.ceil(font.width(text(index))));
+            width = Math.max(width, (int) Math.ceil(widths.of(font, text(index))));
         }
         return width;
     }
@@ -289,6 +365,7 @@ final class ArmourWidget implements HudWidget {
 
         boolean icons = icons();
         boolean text = text();
+        int size = icon();
         boolean bar = Widgets.option("armour", "bar", false);
         boolean shadow = HudStyle.textShadow(module);
         boolean horizontal = horizontal();
@@ -297,18 +374,26 @@ final class ArmourWidget implements HudWidget {
         int top = y + pad;
         int rowHeight = horizontal ? 0 : rowHeight(font);
 
+        // Pinned to the right, a row reads from the edge inwards: icon at the
+        // edge, the value to its left, rows right-aligned.
+        boolean mirrored = !horizontal && alignment > 0.5f;
+        int inner = width(client, font) - HudStyle.padding(module) * 2;
         if (icons) {
             HudGl.itemsBegin();
             try {
                 int cursor = left;
                 for (int index = 0; index < count; index++) {
+                    // The arrow count is printed beside it; the stack's own
+                    // number on the icon would say it twice.
+                    boolean overlay = bar && slots[index] != ARROWS;
                     if (horizontal) {
                         int cell = cellWidth(font, index);
-                        HudGl.itemQuad(client, stacks[index], cursor + (cell - ICON) / 2, top, bar);
+                        item(client, stacks[index], cursor + (cell - size) / 2, top, size, overlay);
                         cursor += cell + gap;
                     } else {
-                        HudGl.itemQuad(client, stacks[index], left,
-                                top + index * (rowHeight + gap) + (rowHeight - ICON) / 2, bar);
+                        int iconX = mirrored ? left + inner - size : left;
+                        item(client, stacks[index], iconX,
+                                top + index * (rowHeight + gap) + (rowHeight - size) / 2, size, overlay);
                     }
                 }
             } finally {
@@ -323,14 +408,16 @@ final class ArmourWidget implements HudWidget {
             String line = text(index);
             if (horizontal) {
                 int cell = cellWidth(font, index);
-                float textX = cursor + (cell - font.width(line)) / 2f;
-                font.draw(line, Math.round(textX), top + (icons ? ICON + 1 : 0),
+                float textX = cursor + (cell - widths.of(font, line)) / 2f;
+                font.draw(line, Math.round(textX), top + (icons ? size + 1 : 0),
                         colour(module, index, alpha), shadow);
                 cursor += cell + gap;
                 continue;
             }
             int rowTop = top + index * (rowHeight + gap);
-            float textX = left + (icons ? ICON + 2 : 0);
+            float textX = mirrored
+                    ? left + inner - (icons ? size + 2 : 0) - widths.of(font, line)
+                    : left + (icons ? size + 2 : 0);
             float textY = rowTop + (rowHeight - font.lineHeight()) / 2f;
             font.draw(line, Math.round(textX), Math.round(textY), colour(module, index, alpha), shadow);
         }
@@ -351,5 +438,22 @@ final class ArmourWidget implements HudWidget {
             }
         }
         return (alpha << 24) | (rgb & 0x00FFFFFF);
+    }
+
+    /** An item at {@code size} pixels: drawn at its native sixteen and scaled about its corner. */
+    private static void item(MinecraftClient client, ItemStack stack, int x, int y, int size, boolean overlay) {
+        if (size == ITEM) {
+            HudGl.itemQuad(client, stack, x, y, overlay);
+            return;
+        }
+        com.mojang.blaze3d.platform.GlStateManager.pushMatrix();
+        try {
+            com.mojang.blaze3d.platform.GlStateManager.translate(x, y, 0f);
+            float scale = size / (float) ITEM;
+            com.mojang.blaze3d.platform.GlStateManager.scale(scale, scale, 1f);
+            HudGl.itemQuad(client, stack, 0, 0, overlay);
+        } finally {
+            com.mojang.blaze3d.platform.GlStateManager.popMatrix();
+        }
     }
 }

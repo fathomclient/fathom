@@ -16,14 +16,17 @@ public interface UiCanvas extends Renderer {
     /** The wordmark's ink width in logical units at an ascender height. */
     float wordmarkWidth(float capHeight);
 
-    /** The wordmark, its ascender's top-left ink at x, y. Returns the ink width. */
+    /**
+     * The wordmark, its ascender's top-left ink at x, y, in its own inks;
+     * {@code argb} only fades it. Returns the ink width.
+     */
     float wordmark(float x, float y, float capHeight, int argb);
 
-    /** The Aperture lockup, mark and word. Returns its width. */
-    float lockup(float x, float y, float capHeight, int frameArgb, int planeArgb);
+    /** The mark's width in logical units at a height. */
+    float markWidth(float height);
 
-    /** The lockup's height in logical units. */
-    float lockupHeight(float capHeight);
+    /** The mark, its box's top-left at x, y, in its own inks. Returns its width. */
+    float mark(float x, float y, float height, int argb);
 
     /** A whole texture in a rounded rectangle: the account's head, as a circle. */
     void roundedImage(int textureId, float left, float top, float right, float bottom, float radius);

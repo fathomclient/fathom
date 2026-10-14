@@ -353,6 +353,41 @@ public final class FathomModule {
         enabled = defaultEnabled;
     }
 
+    /**
+     * Put every setting and key back as shipped, and leave the switch alone.
+     *
+     * <p>What a module page's "Reset to defaults" does. Resetting the switch
+     * as well would turn off a module somebody had just turned on, from a
+     * button they pressed to tidy its settings -- an unrelated preference
+     * erased as a side effect.
+     */
+    public void resetSettings() {
+        for (Setting setting : settings.values()) {
+            setting.reset();
+        }
+        for (Keybind keybind : keybinds) {
+            keybind.reset();
+        }
+        if (changeListener != null) {
+            changeListener.changed(this, null);
+        }
+    }
+
+    /** Whether any setting or key differs from how it shipped; the switch is not counted. */
+    public boolean settingsChanged() {
+        for (Setting setting : settings.values()) {
+            if (setting.changed()) {
+                return true;
+            }
+        }
+        for (Keybind keybind : keybinds) {
+            if (keybind.changed()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Whether anything about this feature differs from how it shipped. */
     public boolean changed() {
         if (enabled != defaultEnabled) {
@@ -548,11 +583,14 @@ public final class FathomModule {
             if (description.length() < 10) {
                 throw new IllegalStateException(id + " has no real description");
             }
-            if (widgets.isEmpty() && optimizations.isEmpty() && keybinds.isEmpty() && settings.isEmpty()) {
+            if (widgets.isEmpty() && optimizations.isEmpty() && keybinds.isEmpty() && settings.isEmpty()
+                    && behaviour.isEmpty()) {
                 // A feature with nothing attached is a row in a list that does
                 // nothing when pressed. Refusing it here is how the hub stays
-                // free of decoration.
-                throw new IllegalStateException(id + " does nothing: no widget, keybind, setting or optimization");
+                // free of decoration. A declared behaviour counts: it is code
+                // that reads the switch (Behaviour.implemented proves it exists).
+                throw new IllegalStateException(id
+                        + " does nothing: no widget, keybind, setting, optimization or behaviour");
             }
             return new FathomModule(this);
         }

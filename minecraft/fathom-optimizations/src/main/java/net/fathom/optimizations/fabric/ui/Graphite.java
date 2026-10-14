@@ -49,6 +49,8 @@ public final class Graphite {
     public static final int STATE_HOVER = GraphiteTokens.COLOR_STATE_HOVER;
     public static final int STATE_SELECTED = GraphiteTokens.COLOR_STATE_SELECTED;
     public static final int SIGNAL = GraphiteTokens.COLOR_SIGNAL;
+    /** The icon's arc blue: the current place's glyph, as in the launcher's rail. */
+    public static final int BRAND_LIGHT = FathomTheme.Tokens.BRAND_ORBIT_LIGHT;
     public static final int SCROLLBAR = GraphiteTokens.COLOR_SCROLLBAR;
 
     // -----------------------------------------------------------------------
@@ -374,41 +376,54 @@ public final class Graphite {
     // The wordmark
     // -----------------------------------------------------------------------
 
+    /** The brand art is drawn in its own inks: the tint only fades it. */
+    private static final int BRAND_TINT = 0xFFFFFFFF;
+
     /**
      * Draw the wordmark, "fathom", with its ascender's top at {@code y}; returns
      * its width. {@code capHeight} is the ascender, which in Geist is the cap
-     * height. A renderer without the brand sheet (the development showcase) gets
-     * the word set plainly rather than nothing.
+     * height. It is drawn in the brand's inks, ivory warming to the arc's blue
+     * over its last letters. A renderer without the brand sheet (the
+     * development showcase) gets the word set plainly rather than nothing.
      */
     public static float wordmark(Renderer ui, float x, float y, float capHeight) {
         if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
-            return ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).wordmark(x, y, capHeight, TEXT);
+            return ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).wordmark(x, y, capHeight, BRAND_TINT);
         }
         ui.text(GraphiteTokens.WORDMARK_TEXT, x, y + capHeight, UI.at(capHeight * 1.4f), TEXT);
         return ui.measure(GraphiteTokens.WORDMARK_TEXT, UI.at(capHeight * 1.4f));
     }
 
     /**
-     * The lockup: the Aperture mark, then the wordmark on its baseline. {@code y}
-     * is the mark's top. A renderer without the brand sheet gets the wordmark
-     * alone.
+     * The lockup, as the launcher's header sets it: the mark, then the
+     * wordmark. {@code y} is the word's ascender top, as for
+     * {@link #wordmark}; the mark is {@code BRAND_LOCKUP_MARK} ascenders tall,
+     * centred on the ascender, so it reaches past the word above and below,
+     * and stands {@code BRAND_LOCKUP_GAP} ascenders before it. A renderer
+     * without the brand sheet gets the wordmark alone.
      *
      * @return its width
      */
     public static float lockup(Renderer ui, float x, float y, float capHeight) {
-        if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
-            return ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).lockup(x, y, capHeight, TEXT,
-                    net.fathom.optimizations.generated.FathomTheme.Tokens.BRAND_PLANE_INK);
+        if (!(ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas)) {
+            return wordmark(ui, x, y, capHeight);
         }
-        return wordmark(ui, x, y, capHeight);
+        net.fathom.optimizations.fabric.gfx.UiCanvas canvas = (net.fathom.optimizations.fabric.gfx.UiCanvas) ui;
+        float markHeight = capHeight * FathomTheme.Tokens.BRAND_LOCKUP_MARK;
+        float markWidth = canvas.mark(x, y + (capHeight - markHeight) / 2f, markHeight, BRAND_TINT);
+        float gap = capHeight * FathomTheme.Tokens.BRAND_LOCKUP_GAP;
+        return markWidth + gap + canvas.wordmark(x + markWidth + gap, y, capHeight, BRAND_TINT);
     }
 
-    /** The lockup's height, the mark's, at an ascender height. */
-    public static float lockupHeight(Renderer ui, float capHeight) {
-        if (ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas) {
-            return ((net.fathom.optimizations.fabric.gfx.UiCanvas) ui).lockupHeight(capHeight);
+    /** The lockup's width at an ascender height, without drawing it. */
+    public static float lockupWidth(Renderer ui, float capHeight) {
+        if (!(ui instanceof net.fathom.optimizations.fabric.gfx.UiCanvas)) {
+            return wordmarkWidth(ui, capHeight);
         }
-        return capHeight;
+        net.fathom.optimizations.fabric.gfx.UiCanvas canvas = (net.fathom.optimizations.fabric.gfx.UiCanvas) ui;
+        return canvas.markWidth(capHeight * FathomTheme.Tokens.BRAND_LOCKUP_MARK)
+                + capHeight * FathomTheme.Tokens.BRAND_LOCKUP_GAP
+                + canvas.wordmarkWidth(capHeight);
     }
 
     /** The wordmark's width at an ascender height, without drawing it. */

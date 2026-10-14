@@ -50,7 +50,11 @@ impl CatalogProvider for Index {
         Availability::Ready
     }
 
-    fn search(&self, query: &SearchQuery, _: ProviderContext<'_>) -> Result<SearchPage, BrowseError> {
+    fn search(
+        &self,
+        query: &SearchQuery,
+        _: ProviderContext<'_>,
+    ) -> Result<SearchPage, BrowseError> {
         Ok(SearchPage {
             hits: self.projects.clone(),
             total: self.projects.len() as u64,
@@ -69,7 +73,12 @@ impl CatalogProvider for Index {
             })
     }
 
-    fn files(&self, id: &str, _: &Target, _: ProviderContext<'_>) -> Result<Vec<ModFile>, BrowseError> {
+    fn files(
+        &self,
+        id: &str,
+        _: &Target,
+        _: ProviderContext<'_>,
+    ) -> Result<Vec<ModFile>, BrowseError> {
         // Newest first, the way the real providers answer.
         let mut files: Vec<ModFile> = self
             .files
@@ -83,7 +92,12 @@ impl CatalogProvider for Index {
         Ok(files)
     }
 
-    fn file(&self, project: &str, version_id: &str, _: ProviderContext<'_>) -> Result<ModFile, BrowseError> {
+    fn file(
+        &self,
+        project: &str,
+        version_id: &str,
+        _: ProviderContext<'_>,
+    ) -> Result<ModFile, BrowseError> {
         self.files
             .lock()
             .unwrap()
@@ -126,7 +140,9 @@ fn project(id: &str, slug: &str) -> ModProject {
 fn stored_file(paths: &DataPaths, id: &str, version: &str, requires: &[&str]) -> ModFile {
     let bytes = format!("PK\u{3}\u{4} {id} {version}").into_bytes();
     let sha1 = launcher_core::install::download::sha1_hex(&bytes);
-    ModStore::new(paths.clone()).adopt_bytes(&bytes, &sha1).unwrap();
+    ModStore::new(paths.clone())
+        .adopt_bytes(&bytes, &sha1)
+        .unwrap();
     ModFile {
         project: ProjectRef::new(Provider::Modrinth, id),
         version_id: format!("{id}-{version}"),
@@ -190,11 +206,10 @@ fn world() -> World {
     let mut index = Index::default();
     index.projects = vec![project("lib", "library"), project("root", "root-mod")];
     let index = Arc::new(index);
-    index
-        .files
-        .lock()
-        .unwrap()
-        .extend([stored_file(&paths, "lib", "1", &[]), stored_file(&paths, "root", "1", &["lib"])]);
+    index.files.lock().unwrap().extend([
+        stored_file(&paths, "lib", "1", &[]),
+        stored_file(&paths, "root", "1", &["lib"]),
+    ]);
 
     // Offline: anything that tried to reach a real index would fail.
     let http = HttpClient::new(
@@ -266,10 +281,15 @@ fn an_install_reaches_only_the_selected_profiles_mods_directory() {
     let other_dir = world.launcher.dirs_for(&other).mods_dir();
     assert_eq!(
         jars_in(&chosen_dir),
-        ["lib-1.jar".to_owned(), "root-1.jar".to_owned()].into_iter().collect(),
+        ["lib-1.jar".to_owned(), "root-1.jar".to_owned()]
+            .into_iter()
+            .collect(),
         "the mod and its dependency, and nothing half-written"
     );
-    assert!(jars_in(&other_dir).is_empty(), "the other profile is untouched");
+    assert!(
+        jars_in(&other_dir).is_empty(),
+        "the other profile is untouched"
+    );
     assert!(
         !world.paths.root().join(".minecraft").join("mods").exists(),
         "nothing is written to a global mods folder"
@@ -306,7 +326,13 @@ fn an_update_leaves_exactly_one_version_active() {
     let id = ModId::new("root-mod").unwrap();
     let plan = world
         .catalog
-        .plan_update(&id, &Target::of(&chosen), &installed, &grant(), &Cancel::new())
+        .plan_update(
+            &id,
+            &Target::of(&chosen),
+            &installed,
+            &grant(),
+            &Cancel::new(),
+        )
         .unwrap()
         .expect("an update is available");
     world
@@ -327,7 +353,10 @@ fn an_update_leaves_exactly_one_version_active() {
 
     let jars = jars_in(&world.launcher.dirs_for(&chosen).mods_dir());
     assert!(jars.contains("root-2.jar"));
-    assert!(!jars.contains("root-1.jar"), "the old version is gone: {jars:?}");
+    assert!(
+        !jars.contains("root-1.jar"),
+        "the old version is gone: {jars:?}"
+    );
     assert_eq!(chosen.mods.len(), 2);
 }
 
@@ -339,7 +368,10 @@ fn the_launcher_refuses_to_remove_a_library_that_is_still_needed() {
     install(&world, &mut chosen, "root");
 
     let library = ModId::new("library").unwrap();
-    let plan = world.launcher.plan_mod_uninstall(&chosen, &library).unwrap();
+    let plan = world
+        .launcher
+        .plan_mod_uninstall(&chosen, &library)
+        .unwrap();
     assert_eq!(plan.needed_by, vec!["root-mod".to_owned()]);
     assert!(matches!(
         world.launcher.uninstall_mod(&mut chosen, &library),

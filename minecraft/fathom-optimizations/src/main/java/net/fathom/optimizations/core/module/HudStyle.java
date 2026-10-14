@@ -39,6 +39,10 @@ public final class HudStyle {
     public static final String BORDER = "border";
     public static final String BORDER_COLOUR = "border.colour";
     public static final String BORDER_WIDTH = "border.width";
+    /** Hidden while the debug screen is open, which covers the top-left anyway. */
+    public static final String HIDE_DEBUG = "hide.debug";
+    /** Hidden while a screen other than chat is open. */
+    public static final String HIDE_SCREENS = "hide.screens";
 
     // The neutral Graphite HUD: value #F2F2F2 on a #101010 plate. These were
     // the warm golden-hour cream and umber, left behind when the rest of the
@@ -86,27 +90,46 @@ public final class HudStyle {
                 .setting(new Setting.Toggle(DROP_SHADOW, "Drop shadow", "A soft edge under the panel.", false))
                 .setting(new Setting.Toggle(BORDER, "Panel border", "An outline around the panel.", false))
                 .setting(new Setting.Colour(BORDER_COLOUR, "Panel border colour", "", DEFAULT_BORDER_COLOUR))
-                .setting(new Setting.Whole(BORDER_WIDTH, "Panel border width", "", 1, 1, 3, 1, "px"));
+                .setting(new Setting.Whole(BORDER_WIDTH, "Panel border width", "", 1, 1, 3, 1, "px"))
+                .setting(hideDebug())
+                .setting(hideScreens());
+    }
+
+    /**
+     * The common settings with defaults chosen to look like something vanilla
+     * already draws: for a module that replaces a vanilla element, whose first
+     * frame switched on should look like the element it replaced.
+     */
+    public static FathomModule.Builder declareVanilla(FathomModule.Builder builder, int textColour,
+            boolean shadow, int padding) {
+        return declare(builder, "Material", "None", textColour, shadow, padding);
     }
 
     private static FathomModule.Builder declare(
             FathomModule.Builder builder, String backgroundLabel, String materialDefault) {
+        return declare(builder, backgroundLabel, materialDefault, DEFAULT_TEXT_COLOUR, true, DEFAULT_PADDING);
+    }
+
+    private static FathomModule.Builder declare(FathomModule.Builder builder, String backgroundLabel,
+            String materialDefault, int textColour, boolean shadow, int padding) {
         return builder
                 .setting(new Setting.Choice(FONT, "Font", "Typeface for this HUD module.",
                         FONT_CHOICES[0], FONT_CHOICES))
-                .setting(new Setting.Colour(TEXT_COLOUR, "Text colour", "", DEFAULT_TEXT_COLOUR))
-                .setting(new Setting.Toggle(TEXT_SHADOW, "Text shadow", "A dark edge under the letters.", true))
+                .setting(new Setting.Colour(TEXT_COLOUR, "Text colour", "", textColour))
+                .setting(new Setting.Toggle(TEXT_SHADOW, "Text shadow", "A dark edge under the letters.", shadow))
                 .setting(material(backgroundLabel, materialDefault))
                 .setting(new Setting.Colour(BACKGROUND_COLOUR, "Background colour", "", DEFAULT_BACKGROUND_COLOUR))
                 .setting(new Setting.Whole(
                         BACKGROUND_OPACITY, "Material strength", "", DEFAULT_OPACITY, 0, 100, 5, "%"))
                 .setting(new Setting.Whole(PADDING, "Padding", "Space between the text and the plate.",
-                        DEFAULT_PADDING, 0, 10, 1, "px"))
+                        padding, 0, 10, 1, "px"))
                 .setting(new Setting.Whole(RADIUS, "Corner radius", "", DEFAULT_RADIUS, 0, 8, 1, "px"))
                 .setting(new Setting.Toggle(DROP_SHADOW, "Drop shadow", "A soft edge under the plate.", false))
                 .setting(new Setting.Toggle(BORDER, "Border", "An outline around the plate.", false))
                 .setting(new Setting.Colour(BORDER_COLOUR, "Border colour", "", DEFAULT_BORDER_COLOUR))
-                .setting(new Setting.Whole(BORDER_WIDTH, "Border width", "", 1, 1, 3, 1, "px"));
+                .setting(new Setting.Whole(BORDER_WIDTH, "Border width", "", 1, 1, 3, 1, "px"))
+                .setting(hideDebug())
+                .setting(hideScreens());
     }
 
     /** Keep the id stable and accept the old toggle's stored values. */
@@ -118,6 +141,28 @@ public final class HudStyle {
     }
 
     /** Whether a module was declared with the common settings. */
+    private static Setting.Toggle hideDebug() {
+        return new Setting.Toggle(HIDE_DEBUG, "Hide with F3", "While the debug screen is open.", false);
+    }
+
+    private static Setting.Toggle hideScreens() {
+        return new Setting.Toggle(HIDE_SCREENS, "Hide behind menus",
+                "While the inventory or another menu is open. Chat does not count.", false);
+    }
+
+    /**
+     * Whether a module's own visibility rules hide it right now.
+     *
+     * @param debugOpen whether the debug screen is showing
+     * @param menuOpen whether a screen other than chat is open
+     */
+    public static boolean hiddenBy(FathomModule module, boolean debugOpen, boolean menuOpen) {
+        if (module == null) {
+            return false;
+        }
+        return (debugOpen && module.toggle(HIDE_DEBUG, false)) || (menuOpen && module.toggle(HIDE_SCREENS, false));
+    }
+
     public static boolean declaredOn(FathomModule module) {
         return module != null
                 && module.setting(FONT) != null

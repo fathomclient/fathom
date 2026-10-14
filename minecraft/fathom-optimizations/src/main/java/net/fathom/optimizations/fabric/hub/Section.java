@@ -95,6 +95,16 @@ public interface Section {
     }
 
     /** Called when the section becomes visible, to reset scroll and selection. */
+    /**
+     * Whether a text field on this page is taking typing right now.
+     *
+     * <p>Asked by the Hub key: while somebody is typing, Right Shift is how a
+     * capital letter is made, not a request to close the Hub.
+     */
+    default boolean typing() {
+        return false;
+    }
+
     default void opened(HubContext context) {
         // Most sections have nothing to reset.
     }

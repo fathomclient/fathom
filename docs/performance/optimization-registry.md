@@ -13,11 +13,11 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 
 ## 1. Where things stand
 
-**13** entries: **12** implemented and hooked into the game, **1** planned. **11** carry a measurement, **7** of them taken in a running game.
+**16** entries: **15** implemented and hooked into the game, **1** planned. **14** carry a measurement, **10** of them taken in a running game.
 
 | Status | Count |
 |---|---|
-| Runs in game | 12 |
+| Runs in game | 15 |
 | In the module, not yet seen in game | 0 |
 | Core written, not hooked up | 1 |
 | Planned | 0 |
@@ -35,6 +35,9 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 | `world.chunk.lookup-cache` | Chunk lookup cache | Chunks | Safe | Runs in game | Launcher switch | in-game (`perf-2026-09-14-ab`) | OptiFine |
 | `memory.world-change-gc` | Remove System.gc() on world change | Memory | Safe | Runs in game | Launcher switch | isolated (`bench-2026-08-26-explicit-gc`) | — |
 | `resources.pack-icon-downscale` | Downscale resource pack icons | Resources | Safe | Runs in game | Launcher switch | isolated (`opt-2026-08-26-pack-icons`) | — |
+| `render.entity.nametag-name-cache` | Nametag name cache | Entities | Safe | Runs in game | Launcher switch | in-game (`view-2026-10-05-entities`) | — |
+| `render.entity.armor-texture-cache` | Armor texture lookup cache | Entities | Safe | Runs in game | Launcher switch | in-game (`view-2026-10-05-entities`) | — |
+| `render.hud.vanilla-replay` | Replay unchanged chat and scoreboard | HUD and interface | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-06-hud`) | — |
 | `input.unfocused-fps-cap` | Cap frame rate when unfocused | Frames and input | Safe | Runs in game | Launcher switch | isolated (`opt-2026-09-04-frame-caps`) | — |
 | `render.entity.occlusion-culling` | Entity occlusion culling | Entities | Optional | Core written, not hooked up | Launcher switch | **none** | OptiFine shaders |
 | `render.chunk.rebuild-scheduling` | Chunk rebuild scheduling | Chunks | Safe | Runs in game | Launcher switch | in-game (`view-2026-10-03-chunk-workers`) | OptiFine |
@@ -116,6 +119,30 @@ Every installed pack's pack.png is uploaded at whatever resolution its author sa
 - **Expected benefit:** Frees video memory in proportion to how many packs are installed and how carelessly their icons were exported. Costs nothing at frame time either way -- this is a memory optimization and should not be expected to move FPS.
 - **Measured** (isolated, `opt-2026-08-26-pack-icons`): Arithmetic over a plausible 40-pack folder: 12 MB of video memory above what the screen samples, and 4.2 MB for a single 1024x1024 icon. Exact rather than estimated, because RGBA8 texture size is a calculation and not a measurement.
 
+#### `render.entity.nametag-name-cache` — Nametag name cache
+
+Every visible nametag, every frame, vanilla builds a chat component with click and hover events -- an NBT compound turned into a string, a UUID turned into a string -- only to read back prefix, name and suffix. This keeps the string the original code produced and rebuilds it the frame the name, team, prefix or suffix changes. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities.
+- **Expected benefit:** Proportional to labels on screen: player lobbies, holograms, PvP. Removes per-label allocation and Java 8 regex compiles.
+- **Measured** (in-game, `view-2026-10-05-entities`): OptiFine profile, 48 armoured players with nametags, 4 interleaved rounds against the switch off: faster in 4/4 rounds, paired median -0.200 ms/frame, median 1.948 -> 1.815 ms, p99 4.243 -> 3.813 ms; the label decision fell from 0.069 to 0.009 ms/frame. Verified against the original on 130,122 labels with teams and prefixes changing: 0 mismatches.
+
+#### `render.entity.armor-texture-cache` — Armor texture lookup cache
+
+Vanilla finds each armour piece's texture by formatting its path with String.format every frame, then looking the string up in a cache of its own. This remembers the identifier the original lookup returned for each material and layer, so the same object comes back without the formatting. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities.
+- **Expected benefit:** Proportional to armoured players and mobs in view; up to five String.format calls per armoured player per frame.
+- **Measured** (in-game, `view-2026-10-05-entities`): OptiFine profile, 48 iron-armoured players, 4 interleaved rounds against the switch off: faster in 3/4 rounds, paired median -0.174 ms/frame, median 1.948 -> 1.784 ms; the armour layer fell from 0.456 to 0.253 ms/frame and client allocation from 206 to 99 MB/s. 543,702 lookups verified identical.
+
+#### `render.hud.vanilla-replay` — Replay unchanged chat and scoreboard
+
+Chat and the scoreboard sidebar redraw every glyph every frame, though what they show changes at most once a client tick or when the server changes the scoreboard. This records them while they hold still and replays the recording until anything they are drawn from changes; that frame is drawn live. Obfuscated text is always drawn live. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** HUD and interface.
+- **Expected benefit:** Whenever chat lines or a server sidebar are on screen: in the multiplayer profile they cost 0.06-0.13 and 0.05-0.09 ms a frame.
+- **Measured** (in-game, `mp-2026-10-06-hud`): Local 1.8.9 server, 40 scripted players, OptiFine profile, 4 interleaved rounds against the switch off. Scoreboard updating every tick and chat every 100 ms: faster in 4/4 rounds, paired median -0.155 ms/frame, p95 3.314 -> 3.065 ms, p99 4.061 -> 3.652 ms. Lobby with chat and sidebar: -0.111 and -0.115 ms paired, 3/4 rounds in each of two runs. No change where neither is on screen. Pixel check: 630 chat and 691 sidebar replays drawn both ways offscreen, 0 differing bytes.
+
 #### `input.unfocused-fps-cap` — Cap frame rate when unfocused
 
 Vanilla renders at full speed into a window you have alt-tabbed away from. This caps it at 30 frames per second while the window does not have focus, and changes nothing while it does.
@@ -139,7 +166,7 @@ Without OptiFine, 1.8.9 rebuilds chunks on exactly two worker threads whatever t
 
 - **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Chunks.
 - **Expected benefit:** Chunks fill in sooner when joining, teleporting or reloading. Steady frame time is untouched: once a view settles nothing is being rebuilt. Not on by default -- one machine, and each arm had an outlier.
-- **Measured** (in-game, `view-2026-10-03-chunk-workers`): Full renderer reloads on the user's profile without OptiFine, four launches in on-off-off-on order, three reloads each, 5 workers against vanilla's 2: reload-to-quiet median 0.65 s against 0.76 s, mean 0.73 s against 0.87 s (each including a fixed 0.5 s quiet period).
+- **Measured** (in-game, `view-2026-10-03-chunk-workers`): Full renderer reloads on my own profile without OptiFine, four launches in on-off-off-on order, three reloads each, 5 workers against vanilla's 2: reload-to-quiet median 0.65 s against 0.76 s, mean 0.73 s against 0.87 s (each including a fixed 0.5 s quiet period).
 - **Stood down by OptiFine:** OptiFine already sizes its own chunk worker pool to the CPU (up to five threads).
 
 #### `input.frame-limiter-accuracy` — Accurate frame limiter
@@ -423,7 +450,7 @@ collect only because it lets a larger live set accumulate. The fix is not a smal
 `-Xmx`; it is not forcing full collections at all.
 
 Full data, including the limitations of a synthetic workload, in
-`docs/performance/benchmarks.md` §4. `baseline.md` §5 covers the Shenandoah probe.
+`docs/performance/benchmarks.md` §4.
 
 ---
 
@@ -480,10 +507,8 @@ stale.
 
 ## 9. References
 
-- `docs/performance/optimizations.md` — what was implemented, what was rejected, and why
 - `docs/performance/benchmarks.md` — every run behind the evidence column
 - `docs/performance/benchmark-methodology.md` — how anything here gets measured
-- `docs/performance/baseline.md` — the environment, and where results go
 - `docs/research/performance.md` — the analysis these entries encode
 - `docs/research/PERFORMANCE_MATRIX.md` — the classification scheme
 - `docs/research/mod-policies.md` §3, §7, §8 — licensing and conflicts

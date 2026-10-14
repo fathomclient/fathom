@@ -16,7 +16,7 @@ export interface BackgroundOption {
   minecraft: 'video' | 'still' | null;
   /** Plain-text credit shown in Settings; the full record is ATTRIBUTION.md. */
   credit: string;
-  /** The glow colour while this background shows (tools/derive-background-accents.mjs). */
+  /** The glow colour while this background shows: its measured accent, drawn toward the icon's blue. */
   accent: string;
 }
 
@@ -32,7 +32,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-    accent: "#7b9fd5",
+    accent: "#87b8ee",
   },
   {
     id: "bg_1",
@@ -44,8 +44,8 @@ export const BACKGROUNDS: BackgroundOption[] = [
     width: 1920,
     height: 1080,
     minecraft: "still",
-    credit: "Recorded in vanilla Minecraft by the Fathom project owner",
-    accent: "#cf81a8",
+    credit: "Recorded in vanilla Minecraft",
+    accent: "#a9acdc",
   },
   {
     id: "bg_6clear",
@@ -58,7 +58,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-    accent: "#c2938e",
+    accent: "#a3b3d2",
   },
   {
     id: "bg_3",
@@ -70,8 +70,8 @@ export const BACKGROUNDS: BackgroundOption[] = [
     width: 1920,
     height: 1080,
     minecraft: "still",
-    credit: "Recorded in vanilla Minecraft by the Fathom project owner",
-    accent: "#95bbb4",
+    credit: "Recorded in vanilla Minecraft",
+    accent: "#91c3e1",
   },
   {
     id: "bg_6midnight",
@@ -84,7 +84,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-    accent: "#c48d90",
+    accent: "#a4b0d3",
   },
   {
     id: "bg_5noraintickunfrozen",
@@ -97,7 +97,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "still",
     credit: "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
-    accent: "#7f9cd2",
+    accent: "#89b6ed",
   },
   {
     id: "bg_5rain",
@@ -110,7 +110,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "video",
     credit: "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
-    accent: "#8dadc3",
+    accent: "#8ebde7",
   },
   {
     id: "bg_5noraintickfrozen",
@@ -123,7 +123,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "still",
     credit: "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
-    accent: "#809bd0",
+    accent: "#89b6ec",
   },
   {
     id: "bg_4",
@@ -135,8 +135,8 @@ export const BACKGROUNDS: BackgroundOption[] = [
     width: 1920,
     height: 1080,
     minecraft: "still",
-    credit: "Recorded in vanilla Minecraft by the Fathom project owner",
-    accent: "#e7ce6a",
+    credit: "Recorded in vanilla Minecraft",
+    accent: "#b2cac3",
   },
   {
     id: "bg_2",
@@ -148,8 +148,8 @@ export const BACKGROUNDS: BackgroundOption[] = [
     width: 1920,
     height: 1080,
     minecraft: "still",
-    credit: "Recorded in vanilla Minecraft by the Fathom project owner",
-    accent: "#96bbaf",
+    credit: "Recorded in vanilla Minecraft",
+    accent: "#92c3df",
   },
   {
     id: "bg_6tokyo",
@@ -162,7 +162,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
     height: 1080,
     minecraft: "still",
     credit: "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
-    accent: "#8abbc7",
+    accent: "#8dc3e9",
   },
 ];
 

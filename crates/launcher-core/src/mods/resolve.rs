@@ -91,6 +91,11 @@ pub enum Problem {
     /// A mod we know nothing about is enabled. Not an error — the user may
     /// supply whatever they like — but they should know we cannot vouch for it.
     UnknownMod { id: ModId, file_name: String },
+    /// What was recorded about this build when it was installed or identified
+    /// says it is for another loader or Minecraft version. Fabric's loader
+    /// skips a jar it cannot load rather than crashing, so this is a warning
+    /// that the mod will do nothing, not a reason to refuse the launch.
+    RecordedIncompatible { id: ModId, detail: String },
     /// A Fathom profile is missing one of the components that make it a Fathom
     /// profile.
     ///
@@ -141,6 +146,7 @@ impl Problem {
             Problem::LoaderLoadsNoMods { .. } => Severity::Warning,
             Problem::DuplicateMod { .. } => Severity::Blocking,
             Problem::UnknownMod { .. } => Severity::Advisory,
+            Problem::RecordedIncompatible { .. } => Severity::Warning,
             Problem::FirstPartyModuleMissing { repairable, .. } => {
                 if *repairable {
                     Severity::Blocking
@@ -178,10 +184,12 @@ impl Problem {
                     },
                     names.of(missing)
                 );
+                // "Present" means installed *and* on: a library that is
+                // switched off satisfies nothing at launch.
                 if reason.is_empty() {
-                    format!("{base}, which is not installed.")
+                    format!("{base}, which is missing or switched off.")
                 } else {
-                    format!("{base}, which is not installed. {reason}")
+                    format!("{base}, which is missing or switched off. {reason}")
                 }
             }
             Problem::DependencyTooOld {
@@ -248,6 +256,10 @@ impl Problem {
                 names.of(id),
                 file_names.join(" and ")
             ),
+            Problem::RecordedIncompatible { id, detail } => format!(
+                "{} will not load in this profile. {detail} Turn it off, or remove it.",
+                names.of(id)
+            ),
             Problem::UnknownMod { id, file_name } => format!(
                 "{file_name} was added by you and is not in Fathom's catalogue, so we cannot \
                  check its licence, its dependencies, or what it conflicts with. It will be \
@@ -292,6 +304,49 @@ impl NameLookup {
 
     pub fn of(&self, id: &ModId) -> String {
         self.0.get(id).cloned().unwrap_or_else(|| id.to_string())
+    }
+
+    /// Add the names a profile records for its own entries (an index's name,
+    /// or the file name), without overriding the catalogue's.
+    #[must_use]
+    pub fn with_profile(mut self, mods: &crate::mods::ProfileModConfiguration) -> Self {
+        for entry in mods.iter() {
+            let name = entry.origin.name.clone().unwrap_or_else(|| {
+                entry
+                    .file_name
+                    .strip_suffix(".jar")
+                    .unwrap_or(&entry.file_name)
+                    .to_owned()
+            });
+            self.0.entry(entry.id.clone()).or_insert(name);
+        }
+        self
+    }
+}
+
+impl Problem {
+    /// The mods this problem is about, for showing it beside them.
+    pub fn mods(&self) -> Vec<&ModId> {
+        match self {
+            Problem::MissingDependency {
+                needed_by, missing, ..
+            } => vec![needed_by, missing],
+            Problem::DependencyTooOld {
+                needed_by,
+                dependency,
+                ..
+            } => vec![needed_by, dependency],
+            Problem::Conflict { left, right, .. } => vec![left, right],
+            Problem::DependencyCycle { cycle } => cycle.iter().collect(),
+            Problem::WrongMinecraftVersion { id, .. }
+            | Problem::WrongLoader { id, .. }
+            | Problem::DuplicateMod { id, .. }
+            | Problem::UnknownMod { id, .. }
+            | Problem::RecordedIncompatible { id, .. } => vec![id],
+            Problem::LoaderLoadsNoMods { .. } | Problem::FirstPartyModuleMissing { .. } => {
+                Vec::new()
+            }
+        }
     }
 }
 
@@ -342,12 +397,80 @@ pub struct Candidate {
     /// What we know about it. `None` for a jar the user supplied that is not in
     /// the catalogue — which is allowed, and reported as an advisory.
     pub definition: Option<ModDefinition>,
+    /// What was recorded about this exact build when an index supplied or
+    /// identified it. Used when there is no catalogue definition.
+    pub recorded: Option<Recorded>,
+}
+
+/// Facts an index published about one installed build, kept in the profile.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Recorded {
+    pub loaders: BTreeSet<String>,
+    pub minecraft: BTreeSet<String>,
+    /// Other entries in this profile it needs, by id.
+    pub requires: BTreeSet<String>,
+}
+
+impl Recorded {
+    /// The record an entry carries, when it carries one worth checking.
+    pub fn of(origin: &crate::mods::Origin) -> Option<Self> {
+        (!origin.loaders.is_empty() || !origin.requires.is_empty()).then(|| Self {
+            loaders: origin.loaders.clone(),
+            minecraft: origin.minecraft.clone(),
+            requires: origin.requires.clone(),
+        })
+    }
+}
+
+/// The checks a recorded build gets in place of a catalogue definition.
+fn check_recorded(
+    candidate: &Candidate,
+    recorded: &Recorded,
+    present: &BTreeSet<&ModId>,
+    minecraft_version: &str,
+    loader: Loader,
+    problems: &mut Vec<Problem>,
+) {
+    // Dependencies resolved when it was installed: each must still be here,
+    // and switched on. A library that is off satisfies nothing at launch.
+    for required in &recorded.requires {
+        let Ok(required) = ModId::new(required) else {
+            continue;
+        };
+        if !present.contains(&required) {
+            problems.push(Problem::MissingDependency {
+                needed_by: candidate.id.clone(),
+                missing: required,
+                optional: false,
+                reason: "It was installed as a requirement; switch it back on or reinstall it."
+                    .to_owned(),
+            });
+        }
+    }
+    if !loader.supports_mods() || recorded.loaders.is_empty() {
+        return;
+    }
+    let target = crate::mods::browse::Target::new(minecraft_version, loader);
+    let assessment = crate::mods::browse::compat::assess_recorded(
+        &recorded.loaders,
+        &recorded.minecraft,
+        &target,
+    );
+    if assessment.verdict == crate::mods::browse::compat::Verdict::Incompatible {
+        problems.push(Problem::RecordedIncompatible {
+            id: candidate.id.clone(),
+            detail: assessment.headline(),
+        });
+    }
 }
 
 /// Check a mod set against a profile's Minecraft version and loader.
 ///
 /// Deterministic: the same input produces the same output, including the order
 /// of `effective` and of `problems`.
+// One pass over the set, in the order a reader checks it; see `message` for
+// why tables of rules stay whole.
+#[allow(clippy::too_many_lines)]
 pub fn resolve(candidates: &[Candidate], minecraft_version: &str, loader: Loader) -> Resolution {
     let mut problems = Vec::new();
 
@@ -383,10 +506,20 @@ pub fn resolve(candidates: &[Candidate], minecraft_version: &str, loader: Loader
     // -- per-mod checks ----------------------------------------------------
     for candidate in &enabled {
         let Some(definition) = &candidate.definition else {
-            problems.push(Problem::UnknownMod {
-                id: candidate.id.clone(),
-                file_name: candidate.file_name.clone(),
-            });
+            match &candidate.recorded {
+                Some(recorded) => check_recorded(
+                    candidate,
+                    recorded,
+                    &present,
+                    minecraft_version,
+                    loader,
+                    &mut problems,
+                ),
+                None => problems.push(Problem::UnknownMod {
+                    id: candidate.id.clone(),
+                    file_name: candidate.file_name.clone(),
+                }),
+            }
             continue;
         };
 
@@ -539,6 +672,7 @@ fn problem_order_key(problem: &Problem) -> String {
         Problem::LoaderLoadsNoMods { loader, .. } => format!("7:{loader:?}"),
         Problem::DuplicateMod { id, .. } => format!("8:{id}"),
         Problem::UnknownMod { id, .. } => format!("9:{id}"),
+        Problem::RecordedIncompatible { id, .. } => format!("6r:{id}"),
         Problem::FirstPartyModuleMissing { component, .. } => format!("0:{component}"),
     }
 }
@@ -720,6 +854,7 @@ mod tests {
             sha1: "a".repeat(40),
             enabled: true,
             definition: Some(definition),
+            recorded: None,
         }
     }
 
@@ -1120,6 +1255,7 @@ mod tests {
             sha1: "c".repeat(40),
             enabled: true,
             definition: None,
+            recorded: None,
         };
 
         let result = run(&[unknown]);
@@ -1145,6 +1281,7 @@ mod tests {
             sha1: "c".repeat(40),
             enabled: true,
             definition: None,
+            recorded: None,
         };
 
         let result = run(&[candidate(blocking), unknown]);
@@ -1159,6 +1296,7 @@ mod tests {
                 sha1: "c".repeat(40),
                 enabled: true,
                 definition: None,
+                recorded: None,
             },
             candidate({
                 let mut d = definition("zzz");
@@ -1183,5 +1321,70 @@ mod tests {
     fn vanilla_with_no_mods_is_fine() {
         let result = resolve(&[], "1.8.9", Loader::Vanilla);
         assert!(result.problems.is_empty());
+    }
+
+    fn recorded(id: &str, loaders: &[&str], requires: &[&str], enabled: bool) -> Candidate {
+        Candidate {
+            id: ModId::new(id).unwrap(),
+            file_name: format!("{id}.jar"),
+            sha1: "c".repeat(40),
+            enabled,
+            definition: None,
+            recorded: Some(Recorded {
+                loaders: loaders.iter().map(|s| (*s).to_owned()).collect(),
+                minecraft: ["1.8.9".to_owned()].into_iter().collect(),
+                requires: requires.iter().map(|s| (*s).to_owned()).collect(),
+            }),
+        }
+    }
+
+    /// A browser-installed mod is checked against what was recorded when it was
+    /// installed: its libraries must be here and on, and it must be for this
+    /// loader. Such a mod is not "unknown".
+    #[test]
+    fn recorded_requirements_and_loaders_are_checked_at_launch() {
+        let library = recorded("library", &["legacy-fabric"], &[], true);
+        let user = recorded("user", &["legacy-fabric"], &["library"], true);
+        let fine = run(&[library.clone(), user.clone()]);
+        assert!(fine.problems.is_empty(), "{:?}", fine.problems);
+
+        // The library switched off: the mod that needs it will not start.
+        let mut off = library.clone();
+        off.enabled = false;
+        let broken = run(&[off, user.clone()]);
+        assert!(broken.problems.iter().any(|p| matches!(
+            p,
+            Problem::MissingDependency { missing, optional: false, .. } if missing.as_str() == "library"
+        )));
+        assert!(!broken.is_launchable());
+
+        // A Forge build recorded as such is a warning that it will not load.
+        let forge = run(&[recorded("forgething", &["forge"], &[], true)]);
+        assert!(matches!(
+            forge.problems.as_slice(),
+            [Problem::RecordedIncompatible { .. }]
+        ));
+        assert_eq!(forge.problems[0].severity(), Severity::Warning);
+        assert!(forge.problems[0]
+            .message(&NameLookup::default())
+            .contains("Forge"));
+
+        // Off, it is nobody's problem.
+        let forge_off = run(&[recorded("forgething", &["forge"], &[], false)]);
+        assert!(forge_off.problems.is_empty());
+    }
+
+    #[test]
+    fn every_problem_names_the_mods_it_is_about() {
+        let result = run(&[
+            recorded("library", &["legacy-fabric"], &[], false),
+            recorded("user", &["legacy-fabric"], &["library"], true),
+        ]);
+        let ids: Vec<&str> = result.problems[0]
+            .mods()
+            .iter()
+            .map(|id| id.as_str())
+            .collect();
+        assert_eq!(ids, ["user", "library"]);
     }
 }

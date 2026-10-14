@@ -66,7 +66,7 @@ permanently.
 **b) ShareAlike.** Any adaptation must be released under CC BY-NC-SA 4.0 or a CC-approved compatible
 licence. Since CC BY-NC-SA is **not an open-source licence** (it fails the Open Source Definition's
 prohibition on field-of-use restrictions, OSD #6), deriving from Patcher/PolyPatcher would make our
-project **not open source**. That contradicts the first line of the product brief.
+project **not open source**. That contradicts the first line of the product spec.
 
 **c) Creative Commons themselves recommend against using CC licences for software**, because they
 lack the patent, source-availability, and linking provisions that software licences need. This is a

@@ -81,13 +81,21 @@ public abstract class MinecraftClientFrameMixin {
             long dispatch = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                     net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_DISPATCH);
+            net.fathom.optimizations.fabric.FathomOptimizationsClient.ensureReloadHook();
             net.fathom.optimizations.fabric.gfx.FrameInput.poll(client);
+            net.fathom.optimizations.fabric.input.ModuleKeys.poll(client);
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                     net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_LISTENER);
             net.fathom.optimizations.fabric.gfx.FrameKeyboard.pollCurrent(client);
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                     net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_LISTENER);
             net.fathom.optimizations.fabric.input.GameSession.frame(client);
+            if (net.fathom.optimizations.fabric.diag.ModuleSelfTest.ACTIVE) {
+                net.fathom.optimizations.fabric.diag.ModuleSelfTest.frame(client);
+            }
+            if (net.fathom.optimizations.fabric.diag.EditorSelfTest.ACTIVE) {
+                net.fathom.optimizations.fabric.diag.EditorSelfTest.frame(client);
+            }
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                     net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_LISTENER);
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
@@ -125,6 +133,13 @@ public abstract class MinecraftClientFrameMixin {
                 net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, callback);
         if (start != 0L) {
             Runtime.frame(frameNanos);
+            // The instrument's reading of play. The frame's end is the clock just
+            // read, so this costs no second timestamp. Left out of a benchmark arm
+            // that bypasses Fathom's hooks, so that arm measures none of Fathom.
+            if (net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowCoreHooks()) {
+                net.fathom.optimizations.fabric.diag.SessionPulse.frame(
+                        (MinecraftClient) (Object) this, start + frameNanos);
+            }
         }
         if (net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE) {
             net.fathom.optimizations.fabric.bench.PerfBench.frame((MinecraftClient) (Object) this, frameNanos);

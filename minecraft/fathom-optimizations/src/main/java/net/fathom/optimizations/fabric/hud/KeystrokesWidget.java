@@ -1,8 +1,10 @@
 package net.fathom.optimizations.fabric.hud;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.KeyBinding;
 
+import net.fathom.optimizations.core.hud.KeyLabels;
 import net.fathom.optimizations.core.module.FathomModule;
 import net.fathom.optimizations.core.module.HudStyle;
 
@@ -119,7 +121,50 @@ public final class KeystrokesWidget implements HudWidget {
         if (rows == 0) {
             return 0;
         }
-        return rows * (keySize() + keyGap()) - keyGap() + pad() * 2;
+        return rows * (keySize() + keyGap()) - keyGap() + pad() * 2 + mouseExtra(font);
+    }
+
+    /**
+     * How much taller the mouse row is than a key: with clicks per second
+     * shown, a second line under the button's name, rather than the number in
+     * place of the name.
+     */
+    private static int mouseExtra(HudFont font) {
+        if (!Widgets.option("keystrokes", "mouse", true) || !Widgets.option("keystrokes", "cps-on-keys", false)) {
+            return 0;
+        }
+        return (int) Math.ceil(font.lineHeight()) + 1;
+    }
+
+    /** "0 CPS" to "39 CPS", made once; anything faster is rare enough to build. */
+    private static final String[] CPS_TEXT = new String[40];
+
+    private static String cpsText(int count) {
+        if (count >= 0 && count < CPS_TEXT.length) {
+            String text = CPS_TEXT[count];
+            if (text == null) {
+                text = count + " CPS";
+                CPS_TEXT[count] = text;
+            }
+            return text;
+        }
+        return count + " CPS";
+    }
+
+    /** The label printed on a binding's key: the key it is actually bound to. */
+    private final int[] labelCodes = new int[8];
+    private final String[] labels = new String[8];
+
+    private String label(int slot, KeyBinding binding, String fallback) {
+        if (binding == null) {
+            return fallback;
+        }
+        int code = binding.getCode();
+        if (labels[slot] == null || labelCodes[slot] != code) {
+            labelCodes[slot] = code;
+            labels[slot] = KeyLabels.shortName(code);
+        }
+        return labels[slot];
     }
 
     @Override
@@ -173,6 +218,16 @@ public final class KeystrokesWidget implements HudWidget {
             hash = (hash ^ clicks.left()) * 0x100000001b3L;
             hash = (hash ^ clicks.right()) * 0x100000001b3L;
         }
+        GameOptions options = client.options;
+        // The labels are the bound keys, so a rebind is new content.
+        hash = (hash ^ options.forwardKey.getCode()) * 0x100000001b3L;
+        hash = (hash ^ options.leftKey.getCode()) * 0x100000001b3L;
+        hash = (hash ^ options.backKey.getCode()) * 0x100000001b3L;
+        hash = (hash ^ options.rightKey.getCode()) * 0x100000001b3L;
+        hash = (hash ^ options.attackKey.getCode()) * 0x100000001b3L;
+        hash = (hash ^ options.useKey.getCode()) * 0x100000001b3L;
+        hash = (hash ^ options.jumpKey.getCode()) * 0x100000001b3L;
+        hash = (hash ^ options.sneakKey.getCode()) * 0x100000001b3L;
         hash = (hash ^ System.identityHashCode(font)) * 0x100000001b3L;
         return hash == 0L ? 1L : hash;
     }
@@ -213,29 +268,36 @@ public final class KeystrokesWidget implements HudWidget {
         int left = x + pad();
         int row = y + pad();
 
+        GameOptions options = client.options;
         if (Widgets.option("keystrokes", "wasd", true)) {
-            key(font, style, left + size + gap, row, size, size, "W", lit[W], surfaces);
+            key(font, style, left + size + gap, row, size, size, label(W, options.forwardKey, "W"), null,
+                    lit[W], surfaces);
             row += size + gap;
-            key(font, style, left, row, size, size, "A", lit[A], surfaces);
-            key(font, style, left + size + gap, row, size, size, "S", lit[S], surfaces);
-            key(font, style, left + (size + gap) * 2, row, size, size, "D", lit[D], surfaces);
+            key(font, style, left, row, size, size, label(A, options.leftKey, "A"), null, lit[A], surfaces);
+            key(font, style, left + size + gap, row, size, size, label(S, options.backKey, "S"), null,
+                    lit[S], surfaces);
+            key(font, style, left + (size + gap) * 2, row, size, size, label(D, options.rightKey, "D"), null,
+                    lit[D], surfaces);
             row += size + gap;
         }
         if (Widgets.option("keystrokes", "mouse", true)) {
             boolean numbers = Widgets.option("keystrokes", "cps-on-keys", false);
             int half = (wide - gap) / 2;
-            key(font, style, left, row, half, size,
-                    numbers ? String.valueOf(clicks.left()) : "LMB", lit[LEFT], surfaces);
-            key(font, style, left + half + gap, row, wide - half - gap, size,
-                    numbers ? String.valueOf(clicks.right()) : "RMB", lit[RIGHT], surfaces);
-            row += size + gap;
+            int tall = size + mouseExtra(font);
+            key(font, style, left, row, half, tall, label(LEFT, options.attackKey, "LMB"),
+                    numbers ? cpsText(clicks.left()) : null, lit[LEFT], surfaces);
+            key(font, style, left + half + gap, row, wide - half - gap, tall, label(RIGHT, options.useKey, "RMB"),
+                    numbers ? cpsText(clicks.right()) : null, lit[RIGHT], surfaces);
+            row += tall + gap;
         }
         if (Widgets.option("keystrokes", "space", true)) {
-            key(font, style, left, row, wide, size, "SPACE", lit[SPACE], surfaces);
+            key(font, style, left, row, wide, size, label(SPACE, options.jumpKey, "SPACE"), null, lit[SPACE],
+                    surfaces);
             row += size + gap;
         }
         if (Widgets.option("keystrokes", "sneak", false)) {
-            key(font, style, left, row, wide, size, "SHIFT", lit[SNEAK], surfaces);
+            key(font, style, left, row, wide, size, label(SNEAK, options.sneakKey, "SHIFT"), null, lit[SNEAK],
+                    surfaces);
         }
     }
 
@@ -282,8 +344,11 @@ public final class KeystrokesWidget implements HudWidget {
         return binding != null && binding.isPressed();
     }
 
-    private static void key(HudFont font, KeyStyle style, int x, int y, int width, int height,
-            String label, float amount, boolean surfaces) {
+    /** Labels and counts measured once while unchanged; nine keys' worth. */
+    private final MeasuredWidths widths = new MeasuredWidths(12);
+
+    private void key(HudFont font, KeyStyle style, int x, int y, int width, int height,
+            String label, String second, float amount, boolean surfaces) {
         int keyAlpha = style.keyAlpha;
         if (surfaces) {
             int fill = mix(style.unpressedFill, style.pressedFill, amount);
@@ -298,8 +363,20 @@ public final class KeystrokesWidget implements HudWidget {
         }
         int text = mix(style.unpressedText, style.pressedText, amount);
         int colour = (keyAlpha << 24) | (text & 0x00FFFFFF);
-        float labelWidth = font.width(label);
+        float labelWidth = widths.of(font, label);
         float textX = Math.round(x + (width - labelWidth) / 2f);
+        if (second != null) {
+            // Two lines, the name over the count, centred as one block.
+            float line = font.lineHeight();
+            float top = Math.round(y + (height - (line * 2f + 1f)) / 2f);
+            font.draw(label, textX, top, colour, style.shadow);
+            // "12 CPS" where it fits inside the key, "12" where it does not:
+            // a count spilling past its key reads as belonging to the next.
+            String count = widths.of(font, second) <= width - 2 ? second : countOnly(second);
+            float secondX = Math.round(x + (width - widths.of(font, count)) / 2f);
+            font.draw(count, secondX, top + line + 1f, colour, style.shadow);
+            return;
+        }
         // Centred on the capitals rather than on the line box, so a label sits
         // in the middle of its key in both typefaces.
         float textY = Math.round(font.centredTop(y, height));
@@ -318,5 +395,25 @@ public final class KeystrokesWidget implements HudWidget {
         int g = (int) (((from >> 8) & 0xFF) + (((to >> 8) & 0xFF) - ((from >> 8) & 0xFF)) * amount);
         int b = (int) ((from & 0xFF) + ((to & 0xFF) - (from & 0xFF)) * amount);
         return (r << 16) | (g << 8) | b;
+    }
+
+    /** "12 CPS" without the unit, for a key too narrow for it; cached like the full text. */
+    private static final String[] COUNT_ONLY = new String[40];
+
+    private static String countOnly(String text) {
+        String digits = text.substring(0, text.indexOf(' '));
+        int value;
+        try {
+            value = Integer.parseInt(digits);
+        } catch (NumberFormatException notANumber) {
+            return digits;
+        }
+        if (value >= 0 && value < COUNT_ONLY.length) {
+            if (COUNT_ONLY[value] == null) {
+                COUNT_ONLY[value] = digits;
+            }
+            return COUNT_ONLY[value];
+        }
+        return digits;
     }
 }

@@ -118,6 +118,10 @@ impl ModStore {
         Self { paths }
     }
 
+    pub fn paths(&self) -> &DataPaths {
+        &self.paths
+    }
+
     pub fn root(&self) -> PathBuf {
         self.paths.root().join("mods")
     }
@@ -370,6 +374,9 @@ pub struct Materialization {
     pub foreign: Vec<String>,
     /// Mods that should have been placed but whose bytes are not in the store.
     pub missing: Vec<String>,
+    /// Mods whose stored bytes no longer match their hash: damaged on disk.
+    /// Not placed, because a jar that is not the one recorded is not the mod.
+    pub corrupt: Vec<String>,
 }
 
 impl Materialization {
@@ -379,10 +386,12 @@ impl Materialization {
 
     pub fn summary(&self) -> String {
         format!(
-            "{} placed, {} removed, {} left alone",
+            "{} placed, {} removed, {} left alone, {} missing, {} damaged",
             self.placed.len(),
             self.removed.len(),
-            self.foreign.len()
+            self.foreign.len(),
+            self.missing.len(),
+            self.corrupt.len()
         )
     }
 }
@@ -422,15 +431,25 @@ pub fn materialize(
             continue;
         }
 
-        now_placed.insert(wanted.file_name.clone());
-
         // Already correct? Leave it. Copying every launch would churn the disk
         // and change mtimes for no reason.
         if target.is_file()
             && sha1_file(&target).is_some_and(|h| h.eq_ignore_ascii_case(&wanted.sha1))
         {
+            now_placed.insert(wanted.file_name.clone());
             continue;
         }
+
+        // About to copy: the store is content-addressed, so its file has to
+        // hash to its own name. One that does not was damaged on disk, and
+        // placing it would hand the game bytes nobody installed. Not placed;
+        // whatever older copy is in the mods directory is taken away below.
+        if !sha1_file(&source).is_some_and(|h| h.eq_ignore_ascii_case(&wanted.sha1)) {
+            tracing::warn!(file = %wanted.file_name, "a stored mod no longer matches its hash; not placing it");
+            outcome.corrupt.push(wanted.file_name.clone());
+            continue;
+        }
+        now_placed.insert(wanted.file_name.clone());
 
         // Copied under a name the game will not load, then renamed. A copy
         // interrupted half way leaves a `.partial` rather than a truncated jar
@@ -739,6 +758,45 @@ mod tests {
         assert!(dirs.mods_dir().join("a.jar").is_file());
         assert!(dirs.mods_dir().join("b.jar").is_file());
         assert!(outcome.missing.is_empty());
+    }
+
+    /// A stored jar damaged on disk is reported and never handed to the game,
+    /// and an older copy of it in the mods directory is taken away rather than
+    /// left to load instead.
+    #[test]
+    fn a_damaged_stored_jar_is_reported_and_not_placed() {
+        let (tmp, store, dirs) = fixture();
+        let a = store.adopt(&jar(&tmp, "a.jar", b"a")).unwrap();
+        let b = store.adopt(&jar(&tmp, "b.jar", b"b")).unwrap();
+        let first = materialize(
+            &store,
+            &dirs,
+            &[resolved("a", &a.sha1), resolved("b", &b.sha1)],
+        )
+        .unwrap();
+        assert_eq!(first.placed.len(), 2);
+
+        // b is damaged in the store, and its placed copy is gone too (as after
+        // an update whose download was damaged).
+        std::fs::write(store.path_for(&b.sha1).unwrap(), b"not b any more").unwrap();
+        std::fs::remove_file(dirs.mods_dir().join("b.jar")).unwrap();
+
+        let second = materialize(
+            &store,
+            &dirs,
+            &[resolved("a", &a.sha1), resolved("b", &b.sha1)],
+        )
+        .unwrap();
+        assert_eq!(second.corrupt, vec!["b.jar".to_owned()]);
+        assert!(
+            !dirs.mods_dir().join("b.jar").exists(),
+            "the damaged bytes were not placed"
+        );
+        assert!(
+            dirs.mods_dir().join("a.jar").is_file(),
+            "the healthy mod is unaffected"
+        );
+        assert!(!store.verify(&b.sha1).unwrap());
     }
 
     /// The property that makes this a replacement for renaming.

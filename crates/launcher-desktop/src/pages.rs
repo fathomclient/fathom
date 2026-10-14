@@ -120,6 +120,100 @@ pub fn project_url(slug: &str) -> Option<String> {
 ///
 /// The code is a device *user* code, not a credential: it grants nothing
 /// unless the account holder signs in on the page it opens.
+/// Open a link a mod index published: a project's page, source or tracker.
+///
+/// These are not in the table above because there are thousands of them and
+/// they belong to the mods' authors. The WebView never supplies one: the mod
+/// browser reads it from the catalogue's cached copy of the index's answer,
+/// where `safe_link` already kept only HTTPS. This checks it again, as a URL a
+/// person is about to be sent to rather than as a string.
+pub fn open_external(url: &str) -> Result<(), String> {
+    let url = external_url(url).ok_or_else(|| "Fathom will not open that link".to_owned())?;
+    launch_browser(&url)
+}
+
+/// Show a file in the system file manager, selected.
+///
+/// Only ever given a path the launcher computed from its own data -- a mod in a
+/// profile's `mods/` folder or in the mod store -- never one from the WebView.
+/// The file must exist; the path is passed as one argument, with no shell.
+pub fn reveal_file(path: &std::path::Path) -> Result<(), String> {
+    if !path.is_file() {
+        return Err("The file is not on this computer.".to_owned());
+    }
+    reveal(path)
+}
+
+#[cfg(target_os = "windows")]
+fn reveal(path: &std::path::Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    // `/select,"<path>"` must reach Explorer as written, so it is passed raw.
+    // Windows paths cannot contain a double quote, so the quoting is safe.
+    let text = path.display().to_string();
+    if text.contains('"') {
+        return Err("Fathom will not open that path".to_owned());
+    }
+    std::process::Command::new("explorer.exe")
+        .raw_arg(format!("/select,\"{text}\""))
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("could not open the folder: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn reveal(path: &std::path::Path) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("could not open the folder: {error}"))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn reveal(path: &std::path::Path) -> Result<(), String> {
+    let folder = path.parent().ok_or_else(|| "no folder".to_owned())?;
+    std::process::Command::new("xdg-open")
+        .arg(folder)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("could not open the folder: {error}"))
+}
+
+/// The link, if it is one a browser should be handed.
+///
+/// HTTPS only; a host made of host characters with at least one dot; no
+/// credentials, no spaces, no control characters, nothing a URL handler could
+/// read as an argument.
+pub fn external_url(url: &str) -> Option<String> {
+    if url.len() > 512 || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return None;
+    }
+    let rest = url.strip_prefix("https://")?;
+    let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let (host, port) = host
+        .split_once(':')
+        .map_or((host, None), |(h, p)| (h, Some(p)));
+    if host.is_empty()
+        || host.contains('@')
+        || !host.contains('.')
+        || host.starts_with('.')
+        || host.ends_with('.')
+        || !host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return None;
+    }
+    if port.is_some_and(|port| port.is_empty() || !port.chars().all(|c| c.is_ascii_digit())) {
+        return None;
+    }
+    if url.contains('"') || url.contains('<') || url.contains('>') || url.contains('`') {
+        return None;
+    }
+    Some(url.to_owned())
+}
+
 pub fn open_microsoft_sign_in(verification_uri: &str, user_code: &str) -> Result<bool, String> {
     let url = microsoft_sign_in_url(verification_uri, user_code)
         .ok_or_else(|| "Microsoft sent a sign-in address Fathom will not open".to_owned())?;
@@ -257,6 +351,33 @@ mod tests {
             "../optifine",
         ] {
             assert_eq!(url_for(hostile), None, "{hostile} should not resolve");
+        }
+    }
+
+    #[test]
+    fn a_mod_link_must_be_a_plain_https_url() {
+        for fine in [
+            "https://github.com/CaffeineMC/sodium",
+            "https://modrinth.com/mod/ksyxis",
+            "https://git.example.org:8443/a/b?c=d#e",
+        ] {
+            assert_eq!(external_url(fine).as_deref(), Some(fine), "{fine}");
+        }
+        for hostile in [
+            "http://github.com/x",
+            "javascript:alert(1)",
+            "file:///C:/Windows/System32/calc.exe",
+            "https://user:pass@evil.example/",
+            "https://evil.example/ --flag",
+            "https://localhost/x",
+            "https://evil.example\n/x",
+            "https://.example/",
+            "https://exa mple.com/",
+            "https://example.com:/x",
+            "https://example.com/\"onload",
+            "",
+        ] {
+            assert_eq!(external_url(hostile), None, "{hostile:?} should be refused");
         }
     }
 

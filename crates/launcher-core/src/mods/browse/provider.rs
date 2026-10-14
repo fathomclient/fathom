@@ -22,7 +22,7 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 
-use super::model::{ModFile, ModProject, Provider, Target};
+use super::model::{Category, ModFile, ModProject, Provider, Target};
 use crate::network::{NetworkError, PerActionGrant, PolicyDenial};
 use crate::tasks::Cancel;
 
@@ -267,6 +267,26 @@ pub enum Sort {
     Name,
 }
 
+/// How wide a compatible search casts its net.
+///
+/// None of these makes anything installable: every build still goes through
+/// the compatibility resolver, and an incompatible one is never installed.
+/// They decide which projects are *worth showing* with a verdict beside them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Breadth {
+    /// Projects tagged for exactly this loader.
+    #[default]
+    Tagged,
+    /// Also projects tagged plain Fabric for this Minecraft version: the
+    /// unverified middle group `compat.rs` explains.
+    Plausible,
+    /// Every project with a build for this Minecraft version, whatever its
+    /// loader, so a Forge-only or Ornithe-only mod can be found and its
+    /// verdict read.
+    AnyLoader,
+}
+
 /// One search, as the catalog asks it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -293,6 +313,9 @@ pub struct SearchQuery {
     /// is refused regardless — see [`super::install`].
     #[serde(default)]
     pub include_incompatible: bool,
+    /// Which loader tags count, when `include_incompatible` is off.
+    #[serde(default)]
+    pub breadth: Breadth,
     /// Which providers to ask. Empty means every configured one.
     #[serde(default)]
     pub providers: Vec<Provider>,
@@ -312,6 +335,7 @@ impl SearchQuery {
             offset: 0,
             limit: default_limit(),
             include_incompatible: false,
+            breadth: Breadth::default(),
             providers: Vec::new(),
         }
     }
@@ -344,7 +368,7 @@ impl SearchQuery {
     /// same answer, so the cache must include everything that changes it.
     pub fn cache_key(&self) -> String {
         format!(
-            "{}|{}|{}|{:?}|{}|{}|{}|{}",
+            "{}|{}|{}|{:?}|{}|{}|{}|{}|{:?}",
             self.text.trim().to_lowercase(),
             self.target.minecraft,
             self.target.loader.label(),
@@ -353,6 +377,7 @@ impl SearchQuery {
             self.offset,
             self.limit,
             self.include_incompatible,
+            self.breadth,
         )
     }
 }
@@ -434,11 +459,13 @@ pub trait CatalogProvider: Debug + Send + Sync {
     /// Everything about one project, including description and gallery.
     fn project(&self, id: &str, ctx: ProviderContext<'_>) -> Result<ModProject, BrowseError>;
 
-    /// The project's builds that fit the target, newest first.
+    /// The project's builds that list the target's Minecraft version, newest
+    /// first, *whatever their loader tag*.
     ///
-    /// Filtered by the provider *and* checked again by the caller. A provider
-    /// returning an incompatible file is a provider bug; installing it would be
-    /// ours.
+    /// Not a compatibility filter: which of these fit is the compatibility
+    /// resolver's question (`compat.rs`), asked by the catalogue on every read
+    /// and again by the installer. A provider that filtered by loader here
+    /// would hide the builds the resolver needs to explain a verdict.
     fn files(
         &self,
         id: &str,
@@ -457,19 +484,28 @@ pub trait CatalogProvider: Debug + Send + Sync {
         ctx: ProviderContext<'_>,
     ) -> Result<ModFile, BrowseError>;
 
-    /// The newest compatible build: a release if there is one, otherwise the
-    /// newest of anything.
-    ///
-    /// Defaulted because both providers return their file lists already sorted
-    /// that way, and a provider that does not can override it.
+    /// The newest build the resolver calls compatible: a release if there is
+    /// one, otherwise the newest of anything. Unverified builds are not
+    /// considered; asking for one is a decision for a person, not a default.
     fn latest_compatible(
         &self,
         id: &str,
         target: &Target,
         ctx: ProviderContext<'_>,
     ) -> Result<Option<ModFile>, BrowseError> {
-        let files = self.files(id, target, ctx)?;
-        Ok(files.into_iter().next())
+        Ok(
+            super::compat::assess_files(self.files(id, target, ctx)?, target)
+                .into_iter()
+                .find(|assessed| assessed.assessment.verdict == super::compat::Verdict::Compatible)
+                .map(|assessed| assessed.file),
+        )
+    }
+
+    /// The topics this provider can filter a search by. Empty when it has
+    /// none Fathom can use.
+    fn categories(&self, ctx: ProviderContext<'_>) -> Result<Vec<Category>, BrowseError> {
+        ctx.check()?;
+        Ok(Vec::new())
     }
 
     /// Identify a jar by its SHA-1, when the provider offers such a lookup.

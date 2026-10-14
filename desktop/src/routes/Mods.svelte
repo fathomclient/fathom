@@ -35,10 +35,8 @@
     Search,
     Puzzle,
     Download,
-    Check,
     CircleCheck,
     RefreshCw,
-    ExternalLink,
     ChevronRight,
     ListFilter,
   } from '@lucide/svelte';
@@ -53,31 +51,42 @@
   import EmptyState from '../lib/ui/EmptyState.svelte';
   import Progress from '../lib/ui/Progress.svelte';
   import ModDetail from './mods/ModDetail.svelte';
+  import Browse from './mods/Browse.svelte';
+  import CatalogDetail from './mods/CatalogDetail.svelte';
+  import InstallSheet from './mods/InstallSheet.svelte';
+  import InstalledDetail from './mods/InstalledDetail.svelte';
+  import RecoveryPanel from './mods/RecoveryPanel.svelte';
+  import VerdictBadge from './mods/VerdictBadge.svelte';
   import { tooltip } from '../lib/tooltip';
   import { EASE, MOTION_HOVER, MOTION_PAGE, MOTION_STAGGER } from '../lib/motion';
   import {
-    browseMods,
+    catalogUninstall,
+    checkModUpdates,
+    identifyMods,
     importDroppedMod,
     importMod,
     installComponent,
-    installMod,
-    modUpdates,
     modsView,
     openPage,
     openProjectPage,
-    removeMod,
     setLoader,
     setModEnabled,
-    type BrowseView,
+    type CatalogEntry,
     type ImportedMod,
+    type InstallArgs,
+    type InstallOutcome,
     type ModsView,
-    type UpdatesView,
+    type UpdatesCheck,
   } from '../lib/api';
 
   /** Told when something here changed what the rest of the shell shows. */
   export let onChanged: () => void = () => {};
   /** Open the full Add OptiFine screen. Set by the shell. */
   export let onAddOptiFine: () => void = () => {};
+  /** Which tab to open on: the shell sends `issues` after a failed launch. */
+  export let initialTab: 'installed' | 'browse' | 'updates' | 'issues' = 'installed';
+  /** Start the game without external mods. Set by the shell. */
+  export let onSafeLaunch: () => void = () => {};
 
   let view: ModsView | null = null;
   let busy = false;
@@ -89,14 +98,19 @@
   let dropping = false;
 
   type Tab = 'installed' | 'browse' | 'updates' | 'issues';
-  let tab: Tab = 'installed';
+  let tab: Tab = initialTab;
   /** Which kind of row the Installed tab is showing. */
   let filter: 'all' | 'enabled' | 'fathom' | 'managed' | 'yours' = 'all';
 
-  let browse: BrowseView | null = null;
-  let browseQuery = '';
-  let browsing = false;
-  let updates: UpdatesView | null = null;
+  /** A mod opened from Browse, shown as its own page. */
+  let catalogSelected: CatalogEntry | null = null;
+  /** The install sheet, when one is open. */
+  let installRequest: { args: InstallArgs; name: string; quick?: boolean } | null = null;
+  /** Bumped after an install or removal, so Browse and the detail page re-read. */
+  let browseRevision = 0;
+  /** Projects with an install under way, by `provider:id`. */
+  let running = new Set<string>();
+  let updates: UpdatesCheck | null = null;
   let checking = false;
   /** A one-line confirmation of the last thing that worked. */
   let note = '';
@@ -104,6 +118,8 @@
   onMount(() => {
     void (async () => {
       view = await modsView();
+      if (tab === 'updates' && !view.browseBlocked) void checkUpdates();
+      void identifyUnknown();
     })();
 
     /* Dropping a jar onto the window is the fastest path from "downloaded
@@ -210,50 +226,48 @@
     }
   }
 
-  /* Searching reaches the network, so it happens when asked rather than on
-     every keystroke: a debounced search box would send a request per pause,
-     and each of those is a third party learning what somebody is looking for. */
-  async function search() {
-    if (browsing) return;
-    browsing = true;
-    error = '';
-    try {
-      browse = await browseMods(browseQuery, 0);
-    } catch (cause) {
-      error = String(cause);
-      browse = null;
-    } finally {
-      browsing = false;
-    }
+  /* Installing from the browser always goes through the install sheet: a plan
+     first, then the user's decision, then the install, which runs on a Rust
+     worker and reports progress as it goes. */
+  function requestInstall(entry: CatalogEntry, versionId: string | null = null, quick = false) {
+    installRequest = { args: { reference: entry.reference, versionId }, name: entry.name, quick };
   }
 
-  async function more() {
-    if (browsing || !browse?.more) return;
-    browsing = true;
-    try {
-      const next = await browseMods(browse.query, browse.offset + browse.rows.length);
-      browse = { ...next, rows: [...browse.rows, ...next.rows] };
-    } catch (cause) {
-      error = String(cause);
-    } finally {
-      browsing = false;
-    }
+  function requestUpdate(entry: CatalogEntry) {
+    if (!entry.installedId) return;
+    installRequest = {
+      args: { reference: entry.reference, replacing: entry.installedId },
+      name: entry.name,
+    };
   }
 
-  async function install(project: string, title: string) {
+  async function installed(outcome: InstallOutcome) {
+    const key = installRequest
+      ? `${installRequest.args.reference.provider}:${installRequest.args.reference.id}`
+      : '';
+    installRequest = null;
+    running.delete(key);
+    running = running;
+    note = outcome.message;
+    setTimeout(() => (note = ''), 6000);
+    browseRevision += 1;
+    updates = null;
+    view = await modsView();
+    onChanged();
+  }
+
+  async function uninstallCatalogMod(id: string) {
     if (busy) return;
     busy = true;
     error = '';
     try {
-      view = await installMod(project);
-      note = `Installed ${title}.`;
-      // The browse list carries an "installed" flag per row, and it is now
-      // stale for the row just pressed.
-      if (browse) browse = await browseMods(browse.query, 0);
-      onChanged();
+      note = await catalogUninstall(id);
       setTimeout(() => (note = ''), 6000);
+      browseRevision += 1;
+      view = await modsView();
+      onChanged();
     } catch (cause) {
-      error = String(cause);
+      error = String(cause instanceof Error ? cause.message : cause);
     } finally {
       busy = false;
     }
@@ -280,17 +294,66 @@
     checking = true;
     error = '';
     try {
-      updates = await modUpdates();
+      updates = await checkModUpdates();
     } catch (cause) {
-      error = String(cause);
+      error = String(cause instanceof Error ? cause.message : cause);
     } finally {
       checking = false;
     }
   }
 
+  /* Jars somebody added by hand carry no record of what they are. When mod
+     repositories are on, ask by their exact bytes once per visit: a match
+     gives the row a name, a verdict and an update path. A jar no index knows
+     stays exactly as it was. */
+  let identified = false;
+  async function identifyUnknown() {
+    if (identified || !view || view.browseBlocked) return;
+    const unknown = view.rows.some(
+      (row) => row.group === 'yours' && row.compatibility?.verdict === 'unknown',
+    );
+    if (!unknown) return;
+    identified = true;
+    try {
+      const count = await identifyMods();
+      if (count > 0) {
+        view = await modsView();
+        note = `Recognised ${count} of your ${count === 1 ? 'mod' : 'mods'} by its exact file.`;
+        setTimeout(() => (note = ''), 6000);
+      }
+    } catch {
+      /* A convenience: unknown jars simply stay unknown. */
+    }
+  }
+
+  async function removeExternal(id: string) {
+    if (busy) return;
+    busy = true;
+    error = '';
+    try {
+      note = await catalogUninstall(id);
+      setTimeout(() => (note = ''), 6000);
+      selected = null;
+      browseRevision += 1;
+      view = await modsView();
+      onChanged();
+    } catch (cause) {
+      error = String(cause instanceof Error ? cause.message : cause);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function changed(message: string) {
+    note = message;
+    setTimeout(() => (note = ''), 6000);
+    browseRevision += 1;
+    view = await modsView();
+    onChanged();
+  }
+
   function show(next: Tab) {
     tab = next;
-    if (next === 'browse' && browse === null && !view?.browseBlocked) void search();
     if (next === 'updates' && updates === null && !view?.browseBlocked) void checkUpdates();
   }
 
@@ -324,13 +387,14 @@
       ] as const).filter(([id, , count]) => id === 'all' || count > 0)
     : [];
   /* The tab strip earns its place only when there is more than one answer.
-     Under a loader that reads no mods, or with repositories switched off,
-     three of the four tabs would exist to explain why they are empty. */
-  $: tabbed = !!view && !view.loaderNotice && !view.browseBlocked;
+     Under a loader that reads no mods, three of the four tabs would exist to
+     explain why they are empty. With repositories switched off the tabs stay:
+     Browse is where somebody looks for mods, so it is where the switch is. */
+  $: tabbed = !!view && !view.loaderNotice;
   $: tabs = [
     { id: 'installed', label: 'Installed' },
     { id: 'browse', label: 'Browse' },
-    { id: 'updates', label: updates?.rows.length ? `Updates (${updates.rows.length})` : 'Updates' },
+    { id: 'updates', label: updates?.updates.length ? `Updates (${updates.updates.length})` : 'Updates' },
     { id: 'issues', label: view?.counts.issues ? `Issues (${view.counts.issues})` : 'Issues' },
   ];
 
@@ -364,21 +428,52 @@
 </script>
 
 {#if view}
-  {#if selectedMod || selectedComponent}
+  {#if selectedMod}
     <!-- ------------------------------------------------- one mod, as a page -->
     {#key selected?.id}
+      <InstalledDetail
+        id={selectedMod.id}
+        {busy}
+        revision={browseRevision}
+        onBack={close}
+        onToggle={(value) => selectedMod && run(() => setModEnabled(selectedMod.id, value)).then(() => (browseRevision += 1))}
+        onRemove={() => selectedMod && void removeExternal(selectedMod.id)}
+        onInstall={(args, name) => (installRequest = { args, name })}
+        onChanged={(message) => void changed(message)}
+      />
+    {/key}
+  {:else if selectedComponent}
+    {#key selected?.id}
       <ModDetail
-        mod={selectedMod}
+        mod={null}
         component={selectedComponent}
         profileName={view.profileName}
         {busy}
         onBack={close}
-        onToggle={(value) => selectedMod && run(() => setModEnabled(selectedMod.id, value))}
-        onRemove={() => selectedMod && run(() => removeMod(selectedMod.id))}
         onInstall={() =>
           selectedComponent && void addComponent(selectedComponent.id, selectedComponent.name)}
         onOpenProject={(slug) => void openProjectPage(slug)}
         onOpenPage={(page) => void openPage(page)}
+      />
+    {/key}
+  {:else if catalogSelected}
+    {#key catalogSelected.key}
+      <CatalogDetail
+        entry={catalogSelected}
+        profileName={view.profileName}
+        minecraft={view.minecraft}
+        loader={view.loader}
+        revision={browseRevision}
+        {busy}
+        onBack={() => (catalogSelected = null)}
+        onInstall={(versionId) => catalogSelected && requestInstall(catalogSelected, versionId)}
+        onUpdate={(installedId) =>
+          catalogSelected &&
+          (installRequest = {
+            args: { reference: catalogSelected.reference, replacing: installedId },
+            name: catalogSelected.name,
+          })}
+        onRemove={(installedId) => void uninstallCatalogMod(installedId)}
       />
     {/key}
   {:else}
@@ -524,6 +619,16 @@
                 </div>
               {/if}
 
+              {#if view.gameRunning}
+                <Notice>Minecraft is running. Mods are loaded when it starts, so changes here apply the next time it starts.</Notice>
+              {/if}
+              {#if view.rows.some((row) => row.kind === 'builtin')}
+                <p class="builtin-note">
+                  Fathom's own modules — HUD, Keystrokes, Zoom, Crosshair and the rest — are part of the Fathom client
+                  and are switched on in game, from the Hub (Right Shift). Everything else here is a separate Java mod,
+                  loaded when Minecraft starts.
+                </p>
+              {/if}
               <Section label="Installed" summary={query ? `${rows.length} shown` : `${view.counts.enabled} of ${view.counts.all} on`} material>
                 {#each rows as row, index (row.id)}
                   <div
@@ -535,11 +640,15 @@
                     <div class="text">
                       <button class="name" on:click={() => open('mod', row.id)}>{row.name}</button>
                       {#if row.summary}<p class="summary">{row.summary}</p>{/if}
-                      <p class="meta tnum">{[row.version, row.origin, row.size].filter(Boolean).join(' · ')}</p>
+                      <p class="meta tnum">{[row.sourceLabel, row.version, row.size].filter((part) => part && part !== '—').join(' · ')}</p>
                       {#if row.missing}<p class="flag">File missing</p>{/if}
                       {#if row.warning}<p class="flag">{row.warning}</p>{/if}
+                      {#each row.issues as issue}<p class="flag">{issue}</p>{/each}
                     </div>
                     <div class="controls">
+                      {#if row.compatibility && row.compatibility.verdict !== 'compatible'}
+                        <VerdictBadge verdict={row.compatibility.verdict} detail={row.compatibility.detail} />
+                      {/if}
                       <Switch
                         checked={row.enabled}
                         disabled={busy || !row.canToggle}
@@ -592,85 +701,14 @@
 
         <!-- ------------------------------------------------------- browse -->
         {#if tab === 'browse'}
-          <section class="library">
-            <div class="toolbar">
-              <!-- svelte-ignore a11y-no-static-element-interactions -->
-              <div
-                class="search wide"
-                on:keydown={(event) => event.key === 'Enter' && void search()}
-              >
-                <SearchField bind:value={browseQuery} placeholder="Search Modrinth" />
-              </div>
-              <Button variant="primary" disabled={browsing} onClick={search}>
-                {browsing ? 'Searching' : 'Search'}
-              </Button>
-            </div>
-
-            <Section label="Modrinth" summary="{view.loader} · Minecraft {view.minecraft}" material>
-              {#if browse}
-                {#each browse.rows as hit, index (hit.project)}
-                  <div
-                    class="item"
-                    in:fly={{ y: 6, duration: MOTION_PAGE, delay: Math.min(index, 12) * MOTION_STAGGER, easing: EASE }}
-                  >
-                    <span class="monogram" aria-hidden="true">{initial(hit.title)}</span>
-                    <div class="text">
-                      <span class="name static">{hit.title}</span>
-                      {#if hit.summary}<p class="summary">{hit.summary}</p>{/if}
-                      <p class="meta tnum">{[hit.downloads, hit.license].filter(Boolean).join(' · ')}</p>
-                    </div>
-                    <div class="controls">
-                      {#if hit.installed}
-                        <span class="installed"><Check size={ICON.inline} /> Installed</span>
-                      {:else}
-                        <Button disabled={busy} onClick={() => void install(hit.project, hit.title)}>
-                          <Download size={ICON.inline} />
-                          Install
-                        </Button>
-                      {/if}
-                      <button
-                        class="ui-icon-button small"
-                        aria-label="Open {hit.title} on Modrinth"
-                        use:tooltip={'Open its page'}
-                        on:click={() => void openProjectPage(hit.slug)}
-                      >
-                        <ExternalLink size={ICON.inline} />
-                      </button>
-                    </div>
-                  </div>
-                {/each}
-
-                {#if browse.rows.length === 0}
-                  <EmptyState
-                    compact
-                    icon={Search}
-                    title="No results"
-                    detail="Nothing on Modrinth matches that for {view.loader} and Minecraft {view.minecraft}."
-                  />
-                {/if}
-              {:else if !browsing}
-                <EmptyState
-                  compact
-                  icon={Search}
-                  title="Search Modrinth"
-                  detail="Only builds for {view.loader} and Minecraft {view.minecraft} are listed."
-                />
-              {:else}
-                <div class="loading">
-                  <span>Searching Modrinth</span>
-                  <Progress label="Searching Modrinth" />
-                </div>
-              {/if}
-            </Section>
-
-            {#if browse?.more}
-              <div class="more">
-                <Button disabled={browsing} onClick={more}>
-                  {browsing ? 'Loading' : `Show more (${browse.total} found)`}
-                </Button>
-              </div>
-            {/if}
-          </section>
+          <Browse
+            revision={browseRevision}
+            {busy}
+            {running}
+            onOpen={(entry) => (catalogSelected = entry)}
+            onInstall={(entry, quick) => requestInstall(entry, null, quick)}
+            onUpdate={(entry) => requestUpdate(entry)}
+          />
         {/if}
 
         <!-- ------------------------------------------------------ updates -->
@@ -681,25 +719,32 @@
               summary={updates ? `${updates.checkable} of ${updates.total} can be checked` : ''}
               material
             >
-              {#if updates?.blocked}
-                <p class="none">{updates.blocked}</p>
+              {#if view.browseBlocked && !updates}
+                <p class="none">{view.browseBlocked} Turn them on from the Browse tab to check.</p>
               {:else if updates}
-                {#each updates.rows as update (update.id)}
+                {#each updates.updates as update (update.id)}
                   <div class="item">
                     <span class="monogram" aria-hidden="true">{initial(update.name)}</span>
                     <div class="text">
-                      <span class="name static">{update.name}</span>
-                      <p class="meta tnum">{update.from} → {update.to}</p>
+                      <button class="name" on:click={() => open('mod', update.id)}>{update.name}</button>
+                      <p class="meta tnum">{update.installed ?? 'installed'} → {update.latest}</p>
                     </div>
                     <div class="controls">
-                      <Button disabled={busy} onClick={() => void install(update.project, update.name)}>
+                      <Button
+                        disabled={busy}
+                        onClick={() =>
+                          (installRequest = {
+                            args: { reference: update.reference, replacing: update.id },
+                            name: update.name,
+                          })}
+                      >
                         <RefreshCw size={ICON.inline} />
                         Update
                       </Button>
                     </div>
                   </div>
                 {/each}
-                {#if updates.rows.length === 0}
+                {#if updates.updates.length === 0}
                   <EmptyState
                     compact
                     icon={CircleCheck}
@@ -728,6 +773,13 @@
         <!-- ------------------------------------------------------- issues -->
         {#if tab === 'issues'}
           <section class="library">
+            <RecoveryPanel
+              revision={browseRevision}
+              {busy}
+              {onSafeLaunch}
+              onChanged={(message) => void changed(message)}
+              onOpenMod={(id) => open('mod', id)}
+            />
             {#each view.problems as problem}
               <Notice tone={problem.blocking ? 'danger' : 'warning'}>
                 {problem.message}
@@ -787,6 +839,17 @@
       {/if}
     </Page>
   {/if}
+
+  {#if installRequest}
+    <InstallSheet
+      args={installRequest.args}
+      name={installRequest.name}
+      quick={installRequest.quick ?? false}
+      profileName={view.profileName}
+      onClose={() => (installRequest = null)}
+      onDone={(outcome) => void installed(outcome)}
+    />
+  {/if}
 {/if}
 
 <style>
@@ -811,10 +874,6 @@
   .search {
     flex: 0 1 280px;
     min-width: 200px;
-  }
-
-  .search.wide {
-    flex: 1 1 320px;
   }
 
   /* Work under way inside a list: one line of status and a thin line under
@@ -961,12 +1020,11 @@
     gap: var(--space-2);
   }
 
-  .installed {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
+  .builtin-note {
+    margin: 0;
     font-size: var(--type-secondary-size);
-    color: var(--color-text-secondary);
+    line-height: var(--type-secondary-leading);
+    color: var(--color-text-tertiary);
   }
 
   .aside {

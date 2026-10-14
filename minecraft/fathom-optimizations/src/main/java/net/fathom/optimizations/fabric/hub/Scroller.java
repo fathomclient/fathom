@@ -52,6 +52,21 @@ public final class Scroller {
         }
     }
 
+    /** Where the list is heading: what to remember to come back to it. */
+    public float position() {
+        return target;
+    }
+
+    /** Come back to a remembered position at once; clamped on the next frame. */
+    public void restore(float value) {
+        float at = Math.max(0f, value);
+        offset = at;
+        target = at;
+        position.set(at);
+        activeFor = 0f;
+        dragging = false;
+    }
+
     /** Put it back at the top. */
     public void reset() {
         offset = 0f;
