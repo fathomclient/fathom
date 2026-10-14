@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Fathom">
-  <title>Fathom concept 05 - Notched slab</title>
-  <style>.fm-b{fill:currentColor}.fm-a{fill:var(--fathom-accent,#c4303c)}</style>
-  <path class="fm-b" d="M14 8h36v11H28v9h22v9H24v19H14z"/>
-  <rect class="fm-a" x="14" y="37" width="10" height="19"/>
-</svg>
