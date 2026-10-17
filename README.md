@@ -6,26 +6,22 @@
 # Fathom
 
 Fathom is a free, open-source launcher and client for Minecraft: Java Edition
-1.8.9. It signs you in with your own Microsoft account, downloads the game from
-Mojang, and runs it with Fathom's in-game client on Legacy Fabric or Forge.
+1.8.9.
 
 What you get:
 
-- **A launcher** for profiles, mods (with a built-in Modrinth browser),
+- **A launcher** for profiles, mods (with a built-in mod browser),
   OptiFine, Java, and recovery when a launch goes wrong.
-- **An in-game client.** Right Shift opens the hub, with 21 modules: FPS,
-  coordinates, keystrokes, CPS, armour and potion HUDs, zoom, a custom
-  crosshair, toggle sprint and sneak, Fullbright, Time Changer, 1.7
-  animations, and more. Each one can be placed in the HUD editor.
+- **An in-game client.** Right Shift opens the hub, with 21 modules.
 - **Performance work**, each piece measured in the game before it is turned on
   by default. See [optimization-registry.md](docs/performance/optimization-registry.md).
 - **Both loaders.** Legacy Fabric and Forge 1.8.9 run the same client, and your
-  settings and keybinds follow you between them.
+  settings and keybinds persist between them.
 
 It collects nothing: no telemetry, analytics, ads, launcher account or
-background service. [PRIVACY.md](PRIVACY.md) and [NETWORK.md](NETWORK.md) list
-what is stored and every host it talks to. It never offers cracked accounts,
-skips the ownership check, or redistributes game files.
+background service. [PRIVACY.md](PRIVACY.md) and [NETWORK.md](NETWORK.md) list 
+everything that is ever contacted. It does not support cracked accounts and you
+must have an owned copy of the game to use Fathom.
 
 Not affiliated with Mojang or Microsoft.
 
@@ -91,6 +87,8 @@ in `minecraft/fathom-optimizations`.
 More reading: [ARCHITECTURE.md](ARCHITECTURE.md),
 [THREAT_MODEL.md](THREAT_MODEL.md), [docs/forge.md](docs/forge.md),
 [docs/modules.md](docs/modules.md) and [docs/mod-browser.md](docs/mod-browser.md).
+
+Thank you for using Fathom <3
 
 ## Licence
 
