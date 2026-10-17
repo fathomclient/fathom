@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Geometry proof</title>
+<!--
+  Development only (Vite's dev server; not in the build). Loads the launcher
+  itself in a same-origin frame -- ?src=/?proof=home by default -- waits for
+  it to settle, and writes the box, radius, font and colours of every
+  element that draws something, as JSON, into #out. The in-game layouts are
+  built from these numbers rather than from reading the CSS by eye:
+
+    msedge --headless --window-size=1280,720 --dump-dom \
+      "http://localhost:5173/proof/geometry.html?src=%2F%3Fproof%3Dhome"
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  iframe { border: 0; display: block; }
+  #out { display: none; }
+</style>
+<script type="module" src="./geometry.ts"></script>
+</head>
+<body>
+<iframe id="app"></iframe>
+<pre id="out">pending</pre>
+</body>
+</html>

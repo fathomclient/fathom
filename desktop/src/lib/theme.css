@@ -1,0 +1,427 @@
+@import './theme.generated.css';
+@import './controls.css';
+
+/*
+ * Fathom's visual system: neutral glass over Rainforest Storm.
+ *
+ * Every value comes from `assets/theme/fathom-theme.json` through
+ * `tools/generate-fathom-theme.mjs` into `theme.generated.css`. This file holds
+ * only what a token cannot express: the reset, the font face, and the shared
+ * behaviour of a material (hover, press, focus, nesting). See
+ * `docs/design-system.md` for why the values are what they are.
+ *
+ * THE BACKGROUND IS THE PALETTE. Surfaces are glass that borrows colour from
+ * what is behind it. Hierarchy comes from glass density -- clear, light,
+ * standard, dense -- not from different hues. There is no accent colour whose
+ * job is decoration, no glow, and almost nothing fully opaque.
+ *
+ * A surface is `class="material-standard"` (or `<Glass level="standard">`) and
+ * nothing more. A component that writes its own rgba fill, its own
+ * backdrop-filter or its own border colour is re-inventing the material, and it
+ * will drift from it.
+ *
+ * TWO GENERATIONS, FOR NOW. The `--text`, `--accent`, `--fill-*`, `--glass-*`,
+ * `--r-*` and `--m-*` tokens and the `.glass` classes are the previous dark
+ * system. In the launcher they are re-pointed at the Rainforest glass tokens below,
+ * so screens that have not been rebuilt sit in the same palette without their
+ * layout changing. New work uses `--color-*`, `--mat-*`, `--control-*`,
+ * `--radius-*`, `--space-*`, `--type-*` and `--motion-*` only.
+ */
+
+@font-face {
+  /* Geist Sans, bundled. Never fetched: a launcher that reaches out to a font
+     CDN on start has a network request nobody asked for and a hole in its
+     privacy story.
+
+     Geist over Inter, which this build used before. Inter is excellent and
+     completely anonymous -- it is the default of every dashboard shipped in
+     the last five years. Geist has more geometry in the letterforms and holds a
+     heavy weight better at large sizes, which is what the launch composition
+     needs. */
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  /* Vendored under `src/lib/fonts/`, with its SIL Open Font License alongside,
+     rather than imported from the `geist` npm package: that package does not
+     export this subpath, and a font file is a static asset that never changes.
+     Vendoring it also means the build has one fewer install-time dependency for
+     something that is ultimately 70 KB of bytes. */
+  src: url('./fonts/Geist-Variable.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./fonts/GeistMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url('./fonts/GeistMono-Medium.woff2') format('woff2');
+}
+
+/* -- legacy aliases ----------------------------------------------------------
+   The previous dark system's names, answered by the neutral glass tokens. CSS
+   only: the manifest's legacy sections are untouched, because the game's
+   `Skin` still reads them through `FathomTheme.java`. Delete each alias once no
+   screen uses it. The old accent becomes neutral and its glow disappears:
+   nothing in this system glows. */
+:root {
+  /* The keyboard focus ring: a thin signal line outside the control. Shown for
+     keyboard focus only (`:focus-visible`), never after a click. */
+  --focus-ring-width: var(--metric-focus);
+  --type-family-mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', monospace;
+  /* Replaced at start-up with one device pixel (see `main.ts`). */
+  --hairline: 1px;
+
+  --chrome: var(--backdrop-base);
+  --chrome-line: var(--control-hairline);
+  --chrome-line-strong: var(--control-hairline-strong);
+  --edge: var(--control-hairline-strong);
+  --edge-strong: var(--control-hairline-strong);
+  --glass-edge: var(--control-hairline-strong);
+  --glass-edge-strong: var(--control-hairline-strong);
+  --glass-fill: var(--mat-standard-fill);
+  --glass-fill-strong: var(--mat-dense-fill);
+  --glass-blur: var(--mat-standard-blur);
+  --glass-blur-strong: var(--mat-dense-blur);
+  --glass-sheen: var(--mat-standard-rim);
+  --glass-sheen-strong: var(--mat-dense-rim);
+  --glass-shadow: var(--shadow-md);
+  --glass-shadow-strong: var(--shadow-lg);
+  --overlay: var(--mat-dense-tint-solid);
+  --glass-fill-solid: var(--mat-standard-tint-solid);
+
+  --fill: var(--control-fill);
+  --fill-hover: var(--control-fill-hover);
+  --fill-active: var(--control-fill-selected);
+  --fill-pressed: var(--control-fill-pressed);
+  --fill-sunken: var(--control-fill-sunken);
+
+  --text: var(--color-text);
+  --text-muted: var(--color-text-secondary);
+  --text-faint: var(--color-text-tertiary);
+  --text-disabled: var(--color-text-disabled);
+  --text-label: var(--color-text-secondary);
+
+  --accent: var(--color-text-secondary);
+  --accent-strong: var(--color-text);
+  --accent-deep: var(--control-fill-selected);
+  --accent-glow: transparent;
+  --accent-wash: var(--control-fill-hover);
+  --focus: var(--color-focus);
+
+  --good: var(--color-success-text);
+  --warn: var(--color-warning-text);
+  --bad: var(--color-danger-text);
+  --bad-wash: var(--color-danger-tint);
+
+  --r-xs: var(--radius-xs);
+  --r-sm: var(--radius-sm);
+  --r-md: var(--radius-md);
+  --r-lg: var(--radius-lg);
+  --r-xl: var(--radius-xl);
+  --r-pill: var(--radius-pill);
+
+  /* Native checkboxes, radios and progress elements. */
+  accent-color: var(--color-text-secondary);
+}
+
+* {
+  box-sizing: border-box;
+  /* No system focus ring: it is a blue rectangle from another design system.
+     Focus is styled per control, and never removed without a replacement. */
+  outline: none;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--backdrop-base);
+  color: var(--color-text);
+  font-family: var(--type-family);
+  font-size: var(--t-body);
+  font-weight: var(--w-normal);
+  /* Tighter than the browser default. A game client is dense; 1.5 is for
+     articles. */
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* This is an application, not a document. */
+  user-select: none;
+  cursor: default;
+}
+
+/* Geist's tabular figures, so version numbers and counts do not jitter when
+   they change. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Geist Mono, for what is measured or identifies a build: FPS, frame time,
+   memory, live percentages, versions, hashes, device codes, log lines. Never
+   decoration -- a profile name or a preset is words, and words are Geist. */
+.mono {
+  font-family: var(--type-family-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* -- icons -------------------------------------------------------------------
+   One family (Lucide geometry, `FathomIcon` for Fathom's own ids), one pen.
+   The stroke is set in screen pixels rather than in the icon's 24-unit grid,
+   and it is the SAME at every size: a 12px caption glyph, a 16px inline icon
+   and a 20px navigation icon are drawn with one 1.5px line, which is what makes
+   them read as one set. The game draws its icons with the same 1.5 (see
+   `IconGeometry.STROKE_DP`). Sizes are roles from `metrics.generated.ts`;
+   call sites never pick a stroke or a number. */
+svg.lucide {
+  stroke-width: 1.5px;
+  flex-shrink: 0;
+}
+svg.lucide :where(path, circle, ellipse, line, polyline, polygon, rect) {
+  vector-effect: non-scaling-stroke;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* -- letter case -------------------------------------------------------------
+   Every word the launcher draws is set in lowercase by default. The copy in the
+   source keeps its correct capitalization, so the Appearance switch
+   ("Standard capitalization", see `appearance.ts`) only has to lift this one
+   rule: `data-case="standard"` on `<html>` and the text is as written.
+
+   Done here, once, rather than by rewriting every string: a string rewritten to
+   lowercase has lost its capitals for good, and the switch would have nothing
+   to restore.
+
+   Chromium's own stylesheet gives buttons and selects `text-transform: none`,
+   so they are told to follow the page. What is typed, and what is data rather
+   than words -- the `.mono` values, log lines, hosts, paths, hashes -- keeps its
+   case: lowercasing a path or a Java argument would show something that is not
+   true. `.keep-case` marks any other such span. */
+:root:not([data-case='standard']) body {
+  text-transform: lowercase;
+}
+
+:root:not([data-case='standard']) :is(input, textarea)::placeholder {
+  text-transform: lowercase;
+}
+
+button,
+select {
+  text-transform: inherit;
+}
+
+input,
+textarea,
+code,
+pre,
+kbd,
+samp,
+.mono,
+.keep-case {
+  text-transform: none;
+}
+
+/* -- the legacy glass classes ------------------------------------------------
+   `.glass` and `.glass-strong` are the standard and dense materials under their
+   old names, so every surface that predates the system is the same substance
+   as the ones built on it. Use `.material-*` in new work. */
+.glass {
+  background-color: var(--mat-standard-fill);
+  -webkit-backdrop-filter: var(--mat-standard-filter);
+  backdrop-filter: var(--mat-standard-filter);
+  box-shadow: var(--mat-standard-rim), var(--mat-standard-shadow);
+  border-radius: var(--radius-lg);
+}
+
+.glass-strong {
+  background-color: var(--mat-dense-fill);
+  -webkit-backdrop-filter: var(--mat-dense-filter);
+  backdrop-filter: var(--mat-dense-filter);
+  box-shadow: var(--mat-dense-rim), var(--mat-dense-shadow);
+  border-radius: var(--radius-xl);
+}
+
+/* -- materials: shared behaviour -------------------------------------------
+   The four levels themselves (`.material-clear`, `-light`, `-standard`,
+   `-dense`) are generated. What follows is behaviour every level shares. */
+
+/* Clear and light glass let the most of the photograph through, so the type on
+   them gets a faint dark edge for definition. Not a glow: it is darker than the
+   text and one pixel away from it. */
+.material-clear,
+.material-light {
+  text-shadow: var(--backdrop-text-shadow-glass);
+}
+
+/* Interaction is material density, not light. Hover lays a faint neutral veil
+   into the pane (the `--mat-veil` layer the generated rule reserves in its
+   box-shadow, so it interpolates); press compresses it very slightly. Nothing
+   glows, nothing lifts. */
+.material-interactive {
+  cursor: pointer;
+  transition:
+    box-shadow var(--motion-hover) var(--ease-standard),
+    background-color var(--motion-state) var(--ease-standard),
+    transform var(--motion-press) var(--ease-standard);
+}
+
+.material-interactive:hover {
+  --mat-veil: rgba(214, 234, 255, 0.06);
+}
+
+.material-interactive:active {
+  --mat-veil: rgba(6, 12, 18, 0.08);
+  transform: scale(var(--press-scale));
+}
+
+.material-interactive:disabled,
+.material-interactive[aria-disabled='true'] {
+  cursor: default;
+  color: var(--color-text-disabled);
+  transform: none;
+  --mat-veil: transparent;
+}
+
+/* Keyboard focus: a neutral light ring outside the rim, following the radius. */
+.material-interactive:focus-visible,
+.focus-ring:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Nested radii stay concentric. A container that owns its geometry sets
+   `--surface-radius` and `--surface-inset` (its padding); a `.concentric` child
+   takes the outer radius minus that inset, never less than `--radius-inner-min`.
+   One level deep: a concentric child does not redefine the variables for its
+   own children, which set them explicitly if they nest again. */
+.concentric {
+  border-radius: max(
+    var(--radius-inner-min),
+    calc(var(--surface-radius, var(--radius-lg)) - var(--surface-inset, 0px))
+  );
+}
+
+/* Semantic status plates, for notices and badges. Same construction as a
+   material -- a wash and a rim -- in the one place a hue is allowed to mean
+   something. */
+.tone-danger,
+.tone-success,
+.tone-warning {
+  background-color: var(--tone-tint);
+  box-shadow: inset 0 0 0 var(--metric-rim) var(--tone-rim);
+  color: var(--tone-text);
+}
+.tone-danger {
+  --tone-tint: var(--color-danger-tint);
+  --tone-rim: var(--color-danger-rim);
+  --tone-text: var(--color-danger-text);
+}
+.tone-success {
+  --tone-tint: var(--color-success-tint);
+  --tone-rim: var(--color-success-rim);
+  --tone-text: var(--color-success-text);
+}
+.tone-warning {
+  --tone-tint: var(--color-warning-tint);
+  --tone-rim: var(--color-warning-rim);
+  --tone-text: var(--color-warning-text);
+}
+
+/* Type over the photograph itself, with no pane behind it. */
+.legible {
+  text-shadow: var(--backdrop-text-shadow);
+}
+
+/* -- accessibility modes ---------------------------------------------------
+   The token swaps for both modes are generated. These two rules also catch the
+   surfaces that predate the material system and still carry their own
+   backdrop-filter, so switching blur off really does turn every blur off
+   rather than only the ones already migrated. With transparency reduced the
+   panes are near-opaque, so a blur behind them is work nobody would see. */
+:root[data-blur='off'] *,
+:root[data-transparency='reduced'] * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  * {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* Text over footage needs its own contrast rather than a plate behind it.
+   Putting a box behind every label to make it readable would be covering up
+   the thing we went to the trouble of showing. */
+.on-footage {
+  /* The same neutral shadow as `.legible`: a tight edge for definition against
+     bright sky, and a wide soft one that deepens the area around the glyphs. */
+  text-shadow: var(--backdrop-text-shadow);
+}
+
+/* Scrollbars, restyled. The default Windows scrollbar is the single most
+   effective way to make an application look unfinished. No track, no arrows:
+   a narrow neutral thumb inset from the edge, a little brighter under the
+   pointer. The game's `Scroller` draws the same thing. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  background: var(--control-scrollbar);
+  border-radius: var(--radius-pill);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: var(--control-scrollbar-hover);
+  background-clip: padding-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

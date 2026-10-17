@@ -1,0 +1,35 @@
+[package]
+name = "launcher-ui"
+description = "Compatibility command for Fathom's canonical desktop launcher."
+build = "build.rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "fathom-ui"
+path = "src/main.rs"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol", "launcher-desktop/custom-protocol"]
+dev-auth = ["launcher-desktop/dev-auth"]
+
+[dependencies]
+# This command runs without Vite, so it embeds the same production bundle.
+launcher-desktop = { path = "../launcher-desktop" }
+# Directly declared for tauri-build's manifest/resource validation. Runtime
+# code remains entirely in launcher-desktop.
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

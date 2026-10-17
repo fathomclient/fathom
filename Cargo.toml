@@ -1,0 +1,87 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/launcher-core",
+    "crates/launcher-ui",
+    "crates/launcher-desktop",
+    "crates/launcher-cli",
+    # Release tooling. Never a dependency of a shipped binary; see its README.
+    "crates/fathom-release",
+]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/fathomclient/fathom"
+authors = ["Fathom contributors"]
+
+[workspace.dependencies]
+launcher-core = { path = "crates/launcher-core", version = "0.3.0" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+directories = "6.0"
+tempfile = "3"
+
+# Network. rustls only: no OpenSSL, no native-tls, no system TLS version skew.
+ureq = { version = "3.1", default-features = false, features = ["json", "rustls", "gzip"] }
+
+# Hashing. sha1 for Mojang artifact verification (that is what they publish),
+# sha2 for our own update manifests.
+sha1 = "0.10"
+sha2 = "0.10"
+base64 = "0.22"
+
+# Decoding a signed-in player's skin to cut out their head for the account
+# avatar, and encoding the result. Already in the tree through Tauri.
+png = "0.17"
+
+# Entitlement JWT signature verification (ownership gate).
+# `rust_crypto` rather than `aws_lc_rs`: pure Rust, no C toolchain, consistent
+# with the rustls choice. Without an explicit provider feature, jsonwebtoken
+# *panics* at first use -- our tests caught exactly that.
+jsonwebtoken = { version = "11", default-features = false, features = [
+    "use_pem",
+    "rust_crypto",
+] }
+
+# OS credential store: DPAPI-backed Credential Manager / Keychain / Secret Service.
+# The default `v1` feature selects exactly those three platform stores.
+keyring = "4"
+
+# Randomness, for the local bridge's per-session token.
+#
+# The operating system's own source, directly: a token that authenticates the
+# game against the launcher must be unguessable, and a PRNG seeded from a clock
+# is guessable by anything that knows roughly when the game started. `getrandom`
+# is already in the tree transitively; naming it adds a direct dependency and no
+# new weight.
+getrandom = "0.3"
+
+# Natives extraction. Untrusted archive input; see fs_safety.
+zip = { version = "8", default-features = false, features = ["deflate"] }
+
+# Update signature verification (Ed25519).
+#
+# Already in the tree: jsonwebtoken's `rust_crypto` backend depends on it, so
+# naming it directly adds a direct dependency and no new transitive weight.
+#
+# `default-features = false` drops `rand_core`, which we do not need: the
+# launcher only ever *verifies*. Key generation lives in `fathom-release`, a
+# separate crate that is never linked into a shipped binary.
+ed25519-dalek = { version = "2.2", default-features = false, features = [
+    "std",
+    "zeroize",
+] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

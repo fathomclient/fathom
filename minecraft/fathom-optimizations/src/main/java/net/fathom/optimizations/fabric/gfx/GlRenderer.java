@@ -1,0 +1,1516 @@
+package net.fathom.optimizations.fabric.gfx;
+
+import org.lwjgl.opengl.ARBFramebufferObject;
+import org.lwjgl.opengl.ContextCapabilities;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
+import org.lwjgl.opengl.GL14;
+import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GLContext;
+
+import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.platform.GLX;
+
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.render.VertexFormats;
+
+import net.fathom.optimizations.core.ui.Colour;
+import net.fathom.optimizations.core.ui.UiScale;
+import net.fathom.optimizations.core.ui.render.Icon;
+import net.fathom.optimizations.core.ui.render.Renderer;
+import net.fathom.optimizations.core.ui.render.RoundedGeometry;
+import net.fathom.optimizations.core.ui.render.Type;
+import net.fathom.optimizations.generated.FathomTheme;
+import net.fathom.optimizations.generated.Wordmark;
+
+/**
+ * Fathom's 2D renderer, on the GL context the game already has.
+ *
+ * <p>The reasoning behind every choice here is in
+ * {@code docs/ingame-ui-renderer-decision.md}. The short version:
+ *
+ * <ul>
+ *   <li><b>Device pixels, not Minecraft's scaled space.</b> Everything is laid
+ *       out in logical units and converted to real framebuffer pixels. The game's
+ *       projection is left alone and undone with one multiply per vertex, so
+ *       nothing is ever rasterised small and magnified.
+ *   <li><b>One sheet, one batch.</b> Fills, corners, glyphs and icons come from
+ *       texture atlases; quads accumulate into a {@code BufferBuilder} and are
+ *       uploaded once per texture change. The whole hub is a few draw calls.
+ *   <li><b>Anti-aliasing from coverage textures.</b> No shader is required, so
+ *       there is no driver on which this degrades to something else.
+ * </ul>
+ *
+ * <h2>The state rules</h2>
+ *
+ * <p>Every state change goes through {@link GlStateManager}, which caches what
+ * it believes the driver's state to be — a raw {@code GL11.glDisable} desyncs
+ * that cache and the symptom is translucent geometry silently vanishing from the
+ * second frame onwards. The exception is the scissor box, which
+ * {@code GlStateManager} does not model at all.
+ *
+ * <p>{@link #beginFrame} takes the state it needs and {@link #endFrame} puts it
+ * back, so a screen that throws halfway through cannot leave the game with
+ * blending off.
+ */
+public final class GlRenderer implements UiCanvas {
+
+    private static final int MAX_DEPTH = 32;
+    private static final int LOGGED_IMBALANCES = 5;
+
+    private final MinecraftClient client;
+    private final Batch batch = new Batch(this);
+    /**
+     * Every sheet flushes the batch before it writes to itself.
+     *
+     * <p>See {@link Atlas.BeforeUpload}: without it, the first frame that draws
+     * a character or an icon nobody has drawn before would bind a texture
+     * underneath geometry already queued against a different one.
+     */
+    private final Atlas.BeforeUpload flusher = new Atlas.BeforeUpload() {
+        @Override
+        public void flush() {
+            batch.flush();
+        }
+    };
+
+    private final Atlas sheet = new Atlas(Shapes.SHEET, flusher);
+    private final Shapes shapes = new Shapes(sheet);
+    private final FontBook fonts = new FontBook(flusher);
+    private final Icons icons = new Icons(flusher);
+    private final BrandArt brand = new BrandArt(flusher);
+
+    private UiScale ui = new UiScale(854, 480, 1f);
+    private boolean created;
+    private boolean inFrame;
+    private boolean highQuality = true;
+
+    /**
+     * The launcher's "Standard capitalization" switch, off by default: Fathom's
+     * interface is lowercase there, and was title case here, which made the two
+     * read as different products. Monospaced data and text inside
+     * {@link #pushKeepCase} keep their own case, as the launcher's do.
+     */
+    private boolean lowercase;
+    private int keepCase;
+
+    /*
+     * Frost: the screen as it was before the interface, blurred, for glass.
+     * See captureFrost.
+     */
+    /** How many mip levels down glass samples the copy: 2^4.5, about 22 pixels. */
+    private static final float FROST_LOD = 4.5f;
+    /** The four taps' offset, device pixels, smoothing the mip level's blocks. */
+    private static final float FROST_TAP = 6f;
+    private int frostTexture;
+    private int frostWidth;
+    private int frostHeight;
+    /** Whether this frame captured; glass is drawn only over a copy of itself. */
+    private boolean frostReady;
+    /**
+     * Panes frosted this frame, device left/top/right/bottom. A pane inside one
+     * of them is not frosted again: the copy is the scene before any interface,
+     * so frosting a card inside a group would wipe the group's tint out from
+     * under the card.
+     */
+    private final float[] frosted = new float[4 * 32];
+    private int frostedCount;
+    /** One render-thread snapshot, reused every frame to avoid hot-path garbage. */
+    private final GlStateSnapshot frameState = new GlStateSnapshot();
+    private GlStateSnapshot inheritedState;
+
+    /** Device pixels to Minecraft's scaled units — the projection, undone. */
+    private float vertexScaleX = 1f;
+    private float vertexScaleY = 1f;
+
+    /** Current transform, in device pixels. */
+    private float offsetX;
+    private float offsetY;
+    private float zoom = 1f;
+    private final float[] transformStack = new float[MAX_DEPTH * 3];
+    private int transformDepth;
+    private int transformOverflow;
+
+    /** Current clip, in device pixels, or null-ish when nothing is clipped. */
+    private final float[] clipStack = new float[MAX_DEPTH * 4];
+    private int clipDepth;
+    private int clipOverflow;
+
+    private float alpha = 1f;
+    private final float[] alphaStack = new float[MAX_DEPTH];
+    private int alphaDepth;
+    private int alphaOverflow;
+
+    private final Stats stats = new Stats();
+    private int imbalanceReports;
+
+    /** What the last frame cost, for the diagnostics section and the spike. */
+    public static final class Stats {
+        /** This frame, so far. */
+        public int quads;
+        public int draws;
+        /**
+         * The last completed frame.
+         *
+         * <p>What anything on screen should report. A screen reading
+         * {@code quads} is reading a frame it is in the middle of drawing, and
+         * the draw-call count in particular would always be one short, because
+         * the final flush happens after the interface that displays it.
+         */
+        public int lastQuads;
+        public int lastDraws;
+        public int glyphPages;
+        public int iconEntries;
+        public boolean fallbackFont;
+
+        void reset() {
+            lastQuads = quads;
+            lastDraws = draws;
+            quads = 0;
+            draws = 0;
+        }
+    }
+
+    public GlRenderer(MinecraftClient client) {
+        this.client = client;
+    }
+
+    public Stats stats() {
+        return stats;
+    }
+
+    /**
+     * High quality: exact corner masks and quarter-pixel text positioning.
+     * Off ("performance mode"): stretched corner masks and whole-pixel text.
+     * Layout, sizes and measurement are identical either way.
+     */
+    public void setHighQuality(boolean enabled) {
+        highQuality = enabled;
+    }
+
+    public boolean highQuality() {
+        return highQuality;
+    }
+
+    public UiScale scaleInfo() {
+        return ui;
+    }
+
+    // -----------------------------------------------------------------------
+    // Frame
+    // -----------------------------------------------------------------------
+
+    /**
+     * Take the GL state, work out the scale, and start batching.
+     *
+     * @param preference the user's UI scale multiplier
+     */
+    public void beginFrame(float preference) {
+        if (inFrame) {
+            throw new IllegalStateException("a Fathom frame is already open");
+        }
+        net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.GL_FRAME_BEGIN);
+        GlStateSnapshot snapshot = frameState.captureInto();
+        try {
+            if (!created) {
+                sheet.create();
+                shapes.build();
+                fonts.create();
+                icons.create();
+                brand.create();
+                created = true;
+                stats.fallbackFont = fonts.usingFallback();
+            }
+
+            int framebufferWidth = Math.max(1, client.width);
+            int framebufferHeight = Math.max(1, client.height);
+            float nextScale = UiScale.scaleFor(framebufferHeight, preference);
+            boolean dimensionsChanged = framebufferWidth != ui.framebufferWidth()
+                    || framebufferHeight != ui.framebufferHeight();
+            if (UiScale.differs(nextScale, ui.scale())) {
+                // The rasters are only right for one scale. Rebuilding them is a
+                // few milliseconds and happens when a window is resized, which is
+                // already a frame nobody is measuring.
+                fonts.reset();
+                icons.reset();
+                brand.reset();
+            }
+            if (dimensionsChanged || UiScale.differs(nextScale, ui.scale())) {
+                ui = new UiScale(framebufferWidth, framebufferHeight, preference);
+            }
+
+            MinecraftGuiSize minecraftUi = MinecraftGuiSize.get(client);
+            // Minecraft's GUI projection spans the window divided by the scale
+            // factor *exactly* -- 1280 / 3 = 426.67 units -- so one framebuffer
+            // pixel is 1 / factor units. This was the whole-number GUI width
+            // over the window width instead (426 / 1280), which put every
+            // vertex a little left of its pixel, more the further right it was:
+            // two thirds of a pixel at the middle of a 1280-wide window. Glyph
+            // rasters were resampled between texels, uneven across a line, and
+            // each right-hand corner mask read its atlas neighbour, a dark
+            // one-pixel seam down every button. Only widths that the factor
+            // does not divide were affected, which is why the seams were all
+            // vertical.
+            vertexScaleX = 1f / minecraftUi.scaleFactor();
+            vertexScaleY = 1f / minecraftUi.scaleFactor();
+
+            offsetX = 0f;
+            offsetY = 0f;
+            zoom = 1f;
+            transformDepth = 0;
+            transformOverflow = 0;
+            clipDepth = 0;
+            clipOverflow = 0;
+            alpha = 1f;
+            alphaDepth = 0;
+            alphaOverflow = 0;
+            stats.reset();
+            frostReady = false;
+            stats.glyphPages = fonts.pageCount();
+            stats.iconEntries = icons.count();
+
+            GlStateManager.activeTexture(GLX.textureUnit);
+            if (GLX.areShadersSupported()) {
+                GLX.gl20UseProgram(0);
+            }
+            GlStateManager.enableBlend();
+            GlStateManager.blendFuncSeparate(
+                    GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA,
+                    GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            // Alpha testing would throw away exactly the partly-covered pixels that
+            // anti-aliasing is made of. Every soft edge in the interface depends on
+            // this line.
+            GlStateManager.disableAlphaTest();
+            GlStateManager.disableDepthTest();
+            GlStateManager.depthMask(false);
+            GlStateManager.disableCull();
+            // Every gradient here is vertex colours blended across a quad. The
+            // game leaves GL_FLAT on, which paints each quad in one of its
+            // vertices' colours instead: a rounded gradient became flat bands
+            // with a hard step where its corner strips began -- the sheen on
+            // every pane stopped short of the pane's foot, as a dark band.
+            GlStateManager.shadeModel(GL11.GL_SMOOTH);
+            GlStateManager.enableTexture();
+            GlStateManager.color(1f, 1f, 1f, 1f);
+            inheritedState = snapshot;
+            inFrame = true;
+        } catch (RuntimeException failure) {
+            snapshot.restore();
+            throw failure;
+        } catch (Error failure) {
+            snapshot.restore();
+            throw failure;
+        }
+    }
+
+    /** Flush, and put the state back the way the game had it. */
+    public void endFrame() {
+        if (!inFrame) {
+            return;
+        }
+        try {
+            batch.flush();
+            reportImbalance();
+            clipDepth = 0;
+            clipOverflow = 0;
+            transformDepth = 0;
+            transformOverflow = 0;
+            alphaDepth = 0;
+            alphaOverflow = 0;
+        } finally {
+            GlStateSnapshot snapshot = inheritedState;
+            inheritedState = null;
+            inFrame = false;
+            if (snapshot != null) {
+                snapshot.restore();
+            }
+        }
+    }
+
+    public boolean inFrame() {
+        return inFrame;
+    }
+
+    private void reportImbalance() {
+        int open = transformDepth + transformOverflow + clipDepth + clipOverflow
+                + alphaDepth + alphaOverflow;
+        if (open > 0 && imbalanceReports < LOGGED_IMBALANCES) {
+            imbalanceReports++;
+            System.err.println("[Fathom] GL frame ended with " + open
+                    + " unmatched clip/alpha/transform push(es); a component is not popping what it pushed");
+        }
+    }
+
+    /**
+     * Submit whatever is queued, now.
+     *
+     * <p>Ordinarily the batch decides for itself when to flush — on a texture
+     * change, and at the end of a frame — and callers never need this. The HUD
+     * does: it draws Fathom text inside Minecraft's own HUD pass, where the
+     * modelview matrix is changed between widgets and vanilla drawing shares the
+     * one global Tessellator. Both of those mean "whatever is queued has to go
+     * out before the next thing happens", and only the caller knows when that
+     * is.
+     */
+    public void flush() {
+        batch.flush();
+    }
+
+    /** Drop every texture. For a resource reload or a shutdown. */
+    public void dispose() {
+        if (inFrame) {
+            endFrame();
+        }
+        batch.flush();
+        fonts.delete();
+        icons.delete();
+        brand.delete();
+        sheet.delete();
+        if (frostTexture != 0) {
+            GlStateManager.deleteTexture(frostTexture);
+            frostTexture = 0;
+        }
+        created = false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Coordinates
+    // -----------------------------------------------------------------------
+
+    private float deviceX(float logical) {
+        return offsetX + logical * ui.scale() * zoom;
+    }
+
+    private float deviceY(float logical) {
+        return offsetY + logical * ui.scale() * zoom;
+    }
+
+    private float deviceSize(float logical) {
+        return logical * ui.scale() * zoom;
+    }
+
+    /** A logical position from a device one — for the mouse. */
+    public float toLogicalX(float device) {
+        return device / ui.scale();
+    }
+
+    public float toLogicalY(float device) {
+        return device / ui.scale();
+    }
+
+    @Override
+    public float width() {
+        return ui.width();
+    }
+
+    @Override
+    public float height() {
+        return ui.height();
+    }
+
+    @Override
+    public float scale() {
+        return ui.scale();
+    }
+
+    // -----------------------------------------------------------------------
+    // Shapes
+    // -----------------------------------------------------------------------
+
+    @Override
+    public void fill(float left, float top, float right, float bottom, int argb) {
+        int colour = tint(argb);
+        if (Colour.invisible(colour) || right <= left || bottom <= top) {
+            return;
+        }
+        solid(snap(deviceX(left)), snap(deviceY(top)), snap(deviceX(right)), snap(deviceY(bottom)), colour);
+    }
+
+    @Override
+    public void rounded(float left, float top, float right, float bottom, float radius, int argb) {
+        gradient(left, top, right, bottom, radius, argb, argb);
+    }
+
+    @Override
+    public void gradient(
+            float left, float top, float right, float bottom, float radius, int topArgb, int bottomArgb) {
+        int upper = tint(topArgb);
+        int lower = tint(bottomArgb);
+        if ((Colour.invisible(upper) && Colour.invisible(lower)) || right <= left || bottom <= top) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float rad = cornerRadius(radius, r - l, b - t);
+
+        batch.bind(sheet.texture());
+        if (rad < 0.6f) {
+            quadShaded(l, t, r, b, whiteU(), whiteV(), whiteU(), whiteV(), upper, lower);
+            return;
+        }
+
+        // Middle band, full width; then the two bands between the corners.
+        quadShaded(l, t + rad, r, b - rad, whiteU(), whiteV(), whiteU(), whiteV(),
+                mixAt(upper, lower, t, b, t + rad), mixAt(upper, lower, t, b, b - rad));
+        quadShaded(l + rad, t, r - rad, t + rad, whiteU(), whiteV(), whiteU(), whiteV(),
+                upper, mixAt(upper, lower, t, b, t + rad));
+        quadShaded(l + rad, b - rad, r - rad, b, whiteU(), whiteV(), whiteU(), whiteV(),
+                mixAt(upper, lower, t, b, b - rad), lower);
+
+        corner(l, t, rad, true, true, upper);
+        corner(r - rad, t, rad, false, true, upper);
+        corner(l, b - rad, rad, true, false, lower);
+        corner(r - rad, b - rad, rad, false, false, lower);
+    }
+
+    /**
+     * A corner radius in whole device pixels.
+     *
+     * <p>Corners are stamped from a mask generated at {@code round(radius)} and
+     * then drawn into a quad {@code radius} across. While those two disagreed --
+     * a 14-unit radius at a 1.25 scale is 17.5 device pixels, stamped from an
+     * 18-pixel mask -- every corner was a resampled copy of the shape it should
+     * have been, which is what made an outline look thicker at the corners than
+     * along the sides. Rounding here means the mask is drawn at exactly its own
+     * size and the ring keeps one thickness the whole way round.
+     */
+    private float cornerRadius(float radius, float width, float height) {
+        float limit = Math.min(width / 2f, height / 2f);
+        float device = RoundedGeometry.radius(deviceSize(radius), width, height);
+        if (device < 0.6f) {
+            return device;
+        }
+        // Whole pixels even when the shape is a pill with an odd side: half of
+        // 17 is 8.5, and an 8.5-pixel corner quad starts between two pixels, so
+        // every one of its pixels is a blend of two texels and the curve goes
+        // soft and square. Eight pixels and a one-pixel straight between the
+        // two ends is indistinguishable from a circle; the blend was not.
+        float whole = (float) Math.floor(limit);
+        if (whole < 1f) {
+            return limit;
+        }
+        return Math.min(Math.max(1f, Math.round(device)), whole);
+    }
+
+    /** One corner of a rounded rectangle: the quarter disc, oriented. */
+    private void corner(float x, float y, float size, boolean leftSide, boolean topSide, int argb) {
+        Shapes.Mask mask = highQuality ? shapes.exactDisc(Math.max(1, Math.round(size))) : null;
+        int maskX = mask == null ? Shapes.DISC_X : mask.x;
+        int maskY = mask == null ? Shapes.DISC_Y : mask.y;
+        int maskSize = mask == null ? Shapes.DISC_SIZE : mask.size;
+        maskCorner(x, y, size, leftSide, topSide, argb, maskX, maskY, maskSize);
+    }
+
+    private void maskCorner(float x, float y, float size, boolean leftSide, boolean topSide,
+            int argb, int maskX, int maskY, int maskSize) {
+        // The mask's full extent, edge to edge. The corner quad is whole pixels
+        // wide and starts on a whole pixel (`cornerRadius`), so each pixel's
+        // centre lands exactly on the centre of the texel rasterised for it and
+        // the circle reaches the screen as it was computed.
+        //
+        // This used to map the quad onto the texel *centres* instead
+        // (`+0.5 .. size-0.5`). That squeezes the mask by (size-1)/size, so the
+        // outermost pixel read coverage from half a pixel inside the curve: an
+        // 8-pixel corner came out a solid squircle rather than round, and every
+        // radius in the interface looked smaller and squarer than its number.
+        float far = sheet.u(maskX + maskSize);
+        float near = sheet.u(maskX);
+        float farV = sheet.v(maskY + maskSize);
+        float nearV = sheet.v(maskY);
+        float u0 = leftSide ? far : near;
+        float u1 = leftSide ? near : far;
+        float v0 = topSide ? farV : nearV;
+        float v1 = topSide ? nearV : farV;
+        quad(x, y, x + size, y + size, u0, v0, u1, v1, argb);
+    }
+
+    @Override
+    public void outline(
+            float left, float top, float right, float bottom, float radius, float thickness, int argb) {
+        int colour = tint(argb);
+        if (Colour.invisible(colour) || right <= left || bottom <= top) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float w = Math.max(1f, Math.round(deviceSize(thickness)));
+        float rad = cornerRadius(radius, r - l, b - t);
+
+        batch.bind(sheet.texture());
+        // Border geometry is never a quality toggle. The old fast path drew
+        // four square quads here, so a rounded control kept its curved fill but
+        // acquired a blocky rectangular outline whenever NanoVG was unavailable
+        // or the saved UI-quality preference was Low. Exact ring masks are
+        // cached by device radius and width; after the first occurrence this is
+        // the same four corner quads as the square path, with no per-frame
+        // rasterisation or allocation.
+        // The four straight sides, drawn inside the rectangle so a bordered box
+        // is the size it says it is.
+        solid(l + rad, t, r - rad, t + w, colour);
+        solid(l + rad, b - w, r - rad, b, colour);
+        solid(l, t + rad, l + w, b - rad, colour);
+        solid(r - w, t + rad, r, b - rad, colour);
+
+        if (rad >= 0.6f) {
+            Shapes.Mask ring = shapes.exactRing(
+                    Math.max(1, Math.round(rad)), Math.max(1, Math.round(w)));
+            if (ring != null) {
+                maskCorner(l, t, rad, true, true, colour, ring.x, ring.y, ring.size);
+                maskCorner(r - rad, t, rad, false, true, colour, ring.x, ring.y, ring.size);
+                maskCorner(l, b - rad, rad, true, false, colour, ring.x, ring.y, ring.size);
+                maskCorner(r - rad, b - rad, rad, false, false, colour, ring.x, ring.y, ring.size);
+            } else {
+                arc(l + rad, t + rad, rad - w / 2f, 180f, 270f, w, colour);
+                arc(r - rad, t + rad, rad - w / 2f, 270f, 360f, w, colour);
+                arc(r - rad, b - rad, rad - w / 2f, 0f, 90f, w, colour);
+                arc(l + rad, b - rad, rad - w / 2f, 90f, 180f, w, colour);
+            }
+        }
+    }
+
+    /**
+     * A picture, cover-cropped into a rounded rectangle.
+     *
+     * <p>For the scene thumbnails, and anything else that has to show a real
+     * image inside this interface. The crop is CSS {@code object-fit: cover}:
+     * the image fills the box on its tighter axis and loses the overflow on the
+     * other, so a 16:9 still in a 16:9 tile loses nothing and in a squarer tile
+     * loses its sides rather than stretching.
+     *
+     * <p>The corners are painted out afterwards in {@code backdrop} rather than
+     * masked in. One quad samples one texture, and the picture and the corner
+     * mask live in different ones; painting the leftover square in the colour
+     * behind the tile reaches the same place from the other side.
+     *
+     * @param sourceAspect width over height of the image itself
+     * @param backdrop     what sits behind this tile, for the corners
+     */
+    public void image(int textureId, float left, float top, float right, float bottom,
+            float radius, float sourceAspect, int backdrop) {
+        if (textureId <= 0 || right <= left || bottom <= top) {
+            return;
+        }
+        int colour = tint(0xFFFFFFFF);
+        if (Colour.invisible(colour)) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float rad = cornerRadius(radius, r - l, b - t);
+
+        float target = (r - l) / (b - t);
+        float u0 = 0f;
+        float v0 = 0f;
+        float u1 = 1f;
+        float v1 = 1f;
+        if (sourceAspect > target) {
+            float keep = target / sourceAspect;
+            u0 = (1f - keep) / 2f;
+            u1 = 1f - u0;
+        } else if (sourceAspect > 0f) {
+            float keep = sourceAspect / target;
+            v0 = (1f - keep) / 2f;
+            v1 = 1f - v0;
+        }
+
+        batch.bind(textureId);
+        quad(l, t, r, b, u0, v0, u1, v1, colour);
+
+        if (rad < 0.6f) {
+            return;
+        }
+        int cover = tint(backdrop);
+        if (Colour.invisible(cover)) {
+            return;
+        }
+        Shapes.Mask notch = shapes.exactNotch(Math.max(1, Math.round(rad)));
+        if (notch == null) {
+            return;
+        }
+        batch.bind(sheet.texture());
+        maskCorner(l, t, rad, true, true, cover, notch.x, notch.y, notch.size);
+        maskCorner(r - rad, t, rad, false, true, cover, notch.x, notch.y, notch.size);
+        maskCorner(l, b - rad, rad, true, false, cover, notch.x, notch.y, notch.size);
+        maskCorner(r - rad, b - rad, rad, false, false, cover, notch.x, notch.y, notch.size);
+    }
+
+    @Override
+    public void image(int textureId, float left, float top, float right, float bottom, float radius,
+            float sourceAspect) {
+        image(textureId, left, top, right, bottom, radius, sourceAspect, 0);
+    }
+
+    @Override
+    public boolean glass(float left, float top, float right, float bottom, float radius, float blur,
+            float saturate, float brightness) {
+        return frost(left, top, right, bottom, radius);
+    }
+
+    /**
+     * Copy the screen as it stands into the frost texture, for glass.
+     *
+     * <p>The launcher's panes are frosted glass: CSS {@code backdrop-filter}
+     * blurs whatever is behind them and the material's tint goes over that.
+     * The game's panes were the tint alone, 20% over a sharp scene, which is
+     * why the title menu read as thin and grey beside the launcher's card.
+     * Minecraft 1.8.9 has no shader to blur with, so the blur is the GPU's own
+     * mipmap chain: the frame is copied once, the chain generated, and a pane
+     * samples it a few levels down (FROST_LOD), averaged over four offset taps
+     * so the coarse level's blocks do not show. One copy and one mip
+     * generation a frame, both on the GPU.
+     *
+     * <p>Call it after the backdrop is drawn and before anything that should
+     * not be blurred into the glass. A frame that does not call it draws no
+     * glass, and a driver without GPU mip generation keeps the plain tint.
+     */
+    public void captureFrost() {
+        frostReady = false;
+        frostedCount = 0;
+        ContextCapabilities caps = GLContext.getCapabilities();
+        boolean core = caps.OpenGL30;
+        if (!core && !caps.GL_ARB_framebuffer_object) {
+            return;
+        }
+        batch.flush();
+        int width = Math.max(1, client.width);
+        int height = Math.max(1, client.height);
+        if (frostTexture == 0 || width != frostWidth || height != frostHeight) {
+            if (frostTexture != 0) {
+                GlStateManager.deleteTexture(frostTexture);
+            }
+            frostTexture = GL11.glGenTextures();
+            GlStateManager.bindTexture(frostTexture);
+            // RGB: the framebuffer's alpha is whatever was last written to it,
+            // not coverage, and glass sampled with it came out see-through.
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB8, width, height, 0,
+                    GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, (java.nio.ByteBuffer) null);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+            // The blur itself: sampled at 1:1, every lookup is pushed this many
+            // levels down the chain.
+            GL11.glTexParameterf(GL11.GL_TEXTURE_2D, GL14.GL_TEXTURE_LOD_BIAS, FROST_LOD);
+            frostWidth = width;
+            frostHeight = height;
+        } else {
+            GlStateManager.bindTexture(frostTexture);
+        }
+        GL11.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+        if (core) {
+            GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+        } else {
+            ARBFramebufferObject.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+        }
+        // The batch remembers the last texture it bound; this one replaced it.
+        batch.forget();
+        frostReady = true;
+    }
+
+    /**
+     * Frosted glass in a rounded rectangle: the blurred screen behind it.
+     * Draw the material's tint and rim over it. Returns false, drawing
+     * nothing, in a frame that did not {@link #captureFrost}.
+     */
+    public boolean frost(float left, float top, float right, float bottom, float radius) {
+        if (!frostReady || right <= left || bottom <= top) {
+            return false;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float rad = cornerRadius(radius, r - l, b - t);
+        for (int index = 0; index < frostedCount; index++) {
+            int at = index * 4;
+            if (l >= frosted[at] && t >= frosted[at + 1] && r <= frosted[at + 2] && b <= frosted[at + 3]) {
+                return false;
+            }
+        }
+        if (frostedCount < frosted.length / 4) {
+            int at = frostedCount * 4;
+            frosted[at] = l;
+            frosted[at + 1] = t;
+            frosted[at + 2] = r;
+            frosted[at + 3] = b;
+            frostedCount++;
+        }
+        // One pixel in from the shape's edge: the glass's own edge is geometry
+        // with no antialiasing, and here it sits under the antialiased fill
+        // and rim drawn over it, so the pane's outline stays smooth.
+        l += 1f;
+        t += 1f;
+        r -= 1f;
+        b -= 1f;
+        rad = Math.max(0f, rad - 1f);
+        if (r <= l || b <= t) {
+            return false;
+        }
+        batch.bind(frostTexture);
+        // Four taps averaged by blending: the k-th at 1/k over the ones before.
+        float[][] taps = {{-FROST_TAP, -FROST_TAP}, {FROST_TAP, FROST_TAP},
+            {FROST_TAP, -FROST_TAP}, {-FROST_TAP, FROST_TAP}};
+        for (int index = 0; index < taps.length; index++) {
+            int colour = tint(Colour.fade(0xFFFFFFFF, 1f / (index + 1)));
+            frostShape(l, t, r, b, rad, taps[index][0], taps[index][1], colour);
+        }
+        return true;
+    }
+
+    /**
+     * A whole texture in a rounded rectangle, nearest-filtered by the texture's
+     * own parameters: the account's head, as a circle. The edge is geometry,
+     * so draw a rim over it.
+     */
+    public void roundedImage(int textureId, float left, float top, float right, float bottom, float radius) {
+        if (textureId <= 0 || right <= left || bottom <= top) {
+            return;
+        }
+        int colour = tint(0xFFFFFFFF);
+        if (Colour.invisible(colour)) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        float rad = cornerRadius(radius, r - l, b - t);
+        batch.bind(textureId);
+        imageBox = new float[] {l, t, r, b};
+        imageMode = true;
+        frostShape(l, t, r, b, rad, 0f, 0f, colour);
+        imageMode = false;
+        batch.forget();
+    }
+
+    /** While true, frostPolygon maps positions across {@link #imageBox} instead of the screen. */
+    private boolean imageMode;
+    private float[] imageBox = new float[4];
+
+    /** The rounded rectangle as quads and corner fans, textured by screen position. */
+    private void frostShape(float l, float t, float r, float b, float rad, float dx, float dy, int argb) {
+        frostQuad(l, t + rad, r, b - rad, dx, dy, argb);
+        frostQuad(l + rad, t, r - rad, t + rad, dx, dy, argb);
+        frostQuad(l + rad, b - rad, r - rad, b, dx, dy, argb);
+        if (rad < 0.6f) {
+            return;
+        }
+        frostFan(l + rad, t + rad, rad, 180f, dx, dy, argb);
+        frostFan(r - rad, t + rad, rad, 270f, dx, dy, argb);
+        frostFan(r - rad, b - rad, rad, 0f, dx, dy, argb);
+        frostFan(l + rad, b - rad, rad, 90f, dx, dy, argb);
+    }
+
+    private void frostQuad(float x0, float y0, float x1, float y1, float dx, float dy, int argb) {
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
+        frostPolygon(x0, y0, x0, y1, x1, y1, x1, y0, dx, dy, argb);
+    }
+
+    /** A quarter disc from {@code from} degrees, as triangles (quads with a repeated corner). */
+    private void frostFan(float cx, float cy, float rad, float from, float dx, float dy, int argb) {
+        int steps = Math.max(6, Math.min(32, Math.round(rad)));
+        double start = Math.toRadians(from);
+        double step = Math.toRadians(90d) / steps;
+        float px = cx + (float) Math.cos(start) * rad;
+        float py = cy + (float) Math.sin(start) * rad;
+        for (int index = 1; index <= steps; index++) {
+            double angle = start + step * index;
+            float qx = cx + (float) Math.cos(angle) * rad;
+            float qy = cy + (float) Math.sin(angle) * rad;
+            frostPolygon(cx, cy, px, py, qx, qy, qx, qy, dx, dy, argb);
+            px = qx;
+            py = qy;
+        }
+    }
+
+    private void frostPolygon(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3,
+            float dx, float dy, int argb) {
+        if (imageMode) {
+            float w = imageBox[2] - imageBox[0];
+            float h = imageBox[3] - imageBox[1];
+            float ox = imageBox[0];
+            float oy = imageBox[1];
+            batch.vertices(
+                    x0 * vertexScaleX, y0 * vertexScaleY, (x0 - ox) / w, (y0 - oy) / h,
+                    x1 * vertexScaleX, y1 * vertexScaleY, (x1 - ox) / w, (y1 - oy) / h,
+                    x2 * vertexScaleX, y2 * vertexScaleY, (x2 - ox) / w, (y2 - oy) / h,
+                    x3 * vertexScaleX, y3 * vertexScaleY, (x3 - ox) / w, (y3 - oy) / h,
+                    argb);
+            return;
+        }
+        // The copy is the framebuffer the right way up for GL: origin bottom-left.
+        float w = frostWidth;
+        float h = frostHeight;
+        batch.vertices(
+                x0 * vertexScaleX, y0 * vertexScaleY, (x0 + dx) / w, 1f - (y0 + dy) / h,
+                x1 * vertexScaleX, y1 * vertexScaleY, (x1 + dx) / w, 1f - (y1 + dy) / h,
+                x2 * vertexScaleX, y2 * vertexScaleY, (x2 + dx) / w, 1f - (y2 + dy) / h,
+                x3 * vertexScaleX, y3 * vertexScaleY, (x3 + dx) / w, 1f - (y3 + dy) / h,
+                argb);
+    }
+
+    /**
+     * A stroked arc, stamped as overlapping discs.
+     *
+     * <p>The cheapest anti-aliased curve available without a shader: a round nib
+     * dragged along the path. Two stamps per pixel of arc length, so the result
+     * is a continuous stroke with round ends rather than a dotted line.
+     */
+    private void arc(float cx, float cy, float radius, float fromDegrees, float toDegrees, float width, int argb) {
+        if (radius <= 0.2f) {
+            return;
+        }
+        float sweep = (float) Math.toRadians(toDegrees - fromDegrees);
+        float length = Math.abs(sweep) * radius;
+        int steps = Math.max(3, Math.round(length * 2f));
+        float u0 = sheet.u(Shapes.DOT_X + 0.5f);
+        float v0 = sheet.v(Shapes.DOT_Y + 0.5f);
+        float u1 = sheet.u(Shapes.DOT_X + Shapes.DOT_SIZE - 0.5f);
+        float v1 = sheet.v(Shapes.DOT_Y + Shapes.DOT_SIZE - 0.5f);
+        float half = width / 2f;
+        for (int step = 0; step <= steps; step++) {
+            double angle = Math.toRadians(fromDegrees) + sweep * step / steps;
+            float x = cx + (float) Math.cos(angle) * radius;
+            float y = cy + (float) Math.sin(angle) * radius;
+            quad(x - half, y - half, x + half, y + half, u0, v0, u1, v1, argb);
+        }
+    }
+
+    @Override
+    public void shadow(float left, float top, float right, float bottom, float radius, float spread, int argb) {
+        int colour = tint(argb);
+        if (Colour.invisible(colour) || right <= left || bottom <= top) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        // Whole device pixels, so each corner quad maps 1:1 onto its mask.
+        float s = Math.min(64f, Math.round(deviceSize(spread)));
+        if (s < 1f) {
+            return;
+        }
+        // The same corner radius the fill uses, so the shadow is the shape's
+        // own outline pushed outwards rather than a box's.
+        float rad = cornerRadius(radius, r - l, b - t);
+        if (rad < 0.6f) {
+            rad = 0f;
+        }
+
+        batch.bind(sheet.texture());
+        float rampNear = sheet.u(Shapes.RAMP_X + 0.5f);
+        float rampFar = sheet.u(Shapes.RAMP_X + Shapes.RAMP_SIZE - 0.5f);
+        float rampV = sheet.v(Shapes.RAMP_Y + 0.5f);
+
+        // The straight sides run between the corners' circle centres; on a
+        // pill the left and right ones have no length and are skipped.
+        vertical(l + rad, t - s, r - rad, t, rampFar, rampNear, rampV, colour);
+        vertical(l + rad, b, r - rad, b + s, rampNear, rampFar, rampV, colour);
+        horizontal(l - s, t + rad, l, b - rad, rampFar, rampNear, rampV, colour);
+        horizontal(r, t + rad, r + s, b - rad, rampNear, rampFar, rampV, colour);
+
+        Shapes.Mask corner = rad > 96f ? null : shapes.exactShadow(Math.round(rad), Math.round(s));
+        if (corner == null) {
+            return;
+        }
+        float size = rad + s;
+        maskCorner(l - s, t - s, size, true, true, colour, corner.x, corner.y, corner.size);
+        maskCorner(r - rad, t - s, size, false, true, colour, corner.x, corner.y, corner.size);
+        maskCorner(l - s, b - rad, size, true, false, colour, corner.x, corner.y, corner.size);
+        maskCorner(r - rad, b - rad, size, false, false, colour, corner.x, corner.y, corner.size);
+    }
+
+    /**
+     * Four quadrants of the glow mask meeting at the centre, so the falloff is
+     * round: the mask is a quarter disc of light, full at its corner and gone
+     * at its radius, and each quadrant turns it to face outwards.
+     */
+    @Override
+    public void bloom(float centreX, float centreY, float radius, int argb) {
+        int colour = tint(argb);
+        if (Colour.invisible(colour) || !(radius > 0f)) {
+            return;
+        }
+        float cx = deviceX(centreX);
+        float cy = deviceY(centreY);
+        float r = deviceSize(radius);
+        batch.bind(sheet.texture());
+        float near = sheet.u(Shapes.GLOW_X + 0.5f);
+        float far = sheet.u(Shapes.GLOW_X + Shapes.GLOW_SIZE - 0.5f);
+        float nearV = sheet.v(Shapes.GLOW_Y + 0.5f);
+        float farV = sheet.v(Shapes.GLOW_Y + Shapes.GLOW_SIZE - 0.5f);
+        quad(cx - r, cy - r, cx, cy, far, farV, near, nearV, colour);
+        quad(cx, cy - r, cx + r, cy, near, farV, far, nearV, colour);
+        quad(cx - r, cy, cx, cy + r, far, nearV, near, farV, colour);
+        quad(cx, cy, cx + r, cy + r, near, nearV, far, farV, colour);
+    }
+
+    /** A strip whose ramp runs top to bottom. */
+    private void vertical(float x0, float y0, float x1, float y1, float uTop, float uBottom, float v, int argb) {
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
+        batch.quad(
+                x0 * vertexScaleX, y0 * vertexScaleY, x1 * vertexScaleX, y1 * vertexScaleY,
+                uTop, v, uBottom, v, uBottom, v, uTop, v,
+                argb, argb, argb, argb);
+    }
+
+    /** A strip whose ramp runs left to right. */
+    private void horizontal(float x0, float y0, float x1, float y1, float uLeft, float uRight, float v, int argb) {
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
+        batch.quad(
+                x0 * vertexScaleX, y0 * vertexScaleY, x1 * vertexScaleX, y1 * vertexScaleY,
+                uLeft, v, uLeft, v, uRight, v, uRight, v,
+                argb, argb, argb, argb);
+    }
+
+    // -----------------------------------------------------------------------
+    // Text
+    // -----------------------------------------------------------------------
+
+    /** Lowercase interface text, as the launcher's default; see {@link #lowercase}. */
+    public void setLowercase(boolean on) {
+        lowercase = on;
+    }
+
+    /** Text drawn until {@link #popKeepCase} keeps its own case: names, legal text. */
+    public void pushKeepCase() {
+        keepCase++;
+    }
+
+    public void popKeepCase() {
+        keepCase = Math.max(0, keepCase - 1);
+    }
+
+    private String cased(String string, Type type) {
+        if (!lowercase || keepCase > 0 || type.weight() == Type.Weight.MONO_REGULAR
+                || type.weight() == Type.Weight.MONO_MEDIUM) {
+            return string;
+        }
+        return string.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    @Override
+    public float text(String string, float x, float baselineY, Type type, int argb) {
+        if (string == null || string.isEmpty()) {
+            return 0f;
+        }
+        string = cased(string, type);
+        int colour = tint(argb);
+        GlyphPage page = fonts.page(type, ui.scale());
+        float advance = page.width(string);
+        if (Colour.invisible(colour)) {
+            return advance / ui.scale();
+        }
+
+        batch.bind(fonts.atlas().texture());
+        // The pen walks in fractional device pixels, kerned pair by pair. Every
+        // glyph's quad sits on whole pixels so its raster reaches the screen
+        // one-to-one; in high quality the pen's fraction is carried inside the
+        // raster (the nearest quarter-pixel phase), so each letter is where its
+        // advance put it rather than rounded to the nearest pixel on its own.
+        // Low quality ("performance mode") keeps one raster and snaps.
+        boolean phased = highQuality;
+        float pen = deviceX(x);
+        float baseline = Math.round(deviceY(baselineY));
+        char previous = 0;
+        for (int index = 0; index < string.length(); index++) {
+            char c = string.charAt(index);
+            if (previous != 0) {
+                pen += page.kern(previous, c);
+            }
+            previous = c;
+            GlyphPage.Glyph glyph = page.glyph(c);
+            if (!glyph.blank) {
+                float whole;
+                int phase;
+                if (phased) {
+                    whole = (float) Math.floor(pen);
+                    phase = Math.round((pen - whole) * GlyphPage.PHASES);
+                    if (phase == GlyphPage.PHASES) {
+                        whole += 1f;
+                        phase = 0;
+                    }
+                } else {
+                    whole = Math.round(pen);
+                    phase = 0;
+                }
+                GlyphPage.Raster raster = page.raster(glyph, phase);
+                float gx = whole + raster.offsetX;
+                float gy = baseline + raster.offsetY;
+                quad(gx, gy, gx + raster.width, gy + raster.height,
+                        raster.u0, raster.v0, raster.u1, raster.v1, colour);
+            }
+            pen += glyph.advance;
+        }
+        return advance / ui.scale();
+    }
+
+    @Override
+    public float textCentred(String string, float centreX, float baselineY, Type type, int argb) {
+        float width = measure(string, type);
+        return text(string, centreX - width / 2f, baselineY, type, argb);
+    }
+
+    /** Draw centred display lettering with explicit tracking in logical units. */
+    public float textTrackedCentred(
+            String string, float centreX, float baselineY, Type type, float tracking, int argb) {
+        if (string == null || string.isEmpty()) {
+            return 0f;
+        }
+        float gap = Math.max(0f, tracking);
+        float width = gap * Math.max(0, string.length() - 1);
+        for (int index = 0; index < string.length(); index++) {
+            width += measure(String.valueOf(string.charAt(index)), type);
+        }
+        float pen = centreX - width / 2f;
+        for (int index = 0; index < string.length(); index++) {
+            String glyph = String.valueOf(string.charAt(index));
+            pen += text(glyph, pen, baselineY, type, argb) + gap;
+        }
+        return width;
+    }
+
+    @Override
+    public float textRight(String string, float rightX, float baselineY, Type type, int argb) {
+        float width = measure(string, type);
+        return text(string, rightX - width, baselineY, type, argb);
+    }
+
+    @Override
+    public float measure(String string, Type type) {
+        if (string == null || string.isEmpty()) {
+            return 0f;
+        }
+        return fonts.page(type, ui.scale()).width(cased(string, type)) / ui.scale();
+    }
+
+    @Override
+    public float lineHeight(Type type) {
+        return fonts.page(type, ui.scale()).lineHeight() / ui.scale();
+    }
+
+    @Override
+    public float ascent(Type type) {
+        return fonts.page(type, ui.scale()).ascent() / ui.scale();
+    }
+
+    @Override
+    public float descent(Type type) {
+        return fonts.page(type, ui.scale()).descent() / ui.scale();
+    }
+
+    // -----------------------------------------------------------------------
+    // Icons
+    // -----------------------------------------------------------------------
+
+    @Override
+    public void icon(Icon icon, float x, float y, float size, int argb) {
+        int colour = tint(argb);
+        if (Colour.invisible(colour) || icon == null) {
+            return;
+        }
+        if (net.fathom.optimizations.core.ui.render.GeometryDebug.ENABLED) {
+            net.fathom.optimizations.core.ui.render.GeometryDebug.icon(this, x, y, size);
+        }
+        int pixels = Math.max(6, Math.round(deviceSize(size)));
+        Icons.Entry entry = icons.entry(icon, pixels, deviceSize(Icons.strokeUnits(size)));
+        batch.bind(icons.atlas().texture());
+        float left = Math.round(deviceX(x));
+        float top = Math.round(deviceY(y));
+        quad(left, top, left + entry.pixels, top + entry.pixels,
+                entry.u0, entry.v0, entry.u1, entry.v1, colour);
+    }
+
+    // -----------------------------------------------------------------------
+    // The brand
+    // -----------------------------------------------------------------------
+
+    /*
+     * Rasterised at the UI scale alone, not the transform's zoom: a screen that
+     * scales 0.992 -> 1 as it arrives would otherwise ask for a new raster on
+     * every frame of its entrance. During that entrance the quad is scaled
+     * instead, which nobody can see; at rest it is pixel for pixel.
+     */
+
+    /** The wordmark's ink width in logical units at an ascender height in logical units. */
+    public float wordmarkWidth(float capHeight) {
+        int cap = Math.round(capHeight * ui.scale());
+        return BrandArt.wordmarkWidth(cap) / ui.scale();
+    }
+
+    /**
+     * The wordmark, "fathom", with its ascender's top-left ink at {@code x, y},
+     * in its own inks; {@code argb} only fades it. The ascender (Geist's cap height) is held at the wordmark's
+     * minimum in device pixels or more.
+     *
+     * @return the ink width drawn, in logical units
+     */
+    public float wordmark(float x, float y, float capHeight, int argb) {
+        int cap = Math.round(capHeight * ui.scale());
+        BrandArt.Entry entry = brand.wordmark(cap);
+        int colour = tint(argb);
+        if (entry.width > 0 && !Colour.invisible(colour)) {
+            batch.bind(brand.atlas().texture());
+            float pad = entry.pad * zoom;
+            float left = Math.round(deviceX(x)) - pad;
+            float top = Math.round(deviceY(y)) - pad;
+            quad(left, top, left + entry.width * zoom, top + entry.height * zoom,
+                    entry.u0, entry.v0, entry.u1, entry.v1, colour);
+        }
+        return BrandArt.wordmarkWidth(cap) / ui.scale();
+    }
+
+    /** The mark's width in logical units at a height in logical units. */
+    public float markWidth(float height) {
+        return BrandArt.markWidth(Math.round(height * ui.scale())) / ui.scale();
+    }
+
+    /**
+     * The mark: its box's top-left at {@code x, y}, {@code height} tall, in
+     * its own inks with its halo. Rasterised once per size into the brand
+     * sheet; {@code argb} only fades it.
+     *
+     * @return its width, in logical units
+     */
+    public float mark(float x, float y, float height, int argb) {
+        int pixels = Math.round(height * ui.scale());
+        BrandArt.Entry entry = brand.mark(pixels);
+        int colour = tint(argb);
+        if (entry.width > 0 && !Colour.invisible(colour)) {
+            batch.bind(brand.atlas().texture());
+            float pad = entry.pad * zoom;
+            float left = Math.round(deviceX(x)) - pad;
+            float top = Math.round(deviceY(y)) - pad;
+            quad(left, top, left + entry.width * zoom, top + entry.height * zoom,
+                    entry.u0, entry.v0, entry.u1, entry.v1, colour);
+        }
+        return BrandArt.markWidth(pixels) / ui.scale();
+    }
+
+    private float logicalX(float device) {
+        return (device - offsetX) / (ui.scale() * zoom);
+    }
+
+    private float logicalY(float device) {
+        return (device - offsetY) / (ui.scale() * zoom);
+    }
+
+    // -----------------------------------------------------------------------
+    // State
+    // -----------------------------------------------------------------------
+
+    @Override
+    public void clip(float left, float top, float right, float bottom) {
+        if (clipDepth >= MAX_DEPTH || clipOverflow > 0) {
+            clipOverflow++;
+            return;
+        }
+        float l = deviceX(left);
+        float t = deviceY(top);
+        float r = deviceX(right);
+        float b = deviceY(bottom);
+        if (clipDepth > 0) {
+            int base = (clipDepth - 1) * 4;
+            l = Math.max(l, clipStack[base]);
+            t = Math.max(t, clipStack[base + 1]);
+            r = Math.min(r, clipStack[base + 2]);
+            b = Math.min(b, clipStack[base + 3]);
+        }
+        int base = clipDepth * 4;
+        clipStack[base] = l;
+        clipStack[base + 1] = t;
+        clipStack[base + 2] = r;
+        clipStack[base + 3] = b;
+        clipDepth++;
+        applyClip();
+    }
+
+    @Override
+    public void unclip() {
+        if (clipOverflow > 0) {
+            clipOverflow--;
+            return;
+        }
+        if (clipDepth == 0) {
+            return;
+        }
+        clipDepth--;
+        applyClip();
+    }
+
+    private void applyClip() {
+        batch.flush();
+        if (clipDepth == 0) {
+            GL11.glDisable(GL11.GL_SCISSOR_TEST);
+            return;
+        }
+        int base = (clipDepth - 1) * 4;
+        int left = Math.round(clipStack[base]);
+        int top = Math.round(clipStack[base + 1]);
+        int right = Math.round(clipStack[base + 2]);
+        int bottom = Math.round(clipStack[base + 3]);
+        int width = Math.max(0, right - left);
+        int height = Math.max(0, bottom - top);
+        GL11.glEnable(GL11.GL_SCISSOR_TEST);
+        // The scissor box is in window pixels with the origin at the bottom
+        // left, which is the one place in this class where the y axis flips.
+        GL11.glScissor(left, client.height - top - height, width, height);
+    }
+
+    @Override
+    public void pushAlpha(float value) {
+        if (alphaDepth >= MAX_DEPTH) {
+            alphaOverflow++;
+            return;
+        }
+        alphaStack[alphaDepth++] = alpha;
+        alpha *= value < 0f ? 0f : (value > 1f ? 1f : value);
+    }
+
+    @Override
+    public void popAlpha() {
+        if (alphaOverflow > 0) {
+            alphaOverflow--;
+            return;
+        }
+        if (alphaDepth == 0) {
+            alpha = 1f;
+            return;
+        }
+        alpha = alphaStack[--alphaDepth];
+    }
+
+    @Override
+    public void pushTransform(float translateX, float translateY) {
+        pushTransform(translateX, translateY, 1f, 0f, 0f);
+    }
+
+    @Override
+    public void pushTransform(float translateX, float translateY, float scale, float originX, float originY) {
+        if (transformDepth >= MAX_DEPTH) {
+            transformOverflow++;
+            return;
+        }
+        int base = transformDepth * 3;
+        transformStack[base] = offsetX;
+        transformStack[base + 1] = offsetY;
+        transformStack[base + 2] = zoom;
+        transformDepth++;
+
+        // Scale about the origin, then translate, all in device pixels.
+        float deviceOriginX = deviceX(originX);
+        float deviceOriginY = deviceY(originY);
+        offsetX = deviceOriginX - (deviceOriginX - offsetX) * scale + deviceSize(translateX);
+        offsetY = deviceOriginY - (deviceOriginY - offsetY) * scale + deviceSize(translateY);
+        zoom *= scale;
+        if (zoom == 1f) {
+            // A pure translation moves whole device pixels. A fractional one
+            // made every primitive round on its own: a panel sliding in by
+            // 3.4 pixels put its fill on one pixel and its glyphs, snapped
+            // separately, on the next, so the text shimmered against its
+            // surface for the length of every transition.
+            offsetX = Math.round(offsetX);
+            offsetY = Math.round(offsetY);
+        }
+    }
+
+    @Override
+    public float localX(float x) {
+        float s = ui.scale();
+        return (x * s - offsetX) / (s * zoom);
+    }
+
+    @Override
+    public float localY(float y) {
+        float s = ui.scale();
+        return (y * s - offsetY) / (s * zoom);
+    }
+
+    @Override
+    public boolean clipContains(float x, float y) {
+        if (clipDepth == 0) {
+            return true;
+        }
+        int base = (clipDepth - 1) * 4;
+        float dx = x * ui.scale();
+        float dy = y * ui.scale();
+        return dx >= clipStack[base] && dx < clipStack[base + 2]
+                && dy >= clipStack[base + 1] && dy < clipStack[base + 3];
+    }
+
+    @Override
+    public void popTransform() {
+        if (transformOverflow > 0) {
+            transformOverflow--;
+            return;
+        }
+        if (transformDepth == 0) {
+            return;
+        }
+        transformDepth--;
+        int base = transformDepth * 3;
+        offsetX = transformStack[base];
+        offsetY = transformStack[base + 1];
+        zoom = transformStack[base + 2];
+    }
+
+    // -----------------------------------------------------------------------
+    // Emitting
+    // -----------------------------------------------------------------------
+
+    private int tint(int argb) {
+        return alpha >= 0.999f ? argb : Colour.scaleAlpha(argb, alpha);
+    }
+
+    private static float snap(float device) {
+        return Math.round(device);
+    }
+
+    private float whiteU() {
+        return sheet.u(Shapes.WHITE_X + Shapes.WHITE_SIZE / 2f);
+    }
+
+    private float whiteV() {
+        return sheet.v(Shapes.WHITE_Y + Shapes.WHITE_SIZE / 2f);
+    }
+
+    private void solid(float left, float top, float right, float bottom, int argb) {
+        if (right <= left || bottom <= top) {
+            return;
+        }
+        batch.bind(sheet.texture());
+        quad(left, top, right, bottom, whiteU(), whiteV(), whiteU(), whiteV(), argb);
+    }
+
+    private static int mixAt(int top, int bottom, float t, float b, float y) {
+        if (top == bottom || b <= t) {
+            return top;
+        }
+        return Colour.mix(top, bottom, (y - t) / (b - t));
+    }
+
+    private void quad(
+            float x0, float y0, float x1, float y1,
+            float u0, float v0, float u1, float v1, int argb) {
+        quadShaded(x0, y0, x1, y1, u0, v0, u1, v1, argb, argb);
+    }
+
+    private void quadShaded(
+            float x0, float y0, float x1, float y1,
+            float u0, float v0, float u1, float v1, int topArgb, int bottomArgb) {
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
+        batch.quad(
+                x0 * vertexScaleX, y0 * vertexScaleY, x1 * vertexScaleX, y1 * vertexScaleY,
+                u0, v0, u0, v1, u1, v1, u1, v0,
+                topArgb, bottomArgb, bottomArgb, topArgb);
+    }
+
+    // -----------------------------------------------------------------------
+    // The batch
+    // -----------------------------------------------------------------------
+
+    /**
+     * Quads waiting to be uploaded.
+     *
+     * <p>A draw call ends when the texture changes or something needs the
+     * geometry on screen — a scissor change, or the end of the frame. Everything
+     * else accumulates, so the interface is a handful of calls rather than one
+     * per rectangle.
+     */
+    private static final class Batch {
+        private final GlRenderer owner;
+        private int texture = -1;
+        private boolean building;
+
+        Batch(GlRenderer owner) {
+            this.owner = owner;
+        }
+
+        void bind(int wanted) {
+            if (wanted != texture) {
+                flush();
+                texture = wanted;
+            }
+        }
+
+        void quad(
+                float x0, float y0, float x1, float y1,
+                float u0, float v0, float u1, float v1, float u2, float v2, float u3, float v3,
+                int argb0, int argb1, int argb2, int argb3) {
+            start();
+            BufferBuilder buffer = Tessellator.getInstance().getBuffer();
+            vertex(buffer, x0, y0, u0, v0, argb0);
+            vertex(buffer, x0, y1, u1, v1, argb1);
+            vertex(buffer, x1, y1, u2, v2, argb2);
+            vertex(buffer, x1, y0, u3, v3, argb3);
+            owner.stats.quads++;
+        }
+
+        private static void vertex(BufferBuilder buffer, float x, float y, float u, float v, int argb) {
+            buffer.vertex(x, y, 0d)
+                    .texture(u, v)
+                    .color(
+                            (argb >> 16) & 0xFF,
+                            (argb >> 8) & 0xFF,
+                            argb & 0xFF,
+                            (argb >>> 24) & 0xFF)
+                    .next();
+        }
+
+        private void start() {
+            if (building) {
+                return;
+            }
+            if (texture >= 0) {
+                GlStateManager.bindTexture(texture);
+            }
+            Tessellator.getInstance().getBuffer().begin(GL11.GL_QUADS, VertexFormats.POSITION_TEXTURE_COLOR);
+            building = true;
+        }
+
+        /** Something else bound a texture; bind ours again before the next quad. */
+        void forget() {
+            flush();
+            texture = -1;
+        }
+
+        /** Four arbitrary corners, in order round the shape. */
+        void vertices(
+                float x0, float y0, float u0, float v0, float x1, float y1, float u1, float v1,
+                float x2, float y2, float u2, float v2, float x3, float y3, float u3, float v3, int argb) {
+            start();
+            BufferBuilder buffer = Tessellator.getInstance().getBuffer();
+            vertex(buffer, x0, y0, u0, v0, argb);
+            vertex(buffer, x1, y1, u1, v1, argb);
+            vertex(buffer, x2, y2, u2, v2, argb);
+            vertex(buffer, x3, y3, u3, v3, argb);
+            owner.stats.quads++;
+        }
+
+        void flush() {
+            if (!building) {
+                return;
+            }
+            Tessellator.getInstance().draw();
+            building = false;
+            owner.stats.draws++;
+        }
+    }
+}

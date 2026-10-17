@@ -1,0 +1,811 @@
+// Fathom Optimizations — the Minecraft-side module.
+//
+// The `core` package has no Minecraft or Fabric dependencies and compiles with a bare
+// JDK 8 (see README.md and tools/build-optimization-module.ps1). The `fabric` package
+// needs this build: Loom resolves Minecraft, the Legacy Fabric intermediary and the yarn
+// mappings, and remaps the Mixins against them.
+
+// The Forge build (forgeJar, at the end) reads Forge's deobfuscation table,
+// which is LZMA-compressed; the JDK has no LZMA reader.
+buildscript {
+    repositories { mavenCentral() }
+    dependencies { classpath 'org.tukaani:xz:1.9' }
+}
+
+plugins {
+    // Pinned to a released version. This was `1.7-SNAPSHOT`, a mutable
+    // coordinate: the artifact behind it can change without the version
+    // changing, so a build was neither reproducible nor auditable. That was an
+    // open finding in THREAT_MODEL.md; 1.7.4 is the released build and closes
+    // it.
+    id 'fabric-loom' version '1.7.4'
+    id 'java'
+}
+
+version = project.mod_version
+group = project.maven_group
+base { archivesName = project.archives_base_name }
+
+// Legacy Fabric publishes its own intermediary mappings for the versions Mojang
+// predates Fabric on. Without this, Loom looks for 1.8.9 intermediary on the
+// modern Fabric maven, where it does not exist.
+loom {
+    intermediaryUrl = 'https://maven.legacyfabric.net/net/fabricmc/intermediary/%1$s/intermediary-%1$s-v2.jar'
+
+    // WORKFLOW B -- game-side module development.
+    //
+    // `gradle runClient` starts a real, decompiled-against, mod-loaded
+    // Minecraft 1.8.9 through Loom's own tooling. That is the legitimate way to
+    // develop a Fabric mod, and it is how this module gets tested inside the
+    // game while Fathom's production Microsoft authentication is pending
+    // approval.
+    //
+    // WHAT THIS IS NOT: a way to play. Loom's development client runs
+    // unauthenticated, so it can reach singleplayer and nothing else -- no
+    // online-mode server will accept it, because there is no session to
+    // validate. That is a property of having no credential, not a restriction
+    // we added, and it is exactly why this is an acceptable development path
+    // and not a bypass.
+    //
+    // The run directory is inside the module's own build tree, so a developer's
+    // real `.minecraft` is never touched.
+    runs {
+        client {
+            client()
+            setConfigName('Fathom Module (development)')
+            ideConfigGenerated(true)
+            runDir('run')
+
+            // Opt-in visual QA: capture the menu through Minecraft's own
+            // framebuffer path, then stop. These flags are absent from
+            // ordinary builds.
+            //
+            //   gradle runClient -PcaptureMenu
+            //   gradle runClient -PcaptureMenu -PcaptureFrame=4   (mid-opening)
+            //
+            // The frame number exists because the opening animation is part of
+            // the specification and "it compiles" is not evidence that it runs.
+            if (project.hasProperty('captureMenu')) {
+                vmArg '-Dfathom.captureMenu=true'
+                if (project.hasProperty('captureFrame')) {
+                    vmArg "-Dfathom.captureMenuFrame=${project.property('captureFrame')}"
+                }
+            }
+            if (project.hasProperty('captureVideoFrames')) {
+                vmArg "-Dfathom.captureMenuVideoFrames=${project.property('captureVideoFrames')}"
+            }
+            if (project.hasProperty('captureUi')) {
+                vmArg "-Dfathom.captureUi=${project.property('captureUi')}"
+                if ('menu'.equalsIgnoreCase(project.property('captureUi').toString())) {
+                    vmArg '-Dfathom.captureMenu=true'
+                }
+            }
+            // One-process visual and performance QA across every migrated
+            // surface. Example:
+            //   gradle runClient -PuiTour=menu,account,hub:Quick,hud-editor
+            if (project.hasProperty('uiTour')) {
+                vmArg "-Dfathom.uiTour=${project.property('uiTour')}"
+                if (project.hasProperty('uiTourScales')) {
+                    vmArg "-Dfathom.uiTour.scales=${project.property('uiTourScales')}"
+                }
+                if (project.hasProperty('uiTourGeometry')) {
+                    vmArg '-Dfathom.uiTour.geometry=true'
+                }
+                if (project.hasProperty('uiDebug')) {
+                    vmArg '-Dfathom.uiDebug=true'
+                    vmArg '-Dfathom.debugGeometry=true'
+                }
+            }
+            // The Hub over a live world rather than over the title screen:
+            //   gradle runClient -PcaptureHubWorld=Mods
+            // loads the development world as the HUD capture does, opens the
+            // Hub on that section once the world has settled, and captures it.
+            // A clean frame of the development world -- no HUD, no hand-drawn
+            // UI -- saved unprocessed as run/screenshots/fathom-backdrop-source.png,
+            // for tools that make the shipped Graphite backdrop from it.
+            if (project.hasProperty('captureBackdropSource')) {
+                vmArg '-Dfathom.captureUi=hud'
+                vmArg '-Dfathom.captureBackdropSource=true'
+            }
+            if (project.hasProperty('captureHubWorld')) {
+                vmArg '-Dfathom.captureUi=hud'
+                vmArg "-Dfathom.captureHubWorld=${project.property('captureHubWorld')}"
+            }
+            if (project.hasProperty('captureHudItems')) {
+                // Visual QA only: dresses the development player in armour and
+                // two effects so the armour and potion widgets have something
+                // to draw in an in-game HUD capture.
+                vmArg '-Dfathom.captureHudItems=true'
+            }
+            if (project.hasProperty('hudProfile')) {
+                // Development measurement: prints what each HUD widget costs.
+                vmArg '-Dfathom.hudProfile=true'
+            }
+            if (project.hasProperty('railOpen')) {
+                vmArg '-Dfathom.captureRail=true'
+            }
+            if (project.hasProperty('hoverProbe')) {
+                vmArg '-Dfathom.hoverInstrumentation=true'
+            }
+            if (project.hasProperty('qaAllModules')) {
+                // Visual-only stress mode: renders every module card as enabled
+                // without changing the user's saved module configuration.
+                vmArg '-Dfathom.qaAllModules=true'
+            }
+            if (project.hasProperty('qaOpenSettings')) {
+                // Visual-only detail-state capture; never changes saved settings.
+                // The value may be a module id, to capture one drawer.
+                vmArg "-Dfathom.qaOpenSettings=${project.property('qaOpenSettings')}"
+            }
+            if (project.hasProperty('qaEditorSelect')) {
+                // Visual-only: the HUD editor opens with this widget selected.
+                vmArg "-Dfathom.qaEditorSelect=${project.property('qaEditorSelect')}"
+            }
+            if (project.hasProperty('qaPointer')) {
+                // Visual-only: fixed pointer position (UI units, "x,y") for hover captures.
+                vmArg "-Dfathom.qaPointer=${project.property('qaPointer')}"
+            }
+            if (project.hasProperty('qaAccount')) {
+                // Visual-only: the title screen's account panel, open.
+                vmArg '-Dfathom.qaAccountOpen=true'
+            }
+            if (project.hasProperty('qaFocusSearch')) {
+                vmArg '-Dfathom.qaFocusSearch=true'
+            }
+            if (project.hasProperty('qaReplay')) {
+                // Visual-only: replay page switch + card activation, capture N seconds in.
+                vmArg "-Dfathom.qaReplay=${project.property('qaReplay')}"
+            }
+            if (project.hasProperty('perfBench')) {
+                // Development-only scripted benchmark: `world` (gameplay
+                // scenarios in the dev save) or `soak` (long-open screens).
+                // Results print as `[Fathom] Bench` lines and are written to
+                // run/fathom-bench/<label>-<scenario>.json.
+                vmArg "-Dfathom.perfBench=${project.property('perfBench')}"
+                vmArg "-Dfathom.perfBench.label=${project.findProperty('perfLabel') ?: 'run'}"
+                ['off', 'on', 'ab', 'window', 'joinSettle', 'abScenarios', 'abReverse'].each { key ->
+                    if (project.hasProperty("perf${key.capitalize()}")) {
+                        vmArg "-Dfathom.perfBench.${key}=${project.property("perf${key.capitalize()}")}"
+                    }
+                }
+                ['seconds', 'settle', 'soakSeconds'].each { key ->
+                    if (project.hasProperty("perf${key.capitalize()}")) {
+                        vmArg "-Dfathom.perfBench.${key}=${project.property("perf${key.capitalize()}")}"
+                    }
+                }
+            }
+            if (project.hasProperty('viewBench')) {
+                // View-direction frame profile (sky, horizon, ground, entities,
+                // particles, translucency): `gradle runClient -PviewBench=<save folder>`.
+                // Report lands in run/logs/fathom-view-<stamp>.txt. Extra settings
+                // pass through as -PviewRounds=3, -PviewArms=..., -PviewScenes=...
+                vmArg '-Dfathom.benchmark=view'
+                vmArg "-Dfathom.view.world=${project.property('viewBench')}"
+                ['rounds', 'arms', 'scenes', 'seconds', 'settle', 'warmup', 'joinSettle', 'quit'].each { key ->
+                    if (project.hasProperty("view${key.capitalize()}")) {
+                        vmArg "-Dfathom.view.${key}=${project.property("view${key.capitalize()}")}"
+                    }
+                }
+            }
+            if (project.hasProperty('jfrFile')) {
+                // Sampling profile of a run, read with JDK 17's `jfr print`.
+                vmArg "-XX:StartFlightRecording=settings=profile,filename=${project.property('jfrFile')}"
+            }
+            if (project.hasProperty('transitionProbe')) {
+                vmArg '-Dfathom.transitionInstrumentation=true'
+            }
+            // In-game module self-test (fabric/diag/ModuleSelfTest):
+            //   gradle runClient -PqaModules=run -PprofilesDir=<scratch collection>
+            //   gradle runClient -PqaModules=verify -PprofilesDir=<the same collection>
+            // The HUD editor and Mods page, driven like a player (fabric/diag/EditorSelfTest):
+            //   gradle runClient -PqaEditor=run -PprofilesDir=<scratch collection>
+            //   gradle runClient -PqaEditor=verify -PprofilesDir=<the same collection>
+            ['qaModules', 'qaEditor', 'qaWorld', 'qaServer'].each { key ->
+                if (project.hasProperty(key)) {
+                    vmArg "-Dfathom.${key}=${project.property(key)}"
+                }
+            }
+            if (project.hasProperty('profilesDir')) {
+                vmArg "-Dfathom.profilesDir=${project.property('profilesDir')}"
+            }
+            if (project.hasProperty('hudFont')) {
+                vmArg "-Dfathom.hudFont=${project.property('hudFont')}"
+            }
+            if (project.hasProperty('qualityUi')) {
+                vmArg "-Dfathom.highQualityUi=${project.property('qualityUi')}"
+            }
+            if (project.hasProperty('rshiftBackground')) {
+                vmArg "-Dfathom.rshiftBackground=${project.property('rshiftBackground')}"
+            }
+            if (project.hasProperty('rshiftBlur')) {
+                vmArg "-Dfathom.rshiftBlur=${project.property('rshiftBlur')}"
+            }
+            if (project.hasProperty('rshiftDim')) {
+                vmArg "-Dfathom.rshiftDim=${project.property('rshiftDim')}"
+            }
+            // Point the module at a config file in the run directory, so the
+            // launcher's own `config/fathom-performance.properties` contract can
+            // be exercised by hand: edit that file, restart, observe.
+            def clientWidth = project.findProperty('clientWidth') ?: '1280'
+            def clientHeight = project.findProperty('clientHeight') ?: '720'
+            programArgs('--width', clientWidth.toString(), '--height', clientHeight.toString())
+        }
+    }
+}
+
+repositories {
+    // Legacy Fabric first: it hosts the 1.8.9 intermediary mappings.
+    maven {
+        name = 'Legacy Fabric'
+        url = 'https://maven.legacyfabric.net/'
+    }
+    maven {
+        name = 'Fabric'
+        url = 'https://maven.fabricmc.net/'
+    }
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.legacyfabric:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Deliberately no Fabric API dependency yet. This milestone adds instrumentation and
+    // architecture, not gameplay hooks, and every dependency is one more thing a user has
+    // to have installed for the mod to load.
+
+    // No test dependency. The tests are plain `main` methods
+    // (`CoreTests`, `OptTests`) so that `core` can be verified with nothing but
+    // a JDK -- which is how it was verified, because this build has never run.
+    // Adding JUnit would be a dependency carried for tests that do not use it.
+}
+
+java {
+    // Two different Javas, on purpose.
+    //
+    // Gradle and Loom themselves need Java 17 to run. The mod must be Java 8
+    // bytecode, because that is what Minecraft 1.8.9 declares and what its
+    // players have. A toolchain expresses exactly that: build on 17, compile
+    // with the JDK 8 that is installed alongside it.
+    //
+    // This replaces `sourceCompatibility`/`targetCompatibility` plus
+    // `options.release = 8`. `--release` is a JDK 9+ flag, so asking a JDK 8
+    // javac for it fails outright.
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+}
+
+/**
+ * The shared theme constants, regenerated from the manifest before Java compiles.
+ *
+ * <p>`generated/FathomTheme.java` and the launcher's CSS and TypeScript come from
+ * one manifest through one script. Running it here means an edited manifest
+ * cannot ship a jar compiled against stale constants; the script rewrites a file
+ * only when its content changes, so an unchanged manifest leaves this up to date.
+ * Node is already required to build the launcher.
+ */
+def repoRoot = rootProject.projectDir.parentFile.parentFile
+def generateThemeTokens = tasks.register('generateThemeTokens', Exec) {
+    inputs.file(new File(repoRoot, 'assets/theme/fathom-theme.json'))
+    inputs.file(new File(repoRoot, 'tools/generate-fathom-theme.mjs'))
+    outputs.file('src/main/java/net/fathom/optimizations/generated/FathomTheme.java')
+    outputs.file('src/main/java/net/fathom/optimizations/generated/GraphiteTokens.java')
+    workingDir repoRoot
+    commandLine 'node', 'tools/generate-fathom-theme.mjs'
+}
+
+// Compilation reads `src/main/java`, which contains the generated file, so it
+// must run after it; Gradle refuses the build otherwise.
+tasks.named('compileJava').configure { dependsOn generateThemeTokens }
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = 'UTF-8'
+    // -Xlint:all with no -Werror: a warning here should be read, not fatal, because the
+    // Mixin annotation processor emits some that are not ours to fix.
+    it.options.compilerArgs << '-Xlint:all'
+}
+
+/**
+ * The build identity stamped into the jar.
+ *
+ * <p>Three different jars have been called `fathom-optimizations-0.3.0-hud.jar`
+ * in this checkout's history, and the version string cannot tell them apart. A
+ * commit and a build time can, so the runtime can say which bytes it is and a
+ * stale jar reports itself instead of being mistaken for the new one.
+ *
+ * <p>Read at configuration time rather than baked into a constant: a source file
+ * holding a commit hash would have to be edited by the build and is then a file
+ * that is always dirty.
+ */
+static String gitDescribe(File root) {
+    try {
+        def proc = ['git', 'rev-parse', '--short=12', 'HEAD'].execute(null, root)
+        def head_out = new StringWriter()
+        def head_err = new StringWriter()
+        proc.consumeProcessOutput(head_out, head_err)
+        proc.waitForOrKill(10000)
+        if (proc.exitValue() != 0) {
+            return 'unknown'
+        }
+        def head = head_out.toString().trim()
+        // `git diff --quiet` rather than `git status --porcelain`: it answers with
+        // an exit code and prints nothing. The porcelain form prints a line per
+        // modified file, which on a working tree of any size fills the pipe buffer
+        // and deadlocks a Groovy `execute()` that is not draining it -- the check
+        // then times out and every build quietly reports itself as clean.
+        def dirtyProc = ['git', 'diff', '--quiet', 'HEAD'].execute(null, root)
+        dirtyProc.consumeProcessOutput()
+        dirtyProc.waitForOrKill(10000)
+        def dirty = dirtyProc.exitValue() != 0
+        return dirty ? head + '-dirty' : head
+    } catch (Exception ignored) {
+        // A build from a source archive has no git. That is a legitimate build
+        // and must not fail; it simply cannot name a commit.
+        return 'unknown'
+    }
+}
+
+ext.fathomCommit = gitDescribe(rootProject.projectDir)
+ext.fathomBuiltAt = new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'commit', project.ext.fathomCommit
+    inputs.property 'builtAt', project.ext.fathomBuiltAt
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+    // Generated rather than checked in: it describes this build, and a checked-in
+    // copy would describe whichever build last committed it.
+    doLast {
+        def target = new File(destinationDir, 'fathom-build.properties')
+        target.parentFile.mkdirs()
+        target.withWriter('UTF-8') { writer ->
+            writer.writeLine("version=${project.version}")
+            writer.writeLine("commit=${project.ext.fathomCommit}")
+            writer.writeLine("builtAt=${project.ext.fathomBuiltAt}")
+        }
+    }
+}
+
+jar {
+    from('../../LICENSE') {
+        // If a licence file exists at the repository root it travels with the jar.
+        // Shipping code without one is the mistake mod-policies.md §5 is about.
+        rename { "${it}_${project.archives_base_name}" }
+    }
+}
+
+// The core has no Minecraft dependencies, so its tests run on a plain JVM. Under Gradle
+// they are ordinary JUnit tests; the same assertions also run standalone via
+// net.fathom.optimizations.core.CoreTests, which is how they were verified for this
+// milestone.
+test {
+    useJUnit()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
+
+// The core suites are `main` methods, not JUnit: the point of the core/fabric
+// split is that the core has no dependencies, and adding a test framework to
+// prove that would defeat it. `gradle test` therefore finds nothing to run, so
+// the suites are executed here instead — one JVM each, failing the build on a
+// non-zero exit.
+def coreSuites = [
+        'net.fathom.optimizations.core.ConfigTests',
+        'net.fathom.optimizations.core.CoreTests',
+        'net.fathom.optimizations.core.FeatureTests',
+        'net.fathom.optimizations.core.HudTests',
+        'net.fathom.optimizations.core.ModuleTests',
+        'net.fathom.optimizations.core.BaselineTests',
+        'net.fathom.optimizations.core.EditorTests',
+        'net.fathom.optimizations.core.OptTests',
+        'net.fathom.optimizations.core.UiTests',
+        'net.fathom.optimizations.core.ProfileTests',
+        'net.fathom.optimizations.core.ProfileLocationTests',
+        'net.fathom.optimizations.core.AccountTests',
+        'net.fathom.optimizations.core.BenchmarkTests',
+        'net.fathom.optimizations.core.ViewTests',
+        'net.fathom.optimizations.core.RegistryTests',
+        'net.fathom.optimizations.core.PacingTests',
+        'net.fathom.optimizations.core.RendererTests',
+        'net.fathom.optimizations.core.PulseTests',
+]
+
+def coreTest = tasks.register('coreTest') {
+    group = 'verification'
+    description = 'Runs the dependency-free core suites.'
+    dependsOn tasks.named('testClasses')
+    doLast {
+        coreSuites.each { suite ->
+            javaexec {
+                classpath = sourceSets.test.runtimeClasspath
+                mainClass = suite
+            }
+        }
+    }
+}
+
+tasks.named('check').configure { dependsOn coreTest }
+
+// The optimization registry, written for the launcher to compile in. The Java
+// registry is the one source; RegistryTests fails when this file is stale.
+tasks.register('exportRegistry', JavaExec) {
+    group = 'fathom'
+    description = 'Writes assets/optimizations/registry.json from OptimizationRegistry.'
+    dependsOn tasks.named('classes')
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.core.registry.RegistryJson'
+    args file('../../assets/optimizations/registry.json').absolutePath
+}
+
+// The public website's data bundle: product facts, benchmark results,
+// backgrounds, optimizations and approved media, written to web-export/ at the
+// repository root from the sources the client itself uses. Deterministic, and
+// refused if the output contains anything private. See docs/web-export.md.
+tasks.register('exportWebData', JavaExec) {
+    group = 'fathom'
+    description = 'Writes the website data bundle to web-export/.'
+    dependsOn tasks.named('exportRegistry'), tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.tools.WebExport'
+    args = [rootProject.projectDir.toPath().resolve('../..').normalize().toString()]
+}
+
+// The launcher's grain tile. Offline; nothing here runs in a build. The wordmark's outlines come from
+// tools/generate-wordmark.py.
+tasks.register('graphiteAssets', JavaExec) {
+    group = 'fathom'
+    description = "Regenerates the launcher's grain tile."
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.tools.GraphiteAssets'
+    args = [rootProject.projectDir.toPath().resolve('../..').normalize().toString()]
+}
+
+// The interface's glyph atlas: multi-channel distance fields of Geist and
+// Geist Mono, with their metrics and GPOS kerning. Offline; the output under
+// assets/fathom/font/atlas is committed and the game only reads it.
+tasks.register('uiFontAtlas', JavaExec) {
+    group = 'fathom'
+    description = 'Regenerates assets/fathom/font/atlas from the shipped font files.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.tools.font.UiFontAtlas'
+    args = [file('src/main/resources/assets/fathom/font').absolutePath]
+}
+
+// Proves the committed atlas: fresh against the fonts, and every glyph
+// reconstructed as the shader does matches the outline's exact coverage.
+tasks.register('uiFontAtlasCheck', JavaExec) {
+    group = 'verification'
+    description = 'Checks assets/fathom/font/atlas against the fonts, glyph by glyph.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fathom.optimizations.tools.font.FontAtlasCheck'
+    args = [file('src/main/resources/assets/fathom/font').absolutePath,
+            project.findProperty('montage')?.toString() ?: '']
+}
+
+// ---------------------------------------------------------------------------
+// The Forge build: the same client, renamed for Forge 1.8.9.
+// ---------------------------------------------------------------------------
+//
+// Nothing is rewritten for Forge. `remapJar` produces the Fabric jar, whose
+// references to Minecraft use Legacy Fabric's intermediary names; under Forge
+// the game's classes carry MCP/SRG names instead (FML renames them as they
+// load). This task renames every reference from one to the other, with
+// tiny-remapper and its Mixin extension -- the same tool and the same
+// extension Loom used to produce the Fabric jar -- and rewrites the Mixin
+// reference map to match. The mapping between the two is composed here from
+// two public tables keyed by Mojang's obfuscated names: Legacy Fabric's
+// intermediary, and the deobfuscation table inside Forge's own universal jar.
+// Neither table, nor Forge, is put in the output.
+//
+// Forge 1.8.9 has no Mixin, so the jar also carries the Mixin build Fabric
+// uses (with MixinExtras), and the ASM 9 it needs. Forge ships ASM 5.0.3; the
+// launcher puts this jar ahead of it on the class path, which also needs the
+// two ASM classes Forge's deobfuscator extends and ASM 9 no longer has: those
+// are taken from ASM 6.2.1, the last release that carried them, unchanged.
+//
+// The launcher starts it with Mixin's own LaunchWrapper tweaker; see
+// crates/launcher-core/src/loaders/forge.rs and docs/forge.md.
+
+configurations {
+    forgeMappings { transitive = false }
+    forgeBundle { transitive = false }
+    forgeAsmLegacy { transitive = false }
+}
+
+repositories {
+    maven {
+        name = 'Forge'
+        url = 'https://maven.minecraftforge.net/'
+        content { includeGroup 'net.minecraftforge' }
+    }
+}
+
+dependencies {
+    forgeMappings 'net.minecraftforge:forge:1.8.9-11.15.1.2318-1.8.9:universal'
+    forgeBundle 'net.fabricmc:sponge-mixin:0.17.3+mixin.0.8.7'
+    forgeBundle 'io.github.llamalad7:mixinextras-common:0.5.4'
+    ['asm', 'asm-tree', 'asm-commons', 'asm-util', 'asm-analysis'].each { forgeBundle "org.ow2.asm:${it}:9.6" }
+    forgeAsmLegacy 'org.ow2.asm:asm-commons:6.2.1'
+}
+
+def forgeJar = tasks.register('forgeJar') {
+    group = 'build'
+    description = 'Builds the Forge 1.8.9 jar from the remapped Fabric jar.'
+    dependsOn tasks.named('remapJar')
+    def input = tasks.named('remapJar').flatMap { it.archiveFile }
+    // Named for the launcher's "Fathom for Forge" component (fathom-forge-*.jar).
+    def output = layout.buildDirectory.file("libs/fathom-forge-${project.version}.jar")
+    def work = layout.buildDirectory.dir('forge')
+    def loomCache = new File(gradle.gradleUserHomeDir, 'caches/fabric-loom')
+    inputs.file(input)
+    inputs.files(configurations.forgeMappings, configurations.forgeBundle, configurations.forgeAsmLegacy)
+    inputs.file('forge/THIRD-PARTY-NOTICES.txt')
+    outputs.file(output)
+    doLast {
+        File workDir = work.get().asFile
+        workDir.mkdirs()
+        File intermediary = new File(loomCache, "${project.minecraft_version}/intermediary-v2.tiny")
+        File minecraftIntermediary = fileTree(new File(loomCache, 'minecraftMaven/net/minecraft/minecraft-merged-intermediary'))
+                .matching { include '**/*.jar'; exclude '**/*-sources.jar' }.files.find { true }
+        if (!intermediary.isFile() || minecraftIntermediary == null) {
+            throw new GradleException('Loom has not prepared Minecraft yet; run `gradle build` once first.')
+        }
+
+        // 1. Forge's table: obfuscated -> SRG.
+        def srgClass = [:], srgField = [:], srgMethod = [:]
+        def forgeJarFile = configurations.forgeMappings.singleFile
+        new java.util.zip.ZipFile(forgeJarFile).withCloseable { zip ->
+            def entry = zip.getEntry("deobfuscation_data-${project.minecraft_version}.lzma")
+            if (entry == null) throw new GradleException("no deobfuscation table in ${forgeJarFile}")
+            new org.tukaani.xz.LZMAInputStream(zip.getInputStream(entry)).withReader('UTF-8') { reader ->
+                reader.eachLine { line ->
+                    def parts = line.split(' ')
+                    switch (parts[0]) {
+                        case 'CL:': srgClass[parts[1]] = parts[2]; break
+                        case 'FD:': srgField[parts[1]] = parts[2].substring(parts[2].lastIndexOf('/') + 1); break
+                        case 'MD:': srgMethod[parts[1] + ' ' + parts[2]] = parts[3].substring(parts[3].lastIndexOf('/') + 1); break
+                    }
+                }
+            }
+        }
+
+        // 2. Legacy Fabric's table, composed with it: intermediary -> SRG.
+        def officialToIntermediary = [:]
+        def lines = intermediary.readLines('UTF-8')
+        lines.each { line ->
+            def parts = line.split('\t')
+            if (parts[0] == 'c') officialToIntermediary[parts[1]] = parts[2]
+        }
+        def remapDesc = { String desc, Map classes ->
+            desc.replaceAll(/L([^;]+);/) { all, name -> 'L' + (classes[name] ?: name) + ';' }
+        }
+        // Intermediary member names are unique across the game, so the reference
+        // map can be rewritten from these two without knowing owners.
+        def interMemberToSrg = [:]
+        def interClassToSrg = [:]
+        def tiny = new StringBuilder("v1\tintermediary\tsrg\n")
+        String owner = null, ownerInter = null
+        lines.drop(1).each { line ->
+            def parts = line.split('\t', -1)
+            if (parts[0] == 'c') {
+                owner = parts[1]
+                ownerInter = parts[2]
+                String srg = srgClass[owner] ?: owner
+                interClassToSrg[ownerInter] = srg
+                tiny.append("CLASS\t${ownerInter}\t${srg}\n")
+            } else if (parts.length >= 5 && parts[1] == 'm') {
+                String desc = parts[2], official = parts[3], inter = parts[4]
+                if (official == inter) return
+                String srg = srgMethod[owner + '/' + official + ' ' + desc] ?: official
+                interMemberToSrg[inter] = srg
+                tiny.append("METHOD\t${ownerInter}\t${remapDesc(desc, officialToIntermediary)}\t${inter}\t${srg}\n")
+            } else if (parts.length >= 5 && parts[1] == 'f') {
+                String desc = parts[2], official = parts[3], inter = parts[4]
+                if (official == inter) return
+                String srg = srgField[owner + '/' + official] ?: official
+                interMemberToSrg[inter] = srg
+                tiny.append("FIELD\t${ownerInter}\t${remapDesc(desc, officialToIntermediary)}\t${inter}\t${srg}\n")
+            }
+        }
+        File mappings = new File(workDir, 'intermediary-srg.tiny')
+        mappings.setText(tiny.toString(), 'UTF-8')
+
+        // 3. Rename the classes.
+        File renamed = new File(workDir, 'renamed.jar')
+        renamed.delete()
+        def remapper = net.fabricmc.tinyremapper.TinyRemapper.newRemapper()
+                .withMappings(net.fabricmc.tinyremapper.TinyUtils.createTinyMappingProvider(
+                        mappings.toPath(), 'intermediary', 'srg'))
+                .extension(new net.fabricmc.tinyremapper.extension.mixin.MixinExtension(
+                        EnumSet.of(net.fabricmc.tinyremapper.extension.mixin.MixinExtension.AnnotationTarget.HARD)))
+                .rebuildSourceFilenames(false)
+                .build()
+        try {
+            def sink = new net.fabricmc.tinyremapper.OutputConsumerPath.Builder(renamed.toPath()).build()
+            try {
+                sink.addNonClassFiles(input.get().asFile.toPath(),
+                        net.fabricmc.tinyremapper.NonClassCopyMode.FIX_META_INF, remapper)
+                remapper.readInputs(input.get().asFile.toPath())
+                remapper.readClassPath(minecraftIntermediary.toPath())
+                remapper.apply(sink)
+            } finally {
+                sink.close()
+            }
+        } finally {
+            remapper.finish()
+        }
+
+        // 4. The reference map, and the bundle, into one jar.
+        def interClassPattern = java.util.regex.Pattern.compile('net/minecraft/class_[0-9]+(?:[$]class_[0-9]+)*')
+        def interMemberPattern = java.util.regex.Pattern.compile('(?:method|field)_[0-9]+')
+        def replaceAll = { java.util.regex.Pattern pattern, String text, Map table ->
+            def matcher = pattern.matcher(text)
+            def result = new StringBuffer()
+            while (matcher.find()) {
+                String found = matcher.group()
+                matcher.appendReplacement(result, java.util.regex.Matcher.quoteReplacement(table[found] ?: found))
+            }
+            matcher.appendTail(result)
+            result.toString()
+        }
+        def remapReference = { String value ->
+            replaceAll(interMemberPattern, replaceAll(interClassPattern, value, interClassToSrg), interMemberToSrg)
+        }
+        // A safety net after tiny-remapper: a Mixin whose target it could not
+        // resolve (a string target naming a private class) keeps intermediary
+        // names in its @Shadow members. Those names are unique game-wide, so
+        // any left in any class are renamed here, and the build then fails if
+        // one still survives.
+        def leftovers = [] as Set
+        def memberRemapper = new org.objectweb.asm.commons.Remapper() {
+            @Override String mapFieldName(String fieldOwner, String name, String descriptor) {
+                return name.startsWith('field_') ? (interMemberToSrg[name] ?: name) : name
+            }
+            @Override String mapMethodName(String methodOwner, String name, String descriptor) {
+                return name.startsWith('method_') ? (interMemberToSrg[name] ?: name) : name
+            }
+            @Override String map(String internalName) {
+                return interClassToSrg[internalName] ?: internalName
+            }
+        }
+        def finishClass = { String name, byte[] bytes ->
+            def reader = new org.objectweb.asm.ClassReader(bytes)
+            def writer = new org.objectweb.asm.ClassWriter(0)
+            reader.accept(new org.objectweb.asm.commons.ClassRemapper(writer, memberRemapper), 0)
+            byte[] result = writer.toByteArray()
+            String text = new String(result, 'ISO-8859-1')
+            if (text =~ /net\/minecraft\/class_\d+|(?:method|field)_\d{2,}/) {
+                leftovers << name
+            }
+            return result
+        }
+        // Forge 1.8.9's EventSubscriptionTransformer calls Type.getType(superName)
+        // with an internal name, not a descriptor, and reads getInternalName()
+        // back. ASM 5 returned the name unchanged; ASM 9 throws, which leaves
+        // every Forge event without its listener list. This restores ASM 5's
+        // answer for that one case -- a string that is not a descriptor is read
+        // as an internal name, as Type.getObjectType reads it -- and changes no
+        // valid descriptor. ASM is BSD-3-Clause; see ATTRIBUTION.md.
+        def lenientAsmType = { byte[] bytes ->
+            def node = new org.objectweb.asm.tree.ClassNode()
+            new org.objectweb.asm.ClassReader(bytes).accept(node, 0)
+            def method = node.methods.find { it.name == 'getTypeInternal' && it.desc == '(Ljava/lang/String;II)Lorg/objectweb/asm/Type;' }
+            def thrown = method?.instructions?.toArray()?.find {
+                it.opcode == org.objectweb.asm.Opcodes.NEW && it.desc == 'java/lang/IllegalArgumentException'
+            }
+            if (thrown == null) throw new GradleException('ASM Type.getTypeInternal is not the shape this build patches')
+            def end = thrown
+            while (end.opcode != org.objectweb.asm.Opcodes.ATHROW) end = end.next
+            def replacement = new org.objectweb.asm.tree.InsnList()
+            replacement.add(new org.objectweb.asm.tree.TypeInsnNode(org.objectweb.asm.Opcodes.NEW, 'org/objectweb/asm/Type'))
+            replacement.add(new org.objectweb.asm.tree.InsnNode(org.objectweb.asm.Opcodes.DUP))
+            replacement.add(new org.objectweb.asm.tree.IntInsnNode(org.objectweb.asm.Opcodes.BIPUSH, 12)) // INTERNAL
+            replacement.add(new org.objectweb.asm.tree.VarInsnNode(org.objectweb.asm.Opcodes.ALOAD, 0))
+            replacement.add(new org.objectweb.asm.tree.VarInsnNode(org.objectweb.asm.Opcodes.ILOAD, 1))
+            replacement.add(new org.objectweb.asm.tree.VarInsnNode(org.objectweb.asm.Opcodes.ILOAD, 2))
+            replacement.add(new org.objectweb.asm.tree.MethodInsnNode(org.objectweb.asm.Opcodes.INVOKESPECIAL,
+                    'org/objectweb/asm/Type', '<init>', '(ILjava/lang/String;II)V', false))
+            replacement.add(new org.objectweb.asm.tree.InsnNode(org.objectweb.asm.Opcodes.ARETURN))
+            def cursor = thrown
+            method.instructions.insertBefore(thrown, replacement)
+            while (true) {
+                def next = cursor.next
+                boolean last = cursor.is(end)
+                method.instructions.remove(cursor)
+                if (last) break
+                cursor = next
+            }
+            method.maxStack = Math.max(method.maxStack, 6)
+            def writer = new org.objectweb.asm.ClassWriter(0)
+            node.accept(writer)
+            writer.toByteArray()
+        }
+        File out = output.get().asFile
+        out.delete()
+        def seen = [] as Set
+        def legacy = ['org/objectweb/asm/commons/RemappingClassAdapter.class',
+                      'org/objectweb/asm/commons/RemappingMethodAdapter.class',
+                      'org/objectweb/asm/commons/RemappingFieldAdapter.class',
+                      'org/objectweb/asm/commons/RemappingAnnotationAdapter.class',
+                      'org/objectweb/asm/commons/RemappingSignatureAdapter.class'] as Set
+        def manifest = new java.util.jar.Manifest()
+        manifest.mainAttributes.putValue('Manifest-Version', '1.0')
+        manifest.mainAttributes.putValue('Implementation-Title', 'Fathom')
+        manifest.mainAttributes.putValue('Implementation-Version', project.version.toString())
+        manifest.mainAttributes.putValue('Fathom-Loader', 'forge')
+        // Mixin reads these from the jar it was itself loaded from.
+        manifest.mainAttributes.putValue('MixinConfigs', 'fathom.mixins.json,fathom.forge.mixins.json')
+        // FML treats a mods/ jar naming a tweaker as a tweaker, and does not scan
+        // it for @Mod classes with its ASM 5 visitors. The launcher passes the same
+        // tweaker on the command line, and LaunchWrapper starts it once.
+        manifest.mainAttributes.putValue('TweakClass', 'org.spongepowered.asm.launch.MixinTweaker')
+        new java.util.jar.JarOutputStream(new FileOutputStream(out), manifest).withCloseable { jar ->
+            seen << 'META-INF/MANIFEST.MF'
+            // What is bundled, its licences, and the one ASM change.
+            def notices = new java.util.zip.ZipEntry('META-INF/THIRD-PARTY-NOTICES.txt')
+            notices.time = 315532800000L
+            jar.putNextEntry(notices)
+            jar.write(file('forge/THIRD-PARTY-NOTICES.txt').bytes)
+            jar.closeEntry()
+            seen << notices.name
+            def copy = { File source, Closure accept, Closure transform ->
+                new java.util.zip.ZipFile(source).withCloseable { zip ->
+                    zip.entries().each { java.util.zip.ZipEntry entry ->
+                        String name = entry.name
+                        if (entry.isDirectory() || !accept(name) || !seen.add(name)) return
+                        if (name == 'META-INF/MANIFEST.MF' || name ==~ /META-INF\/.*\.(SF|RSA|DSA|EC)/
+                                || name.endsWith('module-info.class') || name.startsWith('META-INF/versions/')) return
+                        byte[] bytes = zip.getInputStream(entry).bytes
+                        bytes = transform(name, bytes)
+                        if (bytes == null) return
+                        def written = new java.util.zip.ZipEntry(name)
+                        written.time = 315532800000L
+                        jar.putNextEntry(written)
+                        jar.write(bytes)
+                        jar.closeEntry()
+                    }
+                }
+            }
+            // Not fabric.mod.json: this jar is not a Fabric mod, and the launcher's
+            // mod checks would rightly refuse one in a Forge profile.
+            copy(renamed, { String name -> name != 'fabric.mod.json' }, { String name, byte[] bytes ->
+                if (name.endsWith('.class')) return finishClass(name, bytes)
+                if (!name.endsWith('-refmap.json')) return bytes
+                def refmap = new groovy.json.JsonSlurper().parse(bytes, 'UTF-8')
+                def mapped = [:]
+                refmap.mappings.each { mixin, entries ->
+                    mapped[mixin] = entries.collectEntries { k, v -> [(k): remapReference(v)] }
+                }
+                // Mixin under FML reads the "searge" context first, then these.
+                return groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(
+                        [mappings: mapped, data: [searge: mapped]])).getBytes('UTF-8')
+            })
+            configurations.forgeBundle.files.each { File dependency ->
+                copy(dependency, { String name -> !name.startsWith('META-INF/maven/') }, { String n, byte[] b ->
+                    // Mixin's ModLauncher classes are Java 16 bytecode: unloadable on Java 8.
+                    if (n.endsWith('.class') && (((b[6] & 0xff) << 8) | (b[7] & 0xff)) > 52) return null
+                    return n == 'org/objectweb/asm/Type.class' ? lenientAsmType(b) : b
+                })
+            }
+            configurations.forgeAsmLegacy.files.each { File dependency ->
+                copy(dependency, { String name -> legacy.contains(name) }, { String n, byte[] b -> b })
+            }
+        }
+        if (!leftovers.isEmpty()) {
+            throw new GradleException("intermediary names survived in ${leftovers.size()} classes: ${leftovers.take(10)}")
+        }
+        def missing = legacy.findAll { !seen.contains(it) }
+        if (!missing.isEmpty()) throw new GradleException("ASM 6.2.1 did not carry ${missing}")
+        logger.lifecycle("Forge jar: ${out} (${interClassToSrg.size()} classes, ${interMemberToSrg.size()} members mapped)")
+    }
+}
+
+tasks.named('build').configure { dependsOn forgeJar }

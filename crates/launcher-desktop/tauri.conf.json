@@ -1,0 +1,69 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fathom Client",
+  "version": "0.3.0",
+  "identifier": "net.fathom.launcher",
+  "build": {
+    "frontendDist": "../../desktop/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm --prefix ../../desktop run dev",
+    "beforeBuildCommand": "npm --prefix ../../desktop run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Fathom",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 940,
+        "minHeight": 620,
+        "resizable": true,
+        "center": true,
+        "theme": "Dark",
+        "backgroundColor": "#080e13",
+        "decorations": false,
+        "visible": false,
+        "label": "main"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: asset: http://asset.localhost; media-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'",
+      "freezePrototype": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "publisher": "Fathom",
+    "copyright": "Copyright © 2026 Fathom contributors. Apache License 2.0.",
+    "homepage": "https://github.com/fathomclient/fathom",
+    "category": "Game",
+    "shortDescription": "A private, performance-focused Minecraft 1.8.9 client.",
+    "longDescription": "Fathom is a private, performance-focused launcher and managed client for Minecraft: Java Edition 1.8.9.",
+    "licenseFile": "../../LICENSE",
+    "targets": [
+      "nsis"
+    ],
+    "resources": [],
+    "windows": {
+      "allowDowngrades": false,
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "icons/nsis-header.bmp",
+        "sidebarImage": "icons/nsis-sidebar.bmp",
+        "startMenuFolder": "Fathom",
+        "compression": "lzma",
+        "installerHooks": "installer/hooks.nsh"
+      }
+    },
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
+  }
+}

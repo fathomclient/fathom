@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renderer proof</title>
+<!--
+  The in-game compositor's reference scene, drawn by the launcher's own CSS.
+
+  Development only: Vite's dev server serves it at /proof/renderer.html; the
+  production build has one entry, index.html, and never includes it. The game
+  draws the same scene, at the same logical positions, from
+  RendererProofScreen (-Dfathom.uiTour=proof). Screenshot both at the same
+  size and compare: this page is the specification.
+
+  ?bg=<url> sets the backdrop; the default is the launcher's bg_5rain poster.
+-->
+<script type="module" src="./renderer.ts"></script>
+</head>
+<body>
+<div id="scene"></div>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- No remote origins at all. The frontend renders; it never fetches.
+         `media-src` covers the background videos, which are bundled assets. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fathom</title>
+    <!-- The first frame. Plain HTML and CSS, painted by the WebView before the
+         script bundle is parsed, so the window has something to show the moment
+         it opens. `LoadingScreen.svelte` draws the same thing and takes over,
+         adding what is being loaded; see docs/startup.md. -->
+    <style>
+      /* The app icon's own ground: its tile's three stops, and the blue halo
+         behind its mark. */
+      html, body { margin: 0; height: 100%; background: #080e13; }
+      #splash {
+        position: fixed; inset: 0; z-index: 1000;
+        display: grid; place-items: center;
+        background:
+          radial-gradient(ellipse 460px 340px at 50% 47%, rgba(76, 154, 251, 0.1), rgba(76, 154, 251, 0) 70%),
+          linear-gradient(180deg, #141c25 0%, #101820 48%, #080e13 100%);
+        color: #edf2f7;
+      }
+      #splash .mark { display: grid; justify-items: center; gap: 22px; }
+      #splash .lockup { display: grid; justify-items: center; gap: 16.2px; }
+      #splash svg { display: block; overflow: visible; }
+      #splash .line {
+        position: relative; width: 132px; height: 2px; overflow: hidden;
+        border-radius: 999px; background: rgba(165, 214, 255, 0.12);
+      }
+      #splash .line::after {
+        content: ''; position: absolute; inset: 0; width: 40%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(91, 156, 235, 0), #a5d6ff 60%, #d3e9ff);
+        animation: splash-sweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+      /* The status line LoadingScreen.svelte fills in, reserved here so the
+         mark does not move at the hand-over (12px caption * 1.4). */
+      #splash .step { min-height: 16.8px; margin: -8px 0 0; }
+      @keyframes splash-sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+      @media (prefers-reduced-motion: reduce) {
+        #splash .line::after { animation-duration: 2.4s; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="splash" aria-hidden="true">
+      <div class="mark">
+        <div class="lockup">
+          <!--fathom:mark-->
+          <!--fathom:wordmark-->
+        </div>
+        <div class="line"></div>
+        <div class="step"></div>
+      </div>
+    </div>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

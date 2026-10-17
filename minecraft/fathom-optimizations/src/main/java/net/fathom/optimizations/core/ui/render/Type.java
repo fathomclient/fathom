@@ -1,0 +1,124 @@
+package net.fathom.optimizations.core.ui.render;
+
+import net.fathom.optimizations.generated.FathomTheme;
+
+/**
+ * A piece of type: a size in logical units and a weight.
+ *
+ * <h2>The scale, from the launcher</h2>
+ *
+ * <p>Five sizes and three weights, which is the whole typographic system. A
+ * sixth size is how a hierarchy stops meaning anything: if everything can be
+ * emphasised, nothing is.
+ *
+ * <p>The sizes are the launcher's, in the same units — 11 and 12 for metadata,
+ * 13 for body, 14 for a row's title, 19 for a section heading, 22 for a number
+ * that is the point of its panel. The two halves are supposed to look like one
+ * product, and a 15px body next to a 14px body is the kind of difference nobody
+ * can name and everybody can feel.
+ */
+public final class Type {
+
+    /**
+     * The three weights the interface uses -- Geist has nine; three is a
+     * system -- and Geist Mono's two, for values that change while visible.
+     */
+    public enum Weight {
+        REGULAR,
+        MEDIUM,
+        SEMIBOLD,
+        MONO_REGULAR,
+        MONO_MEDIUM
+    }
+
+    /** Metadata: badges, units, counts, the quiet line under a control. */
+    public static final Type CAPTION = new Type(FathomTheme.TYPE_META, Weight.REGULAR);
+    /** Secondary text: descriptions, hints. */
+    public static final Type SMALL = new Type(FathomTheme.TYPE_CAPTION, Weight.REGULAR);
+    /** Body. The default, and most of the interface. */
+    public static final Type BODY = new Type(FathomTheme.TYPE_BODY, Weight.REGULAR);
+    /** Body, emphasised: a control's label, a selected tab. */
+    public static final Type BODY_STRONG = new Type(FathomTheme.TYPE_BODY, Weight.MEDIUM);
+    /** The name of a row in a list — the thing the eye lands on first. */
+    public static final Type ROW_TITLE = new Type(FathomTheme.TYPE_BODY_LG, Weight.MEDIUM);
+    /** Small upper-case group labels. */
+    public static final Type LABEL = new Type(FathomTheme.TYPE_META, Weight.MEDIUM);
+    /** The header's product name. */
+    public static final Type TITLE = new Type(FathomTheme.TYPE_ROW, Weight.SEMIBOLD);
+    /** The heading at the top of a page. */
+    public static final Type SECTION = new Type(FathomTheme.TYPE_SECTION, Weight.SEMIBOLD);
+    /** A number that is the point of the panel it is on. */
+    public static final Type DISPLAY = new Type(FathomTheme.TYPE_PAGE, Weight.SEMIBOLD);
+
+    private final float size;
+    private final Weight weight;
+    private final float tracking;
+
+    public Type(float size, Weight weight) {
+        this(size, weight, 0f);
+    }
+
+    /**
+     * @param tracking CSS {@code letter-spacing} in ems: space added after
+     *     every character, as the launcher's type roles set it
+     */
+    public Type(float size, Weight weight, float tracking) {
+        if (size <= 0f) {
+            throw new IllegalArgumentException("type has to have a size");
+        }
+        this.size = size;
+        this.weight = weight == null ? Weight.REGULAR : weight;
+        this.tracking = tracking == tracking ? tracking : 0f;
+    }
+
+    /** The same type at another size. */
+    public Type at(float newSize) {
+        return new Type(newSize, weight, tracking);
+    }
+
+    /** The same size at another weight. */
+    public Type weighing(Weight newWeight) {
+        return new Type(size, newWeight, tracking);
+    }
+
+    /** The same type with another letter-spacing, in ems. */
+    public Type tracked(float ems) {
+        return new Type(size, weight, ems);
+    }
+
+    /** Letter-spacing in ems; 0 for the font's own spacing. */
+    public float tracking() {
+        return tracking;
+    }
+
+    /** In logical units. */
+    public float size() {
+        return size;
+    }
+
+    public Weight weight() {
+        return weight;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof Type)) {
+            return false;
+        }
+        Type that = (Type) other;
+        return that.size == size && that.weight == weight && that.tracking == tracking;
+    }
+
+    @Override
+    public int hashCode() {
+        return (Float.floatToIntBits(size) * 31 + weight.hashCode()) * 31 + Float.floatToIntBits(tracking);
+    }
+
+    @Override
+    public String toString() {
+        return "Type[" + size + " " + weight + "]";
+    }
+}

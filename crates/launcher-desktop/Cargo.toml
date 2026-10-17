@@ -1,0 +1,67 @@
+[package]
+name = "launcher-desktop"
+description = "Fathom's desktop shell: a Tauri window around launcher-core."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "fathom-desktop"
+path = "src/main.rs"
+
+[features]
+# Serve the interface from inside the executable rather than from a dev server.
+#
+# THIS IS REQUIRED FOR ANY BUILD A USER RUNS. Tauri decides between "load
+# `frontendDist` embedded in the binary" and "load `devUrl` over HTTP" from this
+# feature and nothing else -- `tauri-macros` does it as
+# `dev: cfg!(not(feature = "custom-protocol"))`. It is NOT tied to debug versus
+# release. Keeping it in the default feature set makes every ordinary Cargo
+# build safe; only the explicit Tauri development workflow disables it.
+#
+# The Tauri CLI also passes this automatically during `tauri build`.
+#
+# Embedded assets are the safe default for every ordinary Cargo invocation.
+# `tools/dev.ps1` uses `tauri dev`, which deliberately disables default
+# features while it owns and waits for an ephemeral Vite server.
+custom-protocol = ["tauri/custom-protocol"]
+
+default = ["custom-protocol"]
+# Forwards to launcher-core's dev-auth. Never enable for a release build.
+dev-auth = ["launcher-core/dev-auth"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+launcher-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+base64.workspace = true
+
+# The window and the command bridge, and nothing else.
+#
+# No plugins: every capability a plugin would add -- filesystem, shell, http,
+# dialog -- is either something the frontend must not have, or something
+# launcher-core already does behind a typed command. `tauri` itself is the whole
+# surface, which is the smallest this can be while still opening a window.
+tauri = { version = "2", features = ["image-png"] }
+
+# The native file picker, on the Rust side of the boundary.
+#
+# Deliberately this rather than Tauri's dialog plugin. A plugin would put a
+# general "open a dialog" capability in the WebView's hands; this keeps the
+# picker where the filesystem access already is -- the frontend asks "add a
+# mod", and Rust opens the dialog, reads the file and copies it into the store.
+# The interface never learns the path.
+rfd = { version = "0.15", default-features = false, features = ["common-controls-v6"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

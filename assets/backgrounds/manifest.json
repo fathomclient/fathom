@@ -1,0 +1,194 @@
+{
+  "_about": "The one background catalogue. `tools/generate-backgrounds.mjs` turns it into the launcher's `backgrounds.generated.ts` and the game's `BackgroundCatalog.java`; `crates/launcher-desktop/src/lib.rs` tests its allowlist against it; `tools/prepare-background-library.mjs` builds every still, thumbnail and scene from it. Launcher paths are under desktop/public/, Minecraft paths under textures/menu/. `width`/`height` are the asset's native pixels. `minecraft.video` names a frame sequence the game can play; otherwise the game shows `minecraft.still`.",
+  "default": "bg_5rain",
+  "backgrounds": [
+    {
+      "id": "bg_6aurora",
+      "label": "Aurora",
+      "type": "video",
+      "asset": "backgrounds/bg_6aurora.webm",
+      "still": "backgrounds/bg_6aurora.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6aurora.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6aurora.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#7b9fd5"
+    },
+    {
+      "id": "bg_1",
+      "label": "Cherry Grove",
+      "type": "video",
+      "asset": "backgrounds/bg_1.webm",
+      "still": "backgrounds/bg_1.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_1.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_1.jpg",
+        "video": null
+      },
+      "credit": "Recorded in vanilla Minecraft",
+      "accentHue": 330,
+      "accent": "#cf81a8"
+    },
+    {
+      "id": "bg_6clear",
+      "label": "Metropolis",
+      "type": "video",
+      "asset": "backgrounds/bg_6clear.webm",
+      "still": "backgrounds/bg_6clear.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6clear.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6clear.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#c2938e"
+    },
+    {
+      "id": "bg_3",
+      "label": "Midnight Coast",
+      "type": "video",
+      "asset": "backgrounds/bg_3.webm",
+      "still": "backgrounds/bg_3.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_3.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_3.jpg",
+        "video": null
+      },
+      "credit": "Recorded in vanilla Minecraft",
+      "accent": "#95bbb4"
+    },
+    {
+      "id": "bg_6midnight",
+      "label": "Midnight Metropolis",
+      "type": "video",
+      "asset": "backgrounds/bg_6midnight.webm",
+      "still": "backgrounds/bg_6midnight.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6midnight.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6midnight.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#c48d90"
+    },
+    {
+      "id": "bg_5noraintickunfrozen",
+      "label": "Rainforest Drift",
+      "type": "video",
+      "asset": "backgrounds/bg_5noraintickunfrozen.webm",
+      "still": "backgrounds/bg_5noraintickunfrozen.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_5noraintickunfrozen.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_5noraintickunfrozen.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+      "accent": "#7f9cd2"
+    },
+    {
+      "id": "bg_5rain",
+      "label": "Rainforest Storm",
+      "type": "video",
+      "asset": "backgrounds/bg_5rain.webm",
+      "still": "backgrounds/bg_5rain.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_5rain.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "main-menu-bg.png",
+        "video": "bg_5rain"
+      },
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+      "accent": "#8dadc3"
+    },
+    {
+      "id": "bg_5noraintickfrozen",
+      "label": "Rainforest Twilight",
+      "type": "video",
+      "asset": "backgrounds/bg_5noraintickfrozen.webm",
+      "still": "backgrounds/bg_5noraintickfrozen.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_5noraintickfrozen.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_5noraintickfrozen.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tideworn by milkshake_mp3 (CurseForge); see ATTRIBUTION.md",
+      "accent": "#809bd0"
+    },
+    {
+      "id": "bg_4",
+      "label": "Savanna",
+      "type": "video",
+      "asset": "backgrounds/bg_4.webm",
+      "still": "backgrounds/bg_4.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_4.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_4.jpg",
+        "video": null
+      },
+      "credit": "Recorded in vanilla Minecraft",
+      "accent": "#e7ce6a"
+    },
+    {
+      "id": "bg_2",
+      "label": "Snowfall",
+      "type": "video",
+      "asset": "backgrounds/bg_2.webm",
+      "still": "backgrounds/bg_2.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_2.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_2.jpg",
+        "video": null
+      },
+      "credit": "Recorded in vanilla Minecraft",
+      "accent": "#96bbaf"
+    },
+    {
+      "id": "bg_6tokyo",
+      "label": "Tokyo Tower",
+      "type": "video",
+      "asset": "backgrounds/bg_6tokyo.webm",
+      "still": "backgrounds/bg_6tokyo.jpg",
+      "thumbnail": "backgrounds/thumbs/bg_6tokyo.jpg",
+      "width": 1920,
+      "height": 1080,
+      "launcher": true,
+      "minecraft": {
+        "still": "scenes/bg_6tokyo.jpg",
+        "video": null
+      },
+      "credit": "Recorded in Tokyo Inspired City by CoinCoffer (CurseForge); see ATTRIBUTION.md",
+      "accent": "#8abbc7"
+    }
+  ]
+}

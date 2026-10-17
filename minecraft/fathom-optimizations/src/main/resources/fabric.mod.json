@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "fathom-optimizations",
+  "version": "${version}",
+  "name": "Fathom",
+  "description": "Fathom's game-side module for Minecraft 1.8.9: the config bridge and launcher seam (Fathom Core), the in-game optimizations (Fathom Performance), and the hub, HUD widgets and HUD editor behind Right Shift (Fathom HUD).",
+  "authors": ["Fathom"],
+  "contact": {},
+  "license": "Apache-2.0",
+  "icon": "assets/fathom-optimizations/icon/fathom-128.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["net.fathom.optimizations.fabric.FabricEntrypoint"]
+  },
+  "mixins": ["fathom.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "minecraft": "1.8.9",
+    "java": ">=8"
+  }
+}

@@ -1,0 +1,75 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# Locally downloaded build tools. These are useful for development but are not
+# source and must never be staged with the repository.
+/.tmp-gradle-*/
+/.tmp-gradle-*.zip
+
+# JVM crash and heap diagnostics.
+hs_err_pid*
+replay_pid*
+*.hprof
+
+# Runtime logs belong in the launcher's data root, never in the repository or
+# underneath Java source packages when a process inherits an unexpected cwd.
+/logs/
+/minecraft/fathom-optimizations/logs/
+/minecraft/fathom-optimizations/src/main/java/**/logs/
+
+# Editor and operating-system metadata.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Java module build output. `minecraft/fathom-optimizations` is compiled either by
+# Gradle or, in environments without it, by javac straight into build/classes.
+/minecraft/*/build/
+/minecraft/*/.gradle/
+
+# Signing keys. `fathom-release keygen` writes here by default if someone runs
+# it from the repository root, which they should not -- keys belong on offline
+# media. This is the second line of defence, not the first.
+*.key
+*.pem
+
+# Portable release output from tools/package-portable.ps1.
+/dist
+
+# Node dependencies and Vite build output for the Tauri desktop shell.
+# `desktop/public` is source and stays tracked; `desktop/dist` is generated.
+/desktop/node_modules
+/desktop/dist
+/desktop/.vite
+
+# The launcher-ui compatibility wrapper invokes tauri-build only to stamp the
+# Windows manifest. Its schema cache is generated and is not a second UI source.
+/crates/launcher-ui/gen/
+
+# Installer-only first-party resources are staged here by build-installer.ps1.
+/crates/launcher-desktop/bundle/
+
+# The launcher built by tools/build-all.ps1, for launching from the repo root.
+/Fathom.exe
+# Test launchers built with `build-all.ps1 -OutputName <name>.exe`, each in its
+# own folder with its own resources\.
+/Fathom-*/
+# Staged build output, not source. `build-all.ps1` writes the client module here
+# because it is the first place the launcher looks and the only one both a
+# packaged and an unpackaged process agree on.
+/resources/
+
+# The interleaved A/B harness builds its own game instance and caches the
+# classpath it read from a real launch.
+/minecraft/fathom-optimizations/run-ab/
+/tools/.bench-classpath.txt
+
+# The multiplayer profile's local server, its world and the client instance
+# that connects to it (tools/mp-bench).
+/minecraft/fathom-optimizations/run-mp/
+
+# The website data bundle (gradle exportWebData). Regenerated, never edited;
+# the website consumes it from a build, see docs/web-export.md.
+/web-export/

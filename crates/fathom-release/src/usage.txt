@@ -1,0 +1,51 @@
+fathom-release - offline release signing for Fathom
+
+This tool is never linked into a shipped binary. Nothing in the workspace
+depends on it, which is what makes "the signing key never reaches the client" a
+property of the dependency graph rather than a promise.
+
+The private key is passed as a PATH, never as a value: a key on a command line
+ends up in a shell history, and a key in an environment variable ends up in a
+process list and a CI log.
+
+COMMANDS
+
+  keygen --out <file>
+      Generate an Ed25519 keypair. Writes the private key to <file> and prints
+      the public key and its id. Refuses to overwrite an existing file.
+
+  pubkey --key <file>
+      Print the public key for a private key file.
+
+  sign --role <root|release> --key <file> --in <payload.json> --out <envelope.json>
+      Wrap a payload in a signed envelope. Refuses if the payload's own `role`
+      field disagrees with --role.
+
+  add-signature --role <root|release> --key <file> --envelope <envelope.json>
+      Add another signature to an existing envelope. This is how a threshold is
+      met without any machine ever holding two keys: the envelope travels
+      between signers, the keys stay put.
+
+  verify --role <root|release> --envelope <file> --pubkey <base64> [--pubkey ...] --threshold <n>
+      Check an envelope the way a client will, using the client's own code.
+      Run this before publishing.
+
+  hash --file <path>
+      Print the SHA-256 and size of an artifact, for pasting into a release
+      payload.
+
+CUTTING A RELEASE
+
+  1. Build the artifacts.
+  2. fathom-release hash --file <each artifact>
+  3. Write release.payload.json with the versions, platforms, hashes and sizes.
+  4. On signer A:  fathom-release sign --role release --key rel-a.key \
+                       --in release.payload.json --out release.json
+  5. On signer B:  fathom-release add-signature --role release --key rel-b.key \
+                       --envelope release.json
+  6. fathom-release verify --role release --envelope release.json \
+         --pubkey <A> --pubkey <B> --threshold 2
+  7. Publish release.json and the artifacts.
+
+  root.json changes only when a key does, and follows the same shape with
+  --role root and the offline root keys.

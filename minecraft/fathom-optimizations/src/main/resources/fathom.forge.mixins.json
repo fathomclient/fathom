@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "package": "net.fathom.optimizations.forge.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "minVersion": "0.8",
+  "refmap": "fathom-optimizations-refmap.json",
+  "client": [
+    "ForgeChunkFillMixin",
+    "ForgeChunkRevisionMixin",
+    "ForgeClientStartMixin",
+    "ForgeHudMixin",
+    "ForgeSkyBlendMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
