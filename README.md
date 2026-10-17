@@ -88,9 +88,13 @@ More reading: [ARCHITECTURE.md](ARCHITECTURE.md),
 [THREAT_MODEL.md](THREAT_MODEL.md), [docs/forge.md](docs/forge.md),
 [docs/modules.md](docs/modules.md) and [docs/mod-browser.md](docs/mod-browser.md).
 
-Thank you for using Fathom <3
-
 ## Licence
 
 Apache-2.0. Third-party assets and their credits are in
 [ATTRIBUTION.md](ATTRIBUTION.md).
+
+_Please take care to note that all research and markdown files in this repository
+were done by an agent to ensure higher quality work and minimal mistakes. For any 
+questions or concerns, please create a fork with your request._
+
+Thank you for using Fathom <3
