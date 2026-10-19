@@ -120,6 +120,8 @@ public abstract class TextRendererWidthMixin {
     @Inject(method = "init()V", at = @At("RETURN"))
     private void fathom$fontReloaded(CallbackInfo callback) {
         fathom$memo().invalidate();
+        net.fathom.optimizations.fabric.perf.SignTexts.fontChanged();
+        net.fathom.optimizations.fabric.perf.TextLists.release();
         net.fathom.optimizations.fabric.perf.VanillaHudReplay.releaseAll();
         net.fathom.optimizations.fabric.perf.NametagRenderer.release();
         // Both HUD recordings name the glyph texture by id, and a reload makes a new one.
@@ -131,6 +133,8 @@ public abstract class TextRendererWidthMixin {
     @Inject(method = "setUnicode(Z)V", at = @At("RETURN"))
     private void fathom$unicodeChanged(boolean unicode, CallbackInfo callback) {
         fathom$memo().invalidate();
+        net.fathom.optimizations.fabric.perf.SignTexts.fontChanged();
+        net.fathom.optimizations.fabric.perf.TextLists.release();
         net.fathom.optimizations.fabric.perf.VanillaHudReplay.releaseAll();
         net.fathom.optimizations.fabric.perf.NametagRenderer.release();
         net.fathom.optimizations.fabric.perf.HudSteadyCache.release();

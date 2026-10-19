@@ -178,6 +178,15 @@ fn is_failure_line(line: &str) -> bool {
         "exception in thread \"main\"",
         "caused by:",
         "description:",
+        // Forge's own wording (FML, 1.8.9).
+        "caught exception from",
+        "missingmodsexception",
+        "duplicatemodsfoundexception",
+        "wrongminecraftversionexception",
+        "loaderexception",
+        "the mod list is:",
+        "fml has detected",
+        "has failed to load correctly",
     ];
     let lower = line.to_ascii_lowercase();
     MARKERS.iter().any(|marker| lower.contains(marker))
@@ -618,6 +627,27 @@ mod tests {
         // A short id is not distinctive enough to count on its own.
         assert!(!identifiers(&fps).iter().any(|w| w == "fps"));
         assert!(identifiers(&fps).iter().any(|w| w == "fps.jar"));
+    }
+
+    /// Forge words its failures differently, and its ordinary start-up talks
+    /// about coremods without anything being wrong.
+    #[test]
+    fn forges_failure_lines_are_quoted_and_its_chatter_is_not() {
+        assert!(is_failure_line(
+            "[Client thread/ERROR] [FML]: Caught exception from Some Mod (somemod)"
+        ));
+        assert!(is_failure_line(
+            "net.minecraftforge.fml.common.MissingModsException: Mod somemod (Some Mod) requires [otherlib@[1.2,)]"
+        ));
+        assert!(is_failure_line(
+            "net.minecraftforge.fml.common.DuplicateModsFoundException: Found a duplicate mod somemod"
+        ));
+        assert!(!is_failure_line(
+            "[main/INFO] [LaunchWrapper]: Loading tweak class name net.minecraftforge.fml.common.launcher.FMLTweaker"
+        ));
+        assert!(!is_failure_line(
+            "[main/INFO]: Found a command line coremod : net.example.CoreMod"
+        ));
     }
 
     #[test]

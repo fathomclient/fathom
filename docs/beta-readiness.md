@@ -222,5 +222,5 @@ Installed-mod management — earlier builds and offline restore, launch history,
 dependency checks — is described in `docs/mod-management.md`.
 
 **Not implemented:** automatic updates (mechanism done, signing key absent);
-code signing; Forge profiles (planned as a separate opt-in later); and the
+code signing; Fathom's in-game client on Forge (Forge installations themselves work: `docs/forge.md`); and the
 features `docs/v1-modules.md` lists as deliberately left out.

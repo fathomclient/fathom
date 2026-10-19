@@ -350,12 +350,16 @@ mod tests {
     }
 
     #[test]
-    fn an_unimplemented_loader_is_refused_with_its_name() {
+    fn a_custom_forge_profile_is_accepted() {
         let mut blueprint = Blueprint::recommended("F");
         blueprint.kind = ProfileKind::Custom;
         blueprint.components.clear();
         blueprint.loader = Some(Loader::Forge);
-        assert!(blueprint.problems().iter().any(|p| p.contains("Forge")));
+        assert!(
+            !blueprint.problems().iter().any(|p| p.contains("Forge")),
+            "{:?}",
+            blueprint.problems()
+        );
     }
 
     /// A component offered under a loader that cannot load it would be a

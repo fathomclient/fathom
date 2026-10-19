@@ -3449,21 +3449,19 @@ mod tests {
         assert!(launcher.build_launch_plan(&profile, &version).is_err());
     }
 
-    /// Forge, because it is the one that is still genuinely unimplemented.
-    /// This used to use Legacy Fabric, which now launches.
+    /// Forge launches now, so a Forge profile must not be told its loader is
+    /// unimplemented.
     #[test]
-    fn an_unimplemented_loader_blocks_play_and_says_so() {
+    fn a_forge_profile_is_not_blocked_as_unimplemented() {
         let (_tmp, launcher) = launcher();
         let mut profile = Profile::new(ProfileId::new("main").unwrap(), "Main");
         profile.loader.kind = Loader::Forge;
 
         let readiness = launcher.readiness(&profile, None, None);
-        let blocker = readiness
+        assert!(!readiness
             .blockers
             .iter()
-            .find(|b| matches!(b, Blocker::LoaderNotImplemented(_)))
-            .expect("loader blocker");
-        assert!(blocker.message().contains("not implemented"));
+            .any(|b| matches!(b, Blocker::LoaderNotImplemented(_))));
     }
 
     /// The counterpart: an implemented loader must not raise that blocker at

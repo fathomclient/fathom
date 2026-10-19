@@ -80,10 +80,12 @@
     { id: 'updated', label: 'Updated' },
   ];
 
-  const BREADTHS = [
-    { id: 'tagged', label: 'Verified Legacy Fabric' },
+  /* Worded for the profile being browsed: a Forge profile verifies Forge
+     builds, a Legacy Fabric one Legacy Fabric builds. */
+  $: BREADTHS = [
+    { id: 'tagged', label: `Verified ${context?.loader ?? 'loader'}` },
     { id: 'plausible', label: 'Include unverified' },
-    { id: 'any-loader', label: 'All 1.8.9 mods' },
+    { id: 'any-loader', label: `All ${context?.minecraft ?? '1.8.9'} mods` },
   ];
 
   function scroller(): HTMLElement | null {

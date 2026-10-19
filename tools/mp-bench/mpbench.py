@@ -373,7 +373,7 @@ def write_properties():
         "spawn-animals": "false",
         "spawn-npcs": "false",
         "spawn-protection": "0",
-        "max-players": "64",
+        "max-players": "100",
         "view-distance": "8",
         "allow-flight": "true",
         "pvp": "true",
@@ -436,6 +436,13 @@ def arena_commands():
 # ---------------------------------------------------------------------------
 # Scenes
 # ---------------------------------------------------------------------------
+
+# A server hub's hologram: four lines over each NPC.
+HOLOGRAM = [u"\u00a7e\u00a7lCLICK TO PLAY", u"\u00a7bBed Wars \u00a77#%d", u"\u00a77Solo, Doubles, 3v3v3v3",
+            u"\u00a7e1,234 Players"]
+GENERATOR_ITEMS = 40
+DECOR_COUNTS = (40, 24, 16, 12)
+SIGN_NBT = ('Text1:"{\\"text\\":\\"Bed Wars\\"}",Text2:"{\\"text\\":\\"Solo %d\\"}",Text3:"{\\"text\\":\\"%d playing\\"}",Text4:"{\\"text\\":\\"Click to join\\"}"')
 
 SIDEBAR = ["Players:", "Kills:", "Final_Kills:", "Beds:", "Wins:", "Coins:", "Streak:", "Level:", "Map:Lighthouse",
            "Red:", "Blue:", "Green:", "Yellow:", "Event:Reset", "fathom.local"]
@@ -551,6 +558,28 @@ class Director(object):
             for index, bot in enumerate(bots[:10]):
                 plan.append((bot, -10 + (index % 5) * 5, 14 + (index // 5) * 10, "walk",
                              dict(radius=2.0, speed=0.15)))
+        elif scene == "holograms":
+            # A server hub: NPCs standing in two rows, each with a hologram above it.
+            for index, bot in enumerate(bots[:16]):
+                plan.append((bot, -14 + (index % 8) * 4, 10 + (index // 8) * 8, "stand", {}))
+        elif scene == "generators":
+            # A Bed Wars island mid-game: players fighting beside the generators.
+            fighters = bots[:8]
+            for pair in range(4):
+                a, b = fighters[pair * 2], fighters[pair * 2 + 1]
+                x, z = -9 + pair * 6, 18
+                plan.append((a, x - 1.3, z, "fight", dict(speed=0.08, partner=b.name, centre=(x, z))))
+                plan.append((b, x + 1.3, z, "fight", dict(speed=0.08, partner=a.name, centre=(x, z))))
+        elif scene == "tab-big":
+            # A full lobby's tab list: 20 players in view, the other 60 online out of range.
+            for index, bot in enumerate(bots[:80]):
+                if index < 20:
+                    plan.append((bot, -16 + (index % 5) * 8 + random.uniform(-1, 1),
+                                 8 + (index // 5) * 6 + random.uniform(-1, 1), "walk",
+                                 dict(radius=random.uniform(1.5, 3.0), speed=random.uniform(0.1, 0.2))))
+                else:
+                    plan.append((bot, PARK[0] - 15 + (index % 10) * 3, PARK[2] - 15 + (index // 10) * 3,
+                                 "stand", {}))
         return plan
 
     def apply(self, scene):
@@ -570,12 +599,74 @@ class Director(object):
         self.notes = "%d players in view" % len(self.plan)
         if scene in ("combat", "combat-particles"):
             self.notes += ", iron armour + diamond sword, half enchanted"
+        elif scene == "holograms":
+            self.notes += ", %d hologram lines (named invisible armor stands)" % (len(HOLOGRAM) * 16)
+        elif scene == "generators":
+            self.notes += ", %d dropped items on 4 generators" % (GENERATOR_ITEMS * 4)
+        elif scene == "decor":
+            self.notes += ", %d signs, %d skulls, %d banners, %d item frames" % DECOR_COUNTS
+        elif scene == "tab-big":
+            self.notes = "20 players in view, 80 online, tab list held"
         return self.notes
+
+    def clear_props(self):
+        """Remove every prop a scene placed, so no scene measures another's."""
+        self.cmd("kill @e[type=ArmorStand]")
+        self.cmd("kill @e[type=Item]")
+        self.cmd("kill @e[type=ItemFrame]")
+        for y in range(STAND_Y, STAND_Y + 6, 2):
+            self.cmd("fill -30 %d 0 30 %d 40 air" % (y, y + 1))
+
+    def holograms(self):
+        """A hologram stack above each NPC: one named, invisible, marker armor stand per line."""
+        for index in range(16):
+            x = -14 + (index % 8) * 4 + 0.5
+            z = 10 + (index // 8) * 8 + 0.5
+            for line, text in enumerate(HOLOGRAM):
+                y = STAND_Y + 2.6 - line * 0.27
+                name = text % (index + 1) if "%d" in text else text
+                self.cmd('summon ArmorStand %.2f %.2f %.2f {CustomName:"%s",CustomNameVisible:1,Invisible:1,'
+                         'NoGravity:1,Marker:1}' % (x, y, z, name))
+
+    def generators(self):
+        """Piles of dropped items that never merge, despawn or get picked up."""
+        kinds = ["iron_ingot", "gold_ingot", "diamond", "emerald"]
+        # Within vanilla's 16-block item render range (item size x 64), as a player
+        # standing on their island is: further out, items are not drawn at all.
+        for spot, kind in enumerate(kinds):
+            cx, cz = -6 + spot * 4, 3 + (spot % 2) * 2
+            for item in range(GENERATOR_ITEMS):
+                x = cx + (item % 5) * 0.35 - 0.7
+                z = cz + (item // 5 % 5) * 0.35 - 0.7
+                self.cmd('summon Item %.2f %d %.2f {Item:{id:%s,Count:1,tag:{display:{Name:"g%d"}}},'
+                         'PickupDelay:32767,Age:-32768}' % (x, STAND_Y, z, kind, item))
+
+    def decor(self):
+        """Block entities and frames in front of the camera: a server spawn's furniture."""
+        self.cmd("fill -16 %d 30 16 %d 30 stone" % (STAND_Y, STAND_Y + 4))
+        for index in range(40):
+            x, z = -15 + (index % 10) * 3, 6 + (index // 10) * 4
+            self.cmd(('setblock %d %d %d standing_sign 8 replace {' + SIGN_NBT + '}')
+                     % (x, STAND_Y, z, index, index * 7))
+        for index in range(24):
+            x, z = -14 + (index % 12) * 2 + 1, 9 + (index // 12) * 4
+            self.cmd("setblock %d %d %d skull 1 replace {SkullType:%d,Rot:%d}" % (
+                x, STAND_Y, z, [0, 1, 2, 4][index % 4], index % 16))
+        for index in range(16):
+            x = -15 + index * 2
+            self.cmd("setblock %d %d 29 wall_banner 2 replace {Base:%d,Patterns:[{Pattern:cr,Color:15},"
+                     "{Pattern:bo,Color:0},{Pattern:mc,Color:%d}]}" % (x, STAND_Y + 2, index % 16, (index + 5) % 16))
+        items = ["diamond_sword", "compass", "clock", "bow", "golden_apple", "ender_pearl"]
+        for index in range(12):
+            x = -14 + index * 2 + 1
+            self.cmd("summon ItemFrame %d %d 29 {TileX:%d,TileY:%d,TileZ:29,Facing:2,Item:{id:%s,Count:1}}" % (
+                x, STAND_Y + 1, x, STAND_Y + 1, items[index % len(items)]))
 
     def setup(self):
         """Once every bot of the scene is in the world: place, equip, decorate."""
         scene = self.scene
         self.reset_scoreboard()
+        self.clear_props()
         self.cmd("tp %s %.1f %d %.1f %.1f %.1f" % (BENCH_PLAYER, CAMERA[0], STAND_Y, CAMERA[2], CAMERA_YAW,
                                                    CAMERA_PITCH))
         members = []
@@ -613,6 +704,22 @@ class Director(object):
                 self.cmd("scoreboard players set %s tab %d" % (bot.name, random.randint(0, 40)))
         if scene == "chunks":
             self.cmd("fill -20 %d 20 20 %d 40 air" % (STAND_Y, STAND_Y + 6))
+        if scene == "holograms":
+            self.teams(members)
+            self.holograms()
+        if scene == "generators":
+            for bot in members:
+                self.equip(bot, True, "iron_sword", False)
+            self.generators()
+        if scene == "decor":
+            self.decor()
+        if scene == "tab-big":
+            self.teams(members)
+            self.sidebar()
+            self.cmd("scoreboard objectives add tab dummy")
+            self.cmd("scoreboard objectives setdisplay list tab")
+            for bot in members:
+                self.cmd("scoreboard players set %s tab %d" % (bot.name, random.randint(0, 40)))
 
     def step(self):
         """Connections and setup, a few per tick."""
@@ -793,7 +900,7 @@ def main():
     p = sub.add_parser("prepare")
     p.add_argument("--accept-eula", action="store_true")
     s = sub.add_parser("serve")
-    s.add_argument("--bots", type=int, default=40)
+    s.add_argument("--bots", type=int, default=80)
     s.add_argument("--scene-delay", type=float, default=6.0)
     s.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

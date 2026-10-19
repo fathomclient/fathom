@@ -1,0 +1,733 @@
+FATHOM VIEW-DIRECTION FRAME PROFILE
+===================================
+Fathom build: 0.3.0-hud (09ca788cc2f4, built 2026-10-14T01:09:25Z)
+OptiFine active: true; OptiFabric active: true
+GL: NVIDIA GeForce RTX 4060/PCIe/SSE2 / 4.6.0 NVIDIA 617.14 / NVIDIA Corporation
+Display: 1920x1080, fullscreen false, vsync false, maxFps 260 (260 = unlimited), guiScale 2
+Video: renderDistance 8, VBO true (supported true), FBO true, fancy false, smooth lighting 2, mipmaps 4, clouds 1, particles 0, entity shadows true
+OptiFine options: FogType=1 FogStart=0.8 MipmapType=0 OcclusionFancy=false SmoothFps=false SmoothWorld=true LazyChunkLoading=true RenderRegions=true SmartAnimations=false AoLevel=1.0 AaLevel=0 AfLevel=1 Clouds=0 CloudsHeight=0.0 Trees=0 Rain=0 DroppedItems=0 BetterGrass=3 AutoSaveTicks=4000 Lagometer=false Profiler=false ShowFps=false Weather=true Sky=true Stars=true SunMoon=true Vignette=0 ChunkUpdates=1 ChunkUpdatesDynamic=false Time=0 ClearWater=false BetterSnow=false FullscreenMode=Default SwampColors=true RandomEntities=true SmoothBiomes=true CustomFonts=true CustomColors=true CustomSky=true ShowCapes=true ConnectedTextures=2 CustomItems=true NaturalTextures=false EmissiveTextures=true FastMath=false FastRender=false TranslucentBlocks=0 DynamicFov=true AlternateBlocks=true DynamicLights=3 CustomEntityModels=true CustomGuis=true ShowGlErrors=true ScreenshotSize=1 AnimatedWater=0 AnimatedLava=0 AnimatedFire=true AnimatedPortal=true AnimatedRedstone=true AnimatedExplosion=true AnimatedFlame=true AnimatedSmoke=true VoidParticles=true WaterParticles=true RainSplash=true PortalParticles=true PotionParticles=true FireworkParticles=true DrippingWaterLava=true AnimatedTerrain=true AnimatedTextures=true
+OptiFine runtime: FastRender=false RenderRegions=true Vbo=true Shaders=false AnimatedTerrain=true AnimatedTextures=true ConnectedTextures=true DynamicLights=false FogFancy=false FogFast=true FogOff=false TreesFancy=false MultiTexture=false
+Camera: (0.5, 101.0, -4.5) yaw 0.0; save 'mpbench'
+Java 1.8.0_502, heap max 4096 MB, collectors G1 Young Generation/G1 Old Generation, 12 hardware threads
+Method: 3 round(s); per scene per round one 3.0 s window per arm, arm order reversed on alternate rounds; settle >= 1.0 s and 0.5 s without chunk rebuilds/uploads (cap 20 s, hit 0 times); warm-up 2.5 s per scene, not recorded.
+Frames rejected when: a screen open, or the world not loaded. Unfocused frames count (no pause, no frame cap in this mode) and are reported per bucket.
+Scene sp: singleplayer copy of the server world, same camera, nobody else | C: 253/4624 (s) D: 8, pC: 000, pU: 0, aB: 80 | E: 0/1, B: 0, I: 1, OptiFine_1.8.9_HD_U_M5 | particles 0
+Scene mp-empty: connected, same camera, no other player in range | C: 253/4624 (s) D: 8, pC: 000, pU: 0, aB: 80 | E: 0/1, B: 0, I: 1, OptiFine_1.8.9_HD_U_M5 | particles 0 | driver: 0 players in view
+Scene lobby: 40 players walking, sneaking, sprinting and chatting around the camera | C: 253/4624 (s) D: 8, pC: 000, pU: 0, aB: 80 | E: 0/41, B: 0, I: 41, OptiFine_1.8.9_HD_U_M5 | particles 14 | driver: 40 players in view
+Scene combat-particles: the combat scene plus crit, magic-crit and reddust bursts from the server | C: 253/4624 (s) D: 8, pC: 000, pU: 0, aB: 80 | E: 0/21, B: 0, I: 21, OptiFine_1.8.9_HD_U_M5 | particles 823 | driver: 20 players in view, iron armour + diamond sword, half enchanted
+Scene hud-heavy: 40 players; 15-line sidebar updated every tick, tab list held open, chat every 100 ms | C: 253/4624 (s) D: 8, pC: 000, pU: 0, aB: 80 | E: 40/41, B: 0, I: 1, OptiFine_1.8.9_HD_U_M5 | particles 22 | driver: 40 players in view
+Sections never entered in the normal arm (not reached, or the hook did not apply): [CHUNK_COMPILE, ENTITY, ENTITY_ITEM, BLOCK_ENTITY, BLOCK_DAMAGE, FATHOM_GL_STATE, DRAIN]
+World commands: gamerule doDaylightCycle false;time set 6000;weather clear 1000000;difficulty 0;gamerule doMobSpawning false;tp @p 0.5 101 -4.5 0.0 8
+Singleplayer world settled after 15 s (14 s without a hitch, steady frame 0.769 ms).
+Server world: time, weather, spawning and position are set by the scene driver.
+Server world settled after 12 s (12 s without a hitch, steady frame 0.646 ms).
+World commands: gamerule doDaylightCycle false;time set 6000;weather clear 1000000;difficulty 0;gamerule doMobSpawning false;tp @p 0.5 101 -4.5 0.0 8
+Singleplayer world settled after 12 s (12 s without a hitch, steady frame 0.816 ms).
+Vanilla HUD replay: chat: 154963 replayed, 5478 recorded, 5707 live, 0 checked, 0 mismatched; sidebar: 82018 replayed, 1314 recorded, 2100 live, 0 checked, 0 mismatched; tab list: 0 replayed, 0 recorded, 0 live, 0 checked, 0 mismatched; 
+
+Frame time = loop head to loop head, minus the harness. All figures are ms per frame
+unless stated. 'self' excludes nested sections that were timed separately.
+Probe cost (calibrated, best of 5): 54.9 ns per timed enter/exit pair.
+
+SAMPLE VALIDITY
+---------------
+scene        arm           frames rejected unfocused  windows   win CoV GC (n/ms) alloc MB/s
+sp           normal         12156        0         0        3      9.5%    0/0           5.0
+sp           fathom-off     13524        0         0        3      5.8%    0/0           5.2
+mp-empty     normal         12934        0         0        3      2.2%    0/0           5.1
+mp-empty     fathom-off     14125        0         0        3      2.7%    0/0           5.3
+lobby        normal          5957        0         0        3     41.3%    0/0          18.4
+lobby        fathom-off      6069        0         0        3     43.1%    0/0          22.4
+combat-particles normal          5480        0         0        3     41.8%    0/0          32.5
+combat-particles fathom-off      5655        0         0        3     39.9%    0/0          33.6
+hud-heavy    normal          3424        0         0        3      4.2%    0/0          31.9
+hud-heavy    fathom-off      3446        0         0        3      2.5%    0/0          36.7
+
+SCENES (normal arm)
+-------------------
+scene          median     mean      p95      p99      fps   world terrain  entity  partic     HUD  Fathom    swap
+sp              0.624    0.735    1.517    1.923     1361   0.318   0.228   0.005   0.001   0.071   0.038   0.275
+mp-empty        0.544    0.691    1.684    1.982     1447   0.291   0.209   0.005   0.001   0.067   0.037   0.268
+lobby           1.382    1.504    2.780    3.208      665   0.911   0.260   0.523   0.020   0.216   0.047   0.264
+combat-particles    1.529    1.636    3.139    3.767      611   1.160   0.242   0.551   0.266   0.085   0.049   0.253
+hud-heavy       2.624    2.620    3.503    3.988      382   1.536   0.281   1.106   0.023   0.659   0.054   0.276
+
+MULTIPLAYER VS SINGLEPLAYER (normal arm, ms per frame; delta against 'sp')
+--------------------------------------------------------------------------
+scene              median    mean     p95     p99 |   d med  d mean   d p95   d p99 |  plyrs  drawn   tags   pkt/s  B/frame     MB/s   GC/m
+sp                  0.624   0.735   1.517   1.923 |  +0.000  +0.000  +0.000  +0.000 |    0.0    0.0    0.0       1     3859      5.0    0.0
+mp-empty            0.544   0.691   1.684   1.982 |  -0.080  -0.044  +0.167  +0.059 |    0.0    0.0    0.0       1     3736      5.1    0.0
+lobby               1.382   1.504   2.780   3.208 |  +0.758  +0.769  +1.263  +1.285 |   40.0   18.3   10.7     747    29089     18.4    0.0
+combat-particles    1.529   1.636   3.139   3.767 |  +0.904  +0.901  +1.622  +1.845 |   20.0    9.1    4.8     793    55935     32.5    0.0
+hud-heavy           2.624   2.620   3.503   3.988 |  +2.000  +1.886  +1.986  +2.066 |   40.0   40.0   21.3     776    87951     31.9    0.0
+plyrs = other players loaded; drawn = player entities drawn per frame; tags = labels drawn;
+pkt/s = packets applied on the client thread; B/frame and MB/s = client-thread allocation.
+
+WHERE THE MULTIPLAYER TIME GOES (normal arm, mean ms per frame, delta against 'sp')
+-----------------------------------------------------------------------------------
+section (total time)                               sp  mp-empty     lobby combat-pa hud-heavy
+scheduled tasks (network packets)              0.0000   -0.0000   +0.0025   +0.0095   +0.0071
+client tick (simulation)                       0.0049   +0.0002   +0.0171   +0.0425   +0.0298
+tick: entities + block entities                0.0008   +0.0001   +0.0049   +0.0025   +0.0079
+tick: other players                            0.0000   +0.0000   +0.0033   +0.0012   +0.0050
+tick: particles                                0.0000   -0.0000   +0.0008   +0.0310   +0.0016
+terrain: visibility (setupTerrain)             0.0082   -0.0009   +0.0035   +0.0021   +0.0067
+terrain: chunk rebuild scheduling + upload     0.0005   -0.0002   -0.0000   -0.0000   +0.0001
+entities + block entities                      0.0047   +0.0006   +0.5182   +0.5458   +1.1017
+Fathom entity limits (shouldRender hook)       0.0002   -0.0000   +0.0015   +0.0009   +0.0035
+player entity draws                            0.0000   +0.0000   +0.4930   +0.5330   +1.0486
+living: body model + skin                      0.0000   +0.0000   +0.1936   +0.0969   +0.4197
+living: feature layers                         0.0000   +0.0000   +0.1253   +0.3275   +0.2700
+layer: armor (+ glint)                         0.0000   +0.0000   +0.0012   +0.1906   +0.0036
+layer: held item                               0.0000   +0.0000   +0.0944   +0.0969   +0.2031
+layer: cape                                    0.0000   +0.0000   +0.0031   +0.0025   +0.0069
+shadow + fire                                  0.0000   +0.0000   +0.0155   +0.0158   +0.0323
+nametag: visibility + display name + score     0.0000   +0.0000   +0.1274   +0.0648   +0.2615
+nametags                                       0.0000   +0.0000   +0.0708   +0.0319   +0.1425
+item entity draws                              0.0000   +0.0000   +0.0000   +0.0000   +0.0000
+entity draws (not players or items)            0.0000   +0.0000   +0.0000   +0.0000   +0.0000
+particles                                      0.0010   -0.0001   +0.0187   +0.2646   +0.0223
+HUD (vanilla + Fathom)                         0.0705   -0.0038   +0.1450   +0.0146   +0.5880
+HUD: scoreboard sidebar                        0.0000   +0.0000   +0.0648   +0.0000   +0.0765
+HUD: tab list                                  0.0000   +0.0000   +0.0000   +0.0000   +0.4035
+HUD: chat                                      0.0005   +0.0004   +0.0628   +0.0008   +0.0760
+HUD: hotbar + items                            0.0050   -0.0006   +0.0009   +0.0004   +0.0013
+Fathom HUD                                     0.0364   -0.0008   +0.0079   +0.0104   +0.0146
+text drawing (TextRenderer.draw, all callers)   0.0003   +0.0000   +0.0353   +0.0131   +0.3245
+buffer swap (Display.update)                   0.2747   -0.0065   -0.0110   -0.0214   +0.0012
+frame (mean)                                   0.7349   -0.0437   +0.7688   +0.9008   +1.8855
+Rows nest (players inside entities, layers inside players) and TEXT overlaps the HUD and
+nametags, so the rows do not add up to the frame. The frame row is the real delta.
+
+ARMS: DISTRIBUTION AND PAIRED DIFFERENCE (ms per frame)
+--------------------------------------------------------
+Windows of the same round are paired: an arm and the normal arm measured back to back in the
+same scene. 'paired' = median over rounds of (arm window mean - normal window mean);
+'wins' = rounds in which the arm was faster than normal.
+scene             arm                                 median    mean     p95     p99    d med   d mean    d p95    d p99   paired  wins
+sp                normal                               0.624   0.735   1.517   1.923                                                   
+sp                fathom-off                           0.560   0.661   1.423   1.728   -0.064   -0.074   -0.094   -0.195   -0.086   3/3
+mp-empty          normal                               0.544   0.691   1.684   1.982                                                   
+mp-empty          fathom-off                           0.492   0.633   1.633   2.007   -0.051   -0.058   -0.051   +0.026   -0.067   3/3
+lobby             normal                               1.382   1.504   2.780   3.208                                                   
+lobby             fathom-off                           1.364   1.476   2.767   3.424   -0.018   -0.028   -0.013   +0.216   -0.033   2/3
+combat-particles  normal                               1.529   1.636   3.139   3.767                                                   
+combat-particles  fathom-off                           1.599   1.585   3.006   3.639   +0.070   -0.051   -0.133   -0.128   -0.133   3/3
+hud-heavy         normal                               2.624   2.620   3.503   3.988                                                   
+hud-heavy         fathom-off                           2.577   2.604   3.487   3.949   -0.047   -0.017   -0.016   -0.039   +0.008   1/3
+
+VIEW COMPARISON (normal arm, mean ms per frame)
+-----------------------------------------------
+sp:
+  Total:                         0.7349 ms
+  Simulation (tick + tasks):     0.0049 ms
+  World render:                  0.3185 ms
+    Terrain:                     0.2281 ms
+    Sky + clouds:                0.0267 ms
+    Entities:                    0.0047 ms
+    Particles:                   0.0010 ms
+    Hand:                        0.0126 ms
+  HUD (vanilla):                 0.0341 ms
+  Fathom:                        0.0384 ms
+  Blit + swap + glGetError:      0.2835 ms
+  Untimed:                       0.0010 ms
+
+mp-empty:
+  Total:                         0.6912 ms
+  Simulation (tick + tasks):     0.0051 ms
+  World render:                  0.2911 ms
+    Terrain:                     0.2090 ms
+    Sky + clouds:                0.0237 ms
+    Entities:                    0.0053 ms
+    Particles:                   0.0010 ms
+    Hand:                        0.0116 ms
+  HUD (vanilla):                 0.0311 ms
+  Fathom:                        0.0372 ms
+  Blit + swap + glGetError:      0.2760 ms
+  Untimed:                       0.0005 ms
+
+lobby:
+  Total:                         1.5036 ms
+  Simulation (tick + tasks):     0.0245 ms
+  World render:                  0.9113 ms
+    Terrain:                     0.2597 ms
+    Sky + clouds:                0.0325 ms
+    Entities:                    0.5229 ms
+    Particles:                   0.0197 ms
+    Hand:                        0.0147 ms
+  HUD (vanilla):                 0.1712 ms
+  Fathom:                        0.0469 ms
+  Blit + swap + glGetError:      0.2770 ms
+  Untimed:                       0.0006 ms
+
+combat-particles:
+  Total:                         1.6357 ms
+  Simulation (tick + tasks):     0.0569 ms
+  World render:                  1.1596 ms
+    Terrain:                     0.2416 ms
+    Sky + clouds:                0.0294 ms
+    Entities:                    0.5505 ms
+    Particles:                   0.2657 ms
+    Hand:                        0.0150 ms
+  HUD (vanilla):                 0.0383 ms
+  Fathom:                        0.0491 ms
+  Blit + swap + glGetError:      0.2641 ms
+  Untimed:                       0.0006 ms
+
+hud-heavy:
+  Total:                         2.6204 ms
+  Simulation (tick + tasks):     0.0417 ms
+  World render:                  1.5364 ms
+    Terrain:                     0.2813 ms
+    Sky + clouds:                0.0370 ms
+    Entities:                    1.1065 ms
+    Particles:                   0.0234 ms
+    Hand:                        0.0145 ms
+  HUD (vanilla):                 0.6075 ms
+  Fathom:                        0.0542 ms
+  Blit + swap + glGetError:      0.2925 ms
+  Untimed:                       0.0008 ms
+
+BREAKDOWN: sp  (mean frame 0.735 ms, 12156 frames)
+  section                                           total     self self p50 self p95  calls/f %frame  owner
+  game loop                                        0.7328   0.0470   0.0440   0.0758     1.00   6.4%  vanilla
+    scheduled tasks (network packets)              0.0000   0.0000   0.0115   0.0881     0.00   0.0%  vanilla
+    client tick (simulation)                       0.0049   0.0003   0.0146   0.0338     0.01   0.0%  vanilla
+      tick: entities + block entities              0.0008   0.0008   0.0543   0.1044     0.01   0.1%  vanilla
+      tick: world (chunk unload, weather)          0.0009   0.0009   0.0584   0.0963     0.01   0.1%  vanilla
+      tick: random block display ticks             0.0014   0.0014   0.0922   0.1167     0.01   0.2%  vanilla
+      tick: particles                              0.0000   0.0000   0.0016   0.0047     0.01   0.0%  vanilla
+      tick: connection                             0.0002   0.0002   0.0131   0.0179     0.01   0.0%  vanilla
+      tick: animated textures                      0.0011   0.0011   0.0717   0.1126     0.01   0.2%  vanilla, OptiFine-patched
+      tick: game + world renderer                  0.0001   0.0001   0.0063   0.0210     0.03   0.0%  vanilla
+    render                                         0.3942   0.0052   0.0047   0.0084     1.00   0.7%  vanilla
+      world                                        0.3185   0.0421   0.0379   0.0717     1.00   5.7%  vanilla, OptiFine-patched
+        camera info (glGet x3 + unproject)         0.0024   0.0024   0.0021   0.0042     1.00   0.3%  vanilla
+        frustum setup (glGet x2)                   0.0005   0.0005   0.0004   0.0008     1.00   0.1%  vanilla
+        sky                                        0.0209   0.0209   0.0179   0.0358     1.00   2.8%  vanilla, OptiFine-patched
+        clouds                                     0.0058   0.0058   0.0050   0.0090     1.00   0.8%  vanilla, OptiFine-patched
+        terrain: visibility (setupTerrain)         0.0082   0.0082   0.0065   0.0161     1.00   1.1%  vanilla, OptiFine-patched
+        terrain: chunk rebuild scheduling + upload   0.0005   0.0003   0.0002   0.0008     1.00   0.0%  vanilla, OptiFine-patched
+          terrain: buffer upload                   0.0002   0.0002   0.0002   0.0004     1.00   0.0%  vanilla, OptiFine-patched
+        terrain: solid layer                       0.1160   0.1160   0.1004   0.1679     1.00  15.8%  vanilla, OptiFine-patched
+        terrain: cutout-mipped layer               0.0691   0.0691   0.0584   0.1044     1.00   9.4%  vanilla, OptiFine-patched
+        terrain: cutout layer                      0.0018   0.0018   0.0012   0.0042     1.00   0.2%  vanilla, OptiFine-patched
+        terrain: translucent layer                 0.0326   0.0326   0.0271   0.0481     1.00   4.4%  vanilla, OptiFine-patched
+        entities + block entities                  0.0047   0.0045   0.0040   0.0073     1.00   0.6%  vanilla, OptiFine-patched
+          Fathom entity limits (shouldRender hook)   0.0002   0.0002   0.0002   0.0005     1.00   0.0%  Fathom
+        selection box                              0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla
+        particles                                  0.0010   0.0010   0.0009   0.0017     2.00   0.1%  vanilla, OptiFine-patched
+        weather                                    0.0001   0.0001   0.0000   0.0001     1.00   0.0%  vanilla, OptiFine-patched
+        world border                               0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla
+        hand / held item                           0.0126   0.0126   0.0110   0.0200     1.00   1.7%  vanilla, OptiFine-patched
+  text drawing (TextRenderer.draw, all callers)    0.0003   0.0003   0.0156   0.0230     0.03   0.0%  vanilla, OptiFine-patched
+      HUD (vanilla + Fathom)                       0.0705   0.0119   0.0105   0.0189     1.00   1.6%  vanilla
+        HUD: hotbar + items                        0.0050   0.0050   0.0042   0.0081     1.00   0.7%  vanilla
+        HUD: health, food, armour bars             0.0168   0.0168   0.0136   0.0271     1.00   2.3%  vanilla
+        HUD: chat                                  0.0005   0.0005   0.0002   0.0017     1.00   0.1%  vanilla
+        Fathom HUD                                 0.0364   0.0048   0.0042   0.0081     1.00   0.6%  Fathom
+          Fathom HUD: deciding what to draw        0.0050   0.0050   0.0042   0.0090     1.00   0.7%  Fathom
+          Fathom HUD: cached layer                 0.0084   0.0082   0.0070   0.0125     1.00   1.1%  Fathom
+          Fathom HUD: live widgets                 0.0181   0.0181   0.0161   0.0261     1.00   2.5%  Fathom
+          Fathom HUD: Fathom-renderer widgets      0.0001   0.0001   0.0001   0.0002     1.00   0.0%  Fathom
+    framebuffer blit to window                     0.0080   0.0080   0.0068   0.0131     1.00   1.1%  vanilla
+    glGetError checks                              0.0007   0.0007   0.0006   0.0012     2.00   0.1%  vanilla
+    Thread.yield after the swap                    0.0015   0.0015   0.0009   0.0018     1.00   0.2%  vanilla
+    Fathom frame-cap hook                          0.0009   0.0009   0.0007   0.0016     1.00   0.1%  Fathom
+    buffer swap (Display.update)                   0.2747   0.2747   0.1679   1.0813     1.00  37.4%  driver / GPU wait
+    Fathom frame hooks                             0.0009   0.0009   0.0008   0.0015     1.00   0.1%  Fathom
+  between frames (Fathom post-frame)               0.0068   0.0011   0.0009   0.0020     1.00   0.1%  Fathom
+  untimed (between timed sections)                          0.0010
+
+BREAKDOWN: mp-empty  (mean frame 0.691 ms, 12934 frames)
+  section                                           total     self self p50 self p95  calls/f %frame  owner
+  game loop                                        0.6899   0.0439   0.0379   0.0676     1.00   6.4%  vanilla
+    scheduled tasks (network packets)              0.0000   0.0000   0.0100   0.0502     0.00   0.0%  vanilla
+    client tick (simulation)                       0.0050   0.0002   0.0110   0.0200     0.01   0.0%  vanilla
+      tick: entities + block entities              0.0009   0.0009   0.0563   0.1044     0.01   0.1%  vanilla
+      tick: world (chunk unload, weather)          0.0007   0.0007   0.0522   0.0758     0.01   0.1%  vanilla
+      tick: random block display ticks             0.0013   0.0013   0.0881   0.1085     0.01   0.2%  vanilla
+      tick: particles                              0.0000   0.0000   0.0007   0.0015     0.01   0.0%  vanilla
+      tick: connection                             0.0009   0.0009   0.0625   0.0881     0.01   0.1%  vanilla
+      tick: animated textures                      0.0010   0.0010   0.0676   0.1044     0.01   0.1%  vanilla, OptiFine-patched
+      tick: game + world renderer                  0.0001   0.0001   0.0050   0.0081     0.03   0.0%  vanilla
+    render                                         0.3623   0.0045   0.0040   0.0070     1.00   0.6%  vanilla
+      world                                        0.2911   0.0377   0.0323   0.0625     1.00   5.5%  vanilla, OptiFine-patched
+        camera info (glGet x3 + unproject)         0.0021   0.0021   0.0018   0.0036     1.00   0.3%  vanilla
+        frustum setup (glGet x2)                   0.0005   0.0005   0.0004   0.0007     1.00   0.1%  vanilla
+        sky                                        0.0185   0.0185   0.0156   0.0312     1.00   2.7%  vanilla, OptiFine-patched
+        clouds                                     0.0052   0.0052   0.0045   0.0081     1.00   0.8%  vanilla, OptiFine-patched
+        terrain: visibility (setupTerrain)         0.0073   0.0073   0.0055   0.0141     1.00   1.1%  vanilla, OptiFine-patched
+        terrain: chunk rebuild scheduling + upload   0.0003   0.0001   0.0001   0.0003     1.00   0.0%  vanilla, OptiFine-patched
+          terrain: buffer upload                   0.0002   0.0002   0.0002   0.0003     1.00   0.0%  vanilla, OptiFine-patched
+        terrain: solid layer                       0.1061   0.1061   0.0922   0.1597     1.00  15.4%  vanilla, OptiFine-patched
+        terrain: cutout-mipped layer               0.0637   0.0637   0.0563   0.0922     1.00   9.2%  vanilla, OptiFine-patched
+        terrain: cutout layer                      0.0014   0.0014   0.0011   0.0026     1.00   0.2%  vanilla, OptiFine-patched
+        terrain: translucent layer                 0.0302   0.0302   0.0271   0.0461     1.00   4.4%  vanilla, OptiFine-patched
+        entities + block entities                  0.0053   0.0051   0.0045   0.0090     1.00   0.7%  vanilla, OptiFine-patched
+          Fathom entity limits (shouldRender hook)   0.0002   0.0002   0.0002   0.0004     1.00   0.0%  Fathom
+        selection box                              0.0001   0.0001   0.0001   0.0001     1.00   0.0%  vanilla
+        particles                                  0.0010   0.0010   0.0009   0.0015     2.00   0.1%  vanilla, OptiFine-patched
+        weather                                    0.0000   0.0000   0.0000   0.0001     1.00   0.0%  vanilla, OptiFine-patched
+        world border                               0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla
+        hand / held item                           0.0116   0.0116   0.0100   0.0179     1.00   1.7%  vanilla, OptiFine-patched
+  text drawing (TextRenderer.draw, all callers)    0.0003   0.0003   0.0169   0.0261     0.04   0.0%  vanilla, OptiFine-patched
+      HUD (vanilla + Fathom)                       0.0668   0.0105   0.0090   0.0169     1.00   1.5%  vanilla
+        HUD: hotbar + items                        0.0044   0.0044   0.0036   0.0070     1.00   0.6%  vanilla
+        HUD: health, food, armour bars             0.0153   0.0153   0.0131   0.0251     1.00   2.2%  vanilla
+        HUD: chat                                  0.0009   0.0009   0.0008   0.0017     1.00   0.1%  vanilla
+        Fathom HUD                                 0.0357   0.0056   0.0047   0.0090     1.00   0.8%  Fathom
+          Fathom HUD: deciding what to draw        0.0049   0.0049   0.0042   0.0084     1.00   0.7%  Fathom
+          Fathom HUD: cached layer                 0.0087   0.0084   0.0070   0.0131     1.00   1.2%  Fathom
+          Fathom HUD: live widgets                 0.0165   0.0165   0.0146   0.0230     1.00   2.4%  Fathom
+          Fathom HUD: Fathom-renderer widgets      0.0001   0.0001   0.0001   0.0002     1.00   0.0%  Fathom
+    framebuffer blit to window                     0.0071   0.0071   0.0063   0.0115     1.00   1.0%  vanilla
+    glGetError checks                              0.0006   0.0006   0.0006   0.0011     2.00   0.1%  vanilla
+    Thread.yield after the swap                    0.0011   0.0011   0.0008   0.0015     1.00   0.2%  vanilla
+    Fathom frame-cap hook                          0.0008   0.0008   0.0007   0.0014     1.00   0.1%  Fathom
+    buffer swap (Display.update)                   0.2682   0.2682   0.1434   1.2780     1.00  38.8%  driver / GPU wait
+    Fathom frame hooks                             0.0008   0.0008   0.0007   0.0013     1.00   0.1%  Fathom
+  between frames (Fathom post-frame)               0.0039   0.0008   0.0007   0.0013     1.00   0.1%  Fathom
+  untimed (between timed sections)                          0.0005
+
+BREAKDOWN: lobby  (mean frame 1.504 ms, 5957 frames)
+  section                                           total     self self p50 self p95  calls/f %frame  owner
+  game loop                                        1.5017   0.0620   0.0604   0.0922     1.00   4.1%  vanilla
+    scheduled tasks (network packets)              0.0025   0.0025   0.0022   0.0058     1.12   0.2%  vanilla
+    client tick (simulation)                       0.0220   0.0008   0.0251   0.0440     0.03   0.1%  vanilla
+      tick: entities + block entities              0.0057   0.0024   0.0799   0.1044     0.03   0.2%  vanilla
+        tick: other players                        0.0033   0.0033   0.1085   0.1516     1.21   0.2%  vanilla
+      tick: world (chunk unload, weather)          0.0077   0.0077   0.2499   0.3523     0.03   0.5%  vanilla
+      tick: random block display ticks             0.0028   0.0028   0.0922   0.1085     0.03   0.2%  vanilla
+      tick: particles                              0.0009   0.0009   0.0241   0.0481     0.03   0.1%  vanilla
+      tick: connection                             0.0016   0.0016   0.0461   0.0840     0.03   0.1%  vanilla
+      tick: animated textures                      0.0023   0.0023   0.0717   0.1044     0.03   0.2%  vanilla, OptiFine-patched
+      tick: game + world renderer                  0.0002   0.0002   0.0050   0.0084     0.06   0.0%  vanilla
+    render                                         1.1338   0.0070   0.0068   0.0105     1.00   0.5%  vanilla
+      world                                        0.9113   0.0573   0.0543   0.0881     1.00   3.8%  vanilla, OptiFine-patched
+        camera info (glGet x3 + unproject)         0.0034   0.0034   0.0033   0.0058     1.00   0.2%  vanilla
+        frustum setup (glGet x2)                   0.0007   0.0007   0.0006   0.0011     1.00   0.0%  vanilla
+        sky                                        0.0250   0.0250   0.0241   0.0379     1.00   1.7%  vanilla, OptiFine-patched
+        clouds                                     0.0075   0.0075   0.0068   0.0105     1.00   0.5%  vanilla, OptiFine-patched
+        terrain: visibility (setupTerrain)         0.0116   0.0116   0.0105   0.0200     1.00   0.8%  vanilla, OptiFine-patched
+        terrain: chunk rebuild scheduling + upload   0.0005   0.0002   0.0002   0.0004     1.00   0.0%  vanilla, OptiFine-patched
+          terrain: buffer upload                   0.0003   0.0003   0.0003   0.0005     1.00   0.0%  vanilla, OptiFine-patched
+        terrain: solid layer                       0.1299   0.1299   0.1249   0.1843     1.00   8.6%  vanilla, OptiFine-patched
+        terrain: cutout-mipped layer               0.0763   0.0763   0.0717   0.1085     1.00   5.1%  vanilla, OptiFine-patched
+        terrain: cutout layer                      0.0020   0.0020   0.0015   0.0042     1.00   0.1%  vanilla, OptiFine-patched
+        terrain: translucent layer                 0.0395   0.0395   0.0379   0.0625     1.00   2.6%  vanilla, OptiFine-patched
+        entities + block entities                  0.5229   0.0281   0.0073   0.0717     1.00   1.9%  vanilla, OptiFine-patched
+          Fathom entity limits (shouldRender hook)   0.0018   0.0018   0.0004   0.0042    19.34   0.1%  Fathom
+          player entity draws                      0.4930   0.0313   0.0676   0.0963    18.34   2.1%  vanilla, OptiFine-patched
+            living: body model + skin              0.1936   0.1936   0.4178   0.5734    18.34  12.9%  vanilla, OptiFine-patched
+            living: feature layers                 0.1253   0.0266   0.0563   0.0840    18.34   1.8%  vanilla, OptiFine-patched
+              layer: armor (+ glint)               0.0012   0.0012   0.0024   0.0036    18.34   0.1%  vanilla, OptiFine-patched
+              layer: held item                     0.0944   0.0944   0.2007   0.3031    18.34   6.3%  vanilla
+              layer: cape                          0.0031   0.0031   0.0065   0.0084    18.34   0.2%  vanilla, OptiFine-patched
+            shadow + fire                          0.0155   0.0155   0.0323   0.0502    18.34   1.0%  vanilla, OptiFine-patched
+            nametag: visibility + display name + score   0.1274   0.0312   0.0676   0.0963    18.34   2.1%  vanilla, OptiFine-patched
+              nametags                             0.0708   0.0708   0.1516   0.2253    10.75   4.7%  vanilla or Fathom path
+        selection box                              0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla
+        particles                                  0.0197   0.0197   0.0179   0.0338     2.00   1.3%  vanilla, OptiFine-patched
+        weather                                    0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla, OptiFine-patched
+        world border                               0.0002   0.0002   0.0001   0.0003     1.00   0.0%  vanilla
+        hand / held item                           0.0147   0.0147   0.0136   0.0220     1.00   1.0%  vanilla, OptiFine-patched
+  text drawing (TextRenderer.draw, all callers)    0.0356   0.0356   0.0563   0.1925     6.95   2.4%  vanilla, OptiFine-patched
+      HUD (vanilla + Fathom)                       0.2156   0.0172   0.0146   0.0302     1.00   1.1%  vanilla
+        HUD: hotbar + items                        0.0058   0.0058   0.0055   0.0090     1.00   0.4%  vanilla
+        HUD: health, food, armour bars             0.0200   0.0200   0.0179   0.0282     1.00   1.3%  vanilla
+        HUD: scoreboard sidebar                    0.0648   0.0647   0.0604   0.0881     1.00   4.3%  vanilla, OptiFine-patched
+        HUD: chat                                  0.0633   0.0539   0.0522   0.0840     1.00   3.6%  vanilla
+        Fathom HUD                                 0.0444   0.0089   0.0084   0.0136     1.00   0.6%  Fathom
+          Fathom HUD: deciding what to draw        0.0086   0.0086   0.0081   0.0136     1.00   0.6%  Fathom
+          Fathom HUD: cached layer                 0.0078   0.0073   0.0060   0.0115     1.00   0.5%  Fathom
+          Fathom HUD: live widgets                 0.0190   0.0190   0.0179   0.0261     1.00   1.3%  Fathom
+          Fathom HUD: Fathom-renderer widgets      0.0001   0.0001   0.0001   0.0003     1.00   0.0%  Fathom
+    framebuffer blit to window                     0.0123   0.0123   0.0115   0.0210     1.00   0.8%  vanilla
+    glGetError checks                              0.0010   0.0010   0.0008   0.0016     2.00   0.1%  vanilla
+    Thread.yield after the swap                    0.0019   0.0019   0.0013   0.0022     1.00   0.1%  vanilla
+    Fathom frame-cap hook                          0.0013   0.0013   0.0012   0.0021     1.00   0.1%  Fathom
+    buffer swap (Display.update)                   0.2637   0.2637   0.2335   0.4833     1.00  17.5%  driver / GPU wait
+    Fathom frame hooks                             0.0012   0.0012   0.0012   0.0019     1.00   0.1%  Fathom
+  between frames (Fathom post-frame)               0.0057   0.0013   0.0012   0.0022     1.00   0.1%  Fathom
+  untimed (between timed sections)                          0.0006
+
+BREAKDOWN: combat-particles  (mean frame 1.636 ms, 5480 frames)
+  section                                           total     self self p50 self p95  calls/f %frame  owner
+  game loop                                        1.6338   0.0569   0.0543   0.0881     1.00   3.5%  vanilla
+    scheduled tasks (network packets)              0.0095   0.0095   0.0038   0.1679     1.30   0.6%  vanilla
+    client tick (simulation)                       0.0474   0.0013   0.0379   0.0543     0.03   0.1%  vanilla
+      tick: entities + block entities              0.0033   0.0021   0.0604   0.0922     0.03   0.1%  vanilla
+        tick: other players                        0.0012   0.0012   0.0338   0.0481     0.66   0.1%  vanilla
+      tick: world (chunk unload, weather)          0.0043   0.0043   0.1249   0.1761     0.03   0.3%  vanilla
+      tick: random block display ticks             0.0029   0.0029   0.0840   0.1044     0.03   0.2%  vanilla
+      tick: particles                              0.0310   0.0310   0.8684   1.3435     0.03   1.9%  vanilla
+      tick: connection                             0.0022   0.0022   0.0645   0.0922     0.03   0.1%  vanilla
+      tick: animated textures                      0.0023   0.0023   0.0645   0.1085     0.03   0.1%  vanilla, OptiFine-patched
+      tick: game + world renderer                  0.0002   0.0002   0.0050   0.0084     0.07   0.0%  vanilla
+    render                                         1.2514   0.0067   0.0065   0.0100     1.00   0.4%  vanilla
+      world                                        1.1596   0.0530   0.0502   0.0840     1.00   3.2%  vanilla, OptiFine-patched
+        camera info (glGet x3 + unproject)         0.0033   0.0033   0.0030   0.0055     1.00   0.2%  vanilla
+        frustum setup (glGet x2)                   0.0006   0.0006   0.0006   0.0011     1.00   0.0%  vanilla
+        sky                                        0.0225   0.0225   0.0210   0.0338     1.00   1.4%  vanilla, OptiFine-patched
+        clouds                                     0.0068   0.0068   0.0063   0.0100     1.00   0.4%  vanilla, OptiFine-patched
+        terrain: visibility (setupTerrain)         0.0103   0.0103   0.0095   0.0189     1.00   0.6%  vanilla, OptiFine-patched
+        terrain: chunk rebuild scheduling + upload   0.0004   0.0002   0.0002   0.0004     1.00   0.0%  vanilla, OptiFine-patched
+          terrain: buffer upload                   0.0003   0.0003   0.0002   0.0004     1.00   0.0%  vanilla, OptiFine-patched
+        terrain: solid layer                       0.1180   0.1180   0.1044   0.1761     1.00   7.2%  vanilla, OptiFine-patched
+        terrain: cutout-mipped layer               0.0694   0.0694   0.0584   0.1044     1.00   4.2%  vanilla, OptiFine-patched
+        terrain: cutout layer                      0.0016   0.0016   0.0011   0.0035     1.00   0.1%  vanilla, OptiFine-patched
+        terrain: translucent layer                 0.0418   0.0418   0.0379   0.0676     1.00   2.6%  vanilla, OptiFine-patched
+        entities + block entities                  0.5505   0.0164   0.0068   0.0420     1.00   1.0%  vanilla, OptiFine-patched
+          Fathom entity limits (shouldRender hook)   0.0011   0.0011   0.0004   0.0028    10.10   0.1%  Fathom
+          player entity draws                      0.5330   0.0280   0.0563   0.0881     9.10   1.7%  vanilla, OptiFine-patched
+            living: body model + skin              0.0969   0.0969   0.1925   0.3031     9.10   5.9%  vanilla, OptiFine-patched
+            living: feature layers                 0.3275   0.0375   0.0758   0.1208     9.10   2.3%  vanilla, OptiFine-patched
+              layer: armor (+ glint)               0.1906   0.1906   0.3850   0.5734     9.10  11.7%  vanilla, OptiFine-patched
+              layer: held item                     0.0969   0.0969   0.1843   0.3195     9.10   5.9%  vanilla
+              layer: cape                          0.0025   0.0025   0.0050   0.0078     9.10   0.2%  vanilla, OptiFine-patched
+            shadow + fire                          0.0158   0.0158   0.0312   0.0543     9.10   1.0%  vanilla, OptiFine-patched
+            nametag: visibility + display name + score   0.0648   0.0201   0.0399   0.0717     9.10   1.2%  vanilla, OptiFine-patched
+              nametags                             0.0319   0.0319   0.0625   0.1126     4.78   2.0%  vanilla or Fathom path
+        selection box                              0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla
+        particles                                  0.2657   0.2657   0.2499   0.4014     2.00  16.2%  vanilla, OptiFine-patched
+        weather                                    0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla, OptiFine-patched
+        world border                               0.0002   0.0002   0.0002   0.0004     1.00   0.0%  vanilla
+        hand / held item                           0.0150   0.0150   0.0131   0.0230     1.00   0.9%  vanilla, OptiFine-patched
+  text drawing (TextRenderer.draw, all callers)    0.0134   0.0134   0.0261   0.0461     4.42   0.8%  vanilla, OptiFine-patched
+      HUD (vanilla + Fathom)                       0.0851   0.0140   0.0131   0.0210     1.00   0.9%  vanilla
+        HUD: hotbar + items                        0.0054   0.0054   0.0047   0.0084     1.00   0.3%  vanilla
+        HUD: health, food, armour bars             0.0178   0.0178   0.0146   0.0271     1.00   1.1%  vanilla
+        HUD: chat                                  0.0013   0.0013   0.0012   0.0022     1.00   0.1%  vanilla
+        Fathom HUD                                 0.0468   0.0084   0.0081   0.0131     1.00   0.5%  Fathom
+          Fathom HUD: deciding what to draw        0.0081   0.0081   0.0081   0.0131     1.00   0.5%  Fathom
+          Fathom HUD: cached layer                 0.0103   0.0097   0.0078   0.0179     1.00   0.6%  Fathom
+          Fathom HUD: live widgets                 0.0198   0.0198   0.0179   0.0282     1.00   1.2%  Fathom
+          Fathom HUD: Fathom-renderer widgets      0.0001   0.0001   0.0001   0.0003     1.00   0.0%  Fathom
+    framebuffer blit to window                     0.0099   0.0099   0.0090   0.0169     1.00   0.6%  vanilla
+    glGetError checks                              0.0008   0.0008   0.0007   0.0016     2.00   0.1%  vanilla
+    Thread.yield after the swap                    0.0022   0.0022   0.0013   0.0021     1.00   0.1%  vanilla
+    Fathom frame-cap hook                          0.0012   0.0012   0.0011   0.0020     1.00   0.1%  Fathom
+    buffer swap (Display.update)                   0.2533   0.2533   0.2171   0.4997     1.00  15.5%  driver / GPU wait
+    Fathom frame hooks                             0.0011   0.0011   0.0010   0.0017     1.00   0.1%  Fathom
+  between frames (Fathom post-frame)               0.0120   0.0012   0.0011   0.0021     1.00   0.1%  Fathom
+  untimed (between timed sections)                          0.0006
+
+BREAKDOWN: hud-heavy  (mean frame 2.620 ms, 3424 frames)
+  section                                           total     self self p50 self p95  calls/f %frame  owner
+  game loop                                        2.6179   0.0747   0.0758   0.1004     1.00   2.8%  vanilla
+    scheduled tasks (network packets)              0.0071   0.0071   0.0031   0.0543     2.03   0.3%  vanilla
+    client tick (simulation)                       0.0347   0.0014   0.0230   0.0420     0.05   0.1%  vanilla
+      tick: entities + block entities              0.0087   0.0038   0.0676   0.1004     0.05   0.1%  vanilla
+        tick: other players                        0.0050   0.0050   0.0922   0.1352     2.10   0.2%  vanilla
+      tick: world (chunk unload, weather)          0.0112   0.0112   0.2007   0.2867     0.05   0.4%  vanilla
+      tick: random block display ticks             0.0049   0.0049   0.0881   0.1085     0.05   0.2%  vanilla
+      tick: particles                              0.0017   0.0017   0.0282   0.0676     0.05   0.1%  vanilla
+      tick: connection                             0.0026   0.0026   0.0440   0.0758     0.05   0.1%  vanilla
+      tick: animated textures                      0.0040   0.0040   0.0717   0.1044     0.05   0.2%  vanilla, OptiFine-patched
+      tick: game + world renderer                  0.0003   0.0003   0.0055   0.0090     0.11   0.0%  vanilla
+    render                                         2.2037   0.0088   0.0084   0.0115     1.00   0.3%  vanilla
+      world                                        1.5364   0.0682   0.0676   0.1004     1.00   2.6%  vanilla, OptiFine-patched
+        camera info (glGet x3 + unproject)         0.0042   0.0042   0.0040   0.0063     1.00   0.2%  vanilla
+        frustum setup (glGet x2)                   0.0008   0.0008   0.0008   0.0013     1.00   0.0%  vanilla
+        sky                                        0.0281   0.0281   0.0271   0.0399     1.00   1.1%  vanilla, OptiFine-patched
+        clouds                                     0.0089   0.0089   0.0081   0.0120     1.00   0.3%  vanilla, OptiFine-patched
+        terrain: visibility (setupTerrain)         0.0149   0.0149   0.0141   0.0241     1.00   0.6%  vanilla, OptiFine-patched
+        terrain: chunk rebuild scheduling + upload   0.0006   0.0002   0.0002   0.0004     1.00   0.0%  vanilla, OptiFine-patched
+          terrain: buffer upload                   0.0003   0.0003   0.0003   0.0005     1.00   0.0%  vanilla, OptiFine-patched
+        terrain: solid layer                       0.1385   0.1385   0.1352   0.2007     1.00   5.3%  vanilla, OptiFine-patched
+        terrain: cutout-mipped layer               0.0782   0.0782   0.0717   0.1126     1.00   3.0%  vanilla, OptiFine-patched
+        terrain: cutout layer                      0.0022   0.0022   0.0016   0.0047     1.00   0.1%  vanilla, OptiFine-patched
+        terrain: translucent layer                 0.0471   0.0471   0.0440   0.0676     1.00   1.8%  vanilla, OptiFine-patched
+        entities + block entities                  1.1065   0.0541   0.0522   0.0758     1.00   2.1%  vanilla, OptiFine-patched
+          Fathom entity limits (shouldRender hook)   0.0037   0.0037   0.0035   0.0045    41.00   0.1%  Fathom
+          player entity draws                      1.0486   0.0651   0.0625   0.0922    40.00   2.5%  vanilla, OptiFine-patched
+            living: body model + skin              0.4197   0.4197   0.4014   0.5407    40.00  16.0%  vanilla, OptiFine-patched
+            living: feature layers                 0.2700   0.0564   0.0543   0.0799    40.00   2.2%  vanilla, OptiFine-patched
+              layer: armor (+ glint)               0.0036   0.0036   0.0035   0.0047    40.00   0.1%  vanilla, OptiFine-patched
+              layer: held item                     0.2031   0.2031   0.1925   0.3031    40.00   7.7%  vanilla
+              layer: cape                          0.0069   0.0069   0.0065   0.0090    40.00   0.3%  vanilla, OptiFine-patched
+            shadow + fire                          0.0323   0.0323   0.0312   0.0461    40.00   1.2%  vanilla, OptiFine-patched
+            nametag: visibility + display name + score   0.2615   0.0636   0.0604   0.0963    40.00   2.4%  vanilla, OptiFine-patched
+              nametags                             0.1425   0.1425   0.1352   0.2089    21.26   5.4%  vanilla or Fathom path
+        selection box                              0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla
+        particles                                  0.0234   0.0234   0.0210   0.0440     2.00   0.9%  vanilla, OptiFine-patched
+        weather                                    0.0001   0.0001   0.0001   0.0002     1.00   0.0%  vanilla, OptiFine-patched
+        world border                               0.0002   0.0002   0.0002   0.0004     1.00   0.0%  vanilla
+        hand / held item                           0.0145   0.0145   0.0136   0.0220     1.00   0.6%  vanilla, OptiFine-patched
+  text drawing (TextRenderer.draw, all callers)    0.3247   0.3247   0.3195   0.4997   101.19  12.4%  vanilla, OptiFine-patched
+      HUD (vanilla + Fathom)                       0.6586   0.0234   0.0179   0.0676     1.00   0.9%  vanilla
+        HUD: hotbar + items                        0.0063   0.0063   0.0058   0.0095     1.00   0.2%  vanilla
+        HUD: health, food, armour bars             0.0213   0.0213   0.0200   0.0302     1.00   0.8%  vanilla
+        HUD: scoreboard sidebar                    0.0765   0.0687   0.0645   0.1004     1.00   2.6%  vanilla, OptiFine-patched
+        HUD: tab list                              0.4035   0.1637   0.1597   0.2335     1.00   6.2%  vanilla
+        HUD: chat                                  0.0765   0.0558   0.0543   0.0881     1.00   2.1%  vanilla
+        Fathom HUD                                 0.0511   0.0108   0.0100   0.0146     1.00   0.4%  Fathom
+          Fathom HUD: deciding what to draw        0.0109   0.0109   0.0100   0.0151     1.00   0.4%  Fathom
+          Fathom HUD: cached layer                 0.0088   0.0080   0.0065   0.0220     1.00   0.3%  Fathom
+          Fathom HUD: live widgets                 0.0204   0.0204   0.0189   0.0282     1.00   0.8%  Fathom
+          Fathom HUD: Fathom-renderer widgets      0.0002   0.0002   0.0002   0.0004     1.00   0.0%  Fathom
+    framebuffer blit to window                     0.0154   0.0154   0.0146   0.0230     1.00   0.6%  vanilla
+    glGetError checks                              0.0012   0.0012   0.0011   0.0019     2.00   0.0%  vanilla
+    Thread.yield after the swap                    0.0021   0.0021   0.0016   0.0024     1.00   0.1%  vanilla
+    Fathom frame-cap hook                          0.0017   0.0017   0.0016   0.0024     1.00   0.1%  Fathom
+    buffer swap (Display.update)                   0.2759   0.2759   0.2703   0.4014     1.00  10.5%  driver / GPU wait
+    Fathom frame hooks                             0.0014   0.0014   0.0014   0.0021     1.00   0.1%  Fathom
+  between frames (Fathom post-frame)               0.0073   0.0017   0.0015   0.0024     1.00   0.1%  Fathom
+  untimed (between timed sections)                          0.0008
+
+DELTAS AGAINST SP (self time, normal arm)
+-------------------------------------------
+mp-empty - sp: frame -0.044 ms (0.735 -> 0.691)
+   -0.0024  sky                                             0.0209 ->  0.0185    5.5% of delta  [vanilla, OptiFine-patched]
+   -0.0025  terrain: translucent layer                      0.0326 ->  0.0302    5.7% of delta  [vanilla, OptiFine-patched]
+   -0.0031  game loop                                       0.0470 ->  0.0439    7.1% of delta  [vanilla]
+   -0.0044  world                                           0.0421 ->  0.0377   10.0% of delta  [vanilla, OptiFine-patched]
+   -0.0053  terrain: cutout-mipped layer                    0.0691 ->  0.0637   12.2% of delta  [vanilla, OptiFine-patched]
+   -0.0065  buffer swap (Display.update)                    0.2747 ->  0.2682   15.0% of delta  [driver / GPU wait]
+   -0.0098  terrain: solid layer                            0.1160 ->  0.1061   22.5% of delta  [vanilla, OptiFine-patched]
+   -0.0005  untimed remainder                             
+  listed sections explain 77.9% of the frame delta
+
+lobby - sp: frame +0.769 ms (0.735 -> 1.504)
+   +0.1936  living: body model + skin                       0.0000 ->  0.1936   25.2% of delta  [vanilla, OptiFine-patched]
+   +0.0944  layer: held item                                0.0000 ->  0.0944   12.3% of delta  [vanilla]
+   +0.0708  nametags                                        0.0000 ->  0.0708    9.2% of delta  [vanilla or Fathom path]
+   +0.0647  HUD: scoreboard sidebar                         0.0000 ->  0.0647    8.4% of delta  [vanilla, OptiFine-patched]
+   +0.0534  HUD: chat                                       0.0005 ->  0.0539    6.9% of delta  [vanilla]
+   +0.0353  text drawing (TextRenderer.draw, all callers)   0.0003 ->  0.0356    4.6% of delta  [vanilla, OptiFine-patched]
+   +0.0313  player entity draws                             0.0000 ->  0.0313    4.1% of delta  [vanilla, OptiFine-patched]
+   +0.0312  nametag: visibility + display name + score      0.0000 ->  0.0312    4.1% of delta  [vanilla, OptiFine-patched]
+   +0.0266  living: feature layers                          0.0000 ->  0.0266    3.5% of delta  [vanilla, OptiFine-patched]
+   +0.0236  entities + block entities                       0.0045 ->  0.0281    3.1% of delta  [vanilla, OptiFine-patched]
+   +0.0187  particles                                       0.0010 ->  0.0197    2.4% of delta  [vanilla, OptiFine-patched]
+   +0.0155  shadow + fire                                   0.0000 ->  0.0155    2.0% of delta  [vanilla, OptiFine-patched]
+   -0.0004  untimed remainder                             
+  listed sections explain 85.7% of the frame delta
+
+  ...and against mp-empty, the view it was added to:
+lobby - mp-empty: frame +0.812 ms (0.691 -> 1.504)
+   +0.1936  living: body model + skin                       0.0000 ->  0.1936   23.8% of delta  [vanilla, OptiFine-patched]
+   +0.0944  layer: held item                                0.0000 ->  0.0944   11.6% of delta  [vanilla]
+   +0.0708  nametags                                        0.0000 ->  0.0708    8.7% of delta  [vanilla or Fathom path]
+   +0.0647  HUD: scoreboard sidebar                         0.0000 ->  0.0647    8.0% of delta  [vanilla, OptiFine-patched]
+   +0.0530  HUD: chat                                       0.0009 ->  0.0539    6.5% of delta  [vanilla]
+   +0.0353  text drawing (TextRenderer.draw, all callers)   0.0003 ->  0.0356    4.3% of delta  [vanilla, OptiFine-patched]
+   +0.0313  player entity draws                             0.0000 ->  0.0313    3.8% of delta  [vanilla, OptiFine-patched]
+   +0.0312  nametag: visibility + display name + score      0.0000 ->  0.0312    3.8% of delta  [vanilla, OptiFine-patched]
+   +0.0266  living: feature layers                          0.0000 ->  0.0266    3.3% of delta  [vanilla, OptiFine-patched]
+   +0.0237  terrain: solid layer                            0.1061 ->  0.1299    2.9% of delta  [vanilla, OptiFine-patched]
+   +0.0230  entities + block entities                       0.0051 ->  0.0281    2.8% of delta  [vanilla, OptiFine-patched]
+   +0.0196  world                                           0.0377 ->  0.0573    2.4% of delta  [vanilla, OptiFine-patched]
+   +0.0002  untimed remainder                             
+  listed sections explain 82.1% of the frame delta
+
+combat-particles - sp: frame +0.901 ms (0.735 -> 1.636)
+   +0.2646  particles                                       0.0010 ->  0.2657   29.4% of delta  [vanilla, OptiFine-patched]
+   +0.1906  layer: armor (+ glint)                          0.0000 ->  0.1906   21.2% of delta  [vanilla, OptiFine-patched]
+   +0.0969  layer: held item                                0.0000 ->  0.0969   10.8% of delta  [vanilla]
+   +0.0969  living: body model + skin                       0.0000 ->  0.0969   10.8% of delta  [vanilla, OptiFine-patched]
+   +0.0375  living: feature layers                          0.0000 ->  0.0375    4.2% of delta  [vanilla, OptiFine-patched]
+   +0.0319  nametags                                        0.0000 ->  0.0319    3.5% of delta  [vanilla or Fathom path]
+   +0.0310  tick: particles                                 0.0000 ->  0.0310    3.4% of delta  [vanilla]
+   +0.0280  player entity draws                             0.0000 ->  0.0280    3.1% of delta  [vanilla, OptiFine-patched]
+   +0.0201  nametag: visibility + display name + score      0.0000 ->  0.0201    2.2% of delta  [vanilla, OptiFine-patched]
+   +0.0158  shadow + fire                                   0.0000 ->  0.0158    1.8% of delta  [vanilla, OptiFine-patched]
+   +0.0131  text drawing (TextRenderer.draw, all callers)   0.0003 ->  0.0134    1.5% of delta  [vanilla, OptiFine-patched]
+   +0.0119  entities + block entities                       0.0045 ->  0.0164    1.3% of delta  [vanilla, OptiFine-patched]
+   -0.0004  untimed remainder                             
+  listed sections explain 93.1% of the frame delta
+
+  ...and against mp-empty, the view it was added to:
+combat-particles - mp-empty: frame +0.944 ms (0.691 -> 1.636)
+   +0.2647  particles                                       0.0010 ->  0.2657   28.0% of delta  [vanilla, OptiFine-patched]
+   +0.1906  layer: armor (+ glint)                          0.0000 ->  0.1906   20.2% of delta  [vanilla, OptiFine-patched]
+   +0.0969  layer: held item                                0.0000 ->  0.0969   10.3% of delta  [vanilla]
+   +0.0969  living: body model + skin                       0.0000 ->  0.0969   10.3% of delta  [vanilla, OptiFine-patched]
+   +0.0375  living: feature layers                          0.0000 ->  0.0375    4.0% of delta  [vanilla, OptiFine-patched]
+   +0.0319  nametags                                        0.0000 ->  0.0319    3.4% of delta  [vanilla or Fathom path]
+   +0.0310  tick: particles                                 0.0000 ->  0.0310    3.3% of delta  [vanilla]
+   +0.0280  player entity draws                             0.0000 ->  0.0280    3.0% of delta  [vanilla, OptiFine-patched]
+   +0.0201  nametag: visibility + display name + score      0.0000 ->  0.0201    2.1% of delta  [vanilla, OptiFine-patched]
+   +0.0158  shadow + fire                                   0.0000 ->  0.0158    1.7% of delta  [vanilla, OptiFine-patched]
+   +0.0153  world                                           0.0377 ->  0.0530    1.6% of delta  [vanilla, OptiFine-patched]
+   +0.0131  text drawing (TextRenderer.draw, all callers)   0.0003 ->  0.0134    1.4% of delta  [vanilla, OptiFine-patched]
+   +0.0001  untimed remainder                             
+  listed sections explain 89.1% of the frame delta
+
+hud-heavy - sp: frame +1.886 ms (0.735 -> 2.620)
+   +0.4197  living: body model + skin                       0.0000 ->  0.4197   22.3% of delta  [vanilla, OptiFine-patched]
+   +0.3245  text drawing (TextRenderer.draw, all callers)   0.0003 ->  0.3247   17.2% of delta  [vanilla, OptiFine-patched]
+   +0.2031  layer: held item                                0.0000 ->  0.2031   10.8% of delta  [vanilla]
+   +0.1637  HUD: tab list                                   0.0000 ->  0.1637    8.7% of delta  [vanilla]
+   +0.1425  nametags                                        0.0000 ->  0.1425    7.6% of delta  [vanilla or Fathom path]
+   +0.0687  HUD: scoreboard sidebar                         0.0000 ->  0.0687    3.6% of delta  [vanilla, OptiFine-patched]
+   +0.0651  player entity draws                             0.0000 ->  0.0651    3.5% of delta  [vanilla, OptiFine-patched]
+   +0.0636  nametag: visibility + display name + score      0.0000 ->  0.0636    3.4% of delta  [vanilla, OptiFine-patched]
+   +0.0564  living: feature layers                          0.0000 ->  0.0564    3.0% of delta  [vanilla, OptiFine-patched]
+   +0.0553  HUD: chat                                       0.0005 ->  0.0558    2.9% of delta  [vanilla]
+   +0.0497  entities + block entities                       0.0045 ->  0.0541    2.6% of delta  [vanilla, OptiFine-patched]
+   +0.0323  shadow + fire                                   0.0000 ->  0.0323    1.7% of delta  [vanilla, OptiFine-patched]
+   -0.0002  untimed remainder                             
+  listed sections explain 87.2% of the frame delta
+
+  ...and against mp-empty, the view it was added to:
+hud-heavy - mp-empty: frame +1.929 ms (0.691 -> 2.620)
+   +0.4197  living: body model + skin                       0.0000 ->  0.4197   21.8% of delta  [vanilla, OptiFine-patched]
+   +0.3245  text drawing (TextRenderer.draw, all callers)   0.0003 ->  0.3247   16.8% of delta  [vanilla, OptiFine-patched]
+   +0.2031  layer: held item                                0.0000 ->  0.2031   10.5% of delta  [vanilla]
+   +0.1637  HUD: tab list                                   0.0000 ->  0.1637    8.5% of delta  [vanilla]
+   +0.1425  nametags                                        0.0000 ->  0.1425    7.4% of delta  [vanilla or Fathom path]
+   +0.0687  HUD: scoreboard sidebar                         0.0000 ->  0.0687    3.6% of delta  [vanilla, OptiFine-patched]
+   +0.0651  player entity draws                             0.0000 ->  0.0651    3.4% of delta  [vanilla, OptiFine-patched]
+   +0.0636  nametag: visibility + display name + score      0.0000 ->  0.0636    3.3% of delta  [vanilla, OptiFine-patched]
+   +0.0564  living: feature layers                          0.0000 ->  0.0564    2.9% of delta  [vanilla, OptiFine-patched]
+   +0.0549  HUD: chat                                       0.0009 ->  0.0558    2.8% of delta  [vanilla]
+   +0.0490  entities + block entities                       0.0051 ->  0.0541    2.5% of delta  [vanilla, OptiFine-patched]
+   +0.0323  terrain: solid layer                            0.1061 ->  0.1385    1.7% of delta  [vanilla, OptiFine-patched]
+   +0.0003  untimed remainder                             
+  listed sections explain 85.2% of the frame delta
+
+TOP 10 FRAME-TIME CONSUMERS: hud-heavy (self time)
+--------------------------------------------
+ 1. living: body model + skin                        0.4197 ms   16.0%  [vanilla, OptiFine-patched]
+ 2. text drawing (TextRenderer.draw, all callers)    0.3247 ms   12.4%  [vanilla, OptiFine-patched]
+ 3. buffer swap (Display.update)                     0.2759 ms   10.5%  [driver / GPU wait]
+ 4. layer: held item                                 0.2031 ms    7.7%  [vanilla]
+ 5. HUD: tab list                                    0.1637 ms    6.2%  [vanilla]
+ 6. nametags                                         0.1425 ms    5.4%  [vanilla or Fathom path]
+ 7. terrain: solid layer                             0.1385 ms    5.3%  [vanilla, OptiFine-patched]
+ 8. terrain: cutout-mipped layer                     0.0782 ms    3.0%  [vanilla, OptiFine-patched]
+ 9. game loop                                        0.0747 ms    2.8%  [vanilla]
+10. HUD: scoreboard sidebar                          0.0687 ms    2.6%  [vanilla, OptiFine-patched]
+
+SELF TIME BY OWNER (normal arm)
+-------------------------------
+scene                           vanilla  vanilla, OptiFine-patched     vanilla or Fathom path                     Fathom          driver / GPU wait
+sp                               0.1034                     0.3165                     0.0000                     0.0392                     0.2747
+mp-empty                         0.0952                     0.2894                     0.0000                     0.0379                     0.2682
+lobby                            0.3020                     0.8171                     0.0708                     0.0494                     0.2637
+combat-particles                     0.2706                     1.0284                     0.0319                     0.0508                     0.2533
+hud-heavy                        0.6187                     1.5238                     0.1425                     0.0588                     0.2759
+
+CHUNK AND DRAW COUNTERS (per frame, normal arm)
+-----------------------------------------------
+counter                                     sp    mp-empty       lobby combat-particles   hud-heavy
+sections drawn: solid                  244.000     244.000     244.000     244.000     244.000
+sections drawn: cutout-mipped          158.000     158.000     158.000     158.000     158.000
+sections drawn: cutout                   0.000       0.000       0.000       0.000       0.000
+sections drawn: translucent             80.000      80.000      80.000      80.000      80.000
+visible sections (after culling)       253.000     253.000     253.000     253.000     253.000
+sections invalidated                     0.000       0.000       0.000       0.000       0.000
+rebuilds queued                          0.000       0.000       0.000       0.000       0.000
+rebuilds on the client thread            0.000       0.000       0.000       0.000       0.000
+layer buffers uploaded                   0.000       0.000       0.000       0.000       0.000
+sections invalidated by packets          0.000       0.000       0.000       0.000       0.000
+packets applied on the client thread       0.000       0.000       0.000       0.000       0.000
+packets queued by the network thread       0.000       0.000       0.000       0.000       0.000
+other players loaded                     0.000       0.000      40.000      20.000      40.000
+entities loaded                          1.000       1.000      41.000      21.000      41.000
+particles live                           0.000       0.000      18.267     792.269      23.975
+string width queries                     0.002       0.002      12.358       8.644     154.904
+client ticks                             0.015       0.014       0.030       0.033       0.053
+sections drawn: all layers               482.0       482.0       482.0       482.0       482.0
+entities drawn                             0.0         0.0        18.3         9.1        40.0
+block entities drawn                       0.0         0.0         0.0         0.0         0.0
+nametags drawn                             0.0         0.0        10.7         4.8        21.3
+timed probe pairs                         39.2        39.2       225.3       132.4       528.1
+
+PACKETS ON THE CLIENT THREAD (normal arm)
+-----------------------------------------
+Per scene: packets queued and applied per second, client-thread microseconds per frame spent
+applying them, microseconds per packet, and chunk sections they invalidated per second.
+sp  (most packets in one frame: 1)
+  kind                                                      queued/s applied/s  us/frame us/packet   inval/s
+  chunk data (single and bulk)                                  32.4       0.0      0.00      0.00       0.0
+  block changes (single, multi, block entity, action, brea       0.1       0.1      0.01     86.90       0.1
+  world state (time, weather, border, spawn)                     1.0       1.0      0.01     13.41       0.0
+  everything else                                               40.2       0.0      0.00      0.00       0.0
+mp-empty  (most packets in one frame: 1)
+  kind                                                      queued/s applied/s  us/frame us/packet   inval/s
+  sounds                                                         0.1       0.1      0.00     50.80       0.0
+  world state (time, weather, border, spawn)                     1.0       1.0      0.01     10.73       0.0
+lobby  (most packets in one frame: 5)
+  kind                                                      queued/s applied/s  us/frame us/packet   inval/s
+  entity movement (move, look, teleport, head yaw, velocit     724.8     724.2      1.31      1.20       0.0
+  entity metadata, attributes, effects, attach                  11.2      11.2      0.20     11.82       0.0
+  entity animation / status (swing, hurt, crit)                  1.0       1.0      0.01      4.82       0.0
+  scoreboard objectives, scores, display slots                   1.0       1.0      0.01      3.93       0.0
+  sounds                                                         7.1       7.1      0.57     52.97       0.0
+  chat, titles, action bar                                       1.6       1.6      0.38    162.64       0.0
+  world state (time, weather, border, spawn)                     1.0       1.0      0.01      8.99       0.0
+combat-particles  (most packets in one frame: 50)
+  kind                                                      queued/s applied/s  us/frame us/packet   inval/s
+  entity movement (move, look, teleport, head yaw, velocit     399.8     397.3      0.41      0.62       0.0
+  entity equipment                                             179.5     179.5      0.15      0.51       0.0
+  entity animation / status (swing, hurt, crit)                 93.8      93.8      0.59      3.83       0.0
+  tab list entries, header, footer                               0.1       0.1      0.00      5.40       0.0
+  particles                                                    101.0     100.4      6.63     40.40       0.0
+  sounds                                                        20.9      21.0      1.75     50.96       0.0
+  world state (time, weather, border, spawn)                     1.0       1.0      0.01      8.30       0.0
+hud-heavy  (most packets in one frame: 14)
+  kind                                                      queued/s applied/s  us/frame us/packet   inval/s
+  entity movement (move, look, teleport, head yaw, velocit     704.3     705.0      1.66      0.90       0.0
+  entity metadata, attributes, effects, attach                  10.7      10.7      0.32     11.34       0.0
+  entity animation / status (swing, hurt, crit)                  1.1       1.1      0.01      4.46       0.0
+  scoreboard objectives, scores, display slots                  40.7      40.7      0.22      2.07       0.0
+  sounds                                                         6.1       6.1      0.81     50.71       0.0
+  chat, titles, action bar                                      11.3      11.3      4.02    136.14       0.0
+  world state (time, weather, border, spawn)                     1.1       1.0      0.03      9.52       0.0
+
+ONE PLAYER (normal arm, microseconds per player drawn)
+------------------------------------------------------
+scene             drawn/f entity_pl     model  features     armor held_item      cape shadow_fi nametag_d   nametag
+lobby                18.3     26.89     10.56      6.83      0.06      5.15      0.17      0.85      6.95      3.86
+combat-particles      9.1     58.56     10.64     35.98     20.94     10.65      0.28      1.74      7.12      3.51
+hud-heavy            40.0     26.22     10.49      6.75      0.09      5.08      0.17      0.81      6.54      3.56
+Columns are total (inclusive) time divided by players drawn. entity_pl is the whole draw;
+the rest nest inside it. Probe cost is included (about two timed pairs per column per player).
+
+WHAT THE SLOW FRAMES CONTAIN (normal arm)
+-----------------------------------------
+Frames ranked by time. 'median band' = ranks 40-60%; 'p95+' = the slowest 5%; 'p99+' = slowest 1%.
+tick% = share of the band's frames that ran a client tick; gc% = share in which a GC finished.
+sp  (frames with a tick: 1.5%, mean 1.127 ms; without: 0.729 ms; tick cost 0.398 ms)
+  band            frame  tick%    gc%   pkts      tick tick_enti tick_play tick_part     tasks chunk_upd setup_ter  entities entity_pl particles       hud fathom_hu      swap
+  median band     0.625   0.0%   0.0%    0.0    0.0000    0.0000    0.0000    0.0000    0.0000    0.0005    0.0082    0.0046    0.0000    0.0010    0.0675    0.0352    0.1822
+  p95+            1.754   2.1%   0.0%    0.0    0.0076    0.0012    0.0000    0.0000    0.0000    0.0003    0.0061    0.0045    0.0000    0.0009    0.0701    0.0359    1.3059
+  p99+            2.076   1.6%   0.0%    0.0    0.0068    0.0012    0.0000    0.0001    0.0000    0.0003    0.0058    0.0040    0.0000    0.0009    0.0684    0.0347    1.6308
+mp-empty  (frames with a tick: 1.4%, mean 1.094 ms; without: 0.685 ms; tick cost 0.409 ms)
+  band            frame  tick%    gc%   pkts      tick tick_enti tick_play tick_part     tasks chunk_upd setup_ter  entities entity_pl particles       hud fathom_hu      swap
+  median band     0.547   0.0%   0.0%    0.0    0.0000    0.0000    0.0000    0.0000    0.0000    0.0003    0.0068    0.0049    0.0000    0.0009    0.0625    0.0337    0.1544
+  p95+            1.898   1.4%   0.0%    0.0    0.0052    0.0009    0.0000    0.0000    0.0000    0.0002    0.0056    0.0042    0.0000    0.0008    0.0641    0.0342    1.4812
+  p99+            2.212   1.5%   0.0%    0.0    0.0050    0.0008    0.0000    0.0000    0.0000    0.0002    0.0053    0.0040    0.0000    0.0008    0.0602    0.0321    1.7166
+lobby  (frames with a tick: 3.0%, mean 2.668 ms; without: 1.467 ms; tick cost 1.201 ms)
+  band            frame  tick%    gc%   pkts      tick tick_enti tick_play tick_part     tasks chunk_upd setup_ter  entities entity_pl particles       hud fathom_hu      swap
+  median band     1.345   0.9%   0.0%    0.6    0.0060    0.0016    0.0009    0.0003    0.0024    0.0005    0.0114    0.3216    0.3020    0.0212    0.2153    0.0440    0.3249
+  p95+            3.062  24.5%   0.0%    2.6    0.1803    0.0476    0.0273    0.0071    0.0073    0.0009    0.0171    1.4874    1.4076    0.0268    0.3546    0.0669    0.3481
+  p99+            3.541  71.7%   0.0%    2.4    0.5597    0.1491    0.0862    0.0243    0.0079    0.0006    0.0184    1.4831    1.4052    0.0303    0.4083    0.0618    0.3415
+combat-particles  (frames with a tick: 3.3%, mean 3.354 ms; without: 1.577 ms; tick cost 1.776 ms)
+  band            frame  tick%    gc%   pkts      tick tick_enti tick_play tick_part     tasks chunk_upd setup_ter  entities entity_pl particles       hud fathom_hu      swap
+  median band     1.530   0.0%   0.0%    1.1    0.0000    0.0000    0.0000    0.0000    0.0103    0.0004    0.0100    0.3317    0.3197    0.2893    0.0898    0.0486    0.3685
+  p95+            3.536  45.3%   0.0%    4.2    0.6681    0.0452    0.0174    0.4395    0.0246    0.0006    0.0158    1.4901    1.4483    0.3324    0.1124    0.0625    0.3122
+  p99+            4.244  92.7%   0.0%    0.9    1.4850    0.0942    0.0354    0.9986    0.0035    0.0006    0.0170    1.3957    1.3570    0.3093    0.1104    0.0637    0.3136
+hud-heavy  (frames with a tick: 5.3%, mean 3.458 ms; without: 2.574 ms; tick cost 0.884 ms)
+  band            frame  tick%    gc%   pkts      tick tick_enti tick_play tick_part     tasks chunk_upd setup_ter  entities entity_pl particles       hud fathom_hu      swap
+  median band     2.616   3.8%   0.0%    2.4    0.0215    0.0051    0.0029    0.0010    0.0056    0.0006    0.0153    1.1004    1.0427    0.0235    0.6609    0.0516    0.2832
+  p95+            3.818  51.2%   0.0%    3.0    0.3633    0.0944    0.0536    0.0189    0.0228    0.0006    0.0193    1.4630    1.3843    0.0328    0.9134    0.0666    0.3362
+  p99+            4.265  91.4%   0.0%    3.2    0.6579    0.1670    0.0983    0.0354    0.0150    0.0006    0.0208    1.5621    1.4806    0.0350    0.9313    0.0701    0.3230
+
+ARMS (interleaved with the normal arm, same scenes)
+---------------------------------------------------
+probes-off: only the frame interval is timed. normal - probes-off = what timing costs.
+fathom-off: Fathom's hooks bypassed and its performance layer forced off.
+            normal - fathom-off = Fathom's net cost (positive) or saving (negative).
+drain:      glFinish before every swap. The drain time is GPU/driver work still queued
+            when the CPU finished the frame; near zero means the GPU is not the limit.
+scene            normal probes-off   overhead   estimate fathom-off Fathom net drain wait  drain frm
+sp               0.7349          -          -     0.0022     0.6608    +0.0740          -          -
+mp-empty         0.6912          -          -     0.0022     0.6329    +0.0583          -          -
+lobby            1.5036          -          -     0.0124     1.4760    +0.0276          -          -
+combat-particles     1.6357          -          -     0.0073     1.5851    +0.0506          -          -
+hud-heavy        2.6204          -          -     0.0290     2.6036    +0.0168          -          -
+

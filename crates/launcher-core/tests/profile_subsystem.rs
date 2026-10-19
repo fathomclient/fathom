@@ -860,7 +860,7 @@ fn every_kind_of_defect_is_detected_separately() {
     let mut profile = f.ops.create("Broken").unwrap();
 
     profile.display_name = "  ".into();
-    profile.loader.kind = Loader::Forge; // not implemented, and needs a version
+    profile.loader.kind = Loader::Forge; // needs a version
     profile.memory.heap_mb = 1;
     profile.display.resolution = launcher_core::profiles::Resolution {
         width: 1,
@@ -889,7 +889,6 @@ fn every_kind_of_defect_is_detected_separately() {
 
     for expected in [
         "empty-display-name",
-        "loader-not-implemented",
         "loader-version-missing",
         "heap-out-of-range",
         "unusable-resolution",
@@ -1012,8 +1011,8 @@ fn repair_never_changes_the_loader_or_removes_a_file() {
         summary
             .left_alone
             .iter()
-            .any(|d| d.kind() == "loader-not-implemented"),
-        "the blocking defect is reported, not silently fixed"
+            .any(|d| d.kind() == "loader-version-missing"),
+        "a Forge build is the user's to choose: reported, not silently picked by repair"
     );
 }
 

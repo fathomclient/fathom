@@ -557,22 +557,30 @@ fn vanilla_adds_nothing_and_contacts_nobody() {
     assert_eq!(http.journal().summary().total, 0);
 }
 
+/// Forge resolves from its own repository the first time, so with the network
+/// off it fails as a network refusal -- not as "not implemented", and without
+/// writing anything that a later launch could mistake for a resolved build.
 #[test]
-fn forge_refuses_and_explains_rather_than_pretending() {
+fn forge_offline_is_a_network_refusal_and_keeps_nothing() {
     let f = Fixture::new();
-    let http = http();
+    let offline = HttpClient::new(
+        NetworkPolicy {
+            online: false,
+            ..NetworkPolicy::default()
+        },
+        NetworkJournal::new(),
+        "test/0",
+    );
     let cache = launcher_core::install::ArtifactCache::new(f.paths.clone());
 
     let error = loaders::provider_for(Loader::Forge)
-        .resolve("1.8.9", "11.15.1.2318", &cache, &http, Feature::Play)
-        .expect_err("Forge is not implemented");
+        .resolve("1.8.9", "11.15.1.2318", &cache, &offline, Feature::Play)
+        .expect_err("nothing kept and nothing reachable");
+    assert!(matches!(error, LoaderError::Network(_)), "{error}");
+    assert!(!f.paths.metadata_cache_dir().join("forge").exists());
 
-    assert!(matches!(error, LoaderError::NotImplemented { .. }));
-    assert_eq!(http.journal().summary().total, 0);
-
-    // But it still describes itself correctly, so a profile naming Forge is
-    // coherent rather than nonsense.
     let provider = loaders::provider_for(Loader::Forge);
+    assert!(provider.is_implemented());
     assert!(provider.mod_directory().accepts_mods());
     assert!(provider.needs_version());
 }

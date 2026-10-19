@@ -45,8 +45,11 @@ public final class ViewBucket {
     public static final ViewSection[] TAIL = {
         ViewSection.TICK, ViewSection.TICK_ENTITIES, ViewSection.TICK_PLAYER, ViewSection.TICK_PARTICLES,
         ViewSection.TASKS, ViewSection.CHUNK_UPDATES, ViewSection.SETUP_TERRAIN, ViewSection.ENTITIES,
-        ViewSection.ENTITY_PLAYER, ViewSection.PARTICLES, ViewSection.HUD, ViewSection.FATHOM_HUD,
-        ViewSection.SWAP,
+        ViewSection.ENTITY_PLAYER, ViewSection.MODEL, ViewSection.FEATURES, ViewSection.ARMOR,
+        ViewSection.HELD_ITEM, ViewSection.NAMETAG_DECIDE, ViewSection.NAMETAG, ViewSection.TEXT,
+        ViewSection.ENTITY, ViewSection.ENTITY_ITEM, ViewSection.BLOCK_ENTITY,
+        ViewSection.PARTICLES, ViewSection.HUD, ViewSection.HUD_TABLIST, ViewSection.HUD_CHAT,
+        ViewSection.FATHOM_HUD, ViewSection.SWAP,
     };
     private float[][] tail = new float[TAIL.length][8192];
     /** Per frame: packets applied (low 16 bits), ticks (next 8), flags (top 8). */

@@ -114,9 +114,10 @@ impl Defect {
                 "{} is not implemented yet. Switch this profile to Vanilla to play.",
                 loader.label()
             ),
-            Defect::LoaderVersionMissing { loader } => {
-                format!("{} needs a loader version to be chosen.", loader.label())
-            }
+            Defect::LoaderVersionMissing { loader } => format!(
+                "No {} build is chosen yet. The first launch uses the newest stable one and                  keeps it.",
+                loader.label()
+            ),
             Defect::LoaderVersionUnexpected { loader } => format!(
                 "A loader version is recorded, but {} does not use one. Repair clears it.",
                 loader.label()
@@ -180,7 +181,9 @@ impl Defect {
                 | Defect::SchemaTooNew { .. }
                 | Defect::InvalidGameDirectory { .. }
                 | Defect::LoaderNotImplemented { .. }
-                | Defect::LoaderVersionMissing { .. }
+                // Not LoaderVersionMissing: Play resolves and pins the newest
+                // stable build itself (`Launcher::ensure_loader`), so calling the
+                // profile unusable for it was a claim the launch path disproved.
                 | Defect::JavaMissing { .. }
                 | Defect::RejectedJvmArgument { .. }
                 | Defect::InstallationIncomplete { .. }

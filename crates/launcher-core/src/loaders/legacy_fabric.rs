@@ -482,13 +482,42 @@ impl LegacyFabricProvider {
     }
 }
 
+/// A Maven repository's `.sha1` sidecar for `relative`, or `None` when the
+/// repository has none (or sent something that is not one). Shared with Forge,
+/// whose repository publishes sidecars for most but not all of its libraries.
+pub(super) fn sidecar_sha1(
+    relative: &str,
+    repository: Destination,
+    http: &HttpClient,
+    feature: Feature,
+) -> Result<Option<String>, LoaderError> {
+    let request = RequestDescriptor::new(
+        repository,
+        Purpose::ResolveLoaderMetadata,
+        feature,
+        format!("/{relative}.sha1"),
+    );
+    let response = http.get(&request)?;
+    if !response.is_success() {
+        return Ok(None);
+    }
+    let Ok(text) = std::str::from_utf8(&response.body) else {
+        return Ok(None);
+    };
+    Ok(text
+        .split_whitespace()
+        .next()
+        .filter(|hash| hash.len() == 40 && hash.chars().all(|c| c.is_ascii_hexdigit()))
+        .map(str::to_ascii_lowercase))
+}
+
 /// `group:artifact:version` -> `group/path/artifact/version/artifact-version.jar`.
 ///
 /// Returns `None` for anything that is not three colon-separated parts, rather
 /// than guessing. A malformed coordinate reaching the filesystem is exactly the
 /// sort of thing `ArtifactCache::library_path` is there to catch, but refusing
 /// earlier gives a better message.
-fn maven_path(coordinate: &str) -> Option<String> {
+pub(super) fn maven_path(coordinate: &str) -> Option<String> {
     let mut parts = coordinate.split(':');
     let group = parts.next()?;
     let artifact = parts.next()?;
@@ -512,7 +541,7 @@ fn maven_path(coordinate: &str) -> Option<String> {
 /// Minecraft and loader versions are tame in practice, but they arrive from a
 /// profile file and end up in a URL path. Anything outside the unreserved set
 /// is escaped rather than trusted.
-fn encode(segment: &str) -> String {
+pub(super) fn encode(segment: &str) -> String {
     let mut out = String::with_capacity(segment.len());
     for byte in segment.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {

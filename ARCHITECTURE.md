@@ -61,7 +61,7 @@ crates/launcher-core      Rust library, no UI dependency
     java_runtime.rs       finds and identifies Java
     loaders/              what a loader is, and how to install it
       legacy_fabric.rs    the real one, against Legacy Fabric's own metadata
-      forge.rs            described but not implemented, and honest about it
+      forge.rs            Forge 1.8.9 from Forge's Maven; its installer is read, never run
     mods/                 the mod engine
       definition.rs       ModDefinition: identity, licence, policy, relationships
       catalog.rs          what mod-policies.md established, as data
@@ -753,7 +753,7 @@ dealing with.
 |---|---|
 | Vanilla | Implemented. Adds nothing, reads no `mods/`, contacts nobody. |
 | Legacy Fabric | Implemented, against the project's own metadata service. |
-| Forge | Described, not implemented — and it refuses rather than pretending. |
+| Forge | Implemented for 1.8.9 Custom installations (`docs/forge.md`). Fathom's own client does not run on it. |
 
 `LoaderInstallation` is **additive**: the vanilla launch is computed first and
 this is layered on top. A loader that could *replace* parts of the vanilla plan
@@ -764,12 +764,14 @@ loads coremods earlier and by different rules. Vanilla's `None` is not "mods
 unsupported for now" — nothing in an unmodified client reads that directory, so
 a jar placed there is inert, and the type lets the launcher say so plainly.
 
-**Forge is described, not stubbed.** `forge.rs` records exactly what Forge needs
-that Legacy Fabric does not: a tweaker class in the game arguments, coremod
-semantics, and an installer jar that we must not run. The blocking issue is not
-work — it is that `mod-policies.md` §2 records Forge's licensing as needing
-review, and shipping a downloader for terms we have not read is the behaviour
-the mod policy exists to prevent.
+**Forge reads its installer, never runs it.** `forge.rs` supplies what Forge needs
+that Legacy Fabric does not: launchwrapper as the main class, FML's tweaker in the
+game arguments, coremod semantics, and its libraries -- resolved from the install
+profile inside Forge's installer jar, which is downloaded, checked against its
+SHA-1 and opened as a zip, never executed. Every library has a hash before it is
+fetched. The licence decision is recorded in `mod-policies.md` §2 (2026-10-13):
+Forge's own files, from Forge's own repository, at the user's request, never
+bundled. See `docs/forge.md`.
 
 ### 5c.2 Legacy Fabric
 

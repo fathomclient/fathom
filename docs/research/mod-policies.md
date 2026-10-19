@@ -42,8 +42,20 @@ and undistributable all at once -- OptiFine is exactly that.
 | **OneConfig** (Polyfrost) | LGPL-3.0 + Polyfrost Additional Terms | Yes | Yes | Yes (active) | Only as separate jar, terms need review | Case-by-case |
 | **legacy-lwjgl3** | LGPL-2.1 | Yes | **Yes, tested** | No (2023) | Separate jar only | Likely yes |
 | **lwjgl3ify** | LGPL-3.0 | Yes | No (1.7.10) | Yes | Separate jar only | N/A |
-| **Minecraft Forge** | LGPL-2.1 **plus additional terms**; GitHub reports `NOASSERTION` | Yes | Yes | Not for 1.8.9 | Needs legal review | Yes (standard practice) |
+| **Minecraft Forge** | LGPL-2.1 **plus additional terms**; GitHub reports `NOASSERTION` | Yes | Yes | Not for 1.8.9 | **Downloaded on request, never bundled** (decided 2026-10-13, below) | Yes (standard practice) |
 | **Sodium / Lithium** (CaffeineMC) | LGPL-3.0 (Lithium confirmed) | Yes | **No** (1.16+) | Yes | N/A for 1.8.9 | N/A |
+
+
+**Forge decision, 2026-10-13.** Forge is offered as an opt-in loader for Custom
+installations. The launcher downloads Forge's own published files -- its version
+list, its installer (opened only to read `install_profile.json`; never executed
+or extracted), its universal jar and the libraries that profile names -- from
+Forge's own repository (`maven.minecraftforge.net`, with Mojang's library host for
+libraries the profile names without a URL), at the user's request, the way other
+launchers do. Fathom never bundles, mirrors or redistributes Forge, and every
+artifact is hash-verified before it reaches the classpath (`loaders/forge.rs`).
+Fathom's own client is a Legacy Fabric mod and is not part of a Forge
+installation.
 
 ---
 

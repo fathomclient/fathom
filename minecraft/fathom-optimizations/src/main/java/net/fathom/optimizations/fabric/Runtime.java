@@ -67,6 +67,14 @@ public final class Runtime {
             net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.nametag-name-cache");
     public static final net.fathom.optimizations.core.registry.OptimizationId ARMOR_TEXTURE_CACHE =
             net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.armor-texture-cache");
+    public static final net.fathom.optimizations.core.registry.OptimizationId SIGN_TEXT_CACHE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.blockentity.sign-text-cache");
+    public static final net.fathom.optimizations.core.registry.OptimizationId ITEM_FRAME_ENTITY_REUSE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.item-frame-entity-reuse");
+    public static final net.fathom.optimizations.core.registry.OptimizationId TAB_LIST_TEXT_REPLAY =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.hud.tab-list-text-replay");
+    public static final net.fathom.optimizations.core.registry.OptimizationId SHADOW_ALLOCATION =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.shadow-allocation");
     public static final net.fathom.optimizations.core.registry.OptimizationId VANILLA_HUD_REPLAY =
             net.fathom.optimizations.core.registry.OptimizationId.of("render.hud.vanilla-replay");
     public static final net.fathom.optimizations.core.registry.OptimizationId PACK_ICON_DOWNSCALE =
@@ -87,6 +95,10 @@ public final class Runtime {
     public static boolean nametagNameCache;
     public static boolean armorTextureCache;
     public static boolean vanillaHudReplay;
+    public static boolean signTextCache;
+    public static boolean tabListTextReplay;
+    public static boolean shadowAllocation;
+    public static boolean itemFrameEntityReuse;
 
     /** Re-read the hot switches from the board. Cheap: a handful of map lookups. */
     public static void refreshHotSwitches() {
@@ -100,6 +112,18 @@ public final class Runtime {
         frameLimiter = current.isEnabled(FRAME_LIMITER);
         nametagNameCache = current.isEnabled(NAMETAG_NAME_CACHE);
         armorTextureCache = current.isEnabled(ARMOR_TEXTURE_CACHE);
+        signTextCache = current.isEnabled(SIGN_TEXT_CACHE);
+        boolean tabText = current.isEnabled(TAB_LIST_TEXT_REPLAY);
+        if (tabListTextReplay && !tabText) {
+            net.fathom.optimizations.fabric.perf.TextLists.release();
+        }
+        tabListTextReplay = tabText;
+        shadowAllocation = current.isEnabled(SHADOW_ALLOCATION);
+        boolean reuse = current.isEnabled(ITEM_FRAME_ENTITY_REUSE);
+        if (itemFrameEntityReuse && !reuse) {
+            net.fathom.optimizations.fabric.perf.FrameItems.release();
+        }
+        itemFrameEntityReuse = reuse;
         boolean replay = current.isEnabled(VANILLA_HUD_REPLAY);
         if (vanillaHudReplay && !replay) {
             net.fathom.optimizations.fabric.perf.VanillaHudReplay.releaseAll();

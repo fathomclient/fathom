@@ -427,6 +427,108 @@ public final class OptimizationRegistry {
                     .reference("docs/performance/multiplayer-2026-10.md")
                     .build());
 
+            out.add(Optimization.builder("render.blockentity.sign-text-cache")
+                    .name("Sign text cache")
+                    .description(
+                            "Vanilla re-wraps and re-formats every line of every sign in view"
+                                    + " every frame: a copy of the text component, an iterator walk,"
+                                    + " a style copy and a width measurement per line, then the"
+                                    + " formatting codes rebuilt. This keeps each sign's wrapped lines"
+                                    + " and their formatted strings until the sign's text or the font"
+                                    + " changes, and hands the renderer the very same objects."
+                                    + " Output-identical.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
+                    .expectedBenefit(
+                            "Proportional to signs in view: lobbies, sign walls, server spawns. Most"
+                                    + " of the render thread's allocation where signs are on screen.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "mp-2026-10-13-ab",
+                            "Local server, 40 signs with 24 skulls, 16 banners and 12 item frames in"
+                                    + " view, 4 interleaved rounds against the switch off: faster in"
+                                    + " 4/4 rounds, paired median -0.117 ms/frame, p99 3.34 -> 2.40 ms;"
+                                    + " block entity draws 0.381 -> 0.246 ms/frame (about 3.4 us per sign)"
+                                    + " and client allocation 78 -> 35 MB/s. 178,000 sign lines verified"
+                                    + " identical."))
+                    .reference("docs/performance/multiplayer-2026-10-13.md")
+                    .build());
+
+            out.add(Optimization.builder("render.entity.item-frame-entity-reuse")
+                    .name("Item frame item entity reuse")
+                    .description(
+                            "To draw the item in an item frame, vanilla constructs a new item"
+                                    + " entity around it every frame, for every frame in view, and"
+                                    + " reads only the item back. This reuses one entity, given the"
+                                    + " frame's item each time, so the renderer gets the same inputs"
+                                    + " without an entity's construction. Output-identical.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
+                    .expectedBenefit("Proportional to filled item frames in view: map walls, displays.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "mp-2026-10-13-ab",
+                            "Local server, 12 filled item frames in view, 4 interleaved rounds against"
+                                    + " the switch off: frame-entity draws 0.303 -> 0.267 ms/frame (about"
+                                    + " 3 us per frame) and client allocation 78 -> 72 MB/s; the whole"
+                                    + " frame moved within noise at this count (paired +0.009 ms, 2/4)."
+                                    + " Inputs to the renderer are identical by construction."))
+                    .reference("docs/performance/multiplayer-2026-10-13.md")
+                    .build());
+
+            out.add(Optimization.builder("render.hud.tab-list-text-replay")
+                    .name("Tab list text replay")
+                    .description(
+                            "While the tab list is held, vanilla draws every name glyph by glyph,"
+                                    + " every frame. This records each string once, at its position and"
+                                    + " colour, and replays it; the skins, icons, backgrounds and scores"
+                                    + " stay live, so nothing that changes can go stale. Obfuscated text"
+                                    + " is always drawn live. Output-identical.")
+                    .group(Optimization.Group.HUD)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
+                    .expectedBenefit(
+                            "While the tab list is held, proportional to the players in it: most of"
+                                    + " the list's cost on a full server.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "mp-2026-10-14-ab2-ab3",
+                            "Local server, 80 players online with the tab list held: text drawing"
+                                    + " 0.461 -> 0.138 ms/frame and client allocation 35.5 -> 22.5 MB/s;"
+                                    + " faster in 6/6 interleaved rounds, paired median -0.143 ms/frame"
+                                    + " (measured with another game running, so whole-frame figures are"
+                                    + " noisy; the section and allocation figures are not). 6,653 strings"
+                                    + " drawn both ways offscreen: 0 differing bytes."))
+                    .reference("docs/performance/multiplayer-2026-10-13.md")
+                    .build());
+
+            out.add(Optimization.builder("render.entity.shadow-allocation")
+                    .name("Shadow lookup without allocation")
+                    .description(
+                            "Each entity shadow asks for the block below every block it covers"
+                                    + " with a new position object, used once and dropped. This reuses"
+                                    + " one position for that lookup, with the same coordinates."
+                                    + " Output-identical.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
+                    .expectedBenefit("Less allocation under piles of dropped items and crowds.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "mp-2026-10-14-ab2-ab3",
+                            "Local server, 160 dropped items on generators: client allocation"
+                                    + " 21.9 -> 16.4 and 25.0 -> 20.8 MB/s in two runs; shadow drawing time"
+                                    + " unchanged (0.393 -> 0.405 ms/frame) and no whole-frame change."
+                                    + " Identical input to the lookup by construction."))
+                    .reference("docs/performance/multiplayer-2026-10-13.md")
+                    .build());
+
             out.add(Optimization.builder("render.hud.vanilla-replay")
                     .name("Replay unchanged chat and scoreboard")
                     .description(

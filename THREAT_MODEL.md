@@ -110,8 +110,10 @@ rather than from Mojang.
 - **Only client and common libraries are read.** The metadata also lists
   `server` and `development` sets; pulling development libraries onto a client
   classpath would change what runs, so those fields are not deserialised at all.
-- **No installer is ever executed.** This is why Forge is not implemented: it
-  ships an installer jar whose job is to run code and write files.
+- **No installer is ever executed.** Forge ships an installer jar whose job is to
+  run code and write files; Fathom downloads it, checks its SHA-1, and reads only
+  `install_profile.json` out of it as a zip, then fetches each artifact itself
+  with a hash (`loaders/forge.rs`).
 
 Tests: `a_library_without_a_hash_is_refused_rather_than_downloaded_unverified`,
 `a_library_pointed_at_an_unlisted_host_is_refused`,

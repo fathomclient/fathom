@@ -11,7 +11,7 @@
 //! |---|---|
 //! | [`vanilla`] | Implemented. Changes nothing; reads no `mods/` directory. |
 //! | [`legacy_fabric`] | Implemented, against Legacy Fabric's own metadata service. |
-//! | [`forge`] | Described but not implemented, and honest about it. |
+//! | [`forge`] | Implemented, from Forge's own Maven; its installer is read, never run. |
 //!
 //! Forge exists here as a real provider that refuses, rather than as a `todo!()`
 //! or a missing arm. That is the point of the abstraction: the shape of what
@@ -270,11 +270,11 @@ mod tests {
         assert!(ForgeProvider.mod_directory().accepts_mods());
     }
 
-    /// Forge is described, not implemented, and the difference is visible from
-    /// outside rather than being a surprise at launch.
+    /// Forge launches through launchwrapper, so its mods directory carries
+    /// coremods too, and it says so before anything is installed.
     #[test]
-    fn forge_describes_itself_but_refuses_to_resolve() {
-        assert!(!ForgeProvider.is_implemented());
+    fn forge_is_implemented_with_coremod_semantics() {
+        assert!(ForgeProvider.is_implemented());
         assert_eq!(
             ForgeProvider.mod_directory(),
             ModDirectorySemantics::FlatDirectoryWithCoremods

@@ -92,6 +92,7 @@ public final class PerfLayer {
         COUNTERS.frames++;
         shadersActive = queryShaders();
         NametagRenderer.frame();
+        TextLists.frame();
         FathomModule module = module();
         boolean enabled = module != null && module.enabled();
         if (dirty || Setting.revision() != seenRevision || enabled != seenEnabled) {

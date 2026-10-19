@@ -64,6 +64,12 @@ pub enum Destination {
     /// Fabric's own Maven. Legacy Fabric's metadata points the loader jar and
     /// its shared libraries here rather than mirroring them.
     FabricMaven,
+    /// Forge's own Maven. Serves Forge's installer (read for its install
+    /// profile, never run), its universal jar, and the libraries its profile
+    /// points there. Only reached for a profile whose loader is Forge.
+    ForgeMaven,
+    /// Forge's file host, for its published list of recommended builds.
+    ForgeFiles,
     /// Modrinth API. Only ever on an explicit, per-mod user action.
     ModrinthApi,
     /// Modrinth CDN. Only ever on an explicit, per-mod user action. Serves mod
@@ -104,6 +110,8 @@ impl Destination {
         Destination::LegacyFabricMaven,
         Destination::LegacyFabricRepo,
         Destination::FabricMaven,
+        Destination::ForgeMaven,
+        Destination::ForgeFiles,
         Destination::ModrinthApi,
         Destination::ModrinthCdn,
         Destination::CurseForgeApi,
@@ -132,6 +140,8 @@ impl Destination {
             Destination::LegacyFabricMaven => "maven.legacyfabric.net",
             Destination::LegacyFabricRepo => "repo.legacyfabric.net",
             Destination::FabricMaven => "maven.fabricmc.net",
+            Destination::ForgeMaven => "maven.minecraftforge.net",
+            Destination::ForgeFiles => "files.minecraftforge.net",
             Destination::ModrinthApi => "api.modrinth.com",
             Destination::ModrinthCdn => "cdn.modrinth.com",
             Destination::CurseForgeApi => "api.curseforge.com",
@@ -195,6 +205,12 @@ impl Destination {
             Destination::FabricMaven => {
                 "Fabric's own artifact repository. Legacy Fabric's metadata points the loader jar \
                  and its libraries here rather than mirroring them."
+            }
+            Destination::ForgeMaven => {
+                "Forge's own artifact repository. Reached only for a Forge profile: Forge itself,                  the libraries it needs, and its installer, which is read for the list of what to                  download and never run."
+            }
+            Destination::ForgeFiles => {
+                "Forge's file host. Asked which Forge build it recommends for your Minecraft                  version when you choose Forge."
             }
             Destination::ModrinthApi | Destination::ModrinthCdn => {
                 "Looks up and downloads a mod, only when you explicitly ask for that specific mod."

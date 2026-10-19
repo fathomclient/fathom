@@ -47,11 +47,16 @@ def stage(args):
     os.makedirs(os.path.join(RUN, "mods"), exist_ok=True)
     for old in glob.glob(os.path.join(RUN, "mods", "*.jar")):
         os.remove(old)
-    jars = [path for path in glob.glob(os.path.join(MODULE, "build", "libs", "fathom-optimizations-*.jar"))
-            if not path.endswith("-sources.jar")]
-    if not jars:
-        raise SystemExit("Build the module first (gradle build).")
-    shutil.copy(max(jars, key=os.path.getmtime), os.path.join(RUN, "mods"))
+    if args.jar:
+        # A specific build, for comparing two builds under the same conditions.
+        jar = args.jar
+    else:
+        jars = [path for path in glob.glob(os.path.join(MODULE, "build", "libs", "fathom-optimizations-*.jar"))
+                if not path.endswith("-sources.jar")]
+        if not jars:
+            raise SystemExit("Build the module first (gradle build).")
+        jar = max(jars, key=os.path.getmtime)
+    shutil.copy(jar, os.path.join(RUN, "mods", "fathom-optimizations.jar"))
     if not args.no_optifine:
         for pattern in ("optifabric-*.jar", "OptiFine_*.jar"):
             for path in glob.glob(os.path.join(PROFILE, "minecraft", "mods", pattern)):
@@ -93,8 +98,17 @@ def main():
     parser.add_argument("--heap", default="4096")
     parser.add_argument("--jfr", default="")
     parser.add_argument("--no-optifine", action="store_true")
+    parser.add_argument("--jar", default="", help="a specific Fathom module jar (default: the newest in build/libs)")
     parser.add_argument("--extra", action="append", default=[])
     args = parser.parse_args()
+    # Entities that reach the 1.8 client before their chunk does are filed in an
+    # empty placeholder chunk and never drawn; a populated scene measured straight
+    # after connecting can draw none of its players. mp-empty first lets the world
+    # load before any scene's entities arrive.
+    scenes = args.scenes.split(",")
+    if scenes[0] not in ("sp", "mp-empty"):
+        args.scenes = ",".join(["mp-empty"] + [scene for scene in scenes if scene != "mp-empty"])
+        print("[client] measuring mp-empty first so the world loads before the scene's entities")
 
     profiles = stage(args)
     natives = os.path.join(PROFILE, "natives")
@@ -126,7 +140,26 @@ def main():
     log = open(os.path.join(RUN, "client-console.log"), "w", encoding="utf-8")
     print("[client] starting; console in %s" % log.name)
     process = subprocess.Popen(command, cwd=RUN, stdout=log, stderr=subprocess.STDOUT)
-    sys.exit(process.wait())
+    # The client sometimes hangs on its way out after writing its report (sound
+    # system shutdown). Once the report is written the run is complete, so give it a
+    # minute to exit and then stop this process -- the one started here, by handle.
+    import time
+    reported_at = None
+    while process.poll() is None:
+        time.sleep(2)
+        if reported_at is None:
+            try:
+                with open(log.name, encoding="utf-8", errors="replace") as text:
+                    if "[FATHOM VIEW] data:" in text.read():
+                        reported_at = time.time()
+            except OSError:
+                pass
+        elif time.time() - reported_at > 60:
+            print("[client] report written but the game did not exit; stopping it")
+            process.kill()
+            process.wait()
+            sys.exit(0)
+    sys.exit(process.returncode)
 
 
 if __name__ == "__main__":

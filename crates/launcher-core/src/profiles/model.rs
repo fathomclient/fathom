@@ -153,7 +153,7 @@ impl Loader {
         match self {
             Loader::Vanilla => "Vanilla",
             Loader::LegacyFabric => "Legacy Fabric",
-            Loader::Forge => "Forge (compatibility)",
+            Loader::Forge => "Forge",
         }
     }
 
@@ -169,7 +169,7 @@ impl Loader {
     ///
     /// Forge is still false, and honestly so: `ForgeProvider` refuses.
     pub fn is_implemented(self) -> bool {
-        matches!(self, Loader::Vanilla | Loader::LegacyFabric)
+        matches!(self, Loader::Vanilla | Loader::LegacyFabric | Loader::Forge)
     }
 
     /// Whether a loader needs a version of its own alongside the Minecraft
@@ -778,18 +778,18 @@ mod tests {
     ///
     /// Legacy Fabric moved here once the launch pipeline actually resolved a
     /// loader, fetched its libraries and used its main class -- not when the
-    /// provider was written. Forge is still false because `ForgeProvider`
-    /// refuses, and it is the reason this test is still worth having: if every
-    /// loader ever returns true, this stops asserting anything.
+    /// provider was written.
     #[test]
-    fn only_implemented_loaders_claim_to_be_implemented() {
-        assert!(Loader::Vanilla.is_implemented());
-        assert!(Loader::LegacyFabric.is_implemented());
-        assert!(!Loader::Forge.is_implemented());
-        assert!(
-            Loader::ALL.iter().any(|loader| !loader.is_implemented()),
-            "if nothing is unimplemented this test asserts nothing"
-        );
+    fn every_loader_is_implemented_and_the_providers_agree() {
+        // Forge joined the other two on 2026-10-13. The provider-agreement test
+        // in `loaders` keeps the two descriptions from drifting apart.
+        for loader in Loader::ALL {
+            assert!(loader.is_implemented(), "{loader:?}");
+            assert_eq!(
+                crate::loaders::provider_for(loader).is_implemented(),
+                loader.is_implemented()
+            );
+        }
     }
 
     /// The forward-compatibility property the spec asks for: all three loaders

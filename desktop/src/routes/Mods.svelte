@@ -545,6 +545,15 @@
 
         <!-- ---------------------------------------------------- installed -->
         {#if tab === 'installed'}
+          {#if view.loader === 'Forge'}
+            <!-- Said once, plainly: a Forge profile is Minecraft, Forge and
+                 these mods. Fathom's own client is a Legacy Fabric mod. -->
+            <p class="builtin-note">
+              This installation runs Forge. Fathom's in-game client — the Hub, HUD modules and performance layer —
+              runs on Legacy Fabric, so it is not part of this installation. Mods here are Forge mods; OptiFine
+              loads directly, with no OptiFabric.
+            </p>
+          {/if}
           {#if view.problems.length && !tabbed}
             {#each view.problems as problem}
               <Notice tone={problem.blocking ? 'danger' : 'warning'}>{problem.message}</Notice>

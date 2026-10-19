@@ -211,6 +211,12 @@ pub fn save_profile(state: tauri::State<'_, State>, edit: ProfileEdit) -> Result
     profile.memory.heap_mb = memory_mb;
     profile.jvm.extra_args = extra_args.split_whitespace().map(str::to_owned).collect();
     profile.keep_launcher_open = keep_launcher_open;
+    if profile.loader.kind != loader {
+        // Another loader's build number means nothing to this one: Legacy
+        // Fabric's "0.19.3" is not a Forge build. Left unset, the first launch
+        // pins the new loader's newest stable build (`ensure_loader`).
+        profile.loader.version = None;
+    }
     profile.loader.kind = loader;
 
     if let Some(policy) = java {

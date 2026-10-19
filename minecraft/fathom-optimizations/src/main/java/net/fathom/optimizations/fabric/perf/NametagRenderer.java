@@ -89,6 +89,12 @@ public final class NametagRenderer {
 
     /** New strings recorded per frame, at most. */
     static final int COMPILE_BUDGET = 12;
+    /**
+     * Diagnostic only, never a setting: skip the label's background quad, to measure
+     * what one display list per label could at most save
+     * ({@code -Dfathom.measure.labelNoBackground=true}). Changes what is drawn.
+     */
+    private static final boolean MEASURE_WITHOUT_BACKGROUND = Boolean.getBoolean("fathom.measure.labelNoBackground");
 
     /** Outcome of one hook invocation, including whether it touched GL. */
     public enum Result {
@@ -198,12 +204,14 @@ public final class NametagRenderer {
         Tessellator tessellator = Tessellator.getInstance();
         BufferBuilder buffer = tessellator.getBuffer();
         GlStateManager.disableTexture();
+        if (!MEASURE_WITHOUT_BACKGROUND) {
         buffer.begin(7, VertexFormats.POSITION_COLOR);
         buffer.vertex(-half - 1, -1 + top, 0.0).color(0.0f, 0.0f, 0.0f, 0.25f).next();
         buffer.vertex(-half - 1, 8 + top, 0.0).color(0.0f, 0.0f, 0.0f, 0.25f).next();
         buffer.vertex(half + 1, 8 + top, 0.0).color(0.0f, 0.0f, 0.0f, 0.25f).next();
         buffer.vertex(half + 1, -1 + top, 0.0).color(0.0f, 0.0f, 0.0f, 0.25f).next();
         tessellator.draw();
+        }
         GlStateManager.enableTexture();
 
         int left = -label.width / 2;

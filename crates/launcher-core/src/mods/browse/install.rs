@@ -261,11 +261,11 @@ impl Installer {
             });
         }
         if plan.needs_unverified_confirmation() && !options.accept_unverified {
-            return Err(BrowseError::Refused(
-                "Fathom cannot confirm this build works on Legacy Fabric 1.8.9; confirm before \
-                 installing"
-                    .to_owned(),
-            ));
+            return Err(BrowseError::Refused(format!(
+                "Fathom cannot confirm this build works on {} {}; confirm before installing",
+                target.loader.label(),
+                target.minecraft
+            )));
         }
         if plan.needs_duplicate_confirmation() && !options.accept_possible_duplicates {
             return Err(BrowseError::Refused(

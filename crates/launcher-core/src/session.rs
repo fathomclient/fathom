@@ -187,9 +187,9 @@ pub fn component_version(profile: &Profile) -> Option<String> {
 
 /// The loader name the game shows.
 ///
-/// Not [`Loader::label`]: that says "Forge (compatibility)", which is a
-/// launcher's way of describing a choice. On a main menu the line reads
-/// "1.8.9 · Legacy Fabric", and a parenthetical belongs in neither half.
+/// Kept separate from [`Loader::label`], which is the launcher's wording and
+/// free to change; this is the main menu's line ("1.8.9 · Legacy Fabric"),
+/// which the game reads.
 fn loader_name(loader: Loader) -> String {
     match loader {
         Loader::Vanilla => "Vanilla",

@@ -254,6 +254,25 @@ public final class ViewReport {
                         bucket.allocationMegabytesPerSecond()));
             }
         }
+        java.util.List<String> undrawn = new java.util.ArrayList<String>();
+        for (String scene : scenes) {
+            ViewBucket bucket = bucket(scene, NORMAL);
+            if (bucket == null || bucket.frames() == 0) {
+                continue;
+            }
+            double loaded = bucket.counterPerFrame(ViewCounter.PLAYERS_LOADED);
+            double drawn = bucket.callsPerFrame(ViewSection.ENTITY_PLAYER);
+            if (loaded >= 4d && drawn < loaded * 0.9d) {
+                undrawn.add(String.format(Locale.ROOT, "%s (%.1f of %.1f players drawn)", scene, drawn, loaded));
+            }
+        }
+        if (!undrawn.isEmpty()) {
+            // Usually entities that reached the client before their chunk did: 1.8
+            // files them in the empty placeholder chunk and never draws them. Such a
+            // scene is not the scene described; do not use it for comparisons.
+            line(out, "INVALID SCENES: players loaded but not drawn in " + undrawn
+                    + ". Run with mp-empty first.");
+        }
         line(out, "");
     }
 
@@ -453,6 +472,7 @@ public final class ViewReport {
     }
 
     private void multiplayer(StringBuilder out) {
+        java.util.List<String> unequalScenes = new java.util.ArrayList<String>();
         if (!multiplayerRun()) {
             return;
         }
@@ -486,6 +506,18 @@ public final class ViewReport {
                     bucket.callsPerFrame(ViewSection.NAMETAG), packetsPerSecond,
                     bucket.clientBytesPerFrame(), bucket.clientAllocationMegabytesPerSecond(),
                     minutes <= 0d ? 0d : bucket.gcCount() / minutes));
+            double loaded = bucket.counterPerFrame(ViewCounter.PLAYERS_LOADED);
+            double drawn = bucket.callsPerFrame(ViewSection.ENTITY_PLAYER);
+            if (loaded >= 4d && drawn < loaded * 0.9d) {
+                // The scene did not come up as described: players out of view or not
+                // where the driver put them. Its frame times are not comparable with
+                // another run's of the same scene; compare per player drawn instead.
+                unequalScenes.add(String.format(Locale.ROOT, "%s (%.1f of %.1f drawn)", scene, drawn, loaded));
+            }
+        }
+        if (!unequalScenes.isEmpty()) {
+            line(out, "WARNING: fewer players drawn than loaded in " + unequalScenes
+                    + ". Compare these with other runs per player drawn (ONE PLAYER), not per frame.");
         }
         line(out, "plyrs = other players loaded; drawn = player entities drawn per frame; tags = labels drawn;");
         line(out, "pkt/s = packets applied on the client thread; B/frame and MB/s = client-thread allocation.");

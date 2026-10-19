@@ -1063,7 +1063,7 @@ export async function profileDetail(id: string): Promise<ProfileDetail> {
       loaders: [
         { id: 'vanilla', label: 'Vanilla', available: true },
         { id: 'legacy-fabric', label: 'Legacy Fabric', available: false },
-        { id: 'forge', label: 'Forge', available: false },
+        { id: 'forge', label: 'Forge', available: true },
       ],
     };
   }

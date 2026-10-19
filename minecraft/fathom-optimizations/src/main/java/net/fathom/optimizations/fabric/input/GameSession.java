@@ -47,6 +47,10 @@ public final class GameSession {
             net.fathom.optimizations.fabric.diag.SessionPulse.mark(
                     net.fathom.optimizations.core.instrument.Pulse.Mark.WORLD);
         }
+        if (client.world != lastWorld) {
+            // The kept frame-item entity belongs to the world that is going away.
+            net.fathom.optimizations.fabric.perf.FrameItems.release();
+        }
         lastWorld = client.world;
         lastPlayer = client.player;
         MovementToggles.release();

@@ -455,8 +455,8 @@ fn an_impossible_setup_creates_nothing() {
     let fixture = Fixture::new();
     let before = fixture.launcher.profiles().len();
 
-    let mut blueprint = setup_for("Forge please", ProfileKind::Custom);
-    blueprint.loader = Some(Loader::Forge);
+    let mut blueprint = setup_for("Too new", ProfileKind::Custom);
+    blueprint.version_id = "1.21.4".to_owned();
     assert!(fixture.launcher.create_from_blueprint(&blueprint).is_err());
 
     let mut blueprint = setup_for("", ProfileKind::Fathom);
@@ -476,4 +476,21 @@ fn two_setups_with_the_same_name_do_not_collide() {
     let (second, _) = fixture.launcher.create_from_blueprint(&blueprint).unwrap();
     assert_ne!(first.id, second.id);
     assert_eq!(first.display_name, second.display_name);
+}
+
+/// Forge is a loader a Custom installation can choose, and it is made with no
+/// Fathom components: Fathom's client is a Legacy Fabric mod.
+#[test]
+fn a_custom_forge_setup_is_created_without_fathom_components() {
+    let fixture = Fixture::new();
+    let mut blueprint = setup_for("Forge", ProfileKind::Custom);
+    blueprint.loader = Some(Loader::Forge);
+    blueprint.components.clear();
+    let (created, _) = fixture
+        .launcher
+        .create_from_blueprint(&blueprint)
+        .expect("a Custom Forge installation");
+    assert_eq!(created.loader_kind(), Loader::Forge);
+    assert!(!created.kind.owns_components());
+    assert!(created.loader.version.is_none(), "pinned at first launch");
 }

@@ -126,13 +126,22 @@ supply their own, is governed by CurseForge's third-party API terms, which need 
 build enables it by default. Even with a key, CurseForge has no Legacy Fabric loader tag, so every
 1.8.9 Fabric build there is **Unverified**, and category filtering is Modrinth-only.
 
+## Forge installations
+
+A Custom installation with Forge browses for Forge: the search asks for the
+`forge` loader, **Verified Forge** means a 1.8.9 build tagged for Forge, and
+"Include unverified" adds builds that state no loader -- not plain Fabric builds,
+which are plausible only for Legacy Fabric. Fabric, Legacy Fabric and Ornithe
+builds are incompatible there, as Forge builds are in a Fabric installation.
+See `docs/forge.md`.
+
 ## Not supported
 
 - Judging a mod by its jar's `fabric.mod.json` (Fabric Loader version, entrypoints): by design.
 - Libraries that do not list 1.8.9 (for example Fabric Language Kotlin): the planner blocks mods
   that require them rather than guess.
 - Resource packs, shaders and modpacks: mods only.
-- Forge profiles: the resolver supports a Forge target, but Fathom has no Forge profile yet.
+
 
 ## Tests
 

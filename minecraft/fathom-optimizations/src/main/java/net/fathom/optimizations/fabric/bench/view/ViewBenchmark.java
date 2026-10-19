@@ -175,6 +175,13 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         HUD_HEAVY("hud-heavy", 8f, Where.MP,
                 "40 players; 15-line sidebar updated every tick, tab list held open, chat every 100 ms"),
         CHUNKS("chunks", 8f, Where.MP, "blocks changing near the camera every tick, players walking"),
+        // What real servers send that scripted players alone do not.
+        HOLOGRAMS("holograms", 8f, Where.MP,
+                "16 standing NPCs with team names, each under a 4-line hologram of named invisible armor stands"),
+        GENERATORS("generators", 8f, Where.MP,
+                "160 dropped items piled on 4 generators, 8 armoured players fighting beside them"),
+        DECOR("decor", 8f, Where.MP, "40 signs, 24 mob skulls, 16 banners and 12 item frames in front of the camera"),
+        TAB_BIG("tab-big", 8f, Where.MP, "20 players in view, 80 online, 15-line sidebar, tab list held open"),
         /** Whatever a real server is doing; the camera is left alone. */
         LIVE("live", Float.NaN, Where.MP, "a live server, camera not held");
 
@@ -468,7 +475,8 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         if (current != null && !Float.isNaN(current.scene.pitch)) {
             hold(player, current.scene.pitch);
         }
-        if (current != null && current.scene == Scene.HUD_HEAVY && client.options != null) {
+        if (current != null && (current.scene == Scene.HUD_HEAVY || current.scene == Scene.TAB_BIG)
+                && client.options != null) {
             // The tab list is drawn while its key is held; a key nobody presses stays pressed.
             net.minecraft.client.option.KeyBinding.setKeyPressed(client.options.playerListKey.getCode(), true);
         }
@@ -936,7 +944,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     }
 
     private void teardown(MinecraftClient client) {
-        if (activeScene == Scene.HUD_HEAVY && client.options != null) {
+        if ((activeScene == Scene.HUD_HEAVY || activeScene == Scene.TAB_BIG) && client.options != null) {
             net.minecraft.client.option.KeyBinding.setKeyPressed(client.options.playerListKey.getCode(), false);
         }
         ClientWorld world = client.world;
@@ -1092,9 +1100,12 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 }
             }
         } else if (arm.startsWith("on:")) {
-            String outcome = forceSwitch(arm.substring(3), true);
-            if (!runNotes.contains(outcome)) {
-                runNotes.add(outcome);
+            // Several at once, joined with '+', as for off: arms.
+            for (String id : arm.substring(3).split("\\+")) {
+                String outcome = forceSwitch(id, true);
+                if (!runNotes.contains(outcome)) {
+                    runNotes.add(outcome);
+                }
             }
         }
     }
@@ -1162,7 +1173,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 setSwitch(id, true);
             }
         } else if (arm.startsWith("on:")) {
-            forceSwitch(arm.substring(3), false);
+            for (String id : arm.substring(3).split("\\+")) {
+                forceSwitch(id, false);
+            }
         }
     }
 
@@ -1242,7 +1255,8 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         if (net.fathom.optimizations.fabric.perf.NametagNames.VERIFY) {
             runNotes.add(String.format(Locale.ROOT,
                     "Cache verification: nametag names %d checked, %d mismatched%s (served %d, rebuilt %d); "
-                            + "armour textures %d checked, %d mismatched.",
+                            + "armour textures %d checked, %d mismatched; sign lines %d checked, %d mismatched; "
+                            + "tab list strings %d checked, %d mismatched.",
                     net.fathom.optimizations.fabric.perf.NametagNames.verified,
                     net.fathom.optimizations.fabric.perf.NametagNames.mismatches,
                     net.fathom.optimizations.fabric.perf.NametagNames.firstMismatch == null ? ""
@@ -1250,10 +1264,18 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                     net.fathom.optimizations.fabric.perf.NametagNames.hits,
                     net.fathom.optimizations.fabric.perf.NametagNames.builds,
                     net.fathom.optimizations.fabric.perf.ArmorTextures.verified,
-                    net.fathom.optimizations.fabric.perf.ArmorTextures.mismatches));
+                    net.fathom.optimizations.fabric.perf.ArmorTextures.mismatches,
+                    net.fathom.optimizations.fabric.perf.SignTexts.verified,
+                    net.fathom.optimizations.fabric.perf.SignTexts.mismatches,
+                    net.fathom.optimizations.fabric.perf.TextLists.verified,
+                    net.fathom.optimizations.fabric.perf.TextLists.mismatches));
         }
         writeControl("done.txt", reason == null ? "done" : "failed " + reason);
         runNotes.add("Vanilla HUD replay: " + net.fathom.optimizations.fabric.perf.VanillaHudReplay.summary());
+        runNotes.add(String.format(Locale.ROOT, "Tab list text: %d replayed, %d recorded, %d live.",
+                net.fathom.optimizations.fabric.perf.TextLists.replays,
+                net.fathom.optimizations.fabric.perf.TextLists.records,
+                net.fathom.optimizations.fabric.perf.TextLists.live));
         try {
             write(client);
         } catch (Throwable failure) {

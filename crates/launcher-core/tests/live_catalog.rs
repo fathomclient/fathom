@@ -249,3 +249,49 @@ fn categories_come_from_modrinth() {
         .iter()
         .any(|c| c.id == "fabric" || c.id == "forge"));
 }
+
+/// The same real projects, from a Forge 1.8.9 profile: the verdicts follow the
+/// profile's loader, not Fathom's own.
+#[test]
+#[ignore = "makes real network requests to Modrinth"]
+fn a_forge_profile_sees_forge_builds_as_compatible() {
+    let tmp = tempfile::tempdir().unwrap();
+    let catalog = catalog(tmp.path());
+    let forge = Target::new("1.8.9", Loader::Forge);
+    let cases = [
+        // 1.8.9 builds for Forge (and Ornithe).
+        ("chatting", Verdict::Compatible),
+        // Forge only for 1.8.9.
+        ("entityculling", Verdict::Compatible),
+        // 1.8.9 builds tagged plain fabric only: never a Forge mod.
+        ("yosbr", Verdict::Incompatible),
+    ];
+    let mut wrong = Vec::new();
+    for (slug, expected) in cases {
+        let project = by_slug(&catalog, slug);
+        let verdict = catalog
+            .verdict(&project.reference, &forge, &grant(), &Cancel::new())
+            .unwrap();
+        println!("{slug:>14}: {:<12} — {}", verdict.verdict.label(), verdict.headline);
+        if verdict.verdict != expected {
+            wrong.push(format!("{slug}: expected {expected:?}, got {:?}", verdict.verdict));
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+
+    // A Forge search asks for Forge, and plain Fabric is not "plausible" here.
+    for breadth in [Breadth::Tagged, Breadth::Plausible] {
+        let mut query = SearchQuery::new(forge.clone()).with_page(0, 20);
+        query.sort = Sort::Downloads;
+        query.breadth = breadth;
+        let page = catalog.search("live", &query, &[], &grant(), &Cancel::new()).unwrap();
+        assert!(page.entries.len() >= 10, "{breadth:?}: Modrinth has many 1.8.9 Forge mods");
+        for entry in &page.entries {
+            assert!(
+                entry.project.loaders.contains("forge"),
+                "{breadth:?}: {} is not tagged forge",
+                entry.project.name
+            );
+        }
+    }
+}

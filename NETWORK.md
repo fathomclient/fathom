@@ -60,6 +60,8 @@ first thing on the Privacy screen.
 | `maven.legacyfabric.net` | Legacy Fabric mappings; redirects to the host below | core |
 | `repo.legacyfabric.net` | Where `maven.legacyfabric.net` redirects artifacts | core |
 | `maven.fabricmc.net` | Fabric loader jar and its libraries | core |
+| `maven.minecraftforge.net` | Forge, only for a Forge profile: its version list, its installer (read for the install profile, never run), its universal jar and the libraries that profile names | core |
+| `files.minecraftforge.net` | Forge's recommended build for a Minecraft version, when you choose Forge | core |
 | `api.adoptium.net` | Java runtime download | opt-in |
 | `api.modrinth.com` | Mod metadata | per action |
 | `cdn.modrinth.com` | Mod download | per action |
