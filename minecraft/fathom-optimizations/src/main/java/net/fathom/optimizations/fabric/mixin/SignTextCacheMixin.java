@@ -41,6 +41,7 @@ public abstract class SignTextCacheMixin {
         if (!SignTexts.VERIFY_ACTIVE) {
             List<Text> known = SignTexts.wrapped(entry, sign.text, text, width, font, a, b);
             if (known != null) {
+                net.fathom.optimizations.core.bench.view.ViewProbe.engaged(net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_SIGN_TEXT);
                 return known;
             }
         }

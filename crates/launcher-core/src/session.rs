@@ -172,7 +172,10 @@ pub fn component_version(profile: &Profile) -> Option<String> {
     let entry = profile
         .mods
         .enabled()
-        .find(|entry| entry.id.as_str() == crate::mods::catalog::FATHOM_OPTIMIZATIONS)?;
+        .find(|entry| {
+            entry.id.as_str() == crate::mods::catalog::FATHOM_OPTIMIZATIONS
+                || entry.id.as_str() == crate::mods::catalog::FATHOM_FORGE
+        })?;
     if let Some(version) = entry.version.as_ref() {
         return Some(version.as_str().to_owned());
     }
@@ -181,6 +184,7 @@ pub fn component_version(profile: &Profile) -> Option<String> {
         .strip_suffix(".jar")
         .unwrap_or(&entry.file_name);
     stem.strip_prefix("fathom-optimizations-")
+        .or_else(|| stem.strip_prefix("fathom-forge-"))
         .filter(|rest| !rest.is_empty())
         .map(str::to_owned)
 }
@@ -260,7 +264,7 @@ mod tests {
     #[test]
     fn the_data_root_is_written_so_the_game_opens_the_same_profiles() {
         let directory = tempfile::tempdir().unwrap();
-        let root = std::path::Path::new("C:\\Users\\jb\\AppData\\Local\\Fathom\\data");
+        let root = std::path::Path::new("C:\\Users\\Example\\AppData\\Local\\Fathom\\data");
         let descriptor = SessionDescriptor {
             profile_id: "fathom-1-8-9".to_owned(),
             profile_name: "Fathom 1.8.9".to_owned(),

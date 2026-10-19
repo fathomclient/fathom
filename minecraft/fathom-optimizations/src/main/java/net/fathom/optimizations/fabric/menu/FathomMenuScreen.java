@@ -36,31 +36,32 @@ import net.fathom.optimizations.fabric.hud.HudEditorScreen;
 import net.fathom.optimizations.generated.GraphiteTokens;
 
 /**
- * Fathom's title screen: the launcher's Home, in the game.
+ * Fathom's title screen.
  *
  * <pre>
- *   fathom                                       1.8.9  ( @ name )
+ *                                                   1.8.9  ( @ name v )
  *   ╭──╮
- *   │⌂ │  home, mods, performance, profiles (the Hub's pages)
- *   ╰──╯
- *        ╭──────────────────────────────╮
- *        │ CURRENT INSTALLATION         │
- *        │ optimized                    │
- *        │ 1.8.9 · Legacy Fabric        │
- *        │ [ Singleplayer ] [Multi] [x] │
- *        │ client · preset · hub key    │
- *   ╭──╮ ╰──────────────────────────────╯
- *   │⚙ │  quick settings, options
- *   ╰──╯                                Not affiliated with Mojang or Microsoft...
+ *   │⌂ │                   (( mark ))  fathom
+ *   │▦ │
+ *   │◔ │               [ ▶  Singleplayer      ]   the one bright action
+ *   │☺ │               [ ⇆  Multiplayer       ]
+ *   ╰──╯               [ ▦  Mods              ]
+ *                      [ ⚙  Settings          ]
+ *   ╭──╮
+ *   │≡ │                    ×  Quit game
+ *   │⚙ │            optimized · 1.8.9 · Legacy Fabric · Balanced
+ *   ╰──╯                                 Not affiliated with Mojang or Microsoft...
  * </pre>
  *
- * <p>It used to be its own thing -- a lockup and a column of four quiet rows in
- * a panel -- and beside the launcher it read as a different product. Now it is
- * the launcher's composition with the launcher's numbers: the 56 header with
- * the wordmark and the account, the 76 rail column with two glass capsules that
- * widen to 200 under the pointer, and the 440 installation card 28 in from the
- * rail and 40 up from the foot, its Play-sized primary, its 14/14 hairline
- * footer. The glass is frosted over the scene, as the launcher's is.
+ * <p>A compact column in the middle of the scene: the logo, the four places
+ * to go and a quiet Quit, each a control of the game's density (theme
+ * {@code game}): 208dp wide, 28 tall, the primary 32. It replaced a launcher
+ * Home card -- a 440dp panel with a Play-sized button and a footer of facts
+ * -- which took a third of the screen to say what one line under the column
+ * says now. The rail keeps every place the card's neighbours led to
+ * (Performance, Profiles, Quick settings, Options), slimmed to the same
+ * density. A soft pool of shade under the column, and an even veil over the
+ * background, keep the scene visible and the type legible without a panel.
  *
  * <p>Pressing something answers at once: the press shows on the frame it
  * happens, and the hand-off to Minecraft's own screen is on the next one. The
@@ -71,33 +72,31 @@ import net.fathom.optimizations.generated.GraphiteTokens;
 public final class FathomMenuScreen extends Screen implements FathomScreen,
         net.fathom.optimizations.fabric.gfx.LaidOut {
 
-    // -- the launcher's shell metrics (theme: layout.shell, layout.rail) -------
-    private static final float HEADER = 56f;
-    private static final float RAIL_COLUMN = 76f;
+    // -- the shell: header and rail, at the game's density -------------------
+    private static final float HEADER = GraphiteTokens.LAYOUT_MENU_HEADER;
     private static final float RAIL_LEFT = GraphiteTokens.SPACE_3;
-    private static final float RAIL_WIDTH = 48f;
-    private static final float RAIL_TRAY = 200f;
     private static final float RAIL_ITEM = GraphiteTokens.SIZE_CONTROL;
-    private static final float RAIL_INSET = (RAIL_WIDTH - RAIL_ITEM) / 2f;
-    private static final float RAIL_GAP = GraphiteTokens.SPACE_1;
-    /** The rail's lower group ends 56 above the bottom, as the launcher's does. */
-    private static final float RAIL_FOOT = 56f;
-    /** The header's controls: the launcher's 36dp capsules, 12 apart. */
+    private static final float RAIL_INSET = 5f;
+    private static final float RAIL_WIDTH = RAIL_ITEM + RAIL_INSET * 2f;
+    private static final float RAIL_TRAY = 176f;
+    private static final float RAIL_GAP = 2f;
+    /** The rail's lower group ends this far above the bottom. */
+    private static final float RAIL_FOOT = 44f;
+    /** The header's controls: the game's 28dp capsules. */
     private static final float HEADER_CONTROL = GraphiteTokens.SIZE_CONTROL;
     /** The account capsule's name: 13/500 at the button tracking (theme: type.button). */
     private static final Type CAPSULE_TYPE = Graphite.UI.tracked(-0.005f);
-    /** The footer's labels set no letter-spacing (Home.svelte .installation span). */
+    /** The installation line under the column sets no letter-spacing. */
     private static final Type FACT_LABEL = Graphite.CAPTION.tracked(0f);
 
-    // -- the installation card (Home.svelte .launch-composition) --------------
-    private static final float CARD_LEFT = RAIL_COLUMN + 28f;
-    private static final float CARD_BOTTOM = 40f;
-    private static final float CARD_WIDTH = 440f;
-    private static final float CARD_PAD = 24f;
-    private static final float PRIMARY_WIDTH = GraphiteTokens.SIZE_PRIMARY_MIN_WIDTH;
+    // -- the column: logo, actions, the installation line ----------------------
+    private static final float COLUMN = GraphiteTokens.LAYOUT_MENU_COLUMN;
+    private static final float COLUMN_GAP = GraphiteTokens.LAYOUT_MENU_GAP;
+    private static final float BUTTON = GraphiteTokens.SIZE_CONTROL;
     private static final float PRIMARY_HEIGHT = GraphiteTokens.SIZE_PRIMARY;
-    /** The launcher's lockup: the mark and a 13px-ascender wordmark, 24 in, centred in the header. */
-    private static final float WORDMARK_CAP = GraphiteTokens.WORDMARK_CAP_LAUNCHER;
+    private static final float LOGO_CAP = GraphiteTokens.LAYOUT_MENU_LOGO_CAP;
+    /** The column sits a little above the middle, where the eye lands first. */
+    private static final float COLUMN_LIFT = 32f;
 
     private static final float TRAVEL = GraphiteTokens.MOTION_TRAVEL;
 
@@ -106,7 +105,17 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
 
     private static final String SINGLE = "menu.single";
     private static final String MULTI = "menu.multi";
+    private static final String MODS = "menu.mods";
+    private static final String SETTINGS = "menu.settings";
     private static final String QUIT = "menu.quit";
+
+    /** The column's actions: id, label, icon. Singleplayer is the primary. */
+    private static final String[][] ACTIONS = {
+        {SINGLE, "Singleplayer", "PLAY"},
+        {MULTI, "Multiplayer", "SIGNAL"},
+        {MODS, "Mods", "MODS"},
+        {SETTINGS, "Settings", "SETTINGS"},
+    };
 
     /** The rail: id, label, icon, and the Hub section it opens (null: not the Hub). */
     private static final String[][] RAIL_TOP = {
@@ -120,9 +129,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         {"rail.options", "Options", "SETTINGS", null},
     };
 
-    /** Tab order: the card's actions, then the rail. */
+    /** Tab order: the column, top to bottom, then the rail. */
     private static final String[] FOCUS_ORDER = {
-        SINGLE, MULTI, QUIT,
+        SINGLE, MULTI, MODS, SETTINGS, QUIT,
         "rail.mods", "rail.performance", "rail.profiles", "rail.quick", "rail.options",
     };
 
@@ -140,8 +149,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     /** Lines of text in line boxes; one, reused every frame. */
     private final net.fathom.optimizations.core.ui.layout.TextStack stack =
             new net.fathom.optimizations.core.ui.layout.TextStack();
-    /** The launcher's Play label: 15/600. Made once, not per frame. */
-    private static final Type PRIMARY_TYPE = new Type(GraphiteTokens.TYPE_PRIMARY_SIZE, Type.Weight.SEMIBOLD);
+    /** The primary's label: the UI size at the button weight. Made once, not per frame. */
+    private static final Type PRIMARY_TYPE = new Type(GraphiteTokens.TYPE_UI_SIZE, Type.Weight.SEMIBOLD);
     private final Pointer pointer = new Pointer();
     private Transition transition;
     private int captureFrames;
@@ -153,17 +162,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     //    or a string changes. Everything below draws and hit-tests from it.
     private final Box root = Box.stack("home");
     private final Box header = Box.row("header");
-    private final Box wordmarkBox = Box.leaf("header.wordmark", new Box.Measure() {
-        @Override
-        public float width(Renderer ui) {
-            return Graphite.lockupWidth(ui, WORDMARK_CAP);
-        }
-
-        @Override
-        public float height(Renderer ui, float width) {
-            return WORDMARK_CAP;
-        }
-    });
     private final TextLeaf version = TextLeaf.of("header.version", Graphite.SMALL, 16f);
     private final Box capsule = Box.row("header.account");
     private final Box avatarBox = Box.fixed("header.account.head", 24f, 24f);
@@ -173,28 +171,22 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     private final Box railBottom = Box.column("rail.bottom");
     private final Box[] railTopItems = new Box[RAIL_TOP.length];
     private final Box[] railBottomItems = new Box[RAIL_BOTTOM.length];
-    private final Box card = Box.column("card");
-    private final TextLeaf eyebrow = TextLeaf.of("card.eyebrow", Graphite.CAPTION, 14f);
-    private final TextLeaf title = TextLeaf.of("card.title", Graphite.TITLE, 26f);
-    private final TextLeaf build = TextLeaf.of("card.build", Graphite.SMALL, 16f);
-    private final Box primaryBox = Box.fixed("card.single", PRIMARY_WIDTH, PRIMARY_HEIGHT);
-    private final Box multiBox = Box.leaf("card.multi", new Box.Measure() {
+    private final Box column = Box.column("column");
+    private final Box logoBox = Box.leaf("column.logo", new Box.Measure() {
         @Override
         public float width(Renderer ui) {
-            return Controls.buttonWidth(ui, "Multiplayer");
+            return Graphite.lockupWidth(ui, LOGO_CAP);
         }
 
         @Override
         public float height(Renderer ui, float width) {
-            return PRIMARY_HEIGHT;
+            return LOGO_CAP;
         }
     });
-    private final Box quitBox = Box.fixed("card.quit", PRIMARY_HEIGHT, PRIMARY_HEIGHT);
-    private final Box progressBox = Box.column("card.progress").height(10f);
-    private final Box ruleBox = Box.column("card.rule").height(1f);
-    private final Box[] factColumns = new Box[3];
-    private final TextLeaf[] factLabels = new TextLeaf[3];
-    private final TextLeaf[] factValues = new TextLeaf[3];
+    private final Box[] actionBoxes = new Box[ACTIONS.length];
+    private final Box quitBox = Box.fixed("column.quit", COLUMN, BUTTON);
+    private final Box progressBox = Box.column("column.progress").height(6f);
+    private final TextLeaf installLine = TextLeaf.of("column.installation", FACT_LABEL, 14f).keepCase(true);
     private final TextLeaf legalLine = TextLeaf.of("legal", FACT_LABEL, 14f).keepCase(true);
     /** Floats under the account capsule; its retained children determine its height. */
     private final Box accountPanelBox = Box.column("account.panel").width(ACCOUNT_PANEL_WIDTH)
@@ -221,7 +213,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     private final java.util.List<String> accountRowIds = new java.util.ArrayList<String>();
     private boolean built;
     private static final float ACCOUNT_PANEL_WIDTH = 300f;
-    private static final String[] FACT_NAMES = {"Client", "Preset", "Hub"};
 
     /** What was pressed, drawn as working until the hand-off. */
     private String busy;
@@ -336,21 +327,18 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     // -----------------------------------------------------------------------
 
     /**
-     * The launcher's Home, as a tree: the header, the rail's two groups and the
-     * installation card, each from its own paddings and gaps (Home.svelte,
-     * App.svelte; measured from the running launcher by desktop/proof). Built
-     * once.
+     * The title screen as a tree: the header, the rail's two groups and the
+     * centred column, each from its own paddings and gaps at the game's
+     * density. Built once.
      */
     private void buildTree() {
         built = true;
-        // Header: the wordmark 24 in, the version and the account capsule 12
-        // from the right, all centred in its 56.
+        // Header: the version and the account capsule 12 from the right.
         header.height(HEADER).padding(24f, 0f, GraphiteTokens.SPACE_3, 0f).gap(GraphiteTokens.SPACE_3)
                 .align(Box.Align.CENTRE);
-        header.add(wordmarkBox);
         header.add(Box.spacer("header.space"));
         header.add(version.box());
-        capsule.height(HEADER_CONTROL).padding(5f, 0f, GraphiteTokens.SPACE_3, 0f).gap(GraphiteTokens.SPACE_2)
+        capsule.height(HEADER_CONTROL).padding(3f, 0f, GraphiteTokens.SPACE_2, 0f).gap(GraphiteTokens.SPACE_2)
                 .align(Box.Align.CENTRE);
         capsule.add(avatarBox);
         capsule.add(accountName.box());
@@ -369,43 +357,30 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         railSlot.add(railBottom);
         root.add(railSlot);
 
-        // The card: 104 in, 40 up, its heading, actions and facts in line boxes.
-        Box cardSlot = Box.column("slot.card").padding(CARD_LEFT, 0f, 0f, CARD_BOTTOM)
-                .justify(Box.Align.END).align(Box.Align.START);
-        card.padding(CARD_PAD);
-        card.add(eyebrow.box());
-        card.add(Box.column("card.eyebrow.after").height(6f));
-        card.add(title.box());
-        card.add(Box.column("card.title.after").height(4f));
-        card.add(build.box());
-        card.add(Box.column("card.heading.after").height(18f));
-        Box actions = Box.row("card.actions").gap(GraphiteTokens.SPACE_3).align(Box.Align.START);
-        actions.add(primaryBox);
-        actions.add(multiBox);
-        actions.add(quitBox);
-        card.add(actions);
-        card.add(progressBox);
-        card.add(Box.column("card.rule.before").height(14f));
-        card.add(ruleBox);
-        card.add(Box.column("card.rule.after").height(14f));
-        Box facts = Box.row("card.facts");
-        for (int index = 0; index < 3; index++) {
-            factLabels[index] = TextLeaf.of("card.fact.label." + index, FACT_LABEL, 14f);
-            factValues[index] = TextLeaf.of("card.fact.value." + index, Graphite.UI, 16f);
-            factLabels[index].set(FACT_NAMES[index]);
-            // Three equal columns (CSS grid 1fr), each 12 in on the right; the
-            // second and third also 12 in on the left, past their 1px divider.
-            Box column = Box.column("card.fact." + index).width(0f).grow(1f)
-                    .padding(index == 0 ? 0f : 12f + 1f, 0f, 12f, 0f);
-            column.add(factLabels[index].box());
-            column.add(Box.column("card.fact.gap." + index).height(3f));
-            column.add(factValues[index].box());
-            facts.add(column);
-            factColumns[index] = column;
+        // The column, centred and lifted a little: the logo, the actions 6
+        // apart, Quit after a wider gap, then the installation line.
+        Box columnSlot = Box.column("slot.column").padding(0f, 0f, 0f, COLUMN_LIFT * 2f)
+                .justify(Box.Align.CENTRE).align(Box.Align.CENTRE);
+        column.width(COLUMN).align(Box.Align.CENTRE);
+        column.add(logoBox);
+        column.add(Box.column("column.logo.after").height(GraphiteTokens.SPACE_6));
+        for (int index = 0; index < ACTIONS.length; index++) {
+            actionBoxes[index] = Box.fixed("column." + ACTIONS[index][0], COLUMN,
+                    index == 0 ? PRIMARY_HEIGHT : BUTTON);
+            if (index > 0) {
+                column.add(Box.column("column.gap." + index).height(COLUMN_GAP));
+            }
+            column.add(actionBoxes[index]);
+            if (index == 0) {
+                column.add(progressBox);
+            }
         }
-        card.add(facts);
-        cardSlot.add(card);
-        root.add(cardSlot);
+        column.add(Box.column("column.quit.before").height(GraphiteTokens.SPACE_3));
+        column.add(quitBox);
+        column.add(Box.column("column.installation.before").height(GraphiteTokens.SPACE_4));
+        column.add(installLine.box());
+        columnSlot.add(column);
+        root.add(columnSlot);
 
         Box legalSlot = Box.column("slot.legal").padding(0f, 0f, GraphiteTokens.SPACE_4, GraphiteTokens.SPACE_3)
                 .justify(Box.Align.END).align(Box.Align.END);
@@ -426,7 +401,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         accountPanelBox.add(accountStatusBox);
         accountPanelBox.add(accountStatusAfter);
         accountPanelBox.add(accountAddBox);
-        eyebrow.set("Current installation");
         legalLine.set(LEGAL);
     }
 
@@ -445,12 +419,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         }
         version.set(minecraftVersion());
         accountName.set(playerName());
-        title.set(installationName());
-        build.set(buildLine());
-        factValues[0].set("Fathom");
-        factValues[1].set(presetName());
-        factValues[2].set(hubKey());
-        card.width(Math.min(CARD_WIDTH, Math.max(280f, ui.width() - CARD_LEFT - 56f)));
+        installLine.set(installationLine());
         accountPanelBox.hidden(!accountPanelPresent);
         if (accountPanelPresent) {
             syncAccountLayout();
@@ -458,21 +427,23 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         root.layout(ui, 0f, 0f, ui.width(), ui.height());
     }
 
-    /** "1.8.9 · Legacy Fabric", kept until either part changes. */
-    private String buildLine() {
-        String versionText = minecraftVersion();
-        String loader = loaderName();
-        if (!versionText.equals(buildVersion) || !loader.equals(buildLoader)) {
-            buildVersion = versionText;
-            buildLoader = loader;
-            buildText = versionText + " \u00b7 " + loader;
+    /**
+     * "optimized · 1.8.9 · Legacy Fabric · Balanced": what the card's heading
+     * and footer said, on one line, kept until any part changes.
+     */
+    private String installationLine() {
+        String key = installationName() + '\n' + minecraftVersion() + '\n' + loaderName() + '\n' + presetName();
+        if (!key.equals(lineKey)) {
+            lineKey = key;
+            String preset = presetName();
+            lineText = installationName() + " \u00b7 " + minecraftVersion() + " \u00b7 " + loaderName()
+                    + ("\u2014".equals(preset) ? "" : " \u00b7 " + preset);
         }
-        return buildText;
+        return lineText;
     }
 
-    private String buildVersion = "";
-    private String buildLoader = "";
-    private String buildText = "";
+    private String lineKey = "";
+    private String lineText = "";
 
     /** Line boxes as the launcher's CSS sets them: size times line height. */
     private static float line(Type type, float ratio) {
@@ -489,13 +460,15 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         ui.pushAlpha(enter);
         ui.pushTransform(0f, (1f - enter) * TRAVEL);
 
-        // The scene behind the glass, before anything is drawn over it.
+        // The dim, then the scene behind the glass: the rail's panes frost the
+        // dimmed scene, as everything else is drawn over it.
+        Graphite.dim(ui, column.rect(), true, 1f);
         Graphite.captureFrost(ui);
 
         header(ui);
         rail(ui, railTop, railTopItems, RAIL_TOP, "rail.top");
         rail(ui, railBottom, railBottomItems, RAIL_BOTTOM, "rail.bottom");
-        installation(ui, now);
+        column(ui, now);
         legal(ui);
         if (accountPanelPresent) {
             ui.pushLayer(net.fathom.optimizations.core.ui.render.Layer.POPOVER);
@@ -521,10 +494,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         ui.popAlpha();
     }
 
-    /** The launcher's header: wordmark at the left, version and account at the right. */
+    /** The header: the version and the account at the right. The logo is the column's. */
     private void header(Renderer ui) {
-        Rect mark = wordmarkBox.rect();
-        Graphite.lockup(ui, mark.x, Math.round(mark.y), WORDMARK_CAP);
         version.draw(ui, Graphite.TEXT_SECONDARY);
 
         // The launcher's account capsule: clear glass that answers the
@@ -585,7 +556,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
                 Glow.current(ui, row, Graphite.R_CONTROL, 1f);
             }
             int ink = current || state.hover > 0.5f ? Graphite.TEXT : Graphite.TEXT_SECONDARY;
-            float iconSize = 20f;
+            float iconSize = Graphite.ICON_NAV;
             ui.icon(Icon.valueOf(item[2]), row.x + (RAIL_ITEM - iconSize) / 2f, row.centreY() - iconSize / 2f,
                     iconSize, current ? Graphite.BRAND_LIGHT : ink);
             if (open > 0.01f) {
@@ -604,92 +575,101 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         }
     }
 
-    /** The installation card, as on the launcher's Home. */
-    private void installation(Renderer ui, float now) {
-        Rect area = card.rect();
-        Graphite.surface(ui, area, Graphite.R_PANEL, Graphite.Material.STANDARD, true);
-        eyebrow.draw(ui, Graphite.TEXT_SECONDARY);
-        title.draw(ui, Graphite.TEXT);
-        build.draw(ui, Graphite.TEXT_SECONDARY);
+    /** The column: the logo, the four actions, Quit and the installation line. */
+    private void column(Renderer ui, float now) {
+        Rect logo = logoBox.rect();
+        Graphite.lockup(ui, logo.x, Math.round(logo.y), LOGO_CAP);
 
-        // Singleplayer is the Play of the title screen: the bright primary.
-        Rect primary = primaryBox.rect();
-        String primaryLabel = SINGLE.equals(busy) ? "Opening worlds\u2026" : "Singleplayer";
-        if (cardButton(ui, SINGLE, primary, primaryLabel, true) || activated(SINGLE)) {
+        for (int index = 0; index < ACTIONS.length; index++) {
+            final String id = ACTIONS[index][0];
+            Rect area = actionBoxes[index].rect();
+            String label = ACTIONS[index][1];
+            if (id.equals(busy)) {
+                label = SINGLE.equals(id) ? "Opening worlds\u2026" : "Opening\u2026";
+            }
+            if (columnButton(ui, id, area, label, Icon.valueOf(ACTIONS[index][2]), index == 0) || activated(id)) {
+                act(id);
+            }
+            focus(ui, id, area, Graphite.R_CONTROL);
+            if (index == 0 && SINGLE.equals(busy)) {
+                Rect slot = progressBox.rect();
+                working(ui, area.x + 16f, slot.y + 3f, area.width - 32f, now);
+            }
+        }
+
+        // Quit: quiet until the pointer is on it, as a way out should be.
+        Rect quit = quitBox.rect();
+        Controls.State state = controls.state(QUIT, quit, live());
+        pressScale(ui, quit, state.press);
+        Graphite.overlay(ui, quit, Graphite.R_CONTROL, Math.max(state.hover, state.press), 0f);
+        int ink = net.fathom.optimizations.core.ui.Colour.mix(Graphite.TEXT_TERTIARY, Graphite.TEXT, state.hover);
+        Type type = Graphite.floor(ui, Graphite.UI);
+        float glyph = Graphite.ICON_INLINE;
+        String quitLabel = "Quit game";
+        float width = glyph + GraphiteTokens.SPACE_2 + ui.measure(quitLabel, type);
+        float left = quit.centreX() - width / 2f;
+        ui.icon(Icon.CLOSE, left, quit.centreY() - glyph / 2f, glyph, ink);
+        ui.text(quitLabel, left + glyph + GraphiteTokens.SPACE_2, Graphite.baseline(ui, quit, type), type, ink);
+        ui.popTransform();
+        if (state.clicked || activated(QUIT)) {
+            act(QUIT);
+        }
+        focus(ui, QUIT, quit, Graphite.R_CONTROL);
+
+        installLine.draw(ui, Graphite.TEXT_TERTIARY);
+    }
+
+    /** What each of the column's actions does. */
+    private void act(String id) {
+        if (SINGLE.equals(id)) {
             press(SINGLE, new Runnable() {
                 @Override
                 public void run() {
                     client.setScreen(new SelectWorldScreen(FathomMenuScreen.this));
                 }
             });
-        }
-        focus(ui, SINGLE, primary, Graphite.R_CONTROL);
-        if (busy != null) {
-            Rect slot = progressBox.rect();
-            working(ui, slot.x + 16f, slot.y + 6f, primary.width - 32f, now);
-        }
-
-        Rect multi = multiBox.rect();
-        String multiLabel = MULTI.equals(busy) ? "Opening\u2026" : "Multiplayer";
-        if (cardButton(ui, MULTI, multi, multiLabel, false) || activated(MULTI)) {
+        } else if (MULTI.equals(id)) {
             press(MULTI, new Runnable() {
                 @Override
                 public void run() {
                     client.setScreen(new MultiplayerScreen(FathomMenuScreen.this));
                 }
             });
-        }
-        focus(ui, MULTI, multi, Graphite.R_CONTROL);
-
-        Rect quit = quitBox.rect();
-        if (quit.right() <= card.content().right() + 0.5f) {
-            // The launcher's square beside Play: light glass, the control radius.
-            Controls.State state = controls.state(QUIT, quit, live());
-            Graphite.surface(ui, quit, Graphite.R_CONTROL, Graphite.Material.LIGHT,
-                    state.hover, state.press, 0f, false);
-            float iconSize = 16f;
-            ui.icon(Icon.CLOSE, quit.centreX() - iconSize / 2f, quit.centreY() - iconSize / 2f, iconSize,
-                    Graphite.TEXT);
-            controls.tooltip(state, quit, "Quit game");
-            if (state.clicked || activated(QUIT)) {
-                press(QUIT, new Runnable() {
-                    @Override
-                    public void run() {
-                        client.scheduleStop();
-                    }
-                });
-            }
-            focus(ui, QUIT, quit, Graphite.R_CONTROL);
-        }
-
-        // The footer: three labelled facts under a hairline, dividers between.
-        Rect rule = ruleBox.rect();
-        Graphite.hairline(ui, rule.x, rule.right(), rule.y);
-        for (int index = 0; index < 3; index++) {
-            if (index > 0) {
-                Rect column = factColumns[index].rect();
-                ui.fill(column.x, column.y, column.x + ui.pixel(), column.bottom(), Graphite.HAIRLINE);
-            }
-            factLabels[index].draw(ui, Graphite.TEXT_TERTIARY);
-            factValues[index].draw(ui, Graphite.TEXT);
+        } else if (MODS.equals(id)) {
+            openHub(MODS, "Mods");
+        } else if (SETTINGS.equals(id)) {
+            press(SETTINGS, new Runnable() {
+                @Override
+                public void run() {
+                    client.setScreen(new SettingsScreen(FathomMenuScreen.this, client.options));
+                }
+            });
+        } else if (QUIT.equals(id)) {
+            press(QUIT, new Runnable() {
+                @Override
+                public void run() {
+                    client.scheduleStop();
+                }
+            });
         }
     }
 
     /**
-     * A button of the card, in Home's own shapes: the control radius, not a
-     * pill. The primary is the launcher's Play -- the action fill, its dark
-     * type at 15/600, and the accent halo spilling out beneath it. The other
-     * is light glass, like the square beside Play.
+     * One of the column's actions: an icon and a label centred together. The
+     * primary is the action fill with its dark type and a halo that only
+     * strengthens under the pointer; the others are light glass that lifts on
+     * hover. Restrained on purpose: the scene is the picture, not the buttons.
      */
-    private boolean cardButton(Renderer ui, String id, Rect area, String label, boolean primary) {
+    private boolean columnButton(Renderer ui, String id, Rect area, String label, Icon icon, boolean primary) {
         Controls.State state = controls.state(id, area, live());
         float radius = Graphite.R_CONTROL;
+        pressScale(ui, area, state.press);
         Type type;
         int ink;
         if (primary) {
             boolean working = id.equals(busy);
             if (!working) {
-                Glow.halo(ui, area, radius, 1f + 0.5f * state.hover);
+                Glow.halo(ui, area, radius, 0.55f + 0.45f * state.hover);
             }
             int fill = working ? GraphiteTokens.MATERIAL_STANDARD_FILL
                     : net.fathom.optimizations.core.ui.Colour.mix(
@@ -706,10 +686,18 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         } else {
             Graphite.surface(ui, area, radius, Graphite.Material.LIGHT, state.hover, state.press, 0f, false);
             type = Graphite.floor(ui, Graphite.UI);
-            ink = Graphite.TEXT;
+            ink = net.fathom.optimizations.core.ui.Colour.mix(Graphite.TEXT_SECONDARY, Graphite.TEXT,
+                    Math.max(state.hover, keyboardFocus && controls.focused(id) ? 1f : 0f));
         }
-        ui.textCentred(Text.fit(ui, label, type, area.width - GraphiteTokens.SPACE_4), area.centreX(),
-                Graphite.baseline(ui, area, type), type, ink);
+        float glyph = icon == null ? 0f : Graphite.ICON_INLINE;
+        float lead = icon == null ? 0f : glyph + GraphiteTokens.SPACE_2;
+        String fitted = Text.fit(ui, label, type, area.width - lead - GraphiteTokens.SPACE_4 * 2f);
+        float left = area.centreX() - (lead + ui.measure(fitted, type)) / 2f;
+        if (icon != null) {
+            ui.icon(icon, left, area.centreY() - glyph / 2f, glyph, ink);
+        }
+        ui.text(fitted, left + lead, Graphite.baseline(ui, area, type), type, ink);
+        ui.popTransform();
         return state.clicked;
     }
 
@@ -891,7 +879,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         if (pendingSwitch) {
             // Selected in the launcher; the game still plays as who it started as.
             Rect quit = accountQuitBox.rect();
-            if (cardButton(ui, "account.quit", quit, "Quit to play as " + switched, true)) {
+            if (columnButton(ui, "account.quit", quit, "Quit to play as " + switched, null, true)) {
                 final net.minecraft.client.MinecraftClient game = client;
                 account.openLauncher(new Runnable() {
                     @Override
@@ -1040,7 +1028,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     }
 
     // -----------------------------------------------------------------------
-    // What the card says
+    // What the column says
     // -----------------------------------------------------------------------
 
     private LaunchSession session() {

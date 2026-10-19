@@ -20,6 +20,7 @@ import net.fathom.optimizations.core.hud.Placement;
 import net.fathom.optimizations.core.hud.Snap;
 import net.fathom.optimizations.core.hud.Widget;
 import net.fathom.optimizations.core.module.FathomModule;
+import net.fathom.optimizations.core.ui.layout.Rect;
 import net.fathom.optimizations.fabric.Runtime;
 import net.fathom.optimizations.fabric.gfx.FathomNavigation;
 import net.fathom.optimizations.fabric.gfx.MinecraftGuiSize;
@@ -185,14 +186,20 @@ public final class EditorSelfTest {
                     Pointer.scriptPrimary(Boolean.FALSE);
                 } else if (frame > 20) {
                     Placement placed = hud.placement(CLOCK);
-                    Snap.Box now = box(hud, client, CLOCK);
+                    FathomHud.Positioned dropped = positioned(hud, client, CLOCK);
+                    Snap.Box now = dropped.box;
                     check("drag: the clock is selected", CLOCK.equals(editor.qaSelected()), editor.qaSelected());
                     check("drag: it takes the anchor of the third it was dropped in",
                             placed.anchor() == Anchor.MIDDLE_LEFT, String.valueOf(placed.anchor()));
+                    // Where the placement puts it. Once let go it is no longer
+                    // fixed, so HudFlow may move it down off a widget it was
+                    // dropped onto (Keystrokes, at small GUI sizes); that is
+                    // the flow working, and "clear of everything" covers it.
                     float dx = now.x + now.width / 2f - targetX;
-                    float dy = now.y + now.height / 2f - targetY;
+                    float dy = dropped.naturalY + now.height / 2f - targetY;
                     check("drag: it lands under the pointer (snapping aside)",
-                            Math.abs(dx) <= 10f && Math.abs(dy) <= 10f, "off by " + dx + ", " + dy);
+                            Math.abs(dx) <= 10f && Math.abs(dy) <= 10f, "off by " + dx + ", " + dy
+                                    + (dropped.flowed ? "; flowed " + (now.y - dropped.naturalY) + " down" : ""));
                     check("drag: it was dropped clear of everything", overlapsWith(hud, client, CLOCK).isEmpty(),
                             overlapsWith(hud, client, CLOCK));
                     next();
@@ -343,11 +350,34 @@ public final class EditorSelfTest {
                         "left at " + scrolled + ", back at " + hub.qaScroll());
                 hub.handleFathomKey((char) 0, Keyboard.KEY_ESCAPE);
                 check("escape: a module page goes back to the list", hub.qaOpenModule() == null, hub.qaOpenModule());
-                hub.beginClose();
                 Pointer.script(Float.NaN, Float.NaN);
-                next();
+                step = 30;
+                frame = 0;
+                stepStarted = System.nanoTime();
                 return;
             }
+
+            // -- the module grid ---------------------------------------------------------
+            case 30:
+            case 31:
+            case 32:
+            case 33:
+            case 34:
+            case 35:
+            case 36:
+            case 37:
+            case 38:
+            case 39:
+            case 40:
+            case 41:
+            case 42:
+            case 43:
+            case 44:
+            case 45:
+            case 46:
+            case 47:
+                grid(client, (FathomHubScreen) client.currentScreen);
+                return;
             case 18:
                 if (since() < 1200L) {
                     return;
@@ -395,6 +425,273 @@ public final class EditorSelfTest {
         client.startIntegratedServer(WORLD, WORLD, null);
     }
 
+    // -- the module grid, as a player uses it -------------------------------------
+
+    private static int gridTotal;
+    private static boolean clockWasOn;
+    private static String keyed;
+    private static boolean keyedWasOn;
+    private static int clickPhase;
+    private static long clickAt;
+
+    /**
+     * Search, a card's body, its switch and its star by the pointer, the
+     * category and state filters, then the keyboard: arrows, Space and Enter.
+     * Every pointer press lands on the rectangle the card last drew that part
+     * in, so a click meant for one control that reached another would show.
+     */
+    private static void grid(MinecraftClient client, FathomHubScreen hub) {
+        if (hub == null) {
+            fail("grid", "the Hub is not open");
+            finish(client);
+            return;
+        }
+        FathomModule clock = Runtime.features().find(CLOCK);
+        switch (step) {
+            case 30:
+                if (since() < 400L) {
+                    return;
+                }
+                gridTotal = hub.qaCards().size();
+                check("grid: lists every module", gridTotal == Runtime.features().all().size()
+                        && hub.qaColumns() >= 2, gridTotal + " cards in " + hub.qaColumns() + " columns");
+                for (char c : CLOCK.toCharArray()) {
+                    hub.handleFathomKey(c, 0);
+                }
+                next();
+                return;
+            case 31: {
+                if (since() < 400L) {
+                    return;
+                }
+                List<String> cards = hub.qaCards();
+                boolean allMatch = !cards.isEmpty();
+                for (String id : cards) {
+                    allMatch &= Runtime.features().find(id).matches(CLOCK);
+                }
+                check("search: typing filters the grid to what matches",
+                        cards.contains(CLOCK) && cards.size() < gridTotal && allMatch,
+                        "\"" + hub.qaSearch() + "\": " + cards);
+                clockWasOn = clock.enabled();
+                next();
+                return;
+            }
+            case 32:
+                if (!click(hub, CLOCK, "card")) {
+                    return;
+                }
+                check("card: clicking a module with settings opens its page", CLOCK.equals(hub.qaOpenModule()),
+                        hub.qaOpenModule());
+                check("card: and leaves it switched as it was", clock.enabled() == clockWasOn, "");
+                hub.handleFathomKey((char) 0, Keyboard.KEY_ESCAPE);
+                next();
+                return;
+            case 33:
+                if (since() < 400L || !click(hub, CLOCK, "toggle")) {
+                    return;
+                }
+                check("switch: a click on the switch toggles the module", clock.enabled() != clockWasOn,
+                        "enabled " + clock.enabled());
+                check("switch: and opens nothing", hub.qaOpenModule() == null, hub.qaOpenModule());
+                next();
+                return;
+            case 34:
+                if (!click(hub, CLOCK, "toggle")) {
+                    return;
+                }
+                check("switch: a second click switches it back", clock.enabled() == clockWasOn, "");
+                next();
+                return;
+            case 35:
+                if (!click(hub, CLOCK, "star")) {
+                    return;
+                }
+                check("favourite: the star pins the module", clock.favourite(), "");
+                check("favourite: and neither opens nor switches it",
+                        hub.qaOpenModule() == null && clock.enabled() == clockWasOn, hub.qaOpenModule());
+                // Escape clears the search, one layer at a time.
+                hub.handleFathomKey((char) 0, Keyboard.KEY_ESCAPE);
+                next();
+                return;
+            case 36: {
+                if (since() < 400L) {
+                    return;
+                }
+                List<String> cards = hub.qaCards();
+                boolean pinnedFirst = cards.contains(CLOCK);
+                for (int index = 0; index < cards.indexOf(CLOCK); index++) {
+                    pinnedFirst &= Runtime.features().find(cards.get(index)).favourite();
+                }
+                check("search: Escape clears it and every module is back",
+                        hub.qaSearch().isEmpty() && cards.size() == gridTotal, cards.size() + " cards");
+                check("favourite: a pinned module lists before the rest", pinnedFirst,
+                        "clock at " + cards.indexOf(CLOCK));
+                next();
+                return;
+            }
+            case 37:
+                if (!click(hub, CLOCK, "star")) {
+                    return;
+                }
+                check("favourite: the star again unpins it", !clock.favourite(), "");
+                hub.qaCategory(clock.category().label());
+                next();
+                return;
+            case 38: {
+                if (since() < 400L) {
+                    return;
+                }
+                List<String> cards = hub.qaCards();
+                boolean same = cards.contains(CLOCK);
+                for (String id : cards) {
+                    same &= Runtime.features().find(id).category() == clock.category();
+                }
+                check("category: " + clock.category().label() + " lists only its own modules",
+                        same && cards.size() < gridTotal, cards.size() + " cards");
+                hub.qaCategory(null);
+                next();
+                return;
+            }
+            case 39:
+                if (since() < 300L) {
+                    return;
+                }
+                check("category: All lists everything again", hub.qaCards().size() == gridTotal, "");
+                hub.qaStateFilter(1);
+                next();
+                return;
+            case 40:
+            case 41: {
+                if (since() < 300L) {
+                    return;
+                }
+                boolean wantOn = step == 40;
+                List<String> cards = hub.qaCards();
+                boolean all = !cards.isEmpty();
+                for (String id : cards) {
+                    all &= Runtime.features().find(id).enabled() == wantOn;
+                }
+                check(wantOn ? "filter: Enabled lists only enabled modules"
+                        : "filter: Disabled lists only disabled modules", all, cards.size() + " cards");
+                hub.qaStateFilter(wantOn ? 2 : 0);
+                next();
+                return;
+            }
+            case 42: {
+                if (since() < 300L) {
+                    return;
+                }
+                int columns = hub.qaColumns();
+                // The first arrow only shows the focus, on the card last clicked.
+                hub.handleFathomKey((char) 0, Keyboard.KEY_RIGHT);
+                int start = hub.qaGridFocus();
+                check("keyboard: the first arrow shows the focus where it was",
+                        start == hub.qaCards().indexOf(CLOCK), "on " + start);
+                hub.handleFathomKey((char) 0, Keyboard.KEY_RIGHT);
+                hub.handleFathomKey((char) 0, Keyboard.KEY_DOWN);
+                int expected = Math.min(gridTotal - 1, start + 1 + columns);
+                check("keyboard: arrows move across and down the grid", hub.qaGridFocus() == expected,
+                        "on " + hub.qaGridFocus() + ", expected " + expected + " (" + columns + " columns)");
+                hub.handleFathomKey((char) 0, Keyboard.KEY_LEFT);
+                check("keyboard: Left steps back", hub.qaGridFocus() == expected - 1, "on " + hub.qaGridFocus());
+                keyed = hub.qaCards().get(hub.qaGridFocus());
+                FathomModule module = Runtime.features().find(keyed);
+                keyedWasOn = module.enabled();
+                hub.handleFathomKey(' ', Keyboard.KEY_SPACE);
+                check("keyboard: Space switches the card it is on",
+                        !module.switchable() || module.enabled() != keyedWasOn, keyed);
+                hub.handleFathomKey(' ', Keyboard.KEY_SPACE);
+                check("keyboard: Space again switches it back", module.enabled() == keyedWasOn, keyed);
+                // Over to the clock's card, and Enter.
+                int target = hub.qaCards().indexOf(CLOCK);
+                while (hub.qaGridFocus() > target) {
+                    hub.handleFathomKey((char) 0, Keyboard.KEY_LEFT);
+                }
+                while (hub.qaGridFocus() < target) {
+                    hub.handleFathomKey((char) 0, Keyboard.KEY_RIGHT);
+                }
+                hub.handleFathomKey((char) 13, Keyboard.KEY_RETURN);
+                next();
+                return;
+            }
+            case 43:
+                if (since() < 400L) {
+                    return;
+                }
+                check("keyboard: Enter opens the card's settings", CLOCK.equals(hub.qaOpenModule()),
+                        hub.qaOpenModule());
+                check("keyboard: and leaves it switched as it was", clock.enabled() == clockWasOn, "");
+                hub.handleFathomKey((char) 0, Keyboard.KEY_ESCAPE);
+                next();
+                return;
+            case 44:
+                if (since() < 300L) {
+                    return;
+                }
+                check("keyboard: Escape goes back to the grid", hub.qaOpenModule() == null, hub.qaOpenModule());
+                hub.beginClose();
+                Pointer.script(Float.NaN, Float.NaN);
+                Pointer.scriptPrimary(null);
+                step = 18;
+                frame = 0;
+                stepStarted = System.nanoTime();
+                return;
+            default:
+                return;
+        }
+    }
+
+    /**
+     * Point at a card's part, rest there so it is hovered, press and let go.
+     * True once the click has landed and the screen has had a moment with it.
+     */
+    private static boolean click(FathomHubScreen hub, String moduleId, String part) {
+        long now = System.nanoTime();
+        long waited = (now - clickAt) / 1_000_000L;
+        switch (clickPhase) {
+            case 0: {
+                Rect where = hub.qaCardPart(moduleId, part);
+                if (where == null) {
+                    if (since() > 3000L) {
+                        fail("grid: " + moduleId + "'s " + part, "never drawn");
+                        clickPhase = 0;
+                        return true;
+                    }
+                    return false;
+                }
+                // A card's body: on its name, clear of every control on it.
+                float x = "card".equals(part) ? where.x + 18f : where.centreX();
+                float y = "card".equals(part) ? where.y + where.height * 0.6f : where.centreY();
+                Pointer.script(x, y);
+                clickPhase = 1;
+                clickAt = now;
+                return false;
+            }
+            case 1:
+                if (waited < 250L) {
+                    return false;
+                }
+                Pointer.scriptPrimary(Boolean.TRUE);
+                clickPhase = 2;
+                clickAt = now;
+                return false;
+            case 2:
+                if (waited < 80L) {
+                    return false;
+                }
+                Pointer.scriptPrimary(Boolean.FALSE);
+                clickPhase = 3;
+                clickAt = now;
+                return false;
+            default:
+                if (waited < 350L) {
+                    return false;
+                }
+                clickPhase = 0;
+                return true;
+        }
+    }
+
     /** Put the pointer on a point in Minecraft's scaled space. */
     private static void aim(float scaledX, float scaledY) {
         float scale = editor == null ? 1f : editor.qaMcToLogical();
@@ -402,10 +699,14 @@ public final class EditorSelfTest {
     }
 
     private static Snap.Box box(FathomHud hud, MinecraftClient client, String id) {
+        return positioned(hud, client, id).box;
+    }
+
+    private static FathomHud.Positioned positioned(FathomHud hud, MinecraftClient client, String id) {
         MinecraftGuiSize size = MinecraftGuiSize.get(client);
         for (FathomHud.Positioned each : hud.boxes(client, size.width(), size.height())) {
             if (each.widget.id().equals(id)) {
-                return each.box;
+                return each;
             }
         }
         throw new AssertionError(id + " is not on screen");

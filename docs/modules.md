@@ -87,6 +87,7 @@ default and applied by `FathomHud` before a widget is measured.
 | Crosshair | Visual | Working | `crosshair` widget + `crosshair` behaviour | A world | no | Preset, Shape, Length, Thickness, Gap, Centre dot and size, Outline and thickness, Colour, Outline colour, Opacity, Dynamic, Target colour, three hide rules |
 | Fullbright | Visual | Working | `fullbright` behaviour | A world | no | Brightness — plus a Toggle key |
 | Time Changer | Visual | Working | `time-changer` behaviour | A world | no | Time (seven presets or Custom), Custom hour — plus a Toggle key |
+| 1.7 Animations | Visual | Working | `old-animations` behaviour | A world | no | Blockhit, Swing while using items, Punch while using — plus a Toggle key |
 | Unfocused FPS limit | Performance | Working | `input.unfocused-fps-cap` | — | **yes** | Limit |
 | Performance layer | Performance | Working | `performance-layer` behaviour | — | **yes** | Its own page: `docs/performance-module.md` |
 
@@ -188,6 +189,17 @@ says so.
 the client's world: in singleplayer the integrated server's world is a separate
 object, and its time — spawning, beds — is never touched.
 
+**1.7 Animations** hands the swing progress back to the first-person equip
+transform while an item is in use, where 1.8 passes zero: a sword keeps swinging
+as it blocks (the blockhit), and with *Swing while using items* food, potions and
+a drawn bow do too. Every call of the transform in `renderArmHoldingItem` is
+wrapped rather than one picked by ordinal, so OptiFine's copy of the method is
+covered; a call that already had a swing is left alone. *Punch while using*
+starts the arm swing when attack is held on a block while an item is in use, as
+1.7 did -- on the client's own copy of the player only, with no packet, so the
+server sees exactly what an unmodified 1.8 client sends. The module self-test
+checks the swing handed over with the module, and each switch, on and off.
+
 **Chat** restyles a message when it arrives, before vanilla stores it, so a
 re-wrap on resize keeps the timestamp and does not add it twice. A message
 identical to the one before it — the whole component, click and hover targets
@@ -200,8 +212,8 @@ the background's darkness and the text shadow, timestamps and folding. Backgroun
 shadow are changed at the two calls that draw them. Off, every hook passes
 vanilla's values through.
 
-**Toggle keys.** A module may declare a keybind called `toggle` (Fullbright and
-Time Changer do). It is unbound until somebody binds it; a press, only while
+**Toggle keys.** A module may declare a keybind called `toggle` (Fullbright,
+Time Changer and 1.7 Animations do). It is unbound until somebody binds it; a press, only while
 playing with no screen open, switches the module exactly as the Hub does, saves
 the profile and says so in the action bar.
 

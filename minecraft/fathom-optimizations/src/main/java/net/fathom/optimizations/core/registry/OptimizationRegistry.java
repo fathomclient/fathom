@@ -154,6 +154,50 @@ public final class OptimizationRegistry {
                     .reference("docs/performance/benchmarks.md — bench-2026-08-26-text-metrics")
                     .build());
 
+            out.add(Optimization.builder("render.font.format-code-case")
+                    .name("Colour codes without copying")
+                    .description(
+                            "Vanilla's text drawing reads the letter after every colour code"
+                                    + " from a lowercased copy of the whole line, made once per"
+                                    + " code and again for the shadow. This lowercases the one"
+                                    + " letter instead. Output-identical, except after the rare"
+                                    + " character whose lowercase is two characters long (U+0130),"
+                                    + " where vanilla misreads the code that follows.")
+                    .group(Optimization.Group.RENDERING)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .expectedBenefit(
+                            "Less allocation wherever coloured text is drawn live: the tab list,"
+                                    + " nametags, signs, holograms, scoreboards and chat when not"
+                                    + " replayed, and HUD widgets in Minecraft's font. A JFR"
+                                    + " profile traced a scoreboard's whole per-frame cost to"
+                                    + " these copies. Not yet measured in game.")
+                    .defaultOnWhenMeasured()
+                    .runsInGame()
+                    .reference("docs/performance/optimization-registry.md")
+                    .build());
+
+            out.add(Optimization.builder("render.font.glyph-page-preload")
+                    .name("Preload symbol glyphs")
+                    .description(
+                            "The font draws symbols such as stars, hearts and arrows from pages"
+                                    + " of its unicode sheet, and loads a page the first time"
+                                    + " anything on it is drawn: a PNG decoded on the render thread,"
+                                    + " mid-frame, the first time a lobby label comes into view. This"
+                                    + " loads the pages lobbies use while the font itself loads"
+                                    + " instead. The same textures, drawn the same way; about 1.5 MB"
+                                    + " of video memory.")
+                    .group(Optimization.Group.RENDERING)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .expectedBenefit(
+                            "A first-look stutter, once per session per page, where labels or chat"
+                                    + " use symbols. Nothing in steady frames. Not yet measured.")
+                    .defaultOnWhenMeasured()
+                    .runsInGame()
+                    .reference("docs/performance/scene-transitions-2026-10.md")
+                    .build());
+
             // -- entities --------------------------------------------------
             out.add(Optimization.builder("render.nametag.replay")
                     .name("Fast nametags")
@@ -168,6 +212,8 @@ public final class OptimizationRegistry {
                     .runsInGame()
                     .expectedBenefit(
                             "Largest where many named players or armour stands are in view.")
+                    // The Performance module turns it on by default in game.
+                    .defaultOnWhenMeasured()
                     .evidence(Evidence.inGame(
                             "performance-layer-2026-09-22",
                             "Isolated on a populated server lobby: 0.155 ms/frame median paired"
@@ -232,6 +278,8 @@ public final class OptimizationRegistry {
                     .runsInGame()
                     .expectedBenefit(
                             "Most of what Fathom's own HUD costs a frame, in every scene.")
+                    // The Performance module turns it on by default in game.
+                    .defaultOnWhenMeasured()
                     .evidence(Evidence.inGame(
                             "view-2026-10-02-hud-steady",
                             "Replaying unchanged realtime widgets, A/B'd in the view benchmark"
@@ -527,6 +575,31 @@ public final class OptimizationRegistry {
                                     + " unchanged (0.393 -> 0.405 ms/frame) and no whole-frame change."
                                     + " Identical input to the lookup by construction."))
                     .reference("docs/performance/multiplayer-2026-10-13.md")
+                    .build());
+
+            out.add(Optimization.builder("render.forge.sky-blend-cache")
+                    .name("Forge sky colour cache")
+                    .description(
+                            "With Fancy graphics, Forge averages the sky colour of every biome"
+                                    + " column around the camera -- 2,809 of them at render distance 12 --"
+                                    + " twice a frame, because its own cache compares the wrong"
+                                    + " coordinate and never hits. This remembers the answer until the"
+                                    + " camera's block, the blend radius or the loaded chunks change,"
+                                    + " and computes it without allocating. Forge only. Output-identical.")
+                    .group(Optimization.Group.RENDERING)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .compatibility(Compatibility.builder().minecraft("1.8.9").loader("forge").java(8).build())
+                    .runsInGame()
+                    .expectedBenefit("Forge with Fancy graphics: less frame time and allocation in every scene.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "forge-2026-10-15-sky-blend",
+                            "Forge 11.15.1.2318 with OptiFine M5, Fancy, render distance 12, 4 paired rounds:"
+                                    + " horizon 1.163 -> 0.896 ms median (4/4), down45 1.319 -> 1.010 (4/4),"
+                                    + " 48 players 3.146 -> 2.867 (3/4); client allocation 118 -> 18 MB/s."
+                                    + " Verify mode: 28,672 answers compared with Forge's own, 0 differed."))
+                    .reference("docs/forge.md")
                     .build());
 
             out.add(Optimization.builder("render.hud.vanilla-replay")

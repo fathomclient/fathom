@@ -152,6 +152,20 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         ENTITIES("entities", 0f, "level view with 48 armoured, sword-holding players with nametags in front"),
         PARTICLES("particles", 0f, "level view with a steady field of flame and smoke particles in front"),
         TRANSLUCENT("translucent", 0f, "level view through two stained-glass walls and a water wall"),
+        // -- Lobby NPCs, singleplayer and client-side: what a server lobby puts
+        // in front of you, without a server. NPCs are ordinary player entities
+        // (which is how lobby plugins send them), their own nametag hidden by a
+        // team, with the label above them drawn by invisible named armor stands.
+        NPC("npc", 8f, "one NPC 4 blocks ahead under a 3-line hologram with symbols"),
+        NPCS("npcs", 8f, "six NPCs in an arc, each under a 3-line hologram"),
+        CROWD("crowd", 8f, "busy lobby: the six NPCs and holograms with 32 players standing among them"),
+        /**
+         * The crowd, with the camera turning to the sky behind and back twice a
+         * second (180 degrees in a quarter of a second, then held a quarter).
+         * Measures what turning adds: the visibility search reruns on every
+         * frame the camera moves, and new things come into view.
+         */
+        TURN("turn", 8f, "the crowd scene, the camera turning to the sky behind and back twice a second"),
         /**
          * Chunk loading, not a steady view: every window starts by rebuilding
          * every chunk (vanilla's F3+A) and ends once nothing has been rebuilt or
@@ -209,7 +223,12 @@ public final class ViewBenchmark implements ViewProbe.Sink {
 
         /** Chunk traffic is the workload here, so the settle phase cannot wait for it to stop. */
         boolean busyChunks() {
-            return this == CHUNKS || this == LIVE;
+            return this == CHUNKS || this == LIVE || this == TURN;
+        }
+
+        /** Whether the scene puts the lobby NPCs and their holograms in front of the camera. */
+        boolean npcs() {
+            return this == NPC || this == NPCS || this == CROWD || this == TURN;
         }
 
         static Scene byId(String id) {
@@ -358,6 +377,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         }
         long frameNanos = periodNanos - total[ViewSection.HARNESS.ordinal()];
         trackHitches(now, frameNanos);
+        trackLook(frameNanos, flags);
         if (tag < 0 || tag >= tags.size()) {
             return;
         }
@@ -371,6 +391,63 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             windowFrameNanos += frameNanos;
             windowFrames++;
         }
+    }
+
+    /*
+     * The frames from a scene's props being put in place to the end of its
+     * first window: the first look. Warm-up is the first look of the session
+     * (textures, glyph pages and skins seen for the first time, sections never
+     * built); each round sets the scene up again, so its first look is a repeat
+     * after the world has settled. Every frame counts here, recorded or not --
+     * a first-look stall happens before the steady window begins.
+     */
+    private String lookLabel;
+    private long lookStarted;
+    private int lookFrames;
+    private long lookWorst;
+    private int lookOver16;
+    private int lookOver33;
+    private int lookGc;
+
+    private void trackLook(long frameNanos, int flags) {
+        if (lookLabel == null || frameNanos <= 0L) {
+            return;
+        }
+        lookFrames++;
+        lookWorst = Math.max(lookWorst, frameNanos);
+        if (frameNanos > 16_000_000L) {
+            lookOver16++;
+        }
+        if (frameNanos > 33_000_000L) {
+            lookOver33++;
+        }
+        if ((flags & ViewProbe.FLAG_GC) != 0) {
+            lookGc++;
+        }
+    }
+
+    private void beginLook(String label) {
+        lookLabel = label;
+        lookStarted = System.nanoTime();
+        lookFrames = 0;
+        lookWorst = 0L;
+        lookOver16 = 0;
+        lookOver33 = 0;
+        lookGc = 0;
+    }
+
+    private void endLook() {
+        if (lookLabel == null) {
+            return;
+        }
+        String note = String.format(Locale.ROOT,
+                "Look at %s: %.1f s from props in place to the end of its first window, %d frames, worst %.2f ms,"
+                        + " %d over 16 ms, %d over 33 ms, %d GC.",
+                lookLabel, (System.nanoTime() - lookStarted) / 1_000_000_000d, lookFrames, lookWorst / 1_000_000d,
+                lookOver16, lookOver33, lookGc);
+        runNotes.add(note);
+        System.out.println("[FATHOM VIEW] " + note);
+        lookLabel = null;
     }
 
     /** A frame four times the steady average (and at least 16 ms) is a hitch. */
@@ -472,7 +549,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             }
             client.setScreen(null);
         }
-        if (current != null && !Float.isNaN(current.scene.pitch)) {
+        if (current != null && current.scene == Scene.TURN) {
+            turn(player, phase == Phase.MEASURE ? (now - measureStarted) / 1_000_000_000d : 0d);
+        } else if (current != null && !Float.isNaN(current.scene.pitch)) {
             hold(player, current.scene.pitch);
         }
         if (current != null && (current.scene == Scene.HUD_HEAVY || current.scene == Scene.TAB_BIG)
@@ -846,8 +925,10 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         }
         boolean sceneChanged = next.scene != activeScene;
         if (sceneChanged) {
+            endLook();
             teardown(client);
             setup(client, next.scene);
+            beginLook(next.scene.id + (next.record ? " (round " + (next.round + 1) + ", repeat)" : " (warm-up, first)"));
             activeScene = next.scene;
             System.out.println("[FATHOM VIEW] " + (next.record ? "round " + (next.round + 1) : "warm-up")
                     + ": " + next.scene.id + " (" + next.scene.description + ")");
@@ -894,6 +975,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
 
     private void endMeasure(MinecraftClient client, Step current, long now) {
         ViewProbe.tagNextFrame(-1, !ViewReport.PROBES_OFF.equals(activeArm), ViewReport.DRAIN.equals(activeArm));
+        endLook();
         if (!current.record || measuringTag < 0) {
             measuringTag = -1;
             return;
@@ -926,6 +1008,37 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     // Scenes
     // -----------------------------------------------------------------------
 
+    /**
+     * The turn: from facing the crowd to the sky behind it in a quarter of a
+     * second, held a quarter, back in a quarter, held a quarter. Smoothstep
+     * between the two, so the speed peaks mid-turn as a hand would.
+     */
+    private void turn(ClientPlayerEntity player, double seconds) {
+        double cycle = seconds % 1.0d;
+        double away;
+        if (cycle < 0.25d) {
+            away = smooth(cycle / 0.25d);
+        } else if (cycle < 0.5d) {
+            away = 1d;
+        } else if (cycle < 0.75d) {
+            away = 1d - smooth((cycle - 0.5d) / 0.25d);
+        } else {
+            away = 0d;
+        }
+        float yaw = (float) (startYaw + 180d * away);
+        float pitch = (float) (Scene.TURN.pitch + (-60d - Scene.TURN.pitch) * away);
+        player.yaw = yaw;
+        player.prevYaw = yaw;
+        player.pitch = pitch;
+        player.prevPitch = pitch;
+        player.velocityX = 0d;
+        player.velocityZ = 0d;
+    }
+
+    private static double smooth(double t) {
+        return t * t * (3d - 2d * t);
+    }
+
     private void hold(ClientPlayerEntity player, float pitch) {
         player.yaw = startYaw;
         player.prevYaw = startYaw;
@@ -936,7 +1049,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     }
 
     private void setup(MinecraftClient client, Scene scene) {
-        if (scene == Scene.ENTITIES) {
+        if (scene.npcs()) {
+            spawnLobby(client, scene == Scene.NPC ? 1 : 6, scene == Scene.CROWD || scene == Scene.TURN ? 32 : 0);
+        } else if (scene == Scene.ENTITIES) {
             spawnPlayers(client);
         } else if (scene == Scene.TRANSLUCENT) {
             buildWalls(client);
@@ -996,6 +1111,84 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 spawned.add(Integer.valueOf(id));
                 id--;
             }
+        }
+    }
+
+    /**
+     * Lobby NPCs and the people standing around them, client-side.
+     *
+     * <p>Each NPC is an ordinary player entity in a team that hides its own
+     * nametag, under a three-line hologram of invisible named armor stands --
+     * the way lobby plugins build them. The labels carry the symbols lobbies
+     * use (stars, hearts, arrows), which come from the font's unicode pages
+     * rather than its ASCII sheet, so a first look loads what a real one would.
+     * The bystanders are bare players holding a compass, named, facing about.
+     */
+    private void spawnLobby(MinecraftClient client, int npcCount, int bystanders) {
+        ClientWorld world = client.world;
+        double radians = Math.toRadians(startYaw);
+        double forwardX = -Math.sin(radians);
+        double forwardZ = Math.cos(radians);
+        net.minecraft.scoreboard.Scoreboard board = world.getScoreboard();
+        net.minecraft.scoreboard.Team npcTeam = board.getTeam("fathomNpc");
+        if (npcTeam == null) {
+            npcTeam = board.addTeam("fathomNpc");
+        }
+        npcTeam.setNameTagVisibilityRule(net.minecraft.scoreboard.AbstractTeam.VisibilityRule.NEVER);
+        String[][] labels = {
+            {"\u00a76\u00a7l\u2605 \u00a7e\u00a7lBED WARS \u00a76\u00a7l\u2605", "\u00a77Solo, doubles and squads",
+                "\u00a7a\u2764 \u00a7f1,284 playing"},
+            {"\u00a7b\u00a7l\u2726 PRACTICE \u2726", "\u00a77Ranked and unranked", "\u00a7e\u279c \u00a7fClick to play"},
+            {"\u00a7c\u00a7lSKY WARS", "\u00a77\u25cf Insane \u25cf Normal \u25cf", "\u00a7f642 playing"},
+            {"\u00a7d\u00a7l\u272a EVENTS \u272a", "\u00a77This week: Parkour", "\u00a7e\u279c \u00a7fClick to join"},
+            {"\u00a76\u00a7lDAILY REWARD", "\u00a77\u2714 Claim your reward", "\u00a7e\u2726 \u00a7f12h 41m"},
+            {"\u00a7a\u00a7lCOSMETICS", "\u00a77Hats, trails, pets", "\u00a7e\u2b50 \u00a7fNew this week"},
+        };
+        int id = -7600;
+        for (int index = 0; index < npcCount; index++) {
+            // One straight ahead for a single NPC; otherwise an arc 6 blocks out.
+            double angle = npcCount == 1 ? 0d : Math.toRadians(-50d + 100d * index / (npcCount - 1));
+            double distance = npcCount == 1 ? 4d : 6d;
+            double ahead = Math.cos(angle) * distance;
+            double side = Math.sin(angle) * distance;
+            double x = startX + forwardX * ahead + forwardZ * side;
+            double z = startZ + forwardZ * ahead - forwardX * side;
+            BlockPos top = world.getTopPosition(new BlockPos(x, 0d, z));
+            String name = String.format(Locale.ROOT, "NPC%02d", index);
+            GameProfile profile = new GameProfile(new UUID(0xF47B0000L, index), name);
+            OtherClientPlayerEntity npc = new OtherClientPlayerEntity(world, profile);
+            npc.refreshPositionAndAngles(x, top.getY(), z, startYaw + 180f, 0f);
+            world.addEntity(id, npc);
+            spawned.add(Integer.valueOf(id--));
+            board.addPlayerToTeam(name, npcTeam.getName());
+            String[] lines = labels[index % labels.length];
+            for (int line = 0; line < lines.length; line++) {
+                // Top line highest, 0.25 blocks apart, starting just above the head.
+                double y = top.getY() + 2.05d + (lines.length - 1 - line) * 0.25d;
+                net.minecraft.entity.decoration.ArmorStandEntity stand =
+                        new net.minecraft.entity.decoration.ArmorStandEntity(world, x, y, z);
+                stand.setInvisible(true);
+                stand.setCustomName(lines[line]);
+                stand.setCustomNameVisible(true);
+                world.addEntity(id, stand);
+                spawned.add(Integer.valueOf(id--));
+            }
+        }
+        java.util.Random random = new java.util.Random(42L);
+        for (int index = 0; index < bystanders; index++) {
+            double ahead = 3d + random.nextDouble() * 7d;
+            double side = (random.nextDouble() - 0.5d) * 14d;
+            double x = startX + forwardX * ahead + forwardZ * side;
+            double z = startZ + forwardZ * ahead - forwardX * side;
+            BlockPos top = world.getTopPosition(new BlockPos(x, 0d, z));
+            GameProfile profile = new GameProfile(new UUID(0xF47C0000L, index),
+                    String.format(Locale.ROOT, "Player%02d", index));
+            OtherClientPlayerEntity other = new OtherClientPlayerEntity(world, profile);
+            other.refreshPositionAndAngles(x, top.getY(), z, random.nextFloat() * 360f, 0f);
+            other.inventory.main[0] = new ItemStack(Items.COMPASS);
+            other.inventory.selectedSlot = 0;
+            world.addEntity(id, other);
+            spawned.add(Integer.valueOf(id--));
         }
     }
 
@@ -1255,7 +1448,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         if (net.fathom.optimizations.fabric.perf.NametagNames.VERIFY) {
             runNotes.add(String.format(Locale.ROOT,
                     "Cache verification: nametag names %d checked, %d mismatched%s (served %d, rebuilt %d); "
-                            + "armour textures %d checked, %d mismatched; sign lines %d checked, %d mismatched; "
+                            + "armour textures %d checked, %d mismatched (Forge's lookup %d checked, %d mismatched); sign lines %d checked, %d mismatched; "
                             + "tab list strings %d checked, %d mismatched.",
                     net.fathom.optimizations.fabric.perf.NametagNames.verified,
                     net.fathom.optimizations.fabric.perf.NametagNames.mismatches,
@@ -1265,6 +1458,8 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                     net.fathom.optimizations.fabric.perf.NametagNames.builds,
                     net.fathom.optimizations.fabric.perf.ArmorTextures.verified,
                     net.fathom.optimizations.fabric.perf.ArmorTextures.mismatches,
+                    net.fathom.optimizations.fabric.perf.ForgeArmorTextures.verified,
+                    net.fathom.optimizations.fabric.perf.ForgeArmorTextures.mismatches,
                     net.fathom.optimizations.fabric.perf.SignTexts.verified,
                     net.fathom.optimizations.fabric.perf.SignTexts.mismatches,
                     net.fathom.optimizations.fabric.perf.TextLists.verified,

@@ -355,7 +355,7 @@ public abstract class Setting {
             String number = decimals == 0
                     ? String.valueOf(asInt())
                     : String.format(Locale.ROOT, "%." + decimals + "f", value);
-            return unit.isEmpty() ? number : number + " " + unit;
+            return withUnit(number, unit);
         }
     }
 
@@ -704,7 +704,7 @@ public abstract class Setting {
 
         @Override
         public String display() {
-            return unit.isEmpty() ? String.valueOf(value) : value + " " + unit;
+            return withUnit(String.valueOf(value), unit);
         }
     }
 
@@ -847,5 +847,16 @@ public abstract class Setting {
         public String display() {
             return binding.keyName();
         }
+    }
+
+    /**
+     * A number and its unit as the interface writes them: "4 px", but "100%",
+     * as the sliders and the launcher write a percentage.
+     */
+    static String withUnit(String number, String unit) {
+        if (unit.isEmpty()) {
+            return number;
+        }
+        return "%".equals(unit) ? number + unit : number + " " + unit;
     }
 }

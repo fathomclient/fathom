@@ -10,7 +10,7 @@
   "icon": "assets/fathom-optimizations/icon/fathom-128.png",
   "environment": "client",
   "entrypoints": {
-    "client": ["net.fathom.optimizations.fabric.FathomOptimizationsClient"]
+    "client": ["net.fathom.optimizations.fabric.FabricEntrypoint"]
   },
   "mixins": ["fathom.mixins.json"],
   "depends": {

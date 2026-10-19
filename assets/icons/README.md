@@ -1,19 +1,17 @@
-# Fathom icons
+# Icons
 
-`manifest.json` is the stable Fathom icon-ID map. The SVG files in this folder
-are extracted from the exact Lucide package used by the launcher. They are the
-shared artwork consumed by both products:
+The SVGs here come from the Lucide package the launcher uses, and
+`manifest.json` maps Fathom's icon names to them. Both the launcher and the
+game draw from this one set: the launcher inlines them
+(`desktop/src/lib/icons.generated.ts`), and the game rasterises them into its
+icon atlas at the current scale.
 
-- the launcher draws them inline from `desktop/src/lib/icons.generated.ts`
-  (`FathomIcon.svelte`), so the global stroke rule applies to them;
-- Minecraft receives generated SVG path strings and rasterises them into its
-  antialiased icon atlas at the active framebuffer scale.
-
-Regenerate all derivatives after changing the manifest:
+After changing the manifest, regenerate the derived files (don't edit those by
+hand):
 
 ```powershell
 node tools/generate-fathom-icons.mjs
 ```
 
-The generated files record their source and must not be edited by hand. Lucide
-is distributed under the ISC license, with Feather-derived portions under MIT.
+Lucide is ISC-licensed, with Feather-derived parts under MIT; see
+[ATTRIBUTION.md](../../ATTRIBUTION.md).

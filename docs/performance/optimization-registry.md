@@ -13,11 +13,11 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 
 ## 1. Where things stand
 
-**16** entries: **15** implemented and hooked into the game, **1** planned. **14** carry a measurement, **10** of them taken in a running game.
+**23** entries: **22** implemented and hooked into the game, **1** planned. **19** carry a measurement, **15** of them taken in a running game.
 
 | Status | Count |
 |---|---|
-| Runs in game | 15 |
+| Runs in game | 22 |
 | In the module, not yet seen in game | 0 |
 | Core written, not hooked up | 1 |
 | Planned | 0 |
@@ -27,6 +27,8 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 | ID | Name | Group | Class | Status | Control | Evidence | Stood down by |
 |---|---|---|---|---|---|---|---|
 | `render.font.metrics-cache` | Font metrics caching | Rendering | Safe | Runs in game | Launcher switch | isolated (`bench-2026-08-26-text-metrics`) | OptiFine |
+| `render.font.format-code-case` | Colour codes without copying | Rendering | Safe | Runs in game | Launcher switch | **none** | — |
+| `render.font.glyph-page-preload` | Preload symbol glyphs | Rendering | Safe | Runs in game | Launcher switch | **none** | — |
 | `render.nametag.replay` | Fast nametags | Entities | Safe | Runs in game | Set in game (Hub) | in-game (`performance-layer-2026-09-22`) | — |
 | `render.entity.distance-limit` | Entity draw distance | Entities | Optional | Runs in game | Set in game (Hub) | in-game (`performance-layer-2026-09-22`) | — |
 | `render.tile-entity.distance-limit` | Tile entity draw distance | Entities | Optional | Runs in game | Set in game (Hub) | **none** | — |
@@ -37,6 +39,11 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 | `resources.pack-icon-downscale` | Downscale resource pack icons | Resources | Safe | Runs in game | Launcher switch | isolated (`opt-2026-08-26-pack-icons`) | — |
 | `render.entity.nametag-name-cache` | Nametag name cache | Entities | Safe | Runs in game | Launcher switch | in-game (`view-2026-10-05-entities`) | — |
 | `render.entity.armor-texture-cache` | Armor texture lookup cache | Entities | Safe | Runs in game | Launcher switch | in-game (`view-2026-10-05-entities`) | — |
+| `render.blockentity.sign-text-cache` | Sign text cache | Entities | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-13-ab`) | — |
+| `render.entity.item-frame-entity-reuse` | Item frame item entity reuse | Entities | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-13-ab`) | — |
+| `render.hud.tab-list-text-replay` | Tab list text replay | HUD and interface | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-14-ab2-ab3`) | — |
+| `render.entity.shadow-allocation` | Shadow lookup without allocation | Entities | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-14-ab2-ab3`) | — |
+| `render.forge.sky-blend-cache` | Forge sky colour cache | Rendering | Safe | Runs in game | Launcher switch | in-game (`forge-2026-10-15-sky-blend`) | — |
 | `render.hud.vanilla-replay` | Replay unchanged chat and scoreboard | HUD and interface | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-06-hud`) | — |
 | `input.unfocused-fps-cap` | Cap frame rate when unfocused | Frames and input | Safe | Runs in game | Launcher switch | isolated (`opt-2026-09-04-frame-caps`) | — |
 | `render.entity.occlusion-culling` | Entity occlusion culling | Entities | Optional | Core written, not hooked up | Launcher switch | **none** | OptiFine shaders |
@@ -49,16 +56,32 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 
 Character width lookups are recomputed per frame. Caching them is output-identical as long as the cache is invalidated on resource reload and language change.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Rendering.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Rendering. **Default:** off.
 - **Expected benefit:** Measured 66-86% faster than recomputing, for the measurement work alone, at realistic churn. Unknown as a fraction of a frame.
 - **Measured** (isolated, `bench-2026-08-26-text-metrics`): One frame of a busy server's text (235 strings, 11,528 characters): 12.9 us to recompute, 1.8 us cached with a static corpus and 5.2 us with 5% of strings new each frame. At 50% churn the difference falls inside the noise floor, and at 100% the cache is 47% slower.
 - **Stood down by OptiFine:** OptiFine rewrites large parts of the renderer, including its font paths. Fathom turns this off when OptiFine is present rather than fighting it: the user chose to install OptiFine.
+
+#### `render.font.format-code-case` — Colour codes without copying
+
+Vanilla's text drawing reads the letter after every colour code from a lowercased copy of the whole line, made once per code and again for the shadow. This lowercases the one letter instead. Output-identical, except after the rare character whose lowercase is two characters long (U+0130), where vanilla misreads the code that follows.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Rendering. **Default:** off.
+- **Expected benefit:** Less allocation wherever coloured text is drawn live: the tab list, nametags, signs, holograms, scoreboards and chat when not replayed, and HUD widgets in Minecraft's font. A JFR profile traced a scoreboard's whole per-frame cost to these copies. Not yet measured in game.
+- **Measured:** nothing yet.
+
+#### `render.font.glyph-page-preload` — Preload symbol glyphs
+
+The font draws symbols such as stars, hearts and arrows from pages of its unicode sheet, and loads a page the first time anything on it is drawn: a PNG decoded on the render thread, mid-frame, the first time a lobby label comes into view. This loads the pages lobbies use while the font itself loads instead. The same textures, drawn the same way; about 1.5 MB of video memory.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Rendering. **Default:** off.
+- **Expected benefit:** A first-look stutter, once per session per page, where labels or chat use symbols. Nothing in steady frames. Not yet measured.
+- **Measured:** nothing yet.
 
 #### `render.nametag.replay` — Fast nametags
 
 Vanilla draws a nametag a glyph at a time, twice. Each distinct label is recorded once and replayed, with the same glyphs in the same places.
 
-- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Safe. **Group:** Entities.
+- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Safe. **Group:** Entities. **Default:** on.
 - **Expected benefit:** Largest where many named players or armour stands are in view.
 - **Measured** (in-game, `performance-layer-2026-09-22`): Isolated on a populated server lobby: 0.155 ms/frame median paired saving with 33 labels a frame, 18 of 20 pairs, sign test p = 0.0004. Eight test strings were pixel-identical to vanilla.
 
@@ -66,7 +89,7 @@ Vanilla draws a nametag a glyph at a time, twice. Each distinct label is recorde
 
 Entities past a set distance are not drawn. Players are never limited inside 48 blocks, and the game still simulates everything it would have.
 
-- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Optional. **Group:** Entities.
+- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Optional. **Group:** Entities. **Default:** off.
 - **Expected benefit:** Workload-dependent: large in lobbies full of distant armour stands, nothing where everything is close.
 - **Measured** (in-game, `performance-layer-2026-09-22`): Isolated in a lobby with 52 distant armour stands: 0.060 ms/frame median paired saving, 14 of 20 pairs (p = 0.115) -- not consistent enough for a standalone claim. The distance test itself cost 0.010 ms/frame.
 
@@ -74,7 +97,7 @@ Entities past a set distance are not drawn. Players are never limited inside 48 
 
 Chests, signs, skulls and banners past a set distance are not drawn. Beacons, end portals and pistons are never limited.
 
-- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Optional. **Group:** Entities.
+- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Optional. **Group:** Entities. **Default:** off.
 - **Expected benefit:** Engaged in testing (3 of 68 tile entities culled a frame) but never isolated, so no frame-time claim is made.
 - **Measured:** nothing yet.
 
@@ -82,7 +105,7 @@ Chests, signs, skulls and banners past a set distance are not drawn. Beacons, en
 
 Fathom's HUD widgets that have not changed since the last frame are replayed from a recording instead of drawn again, and slow readouts such as the clock and ping are redrawn 20 times a second. Replaces the planned quad batching: Fathom's widgets already batch their quads.
 
-- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Safe. **Group:** HUD and interface.
+- **Status:** Runs in game. **Control:** Set in game (Hub). **Class:** Safe. **Group:** HUD and interface. **Default:** on.
 - **Expected benefit:** Most of what Fathom's own HUD costs a frame, in every scene.
 - **Measured** (in-game, `view-2026-10-02-hud-steady`): Replaying unchanged realtime widgets, A/B'd in the view benchmark (3 interleaved rounds, OptiFine on): -0.026 ms/frame looking at the sky, -0.027 at the ground, -0.029 with 48 players in view; Fathom's HUD fell from 0.042 to 0.027 ms/frame. Keystrokes and CPS pixel-identical in every scene.
 
@@ -90,7 +113,7 @@ Fathom's HUD widgets that have not changed since the last frame are replayed fro
 
 Vanilla clones the six-direction array at the top of loops in per-block light queries, light updates and the per-frame chunk visibility search. Those loops only read it, so they share one copy instead. Output-identical. With OptiFine, only the light-query part applies: OptiFine rewrites the visibility search.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Memory.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Memory. **Default:** on.
 - **Expected benefit:** The clones were 22% of the render thread's allocation in a sampled run. Together with the chunk lookup cache, an interleaved in-game A/B cut allocation 55% while panning and 35% while moving, with 5-8% lower mean frame time in those scenes.
 - **Measured** (in-game, `perf-2026-09-14-ab`): Interleaved ABBA run in the development world, switches toggled within one session: pan 51.8 -> 23.4 MB/s allocated and 6 -> 3 collections; moving 203 -> 132 MB/s. Profiler: the six-direction clones fell from 1890 MB to 91 MB over the run.
 
@@ -98,7 +121,7 @@ Vanilla clones the six-direction array at the top of loops in per-block light qu
 
 Every light query resolves its chunk through a hash lookup, and particles ask for light every frame. The client thread remembers the last few chunks it looked up; the cache is cleared whenever a chunk loads or unloads, so it always returns what the lookup would.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Chunks.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Chunks. **Default:** on.
 - **Expected benefit:** The hash lookup was the hottest method on the render thread (28% of CPU samples) in a scene with torches. Largest where particles and entities are drawn.
 - **Measured** (in-game, `perf-2026-09-14-ab`): Toggled alone, four consecutive interleaved blocks standing still in alternating ABBA/BAAB order: mean frame time 6.5-9.9% lower in every block, p99 lower in every block. Profiler: chunk lookups fell from 14.3% to 5.1% of render-thread samples.
 - **Stood down by OptiFine:** With OptiFine installed it measured no benefit: A/B'd in the view benchmark (2026-10-02) it moved nothing outside the noise, so it is not applied there.
@@ -107,7 +130,7 @@ Every light query resolves its chunk through a hash lookup, and particles ask fo
 
 Vanilla calls System.gc() when changing worlds, which stops the client for as long as a full collection takes.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Memory.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Memory. **Default:** off.
 - **Expected benefit:** Removes a stall of roughly a quarter of a second per world change on the reference machine, and more on a larger live set. The JVM flag -XX:+DisableExplicitGC achieves the same thing without a mod, and the launcher already passes it; this covers the case where it was not passed.
 - **Measured** (isolated, `bench-2026-08-26-explicit-gc`): A forced full collection under a synthetic 512 MB live set costs a median 226 ms with G1 and 926 ms with ParallelGC, the collector every unmodded 1.8.9 player is running. -XX:+DisableExplicitGC removes it entirely: zero collections performed, 0.0 ms. Synthetic workload, not Minecraft.
 
@@ -115,7 +138,7 @@ Vanilla calls System.gc() when changing worlds, which stops the client for as lo
 
 Every installed pack's pack.png is uploaded at whatever resolution its author saved it and kept for the session, though the resource pack screen never draws one larger than 32 pixels. Downscaling to 64 on load frees the difference.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Resources.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Resources. **Default:** off.
 - **Expected benefit:** Frees video memory in proportion to how many packs are installed and how carelessly their icons were exported. Costs nothing at frame time either way -- this is a memory optimization and should not be expected to move FPS.
 - **Measured** (isolated, `opt-2026-08-26-pack-icons`): Arithmetic over a plausible 40-pack folder: 12 MB of video memory above what the screen samples, and 4.2 MB for a single 1024x1024 icon. Exact rather than estimated, because RGBA8 texture size is a calculation and not a measurement.
 
@@ -123,7 +146,7 @@ Every installed pack's pack.png is uploaded at whatever resolution its author sa
 
 Every visible nametag, every frame, vanilla builds a chat component with click and hover events -- an NBT compound turned into a string, a UUID turned into a string -- only to read back prefix, name and suffix. This keeps the string the original code produced and rebuilds it the frame the name, team, prefix or suffix changes. Output-identical.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** on.
 - **Expected benefit:** Proportional to labels on screen: player lobbies, holograms, PvP. Removes per-label allocation and Java 8 regex compiles.
 - **Measured** (in-game, `view-2026-10-05-entities`): OptiFine profile, 48 armoured players with nametags, 4 interleaved rounds against the switch off: faster in 4/4 rounds, paired median -0.200 ms/frame, median 1.948 -> 1.815 ms, p99 4.243 -> 3.813 ms; the label decision fell from 0.069 to 0.009 ms/frame. Verified against the original on 130,122 labels with teams and prefixes changing: 0 mismatches.
 
@@ -131,15 +154,55 @@ Every visible nametag, every frame, vanilla builds a chat component with click a
 
 Vanilla finds each armour piece's texture by formatting its path with String.format every frame, then looking the string up in a cache of its own. This remembers the identifier the original lookup returned for each material and layer, so the same object comes back without the formatting. Output-identical.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** on.
 - **Expected benefit:** Proportional to armoured players and mobs in view; up to five String.format calls per armoured player per frame.
 - **Measured** (in-game, `view-2026-10-05-entities`): OptiFine profile, 48 iron-armoured players, 4 interleaved rounds against the switch off: faster in 3/4 rounds, paired median -0.174 ms/frame, median 1.948 -> 1.784 ms; the armour layer fell from 0.456 to 0.253 ms/frame and client allocation from 206 to 99 MB/s. 543,702 lookups verified identical.
+
+#### `render.blockentity.sign-text-cache` — Sign text cache
+
+Vanilla re-wraps and re-formats every line of every sign in view every frame: a copy of the text component, an iterator walk, a style copy and a width measurement per line, then the formatting codes rebuilt. This keeps each sign's wrapped lines and their formatted strings until the sign's text or the font changes, and hands the renderer the very same objects. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** on.
+- **Expected benefit:** Proportional to signs in view: lobbies, sign walls, server spawns. Most of the render thread's allocation where signs are on screen.
+- **Measured** (in-game, `mp-2026-10-13-ab`): Local server, 40 signs with 24 skulls, 16 banners and 12 item frames in view, 4 interleaved rounds against the switch off: faster in 4/4 rounds, paired median -0.117 ms/frame, p99 3.34 -> 2.40 ms; block entity draws 0.381 -> 0.246 ms/frame (about 3.4 us per sign) and client allocation 78 -> 35 MB/s. 178,000 sign lines verified identical.
+
+#### `render.entity.item-frame-entity-reuse` — Item frame item entity reuse
+
+To draw the item in an item frame, vanilla constructs a new item entity around it every frame, for every frame in view, and reads only the item back. This reuses one entity, given the frame's item each time, so the renderer gets the same inputs without an entity's construction. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** on.
+- **Expected benefit:** Proportional to filled item frames in view: map walls, displays.
+- **Measured** (in-game, `mp-2026-10-13-ab`): Local server, 12 filled item frames in view, 4 interleaved rounds against the switch off: frame-entity draws 0.303 -> 0.267 ms/frame (about 3 us per frame) and client allocation 78 -> 72 MB/s; the whole frame moved within noise at this count (paired +0.009 ms, 2/4). Inputs to the renderer are identical by construction.
+
+#### `render.hud.tab-list-text-replay` — Tab list text replay
+
+While the tab list is held, vanilla draws every name glyph by glyph, every frame. This records each string once, at its position and colour, and replays it; the skins, icons, backgrounds and scores stay live, so nothing that changes can go stale. Obfuscated text is always drawn live. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** HUD and interface. **Default:** on.
+- **Expected benefit:** While the tab list is held, proportional to the players in it: most of the list's cost on a full server.
+- **Measured** (in-game, `mp-2026-10-14-ab2-ab3`): Local server, 80 players online with the tab list held: text drawing 0.461 -> 0.138 ms/frame and client allocation 35.5 -> 22.5 MB/s; faster in 6/6 interleaved rounds, paired median -0.143 ms/frame (measured with another game running, so whole-frame figures are noisy; the section and allocation figures are not). 6,653 strings drawn both ways offscreen: 0 differing bytes.
+
+#### `render.entity.shadow-allocation` — Shadow lookup without allocation
+
+Each entity shadow asks for the block below every block it covers with a new position object, used once and dropped. This reuses one position for that lookup, with the same coordinates. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** on.
+- **Expected benefit:** Less allocation under piles of dropped items and crowds.
+- **Measured** (in-game, `mp-2026-10-14-ab2-ab3`): Local server, 160 dropped items on generators: client allocation 21.9 -> 16.4 and 25.0 -> 20.8 MB/s in two runs; shadow drawing time unchanged (0.393 -> 0.405 ms/frame) and no whole-frame change. Identical input to the lookup by construction.
+
+#### `render.forge.sky-blend-cache` — Forge sky colour cache
+
+With Fancy graphics, Forge averages the sky colour of every biome column around the camera -- 2,809 of them at render distance 12 -- twice a frame, because its own cache compares the wrong coordinate and never hits. This remembers the answer until the camera's block, the blend radius or the loaded chunks change, and computes it without allocating. Forge only. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Rendering. **Default:** on.
+- **Expected benefit:** Forge with Fancy graphics: less frame time and allocation in every scene.
+- **Measured** (in-game, `forge-2026-10-15-sky-blend`): Forge 11.15.1.2318 with OptiFine M5, Fancy, render distance 12, 4 paired rounds: horizon 1.163 -> 0.896 ms median (4/4), down45 1.319 -> 1.010 (4/4), 48 players 3.146 -> 2.867 (3/4); client allocation 118 -> 18 MB/s. Verify mode: 28,672 answers compared with Forge's own, 0 differed.
 
 #### `render.hud.vanilla-replay` — Replay unchanged chat and scoreboard
 
 Chat and the scoreboard sidebar redraw every glyph every frame, though what they show changes at most once a client tick or when the server changes the scoreboard. This records them while they hold still and replays the recording until anything they are drawn from changes; that frame is drawn live. Obfuscated text is always drawn live. Output-identical.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** HUD and interface.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** HUD and interface. **Default:** on.
 - **Expected benefit:** Whenever chat lines or a server sidebar are on screen: in the multiplayer profile they cost 0.06-0.13 and 0.05-0.09 ms a frame.
 - **Measured** (in-game, `mp-2026-10-06-hud`): Local 1.8.9 server, 40 scripted players, OptiFine profile, 4 interleaved rounds against the switch off. Scoreboard updating every tick and chat every 100 ms: faster in 4/4 rounds, paired median -0.155 ms/frame, p95 3.314 -> 3.065 ms, p99 4.061 -> 3.652 ms. Lobby with chat and sidebar: -0.111 and -0.115 ms paired, 3/4 rounds in each of two runs. No change where neither is on screen. Pixel check: 630 chat and 691 sidebar replays drawn both ways offscreen, 0 differing bytes.
 
@@ -147,7 +210,7 @@ Chat and the scoreboard sidebar redraw every glyph every frame, though what they
 
 Vanilla renders at full speed into a window you have alt-tabbed away from. This caps it at 30 frames per second while the window does not have focus, and changes nothing while it does.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Frames and input.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Frames and input. **Default:** off.
 - **Expected benefit:** Frees the GPU and CPU when the game is in the background. No effect on focused performance, by construction: the cap is only consulted while the window is unfocused.
 - **Measured** (isolated, `opt-2026-09-04-frame-caps`): Arithmetic rather than a measurement, and exact because of it: the policy returns the minimum of vanilla's own answer and the cap, so the frames drawn while unfocused fall from whatever the machine managed to 10 per second. What that frees on any given machine has not been measured.
 
@@ -155,7 +218,7 @@ Vanilla renders at full speed into a window you have alt-tabbed away from. This 
 
 Skip entities fully hidden behind geometry. Must exempt nametags, ender dragons and withers, and must never reveal anything vanilla hides. Built and measured in game on 2026-10-03 (branch experiment/entity-occlusion) and not shipped: proving an entity hidden on the CPU cost more than drawing it. A sampled test hid a walled-off crowd of 48 armoured zombies but spent 1.8-2.3 ms a frame to save 1.2; an exact test never errs but proves too few hidden behind real terrain, and the scene was still 0.35 ms slower with it on.
 
-- **Status:** Core written, not hooked up. **Control:** Launcher switch. **Class:** Optional. **Group:** Entities.
+- **Status:** Core written, not hooked up. **Control:** Launcher switch. **Class:** Optional. **Group:** Entities. **Default:** off.
 - **Expected benefit:** About 25 us per armoured mob drawn is the most it can save, and players and anything named are exempt. Needs a test far cheaper than that per entity -- likely GPU occlusion queries -- before it is worth offering.
 - **Measured:** nothing yet.
 - **Stood down by OptiFine shaders:** PolyPatcher documents that entity culling and OptiFine shaders cannot be made compatible. Shaders present is a hard gate: culling is off, not merely adjusted.
@@ -164,7 +227,7 @@ Skip entities fully hidden behind geometry. Must exempt nametags, ender dragons 
 
 Without OptiFine, 1.8.9 rebuilds chunks on exactly two worker threads whatever the machine. This sizes the pool to the CPU instead -- half the hardware threads, between two and five -- with a build buffer per worker. Of the three ideas merged here, only the pool size survived reading the code: vanilla already builds nearest chunks first, and the view benchmark found no redundant rebuilds to skip. Takes effect at the next renderer reload (joining a world, F3+A).
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Chunks.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Chunks. **Default:** off.
 - **Expected benefit:** Chunks fill in sooner when joining, teleporting or reloading. Steady frame time is untouched: once a view settles nothing is being rebuilt. Not on by default -- one machine, and each arm had an outlier.
 - **Measured** (in-game, `view-2026-10-03-chunk-workers`): Full renderer reloads on my own profile without OptiFine, four launches in on-off-off-on order, three reloads each, 5 workers against vanilla's 2: reload-to-quiet median 0.65 s against 0.76 s, mean 0.73 s against 0.87 s (each including a fixed 0.5 s quiet period).
 - **Stood down by OptiFine:** OptiFine already sizes its own chunk worker pool to the CPU (up to five threads).
@@ -173,7 +236,7 @@ Without OptiFine, 1.8.9 rebuilds chunks on exactly two worker threads whatever t
 
 Vanilla's FPS cap waits using LWJGL's estimates of how long a sleep and a yield take, so it reaches the right average with uneven frames around it. This waits for fixed deadlines on the system's precise clock instead: sleep while more than 1.5 ms remains, then yield. Only does anything with a frame cap set.
 
-- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Frames and input.
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Frames and input. **Default:** on.
 - **Expected benefit:** More even frame pacing at a cap, same average FPS. Nothing at all uncapped.
 - **Measured** (in-game, `view-2026-10-02-pace144`): Capped at 144 FPS with OptiFine, three views, three rounds each: frame-time standard deviation 0.51 -> 0.24 ms (sky), 0.55 -> 0.38 ms (horizon), 0.52 -> 0.41 ms (45 degrees down); mean frame time unchanged within 0.02 ms.
 

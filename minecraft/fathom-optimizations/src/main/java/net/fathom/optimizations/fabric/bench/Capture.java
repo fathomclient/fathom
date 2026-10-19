@@ -5,7 +5,6 @@ import java.util.List;
 
 import org.lwjgl.opengl.Display;
 
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
 
@@ -233,13 +232,9 @@ public final class Capture {
 
     private static String loader() {
         try {
-            return "Legacy Fabric "
-                    + FabricLoader.getInstance()
-                            .getModContainer("fabricloader")
-                            .get()
-                            .getMetadata()
-                            .getVersion()
-                            .getFriendlyString();
+            return net.fathom.optimizations.fabric.Platform.fabric()
+                    ? "Legacy " + net.fathom.optimizations.fabric.Platform.loaderDescription()
+                    : net.fathom.optimizations.fabric.Platform.loaderDescription();
         } catch (RuntimeException unavailable) {
             return "";
         }
@@ -247,12 +242,8 @@ public final class Capture {
 
     private static String fathomVersion() {
         try {
-            return FabricLoader.getInstance()
-                    .getModContainer("fathom-optimizations")
-                    .get()
-                    .getMetadata()
-                    .getVersion()
-                    .getFriendlyString();
+            String version = net.fathom.optimizations.fabric.Platform.modVersion("fathom-optimizations");
+            return version == null ? "" : version;
         } catch (RuntimeException unavailable) {
             return "";
         }

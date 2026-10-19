@@ -29,6 +29,7 @@ public abstract class ItemFrameItemReuseMixin {
         if (Runtime.itemFrameEntityReuse) {
             ItemEntity kept = FrameItems.reuse(world, stack);
             if (kept != null) {
+                net.fathom.optimizations.core.bench.view.ViewProbe.engaged(net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_ITEM_FRAME);
                 return kept;
             }
             ItemEntity made = original.call(world, x, y, z, stack);

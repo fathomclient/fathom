@@ -97,6 +97,8 @@ final class LauncherSection implements Section {
     @Override
     public void render(HubContext context, Rect area) {
         Renderer ui = context.ui();
+        // The right gutter every Hub page leaves, so its panels end where theirs do.
+        area = Rect.of(area.x, area.y, area.right() - Skin.SCROLL_GUTTER, area.bottom());
         Controls controls = context.controls();
         LauncherBridge bridge = Runtime.bridge();
         LauncherBridge.State state = bridge.state();

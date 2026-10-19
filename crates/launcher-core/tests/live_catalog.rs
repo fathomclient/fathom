@@ -272,9 +272,16 @@ fn a_forge_profile_sees_forge_builds_as_compatible() {
         let verdict = catalog
             .verdict(&project.reference, &forge, &grant(), &Cancel::new())
             .unwrap();
-        println!("{slug:>14}: {:<12} — {}", verdict.verdict.label(), verdict.headline);
+        println!(
+            "{slug:>14}: {:<12} — {}",
+            verdict.verdict.label(),
+            verdict.headline
+        );
         if verdict.verdict != expected {
-            wrong.push(format!("{slug}: expected {expected:?}, got {:?}", verdict.verdict));
+            wrong.push(format!(
+                "{slug}: expected {expected:?}, got {:?}",
+                verdict.verdict
+            ));
         }
     }
     assert!(wrong.is_empty(), "{wrong:#?}");
@@ -284,8 +291,13 @@ fn a_forge_profile_sees_forge_builds_as_compatible() {
         let mut query = SearchQuery::new(forge.clone()).with_page(0, 20);
         query.sort = Sort::Downloads;
         query.breadth = breadth;
-        let page = catalog.search("live", &query, &[], &grant(), &Cancel::new()).unwrap();
-        assert!(page.entries.len() >= 10, "{breadth:?}: Modrinth has many 1.8.9 Forge mods");
+        let page = catalog
+            .search("live", &query, &[], &grant(), &Cancel::new())
+            .unwrap();
+        assert!(
+            page.entries.len() >= 10,
+            "{breadth:?}: Modrinth has many 1.8.9 Forge mods"
+        );
         for entry in &page.entries {
             assert!(
                 entry.project.loaders.contains("forge"),

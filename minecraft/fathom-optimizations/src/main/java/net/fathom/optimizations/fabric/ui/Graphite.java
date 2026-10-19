@@ -214,6 +214,33 @@ public final class Graphite {
         rim(ui, area, radius, rim);
     }
 
+    /** The shade the dim is made of: the deepest ink, a touch cooler than black. */
+    private static final int DIM_INK = 0x05080C;
+
+    /**
+     * The darkening between the scene and a Fathom screen: an even veil over
+     * everything when {@code veil} (the Fathom background; gameplay glass has
+     * its own, the RShift dim setting), then a soft ellipse of shade under
+     * {@code focus}, the screen's own composition, so the world stays faintly
+     * visible at the edges and the controls sit on calm ground.
+     *
+     * <p>Two fills and no blur: it reads nothing back and adds no pass, so it
+     * costs the same over the cached backdrop and over live glass. Draw it
+     * after the scene (and after the glass), before anything of the screen.
+     */
+    public static void dim(Renderer ui, Rect focus, boolean veil, float strength) {
+        if (strength <= 0.001f) {
+            return;
+        }
+        if (veil) {
+            ui.rounded(0f, 0f, ui.width(), ui.height(), 0f,
+                    Colour.argb(GraphiteTokens.BACKDROP_DIM_VEIL * strength, DIM_INK));
+        }
+        ui.radial(0f, 0f, ui.width(), ui.height(), 0f, focus.centreX(), focus.centreY(),
+                Math.max(focus.width * 0.85f, ui.width() * 0.45f), Math.max(focus.height, ui.height() * 0.6f),
+                Colour.argb(GraphiteTokens.BACKDROP_DIM_POOL * strength, DIM_INK), 1f);
+    }
+
     /**
      * Take the screen as it stands as the backdrop the glass of every pane
      * drawn after it this frame frosts. Call once the scene is drawn and

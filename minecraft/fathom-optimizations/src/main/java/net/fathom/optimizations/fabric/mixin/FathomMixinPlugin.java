@@ -7,7 +7,6 @@ import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
-import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * Decides which of Fathom's Mixins may apply in this installation.
@@ -114,9 +113,19 @@ public final class FathomMixinPlugin implements IMixinConfigPlugin {
      */
     private static final boolean OPTIFINE_PRESENT = detectOptiFine();
 
+    /**
+     * Mixins that are not applied under Forge, with the reason. Forge replaces
+     * some vanilla code outright (the in-game HUD is GuiIngameForge's, not
+     * GuiIngame's) and patches other methods; a hook here either has a Forge
+     * counterpart in {@code fathom.forge.mixins.json} or is a Fabric-only
+     * optimization that is simply not offered there.
+     */
+    private static final String[][] INCOMPATIBLE_WITH_FORGE = {
+    };
+
     private static boolean detectOptiFine() {
         try {
-            return FabricLoader.getInstance().isModLoaded("optifabric");
+            return net.fathom.optimizations.fabric.Platform.isModLoaded("optifabric");
         } catch (Throwable unavailable) {
             // Never let the decision itself be the thing that breaks loading.
             // Answering "no" applies every Mixin, which is the behaviour this
@@ -132,9 +141,16 @@ public final class FathomMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public void onLoad(String mixinPackage) {
+        if (!net.fathom.optimizations.fabric.Platform.fabric()) {
+            // Fabric's loader starts MixinExtras for every mod; under Forge
+            // nothing does, and @WrapOperation and friends need it before the
+            // first config is prepared.
+            com.llamalad7.mixinextras.MixinExtrasBootstrap.init();
+        }
         if (OPTIFINE_PRESENT) {
             System.out.println(
-                    "[Fathom] OptiFine detected through OptiFabric. "
+                    "[Fathom] OptiFine detected"
+                            + (net.fathom.optimizations.fabric.Platform.fabric() ? " through OptiFabric. " : ". ")
                             + "Fathom's overlapping renderer patches will not be applied; "
                             + "OptiFine owns those paths.");
         }
@@ -152,6 +168,14 @@ public final class FathomMixinPlugin implements IMixinConfigPlugin {
         // never applies them, so it pays nothing -- not even a folded branch.
         if (mixinClassName.contains(".mixin.view.")) {
             return net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED;
+        }
+        if (!net.fathom.optimizations.fabric.Platform.fabric()) {
+            for (String[] skipped : INCOMPATIBLE_WITH_FORGE) {
+                if (mixinClassName.endsWith(skipped[0])) {
+                    System.out.println("[Fathom] Skipping " + skipped[0] + " on Forge: " + skipped[1] + ".");
+                    return false;
+                }
+            }
         }
         if (!OPTIFINE_PRESENT) {
             return true;

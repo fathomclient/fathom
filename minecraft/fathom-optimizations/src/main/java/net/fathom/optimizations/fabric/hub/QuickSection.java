@@ -60,7 +60,11 @@ final class QuickSection implements Section {
     private final Scroller scroller = new Scroller();
 
     private static final float ROW = Skin.ROW_HEIGHT;
-    private static final float SLIDER_ROW = 58f;
+    /** A slider is one row: name, track, value. It was two, the track under the name. */
+    private static final float SLIDER_ROW = Skin.ROW_HEIGHT;
+    /** The name's column and the value's, either side of the track. */
+    private static final float SLIDER_LABEL = 168f;
+    private static final float SLIDER_VALUE = 96f;
     private static final float CONTROL = 220f;
 
     /**
@@ -152,7 +156,7 @@ final class QuickSection implements Section {
         // arm's length of nothing between the two — while the slider tracks,
         // which had their own 360-unit cap, ended a third of the way across and
         // read as broken rather than as short.
-        float width = Math.min(Skin.COLUMN_WIDE, area.width - Skin.S4);
+        float width = Math.min(Skin.COLUMN_WIDE, area.width - Skin.SCROLL_GUTTER);
         float labelStep = ui.lineHeight(Type.LABEL) + Skin.S2;
 
         // Every height here is a constant, so the page can be measured before it
@@ -266,12 +270,14 @@ final class QuickSection implements Section {
             VideoSetting setting) {
         Renderer ui = context.ui();
         Rect row = area.inset(0f, 2f);
-        boolean hovered = context.controls().pointerOverVisible(row);
-        ui.text(name, row.x, row.y + ui.ascent(Type.BODY), Type.BODY, hovered ? Skin.TEXT : Skin.TEXT_MUTED);
-        ui.textRight(value, row.right(), row.y + ui.ascent(Type.BODY), Type.BODY, Skin.TEXT_FAINT);
+        float trackLeft = row.x + Math.min(SLIDER_LABEL, row.width * 0.35f);
+        net.fathom.optimizations.fabric.ui.FathomSettingRows.label(ui, row, row.x, trackLeft - row.x - Skin.S3,
+                name, null, true);
+        ui.textRight(value, row.right(), Controls.baseline(ui, row, Type.BODY), Type.BODY, Skin.TEXT_MUTED);
 
-        Rect track = new Rect(row.x, row.y + ui.lineHeight(Type.BODY) + Skin.S2,
-                row.width, Controls.SLIDER_HEIGHT);
+        float trackRight = row.right() - SLIDER_VALUE;
+        Rect track = new Rect(trackLeft, row.centreY() - Controls.SLIDER_HEIGHT / 2f,
+                Math.max(40f, trackRight - trackLeft), Controls.SLIDER_HEIGHT);
         double next = context.controls().slider(ui, id, track, fraction, true);
         if (Math.abs(next - fraction) > 0.0005d) {
             apply(context, setting, next);
@@ -289,22 +295,10 @@ final class QuickSection implements Section {
         return area.bottom();
     }
 
+    /** The shared settings-row label, so Quick reads as a module page does. */
     private void label(HubContext context, Rect row, String name, String detail) {
-        Renderer ui = context.ui();
-        boolean hovered = context.controls().pointerOverVisible(row);
-        boolean twoLines = detail != null && !detail.isEmpty();
-        if (!twoLines) {
-            ui.text(name, row.x, Controls.baseline(ui, row, Type.BODY), Type.BODY,
-                    hovered ? Skin.TEXT : Skin.TEXT_MUTED);
-            return;
-        }
-        // Two lines centred as a block on their own heights, rather than each
-        // one nudged a few units either side of the centre.
-        float top = row.centreY() - (ui.lineHeight(Type.BODY) + ui.lineHeight(Type.CAPTION)) / 2f;
-        ui.text(name, row.x, top + ui.ascent(Type.BODY), Type.BODY,
-                hovered ? Skin.TEXT : Skin.TEXT_MUTED);
-        ui.text(detail, row.x, top + ui.lineHeight(Type.BODY) + ui.ascent(Type.CAPTION),
-                Type.CAPTION, Skin.TEXT_DISABLED);
+        net.fathom.optimizations.fabric.ui.FathomSettingRows.label(context.ui(), row, row.x, row.width * 0.55f,
+                name, detail, true);
     }
 
     private void flip(HubContext context, String id) {

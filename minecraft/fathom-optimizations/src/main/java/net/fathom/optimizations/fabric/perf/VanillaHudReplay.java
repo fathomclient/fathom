@@ -45,8 +45,19 @@ public final class VanillaHudReplay {
     public static final VanillaHudReplay CHAT = new VanillaHudReplay("chat");
     public static final VanillaHudReplay SIDEBAR = new VanillaHudReplay("sidebar");
     public static final VanillaHudReplay TAB_LIST = new VanillaHudReplay("tab list");
+    /**
+     * Fathom's Scoreboard widget: the same sidebar, so the same replay, rather
+     * than {@link HudLayerCache}'s layer, which redraws it twenty times a
+     * second whether or not a score changed.
+     */
+    public static final VanillaHudReplay SCOREBOARD_WIDGET = new VanillaHudReplay("scoreboard widget");
 
-    private static final VanillaHudReplay[] ALL = {CHAT, SIDEBAR, TAB_LIST};
+    private static final VanillaHudReplay[] ALL = {CHAT, SIDEBAR, TAB_LIST, SCOREBOARD_WIDGET};
+
+    /** Whether elements are replayed this frame: the switch on, and no shader pack drawing. */
+    public static boolean active() {
+        return net.fathom.optimizations.fabric.Runtime.vanillaHudReplay && !PerfLayer.shadersActive;
+    }
 
     /** Bumped on every scoreboard change; see {@code ScoreboardRevisionMixin}. Client thread. */
     public static int scoreboardRevision;

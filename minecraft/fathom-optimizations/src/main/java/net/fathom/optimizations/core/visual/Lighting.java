@@ -1,7 +1,5 @@
 package net.fathom.optimizations.core.visual;
 
-import java.util.Locale;
-
 /**
  * Fullbright's and Time Changer's arithmetic, without Minecraft.
  *
@@ -46,11 +44,14 @@ public final class Lighting {
         return fromSix * 1000L + Math.round(clampedMinute * 1000.0 / 60.0);
     }
 
-    /** The tick a Time Changer setting stands for. */
+    /**
+     * The tick a Time Changer setting stands for. Runs on every sky-angle query,
+     * several times a frame, so it compares without lowercasing copies.
+     */
     public static long ticks(String preset, int customHour) {
         if (preset != null) {
             for (int index = 0; index < PRESET_HOURS.length; index++) {
-                if (TIMES[index].toLowerCase(Locale.ROOT).equals(preset.toLowerCase(Locale.ROOT))) {
+                if (TIMES[index].equalsIgnoreCase(preset)) {
                     return ticks(PRESET_HOURS[index], PRESET_MINUTES[index]);
                 }
             }

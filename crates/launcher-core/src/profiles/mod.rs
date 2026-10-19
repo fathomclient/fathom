@@ -28,6 +28,7 @@
 
 pub mod blueprint;
 pub mod game_options;
+pub mod global_options;
 pub mod inherit;
 pub mod model;
 pub mod ops;

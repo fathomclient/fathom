@@ -205,13 +205,14 @@ impl Component {
 // ---------------------------------------------------------------------------
 
 const FABRIC: &[Loader] = &[Loader::LegacyFabric];
+const FORGE: &[Loader] = &[Loader::Forge];
 const FABRIC_OR_FORGE: &[Loader] = &[Loader::LegacyFabric, Loader::Forge];
 
 /// Everything the launcher knows how to put into a profile.
 ///
 /// Ordered as the setup screen shows them: what a Fathom profile is, then what
 /// can be added to one.
-pub const ALL: [Component; 6] = [
+pub const ALL: [Component; 7] = [
     Component {
         id: "fathom-core",
         name: "Fathom Core",
@@ -255,6 +256,18 @@ pub const ALL: [Component; 6] = [
             component: "fathom-performance",
         },
         loaders: FABRIC,
+        bridge: None,
+    },
+    Component {
+        id: "fathom-forge-client",
+        name: "Fathom for Forge",
+        summary: "Fathom's client on Forge: the hub, HUD, menu, shared profiles and optimizations.",
+        mod_id: "fathom-forge",
+        tier: Tier::Core,
+        supply: Supply::Bundled {
+            jar_prefix: "fathom-forge-",
+        },
+        loaders: FORGE,
         bridge: None,
     },
     Component {
@@ -336,7 +349,7 @@ pub fn installed_in(component: &Component, profile: &Profile) -> bool {
 /// the loader is part of the record rather than assumed.
 pub fn missing_bridge(profile: &Profile) -> Option<(&'static Component, &'static Component)> {
     let loader = profile.loader_kind();
-    for component in ALL.iter() {
+    for component in &ALL {
         let Some(bridge) = component.bridge else {
             continue;
         };
@@ -362,6 +375,17 @@ pub fn find(id: &str) -> Option<&'static Component> {
 /// Empty for every kind except [`ProfileKind::Fathom`]. A Custom profile may
 /// contain all of them, but they got there because somebody chose them.
 pub fn required_for(kind: ProfileKind, loader: Loader) -> Vec<&'static Component> {
+    // Forge is an opt-in Custom installation today, but the launcher-wide
+    // settings/profile contract must not disappear merely because its loader
+    // changed. The small Forge companion is therefore integration glue for
+    // every Forge installation, while the full performance client remains a
+    // Fathom-profile component on Legacy Fabric.
+    if loader == Loader::Forge {
+        return ALL
+            .iter()
+            .filter(|component| component.id == "fathom-forge-client")
+            .collect();
+    }
     if !kind.owns_components() {
         return Vec::new();
     }
@@ -417,11 +441,17 @@ pub struct Report {
     /// Required, but this build cannot supply it. Each entry is a component id
     /// and the reason, both suitable for display.
     pub unavailable: Vec<(&'static str, &'static str)>,
+    /// Taken out: a bundled jar built for another loader than the profile's,
+    /// left behind when its loader was switched.
+    pub removed: Vec<&'static str>,
+    /// The profile runs Fathom's client but had never chosen optimizations,
+    /// so it was given the default preset. See [`tune_if_never_chosen`].
+    pub tuned: bool,
 }
 
 impl Report {
     pub fn changed_anything(&self) -> bool {
-        !self.added.is_empty() || !self.updated.is_empty()
+        !self.added.is_empty() || !self.updated.is_empty() || !self.removed.is_empty() || self.tuned
     }
 
     /// One line for a log or a status row.
@@ -435,6 +465,12 @@ impl Report {
         }
         let added = self.added.len();
         let updated = self.updated.len();
+        if added == 0 && updated == 0 && self.removed.is_empty() {
+            return "Fathom's optimizations set to the Balanced preset.".to_owned();
+        }
+        if added == 0 && updated == 0 {
+            return format!("Removed {} Fathom component(s) built for another loader.", self.removed.len());
+        }
         match (added, updated) {
             (0, n) => format!("Updated {n} Fathom component(s)."),
             (n, 0) => format!("Installed {n} Fathom component(s)."),
@@ -458,7 +494,31 @@ pub fn ensure(
     profile: &mut Profile,
 ) -> Result<Report, ComponentError> {
     let mut report = Report::default();
-    let required = required_for(profile.kind, profile.loader_kind());
+    let loader = profile.loader_kind();
+    let required = required_for(profile.kind, loader);
+
+    // Fathom's client is one jar per loader. After a loader switch the other
+    // loader's build is still listed, and laying it out would put a Fabric jar
+    // in a Forge profile (or the reverse). Only a first-party entry is taken
+    // out -- a jar somebody supplied under the same id is theirs -- and it is
+    // removed rather than switched off, so switching back installs it afresh
+    // instead of finding it disabled.
+    for component in &ALL {
+        if component.supports(loader) || !matches!(component.supply, Supply::Bundled { .. }) {
+            continue;
+        }
+        let Some(id) = component.parsed_mod_id() else {
+            continue;
+        };
+        let first_party = profile
+            .mods
+            .get(&id)
+            .is_some_and(|entry| entry.source.is_launcher_owned());
+        if first_party {
+            profile.mods.remove(&id);
+            report.removed.push(component.id);
+        }
+    }
 
     for component in required {
         match component.supply {
@@ -487,7 +547,42 @@ pub fn ensure(
         }
     }
 
+    report.tuned = tune_if_never_chosen(profile);
+
     Ok(report)
+}
+
+/// Give a profile that runs Fathom's client, and has never chosen any
+/// optimizations, the preset a new Fathom profile starts with.
+///
+/// # Why
+///
+/// Every Forge profile carries Fathom's client (see [`required_for`]), but a
+/// Forge profile is created as Custom, and Custom starts with an empty switch
+/// map. [`crate::optimizations::enabled_for`] reads an entry a Custom profile
+/// never mentioned as off, so the game ran Fathom's hooks with every
+/// optimization switched off: "21 optimizations registered, 1 enabled" in a real
+/// Forge session (2026-10-17), against 13 on the Legacy Fabric profile.
+///
+/// An empty map under Custom can only mean nobody chose: the Performance page
+/// expands the preset into the map before it stores the first toggle, so any
+/// choice a person made, including switching everything off, leaves entries
+/// behind. Those profiles are left exactly as they are.
+pub fn tune_if_never_chosen(profile: &mut Profile) -> bool {
+    use crate::profiles::OptimizationPreset;
+
+    let runs_client = crate::fathom_client::module_id_for(profile.loader_kind())
+        .and_then(|id| ModId::new(id).ok())
+        .and_then(|id| profile.mods.get(&id).map(|entry| entry.enabled))
+        .unwrap_or(false);
+    let never_chosen = profile.optimizations.preset == OptimizationPreset::Custom
+        && profile.optimizations.rendering.is_empty();
+    if !runs_client || !never_chosen {
+        return false;
+    }
+    profile.optimizations.preset = OptimizationPreset::Balanced;
+    profile.optimizations.rendering = OptimizationPreset::Balanced.switches();
+    true
 }
 
 /// Install a component the user asked for, from the repository it lives in.
@@ -668,6 +763,8 @@ fn install_bundled(
 
 /// The file-name prefix of Fathom's client module jar.
 pub const FATHOM_JAR_PREFIX: &str = "fathom-optimizations-";
+/// The same client, renamed for Forge by `gradle forgeJar`.
+pub const FATHOM_FORGE_JAR_PREFIX: &str = "fathom-forge-";
 
 /// Where a bundled jar was found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -752,7 +849,10 @@ impl JarLookup {
 /// whichever jar had last been copied into application data by hand.
 pub fn bundled_jar(paths: &DataPaths, prefix: &str) -> JarLookup {
     if let Some(checkout) = paths.development_checkout() {
-        let module = checkout.join("minecraft").join("fathom-optimizations");
+        // Both builds come from the one module: `gradle build` writes the
+        // Fabric jar and, from it, the Forge jar (`forgeJar`).
+        let module_name = "fathom-optimizations";
+        let module = checkout.join("minecraft").join(module_name);
         let libs = module.join("build").join("libs");
         return match newest_in(&libs, prefix) {
             Some(path) => {
@@ -769,7 +869,7 @@ pub fn bundled_jar(paths: &DataPaths, prefix: &str) -> JarLookup {
             None => JarLookup::Missing {
                 hint: format!(
                     "Fathom's client module has not been built in this checkout ({} has no \
-                     {prefix}*.jar). Run `gradle build` in minecraft/fathom-optimizations.",
+                     {prefix}*.jar). Rebuild {module_name}.",
                     libs.display()
                 ),
                 searched: vec![libs],
@@ -1057,7 +1157,13 @@ fn forget_adoptions(store_root: &Path, removed: &[String]) {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation
+)]
 mod tests {
     use super::*;
     use crate::profiles::ProfileId;
@@ -1264,13 +1370,16 @@ mod tests {
         }
     }
 
-    /// The rule the whole module exists for: a Fathom profile's components are
-    /// not a choice, and no other kind gets any installed without asking.
+    /// Fathom owns its full Fabric stack. Forge gets only the loader adapter
+    /// that preserves launcher-wide profiles and settings.
     #[test]
-    fn only_a_fathom_profile_has_required_components() {
+    fn required_components_follow_the_loader_contract() {
         assert!(!required_for(ProfileKind::Fathom, Loader::LegacyFabric).is_empty());
         assert!(required_for(ProfileKind::Vanilla, Loader::Vanilla).is_empty());
         assert!(required_for(ProfileKind::Custom, Loader::LegacyFabric).is_empty());
+        let forge = required_for(ProfileKind::Custom, Loader::Forge);
+        assert_eq!(forge.len(), 1);
+        assert_eq!(forge[0].id, "fathom-forge-client");
     }
 
     /// Vanilla loads no jars at all, so requiring one would produce a profile
@@ -1466,6 +1575,92 @@ mod tests {
         let again = ensure(&paths, &engine, &mut profile).unwrap();
         assert!(!again.changed_anything(), "{again:?}");
         assert!(again.current.contains(&"fathom-performance"));
+    }
+
+    /// Switching a Fathom profile's loader swaps Fathom's client for the
+    /// matching build, both ways, and never leaves the other one laid out.
+    #[test]
+    fn switching_a_fathom_profiles_loader_swaps_the_client_build() {
+        let tmp = tempfile::tempdir().unwrap();
+        let paths = DataPaths::rooted_at(tmp.path());
+        paths.ensure().unwrap();
+        let resources = paths.root().join("resources");
+        std::fs::create_dir_all(&resources).unwrap();
+        std::fs::write(resources.join("fathom-optimizations-9.9.9.jar"), b"PK\x03\x04 fabric build").unwrap();
+        std::fs::write(resources.join("fathom-forge-9.9.9.jar"), b"PK\x03\x04 forge build").unwrap();
+        let engine = ModEngine::new(paths.clone());
+        let ids = |profile: &Profile| -> Vec<String> {
+            profile.mods.iter().map(|entry| entry.id.as_str().to_owned()).collect()
+        };
+
+        let mut profile = profile(ProfileKind::Fathom, Loader::LegacyFabric);
+        ensure(&paths, &engine, &mut profile).unwrap();
+        assert_eq!(ids(&profile), vec!["fathom-optimizations"]);
+
+        profile.loader.kind = Loader::Forge;
+        let report = ensure(&paths, &engine, &mut profile).unwrap();
+        assert_eq!(report.added, vec!["fathom-forge-client"], "{report:?}");
+        assert_eq!(report.removed, vec!["fathom-performance"], "{report:?}");
+        assert_eq!(ids(&profile), vec!["fathom-forge"]);
+
+        profile.loader.kind = Loader::LegacyFabric;
+        let report = ensure(&paths, &engine, &mut profile).unwrap();
+        assert_eq!(report.removed, vec!["fathom-forge-client"], "{report:?}");
+        assert_eq!(ids(&profile), vec!["fathom-optimizations"]);
+        assert!(profile.mods.iter().all(|entry| entry.enabled), "switched back on, not left off");
+    }
+
+    /// The Forge regression of 2026-10-17: a Custom Forge profile carried
+    /// Fathom's client with every optimization switched off, because Custom
+    /// starts with an empty map and an unmentioned entry reads as off.
+    #[test]
+    fn a_forge_profile_that_never_chose_optimizations_gets_the_default_preset() {
+        use crate::profiles::OptimizationPreset;
+        let tmp = tempfile::tempdir().unwrap();
+        let paths = DataPaths::rooted_at(tmp.path());
+        paths.ensure().unwrap();
+        let resources = paths.root().join("resources");
+        std::fs::create_dir_all(&resources).unwrap();
+        std::fs::write(resources.join("fathom-forge-9.9.9.jar"), b"PK\x03\x04 forge build").unwrap();
+        let engine = ModEngine::new(paths.clone());
+
+        let mut profile = profile(ProfileKind::Custom, Loader::Forge);
+        profile.optimizations.preset = OptimizationPreset::Custom;
+        let report = ensure(&paths, &engine, &mut profile).unwrap();
+        assert!(report.tuned && report.changed_anything(), "{report:?}");
+        assert_eq!(profile.optimizations.preset, OptimizationPreset::Balanced);
+        let armour = crate::optimizations::find("render.entity.armor-texture-cache").unwrap();
+        assert!(crate::optimizations::enabled_for(&profile, &armour));
+
+        // Idempotent: nothing to do the second time.
+        let again = ensure(&paths, &engine, &mut profile).unwrap();
+        assert!(!again.tuned && !again.changed_anything(), "{again:?}");
+    }
+
+    /// A choice is a choice, even "everything off", and a profile without
+    /// Fathom's client has nothing for a preset to switch.
+    #[test]
+    fn a_curated_or_clientless_profile_is_left_alone() {
+        use crate::profiles::OptimizationPreset;
+        let mut curated = profile(ProfileKind::Custom, Loader::Forge);
+        install(&mut curated, "fathom-forge-client");
+        curated.optimizations.preset = OptimizationPreset::Custom;
+        curated
+            .optimizations
+            .rendering
+            .insert("render.entity.armor-texture-cache".to_owned(), false);
+        assert!(!tune_if_never_chosen(&mut curated));
+        assert_eq!(curated.optimizations.preset, OptimizationPreset::Custom);
+
+        let mut switched_off = profile(ProfileKind::Custom, Loader::Forge);
+        install(&mut switched_off, "fathom-forge-client");
+        switched_off.mods.set_enabled(&ModId::new("fathom-forge").unwrap(), false);
+        switched_off.optimizations.preset = OptimizationPreset::Custom;
+        assert!(!tune_if_never_chosen(&mut switched_off));
+
+        let mut plain = profile(ProfileKind::Custom, Loader::LegacyFabric);
+        plain.optimizations.preset = OptimizationPreset::Custom;
+        assert!(!tune_if_never_chosen(&mut plain));
     }
 
     /// A newer jar in the build replaces the one the launcher installed.

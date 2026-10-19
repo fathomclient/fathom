@@ -753,7 +753,7 @@ dealing with.
 |---|---|
 | Vanilla | Implemented. Adds nothing, reads no `mods/`, contacts nobody. |
 | Legacy Fabric | Implemented, against the project's own metadata service. |
-| Forge | Implemented for 1.8.9 Custom installations (`docs/forge.md`). Fathom's own client does not run on it. |
+| Forge | Implemented for 1.8.9 Custom installations, with a bundled companion for shared profiles, common HUD modules and the custom menu (`docs/forge.md`). |
 
 `LoaderInstallation` is **additive**: the vanilla launch is computed first and
 this is layered on top. A loader that could *replace* parts of the vanilla plan

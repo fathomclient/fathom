@@ -6,8 +6,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.loader.api.ModContainer;
 
 /**
  * What is actually running, printed once at startup.
@@ -164,7 +162,7 @@ public final class RuntimeTrace {
      * and that is a different problem from a mod that is not installed.
      */
     private static String optifabricLine() {
-        boolean listed = FabricLoader.getInstance().isModLoaded("optifabric");
+        boolean listed = net.fathom.optimizations.fabric.Platform.isModLoaded("optifabric");
         boolean loadable = optifabricActive();
         StringBuilder out = new StringBuilder();
         out.append(loadable ? "ACTIVE" : "NOT ACTIVE");
@@ -236,48 +234,52 @@ public final class RuntimeTrace {
     }
 
     private static String modVersion(String id) {
-        ModContainer container = container(id);
-        return container == null ? "not loaded"
-                : container.getMetadata().getVersion().getFriendlyString();
+        String version = net.fathom.optimizations.fabric.Platform.modVersion(id);
+        return version == null ? "not loaded" : version;
     }
 
     private static String modRoot(String id) {
-        ModContainer container = container(id);
-        if (container == null) {
-            return "not loaded";
+        if (!net.fathom.optimizations.fabric.Platform.fabric()) {
+            // FML keeps no root for a jar on the class path; this one is ours.
+            java.security.CodeSource source = RuntimeTrace.class.getProtectionDomain().getCodeSource();
+            return "fathom-optimizations".equals(id) && source != null
+                    ? String.valueOf(source.getLocation()) : "not loaded";
         }
-        try {
-            // getRootPaths, not the deprecated single-root getRootPath: a mod can
-            // be several jars, and a nested one reports each. Printing all of
-            // them is the point -- "which file is this actually" is the question.
-            return container.getRootPaths().toString();
-        } catch (Throwable unreadable) {
-            return "unreadable (" + unreadable.getClass().getSimpleName() + ")";
-        }
+        return FabricRoots.of(id);
     }
 
-    private static ModContainer container(String id) {
-        try {
-            java.util.Optional<ModContainer> found = FabricLoader.getInstance().getModContainer(id);
-            return found.isPresent() ? found.get() : null;
-        } catch (Throwable absent) {
-            return null;
+    /** Fabric's mod roots, kept apart so this class links without Fabric. */
+    private static final class FabricRoots {
+        static String of(String id) {
+            try {
+                java.util.Optional<net.fabricmc.loader.api.ModContainer> found =
+                        net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer(id);
+                if (!found.isPresent()) {
+                    return "not loaded";
+                }
+                // getRootPaths, not the deprecated single-root getRootPath: a mod can
+                // be several jars, and a nested one reports each. Printing all of
+                // them is the point -- "which file is this actually" is the question.
+                return found.get().getRootPaths().toString();
+            } catch (Throwable unreadable) {
+                return "unreadable (" + unreadable.getClass().getSimpleName() + ")";
+            }
         }
     }
 
     private static File gameDirectory() {
         try {
-            return FabricLoader.getInstance().getGameDir().toFile();
+            return net.fathom.optimizations.fabric.Platform.gameDir();
         } catch (Throwable unreadable) {
             return null;
         }
     }
 
     private static String loaderLine() {
-        return "Fabric " + modVersion("fabricloader")
+        return net.fathom.optimizations.fabric.Platform.loaderDescription()
                 + ", main class " + System.getProperty("sun.java.command", "?").split(" ")[0]
                 + ", environment "
-                + (FabricLoader.getInstance().isDevelopmentEnvironment() ? "development" : "production");
+                + (net.fathom.optimizations.fabric.Platform.development() ? "development" : "production");
     }
 
     private static String java() {

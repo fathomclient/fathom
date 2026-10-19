@@ -423,8 +423,14 @@ pub fn summarise(store: &ProfileStore) -> Vec<ProfileSummary> {
         .collect()
 }
 
-#[allow(clippy::unwrap_used)]
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation
+)]
 mod tests {
     use std::collections::BTreeMap;
 

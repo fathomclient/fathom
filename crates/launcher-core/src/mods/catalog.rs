@@ -44,6 +44,7 @@ const REVIEWED: &str = "2026-01";
 /// Named here so the conflict edges can refer to it before it exists. A mod that
 /// is not built yet still has a knowable relationship to `OptiFine`.
 pub const FATHOM_OPTIMIZATIONS: &str = "fathom-optimizations";
+pub const FATHOM_FORGE: &str = "fathom-forge";
 
 /// Legacy Fabric API's Modrinth project.
 ///
@@ -80,6 +81,7 @@ pub fn entries() -> Vec<ModDefinition> {
     vec![
         optifine(),
         fathom_optimizations(),
+        fathom_forge(),
         polypatcher(),
         patcher(),
         memoryfix(),
@@ -214,6 +216,40 @@ fn fathom_optimizations() -> ModDefinition {
             },
         ],
         summary: "Fathom's own 1.8.9 module: optimizations, the in-game hub and the HUD.".into(),
+        homepage: None,
+    }
+}
+
+/// Fathom's client built for Forge 1.8.9: the same classes as
+/// [`fathom_optimizations`], renamed to Forge's names by `gradle forgeJar` and
+/// started by Mixin's LaunchWrapper tweaker. Shared profiles, the hub, the HUD,
+/// the menu and the optimizations, exactly as on Fabric.
+fn fathom_forge() -> ModDefinition {
+    ModDefinition {
+        id: id(FATHOM_FORGE),
+        name: "Fathom for Forge".into(),
+        // The same build as Fathom Optimizations, so the same version.
+        version: ModVersion::new("0.3.0-hud"),
+        minecraft: MinecraftCompatibility::only("1.8.9"),
+        loaders: loaders(&[Loader::Forge]),
+        provenance: Provenance::BuiltInCatalogue {
+            reviewed: REVIEWED.into(),
+        },
+        download: Some(DownloadSource::UserMustSupply {
+            reason:
+                "Fathom's Forge companion ships inside the launcher and is installed automatically."
+                    .into(),
+            where_to_get: "https://github.com/".into(),
+        }),
+        hash: None,
+        license: License::Spdx {
+            id: "Apache-2.0".into(),
+        },
+        redistribution: RedistributionPolicy::FetchOnRequest,
+        privacy: PrivacyClassification::Local,
+        dependencies: Vec::new(),
+        conflicts: Vec::new(),
+        summary: "Fathom's client for Forge 1.8.9: the hub, HUD, menu, shared profiles and optimizations.".into(),
         homepage: None,
     }
 }

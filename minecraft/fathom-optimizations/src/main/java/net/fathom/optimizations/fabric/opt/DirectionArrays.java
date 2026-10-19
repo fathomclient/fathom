@@ -25,6 +25,10 @@ public final class DirectionArrays {
     private DirectionArrays() {}
 
     public static Direction[] values() {
-        return Runtime.hotPathAllocation ? ALL : Direction.values();
+        if (Runtime.hotPathAllocation) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.engaged(net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_DIRECTIONS);
+            return ALL;
+        }
+        return Direction.values();
     }
 }

@@ -116,6 +116,19 @@ impl ProfileKind {
             ProfileKind::Custom => None,
         }
     }
+
+    /// Whether a profile of this kind may be set to `loader`.
+    ///
+    /// A Fathom profile runs Fathom's client, which is built for Legacy Fabric
+    /// (its implied loader) and for Forge (`gradle forgeJar`); Vanilla would
+    /// leave nothing to load it. Custom takes anything; Vanilla is Vanilla.
+    pub fn accepts_loader(self, loader: Loader) -> bool {
+        match self {
+            ProfileKind::Vanilla => loader == Loader::Vanilla,
+            ProfileKind::Fathom => matches!(loader, Loader::LegacyFabric | Loader::Forge),
+            ProfileKind::Custom => true,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

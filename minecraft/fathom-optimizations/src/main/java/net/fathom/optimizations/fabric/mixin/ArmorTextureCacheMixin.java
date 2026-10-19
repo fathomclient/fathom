@@ -33,6 +33,7 @@ public abstract class ArmorTextureCacheMixin {
         if (Runtime.armorTextureCache) {
             Identifier known = ArmorTextures.lookup(item, secondLayer, overlay);
             if (known != null) {
+                net.fathom.optimizations.core.bench.view.ViewProbe.engaged(net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_ARMOR_TEXTURE);
                 callback.setReturnValue(known);
             }
         }

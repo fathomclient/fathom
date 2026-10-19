@@ -217,10 +217,13 @@ OptiFine compatibility (user-installed); the performance layer.
 **Ready, new in this pass:** the third-party mod browser (Mods → Browse) for
 Modrinth, with per-build compatibility verdicts; see `docs/mod-browser.md`. Its
 CurseForge half is implemented but off: Fathom holds no CurseForge API key.
+**Ready, new since:** Fathom's own client on Forge 1.8.9 -- hub, HUD, menu,
+modules (now 21, with 1.7 Animations), shared profiles and the optimizations,
+plus a Forge-only fix for Forge's sky colour blend; see `docs/forge.md`.
 Installed-mod management — earlier builds and offline restore, launch history,
 "What changed?" recovery, a launch without external mods, and launch-time
 dependency checks — is described in `docs/mod-management.md`.
 
 **Not implemented:** automatic updates (mechanism done, signing key absent);
-code signing; Fathom's in-game client on Forge (Forge installations themselves work: `docs/forge.md`); and the
+code signing; and the
 features `docs/v1-modules.md` lists as deliberately left out.

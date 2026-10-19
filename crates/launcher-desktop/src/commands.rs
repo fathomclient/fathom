@@ -185,14 +185,14 @@ pub fn save_profile(state: tauri::State<'_, State>, edit: ProfileEdit) -> Result
     let loader =
         api::profiles::loader_from_id(&loader).ok_or_else(|| "unknown loader".to_owned())?;
 
-    // A Fathom profile's loader is not a field, it is what the type means. A
-    // save that moved one to Vanilla would produce a profile whose components
-    // could never load, and the next launch would put them back -- so it is
-    // refused here rather than half-applied.
-    if profile.kind.owns_components() && profile.kind.implied_loader() != Some(loader) {
+    // A Fathom profile runs Fathom's client, which exists for Legacy Fabric and
+    // for Forge. A save that moved one to Vanilla would produce a profile whose
+    // components could never load, and the next launch would put them back --
+    // so it is refused here rather than half-applied.
+    if profile.kind.owns_components() && !profile.kind.accepts_loader(loader) {
         return Err(
-            "A Fathom profile's loader comes with the profile type. Change the type to Custom \
-             first."
+            "A Fathom profile runs on Legacy Fabric or Forge. Change the type to Custom first \
+             to use another loader."
                 .to_owned(),
         );
     }
@@ -909,12 +909,13 @@ pub fn window_minimize(window: tauri::Window) -> Result<(), String> {
 
 #[tauri::command]
 pub fn window_toggle_maximize(window: tauri::Window) -> Result<(), String> {
-    window
-        .is_maximized()
-        .map_err(|error| error.to_string())?
-        .then(|| window.unmaximize())
-        .unwrap_or_else(|| window.maximize())
-        .map_err(|error| error.to_string())
+    let maximized = window.is_maximized().map_err(|error| error.to_string())?;
+    if maximized {
+        window.unmaximize()
+    } else {
+        window.maximize()
+    }
+    .map_err(|error| error.to_string())
 }
 
 /// Toggle the launcher between windowed and fullscreen.

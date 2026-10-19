@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 
 import net.fathom.optimizations.core.instrument.Report;
@@ -154,6 +153,8 @@ final class DiagnosticsSection implements Section {
     @Override
     public void render(HubContext context, Rect area) {
         Renderer ui = context.ui();
+        // The right gutter every Hub page leaves, so its panels end where theirs do.
+        area = Rect.of(area.x, area.y, area.right() - Skin.SCROLL_GUTTER, area.bottom());
         Controls controls = context.controls();
         focus().sample();
 
@@ -544,12 +545,8 @@ final class DiagnosticsSection implements Section {
 
     private static String version() {
         try {
-            return FabricLoader.getInstance()
-                    .getModContainer("fathom-optimizations")
-                    .get()
-                    .getMetadata()
-                    .getVersion()
-                    .getFriendlyString();
+            String version = net.fathom.optimizations.fabric.Platform.modVersion("fathom-optimizations");
+            return version == null ? "—" : version;
         } catch (RuntimeException unavailable) {
             // Running outside a loader, or under one that does not know us. A
             // dash is better than a guess.
@@ -572,9 +569,8 @@ final class DiagnosticsSection implements Section {
     private static List<String> loadedMods() {
         List<String> out = new ArrayList<String>();
         try {
-            for (net.fabricmc.loader.api.ModContainer container :
-                    FabricLoader.getInstance().getAllMods()) {
-                String id = container.getMetadata().getId();
+            for (String[] mod : net.fathom.optimizations.fabric.Platform.mods()) {
+                String id = mod[0];
                 // Fabric's own internals are not what somebody means by "loaded
                 // mods", and listing them pushes the four that matter off the
                 // screen.
@@ -584,8 +580,11 @@ final class DiagnosticsSection implements Section {
                 if (id.equals("minecraft") || id.equals("java")) {
                     continue;
                 }
-                out.add(container.getMetadata().getName() + "  "
-                        + container.getMetadata().getVersion().getFriendlyString());
+                // FML's own containers, likewise.
+                if (id.equals("mcp") || id.equals("FML") || id.equals("Forge")) {
+                    continue;
+                }
+                out.add(mod[1] + "  " + mod[2]);
             }
         } catch (RuntimeException unavailable) {
             // Running outside a loader. A shorter list is better than a screen
@@ -598,12 +597,7 @@ final class DiagnosticsSection implements Section {
     /** Which loader is running, when there is no descriptor to ask. */
     private static String loaderName() {
         try {
-            return "Fabric " + FabricLoader.getInstance()
-                    .getModContainer("fabricloader")
-                    .get()
-                    .getMetadata()
-                    .getVersion()
-                    .getFriendlyString();
+            return net.fathom.optimizations.fabric.Platform.loaderDescription();
         } catch (RuntimeException unavailable) {
             return "—";
         }
@@ -702,7 +696,7 @@ final class DiagnosticsSection implements Section {
     }
 
     private static File gameDirectory() {
-        return FabricLoader.getInstance().getGameDir().toFile();
+        return net.fathom.optimizations.fabric.Platform.gameDir();
     }
 
     @Override

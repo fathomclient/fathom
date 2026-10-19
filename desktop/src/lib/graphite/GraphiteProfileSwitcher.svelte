@@ -41,13 +41,16 @@
   }
 </script>
 
-<svelte:window on:click={() => (open = false)} />
+<svelte:window
+  on:click={() => (open = false)}
+  on:keydown={(event) => open && event.key === 'Escape' && (open = false)}
+/>
 
 <div class="anchor">
   <button
     class="trigger"
     class:active={open}
-    aria-label="Switch profile"
+    aria-label="Switch installation"
     use:tooltip={open ? '' : 'Switch installation'}
     aria-haspopup="menu"
     aria-expanded={open}
@@ -141,12 +144,12 @@
     overflow-y: auto;
     padding: var(--space-2);
     border-radius: var(--metric-radius-panel);
-    background: rgba(12, 16, 20, 0.92);
-    box-shadow:
-      inset 0 0 0 var(--metric-rim) var(--g-mat-dense-rim),
-      var(--g-elevation);
-    -webkit-backdrop-filter: blur(var(--g-mat-dense-blur)) saturate(1.1);
-    backdrop-filter: blur(var(--g-mat-dense-blur)) saturate(1.1);
+    /* The shared popover material (.ui-popover), so this menu follows the
+       appearance modes -- no blur, solid -- like every other menu. */
+    background-color: var(--mat-dense-fill);
+    box-shadow: var(--mat-dense-rim), var(--shadow-md);
+    -webkit-backdrop-filter: var(--mat-dense-filter);
+    backdrop-filter: var(--mat-dense-filter);
   }
 
   .row {
@@ -186,7 +189,10 @@
 
   .version {
     overflow: hidden;
-    font: var(--g-type-data-s-weight) var(--g-type-data-s-size) / var(--g-type-data-s-line) var(--g-type-data-s-family);
+    /* The Home card's own build line (.build), so the same "1.8.9 · vanilla"
+       reads the same in the card and in the menu that changes it. */
+    font: var(--g-type-small-weight) var(--g-type-small-size) / var(--g-type-small-line) var(--g-type-small-family);
+    font-variant-numeric: tabular-nums;
     color: var(--g-text-secondary);
     text-overflow: ellipsis;
     white-space: nowrap;

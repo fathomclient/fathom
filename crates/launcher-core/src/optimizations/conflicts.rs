@@ -127,6 +127,13 @@ pub fn as_map(standdowns: &[Standdown]) -> BTreeMap<String, String> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation
+)]
 mod tests {
     use super::*;
     use crate::mods::{ModId, ModSource, ProfileMod};

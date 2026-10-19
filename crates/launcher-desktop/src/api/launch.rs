@@ -40,8 +40,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use launcher_core::install::InstallStage;
-use launcher_core::session_pulse::SessionPulse;
 use launcher_core::network::policy::Feature;
+use launcher_core::session_pulse::SessionPulse;
 use launcher_core::tasks::Cancel;
 
 /// Where a launch has got to.
@@ -317,7 +317,8 @@ impl LaunchProgress {
 /// The process exists, but it is not called a Fathom session until the client
 /// module proves that the expected jar completed initialization.
 pub(crate) fn confirming_fathom() -> LaunchProgress {
-    let mut progress = LaunchProgress::new(Phase::Starting, "Starting", "Confirming the Fathom client");
+    let mut progress =
+        LaunchProgress::new(Phase::Starting, "Starting", "Confirming the Fathom client");
     progress.step = 3;
     progress
 }
@@ -587,8 +588,14 @@ mod tests {
     /// client is its own step rather than more of "Starting".
     #[test]
     fn each_phase_names_its_step() {
-        assert_eq!(LaunchProgress::from_stage(&InstallStage::ResolvingMetadata).step, 0);
-        assert_eq!(LaunchProgress::from_stage(&InstallStage::ExtractingNatives).step, 1);
+        assert_eq!(
+            LaunchProgress::from_stage(&InstallStage::ResolvingMetadata).step,
+            0
+        );
+        assert_eq!(
+            LaunchProgress::from_stage(&InstallStage::ExtractingNatives).step,
+            1
+        );
         assert_eq!(LaunchProgress::starting().step, 2);
         assert_eq!(confirming_fathom().step, 3);
         assert_eq!(running(Duration::from_secs(1)).step, 4);
@@ -606,7 +613,12 @@ mod tests {
         assert!(live.pulse_live);
         assert_eq!(live.pulse.as_ref().map(|p| p.frames), Some(2000));
         // No reading yet: never called live, whatever the caller says.
-        let early = with_session(running(Duration::from_secs(5)), Duration::from_secs(5), None, true);
+        let early = with_session(
+            running(Duration::from_secs(5)),
+            Duration::from_secs(5),
+            None,
+            true,
+        );
         assert!(!early.pulse_live);
     }
 

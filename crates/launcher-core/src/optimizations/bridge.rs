@@ -76,7 +76,11 @@ impl Settings {
             // preset can disagree, and reading it directly here is what made the
             // game run a different set of optimizations from the ones the
             // Performance page was showing. See `optimizations::enabled_for`.
-            let enabled = super::enabled_for(profile, optimization);
+            // An entry for another loader is sent as off: a Forge-only fix has
+            // no target on Legacy Fabric, and reporting it on there would make
+            // the file claim a configuration the game is not in.
+            let enabled = super::enabled_for(profile, optimization)
+                && optimization.applies_to(profile.loader_kind());
             switches.insert(optimization.id.to_owned(), enabled);
         }
         // Anything another mod is already doing is turned off here rather
@@ -198,6 +202,22 @@ mod tests {
             settings.switches.values().any(|on| *on),
             "Balanced has measured entries in it, so the file cannot be all off"
         );
+    }
+
+    /// A loader-specific entry is on only under its loader. The Legacy Fabric
+    /// profile's file used to say the Forge sky colour cache was on.
+    #[test]
+    fn an_entry_for_another_loader_is_sent_as_off() {
+        use crate::profiles::Loader;
+        let mut profile = profile();
+        profile.optimizations.preset = OptimizationPreset::MaximumFps;
+        let id = "render.forge.sky-blend-cache";
+
+        profile.loader.kind = Loader::LegacyFabric;
+        assert_eq!(Settings::from_profile(&profile).switches.get(id), Some(&false));
+
+        profile.loader.kind = Loader::Forge;
+        assert_eq!(Settings::from_profile(&profile).switches.get(id), Some(&true));
     }
 
     /// The JVM flags are the launcher's business. Sending them would suggest

@@ -44,6 +44,33 @@ public final class FathomSettingRows {
         }
     }
 
+    /** A setting's name: the launcher's row title (14, its full text colour). */
+    public static final Type TITLE = Type.ROW_TITLE;
+    /** The line under it: the launcher's row detail (13, secondary text). */
+    public static final Type DETAIL = Type.BODY;
+
+    /**
+     * A setting's name and its optional detail line, in the one type scale
+     * every settings row in the Hub uses -- the launcher's settings row, so a
+     * setting reads the same in both. Centred on the row as a block.
+     *
+     * @param room the width the text may take before it is shortened
+     */
+    public static void label(Renderer ui, Rect row, float x, float room, String title, String detail,
+            boolean enabled) {
+        int titleColour = enabled ? Skin.TEXT : Skin.TEXT_DISABLED;
+        int detailColour = enabled ? Graphite.TEXT_SECONDARY : Skin.scaleAlpha(Skin.TEXT_DISABLED, 0.72f);
+        boolean described = detail != null && !detail.isEmpty();
+        if (!described) {
+            ui.text(Text.fit(ui, title, TITLE, room), x, Controls.baseline(ui, row, TITLE), TITLE, titleColour);
+            return;
+        }
+        float top = Controls.stackTop(ui, row, TITLE, DETAIL);
+        ui.text(Text.fit(ui, title, TITLE, room), x, Controls.stackTitle(ui, top, TITLE), TITLE, titleColour);
+        ui.text(Text.fit(ui, detail, DETAIL, room), x, Controls.stackDetail(ui, top, TITLE, DETAIL),
+                DETAIL, detailColour);
+    }
+
     /** Height of a setting row; explained values get room for a second line. */
     public static float height(String description) {
         return ROW;
@@ -79,22 +106,7 @@ public final class FathomSettingRows {
         float controlX = area.right() - Skin.CARD_PADDING - controlWidth;
         float textX = area.x + Skin.CARD_PADDING;
         float textRoom = Math.max(0f, controlX - Skin.S5 - textX);
-        int titleColour = enabled
-                ? Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, response * 0.72f)
-                : Skin.TEXT_DISABLED;
-        int descriptionColour = enabled ? Skin.TEXT_FAINT : Skin.scaleAlpha(Skin.TEXT_DISABLED, 0.72f);
-
-        boolean described = description != null && !description.isEmpty();
-        float top = Controls.stackTop(ui, area, Type.BODY_STRONG, Type.SMALL);
-        float titleY = described
-                ? Controls.stackTitle(ui, top, Type.BODY_STRONG)
-                : Controls.baseline(ui, area, Type.BODY_STRONG);
-        ui.text(Text.fit(ui, label, Type.BODY_STRONG, textRoom), textX,
-                titleY, Type.BODY_STRONG, titleColour);
-        if (described) {
-            ui.text(Text.fit(ui, description, Type.SMALL, textRoom), textX,
-                    Controls.stackDetail(ui, top, Type.BODY_STRONG, Type.SMALL), Type.SMALL, descriptionColour);
-        }
+        label(ui, area, textX, textRoom, label, description, enabled);
 
         if (!last) {
             FathomComponents.divider(ui, area.x + Skin.CARD_PADDING,

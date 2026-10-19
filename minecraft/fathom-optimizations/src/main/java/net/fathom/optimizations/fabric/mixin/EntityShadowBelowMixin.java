@@ -34,6 +34,7 @@ public abstract class EntityShadowBelowMixin {
             require = 1, allow = 1)
     private BlockPos fathom$below(BlockPos pos) {
         if (Runtime.shadowAllocation) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.engaged(net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_SHADOW);
             return fathom$below.setPosition(pos.getX(), pos.getY() - 1, pos.getZ());
         }
         return pos.down();

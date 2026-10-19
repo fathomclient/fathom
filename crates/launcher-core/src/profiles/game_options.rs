@@ -220,8 +220,7 @@ pub fn apply_recommended(dirs: &ProfileDirs) -> Result<bool, crate::fs_safety::F
     for line in existing.lines() {
         let key = line
             .split_once(':')
-            .map(|(key, _)| key.trim())
-            .unwrap_or("");
+            .map_or("", |(key, _)| key.trim());
         match DEFAULTS.iter().find(|(name, _)| *name == key) {
             Some((name, value)) => {
                 seen.push(name);

@@ -130,6 +130,7 @@ public final class NametagNames {
         if (entry != null && entry.team == team && equal(entry.key, key) && equal(entry.prefix, prefix)
                 && equal(entry.suffix, suffix)) {
             hits++;
+            net.fathom.optimizations.core.bench.view.ViewProbe.engaged(net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_NAMETAG_NAMES);
             if (VERIFY) {
                 String fresh = entity.getName().asFormattedString();
                 verified++;

@@ -114,6 +114,15 @@ rather than from Mojang.
   run code and write files; Fathom downloads it, checks its SHA-1, and reads only
   `install_profile.json` out of it as a zip, then fetches each artifact itself
   with a hash (`loaders/forge.rs`).
+- **Only Fathom's own Forge build goes ahead of Forge.** Under Forge the launcher
+  puts one file in front of the loader's class path, and adds one tweaker
+  (`org.spongepowered.asm.launch.MixinTweaker`, a constant). That file is the
+  installation's `fathom-forge` entry -- placed by `lay_out_mods` and checked by
+  `verify_placed` like the Fabric client -- and never another mod's jar, whatever
+  it is named (`fathom_client::forge_client_entry`). Going first lets it replace
+  ASM for the whole game, which is why the jar it is allowed to be is the one the
+  launcher shipped and pinned by hash; its one change to ASM is recorded in
+  `ATTRIBUTION.md`.
 
 Tests: `a_library_without_a_hash_is_refused_rather_than_downloaded_unverified`,
 `a_library_pointed_at_an_unlisted_host_is_refused`,

@@ -53,6 +53,9 @@ Thumbs.db
 
 # The launcher built by tools/build-all.ps1, for launching from the repo root.
 /Fathom.exe
+# Test launchers built with `build-all.ps1 -OutputName <name>.exe`, each in its
+# own folder with its own resources\.
+/Fathom-*/
 # Staged build output, not source. `build-all.ps1` writes the client module here
 # because it is the first place the launcher looks and the only one both a
 # packaged and an unpackaged process agree on.

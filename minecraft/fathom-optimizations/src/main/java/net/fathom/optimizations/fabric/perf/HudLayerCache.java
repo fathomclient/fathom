@@ -23,16 +23,23 @@ import com.mojang.blaze3d.platform.GlStateManager;
  *       added through the public API are realtime too, because nothing is known
  *       about how often they change.
  *   <li><strong>Slow-changing</strong> — FPS, coordinates, clock, ping, armour,
- *       potions, pack display: recorded {@link #REFRESH_NANOS 20 times a
- *       second} and replayed on every other frame.
+ *       potions, pack display: recorded when what they show changes, at most
+ *       {@link #REFRESH_NANOS 20 times a second}, and replayed on every other
+ *       frame.
  *   <li><strong>Static</strong> — plates, borders, icons and labels are part of
  *       the widget that draws them, so they ride in the recorded list and are not
  *       issued from Java on replayed frames either.
  * </ul>
  *
  * <p>A change of layout, widget set, visibility, window size or any setting
- * records again immediately; the 50 ms interval only bounds how stale a
- * changing number can be. The HUD editor never uses the cache.
+ * records again immediately. Content is the widgets' own business: when every
+ * widget in the layer vouches for it ({@code HudWidget.contentSignature}), the
+ * layer is replayed for as long as that content is unchanged, and a change is
+ * recorded once the 50 ms interval since the last recording has passed. A
+ * layer with any widget that cannot vouch keeps the old rule and records
+ * every 50 ms. Either way the interval bounds how stale a changing number can
+ * be, and never more than 20 recordings a second are paid for, however fast
+ * the coordinates are changing. The HUD editor never uses the cache.
  *
  * <h2>Why a display list, and not a framebuffer</h2>
  *
@@ -65,7 +72,10 @@ public final class HudLayerCache {
 
     private HudLayerCache() {}
 
-    /** How long a recorded layer may be replayed before it is recorded again. */
+    /**
+     * How long a recorded layer may be replayed, once its content has changed or
+     * when a widget in it cannot say whether it has, before it is recorded again.
+     */
     public static final long REFRESH_NANOS = 50_000_000L;
 
     private static final String[] SLOW = {
@@ -74,6 +84,10 @@ public final class HudLayerCache {
 
     /** Whether a widget may be cached. Unknown widgets are realtime. */
     public static boolean cacheable(String widgetId) {
+        if ("scoreboard".equals(widgetId) && VanillaHudReplay.active()) {
+            // Replayed on its own, until a score changes: VanillaHudReplay.SCOREBOARD_WIDGET.
+            return false;
+        }
         for (String slow : SLOW) {
             if (slow.equals(widgetId)) {
                 return true;
@@ -85,6 +99,7 @@ public final class HudLayerCache {
     private static int list;
     private static long recordedAt;
     private static long recordedSignature;
+    private static long recordedContent;
     private static boolean recording;
     private static final GlState START = new GlState();
     private static net.fathom.optimizations.fabric.gfx.GlStateAudit.Scope audit;
@@ -92,14 +107,19 @@ public final class HudLayerCache {
     /**
      * Replay the layer, or start recording it.
      *
-     * @param signature everything the layer's content depends on besides time
+     * @param signature everything the layer depends on that the HUD decides:
+     *     which widgets, where, the screen, the settings
+     * @param content what the widgets themselves draw, combined from their
+     *     content signatures; 0 when any of them cannot vouch for it, which
+     *     falls back to recording every {@link #REFRESH_NANOS}
      * @return true when the caller must now draw the slow widgets and then call
      *     {@link #endRecording()}; false when the layer was replayed
      */
-    public static boolean beginFrame(long signature, long now) {
+    public static boolean beginFrame(long signature, long content, long now) {
         audit = net.fathom.optimizations.fabric.gfx.GlStateAudit.beginRequested(
                 net.fathom.optimizations.fabric.gfx.GlStateAudit.HUD_CACHE, PerfLayer.hudCache);
-        if (list != 0 && signature == recordedSignature && now - recordedAt < REFRESH_NANOS) {
+        if (list != 0 && signature == recordedSignature
+                && (now - recordedAt < REFRESH_NANOS || (content != 0L && content == recordedContent))) {
             START.force();
             GL11.glCallList(list);
             // The list's end state is useful for synchronizing the wrapper,
@@ -132,6 +152,7 @@ public final class HudLayerCache {
         GL11.glNewList(list, GL11.GL_COMPILE_AND_EXECUTE);
         recording = true;
         recordedSignature = signature;
+        recordedContent = content;
         recordedAt = now;
         return true;
     }
@@ -165,11 +186,13 @@ public final class HudLayerCache {
             list = 0;
         }
         recordedSignature = 0L;
+        recordedContent = 0L;
     }
 
-    /** Force a re-record on the next frame. */
+    /** Force a re-record on the next frame, whatever the widgets say about their content. */
     public static void invalidate() {
         recordedAt = Long.MIN_VALUE / 2;
+        recordedContent = 0L;
     }
 
     /** The GL state {@code GlStateManager} caches, read back and forced. */

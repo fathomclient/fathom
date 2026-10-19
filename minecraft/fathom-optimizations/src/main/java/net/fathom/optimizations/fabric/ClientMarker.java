@@ -14,7 +14,6 @@ import java.security.CodeSource;
 import java.security.MessageDigest;
 import java.util.Locale;
 
-import net.fabricmc.loader.api.FabricLoader;
 
 /** Proof for the launcher that this module reached and completed its entrypoint. */
 final class ClientMarker {
@@ -29,10 +28,10 @@ final class ClientMarker {
      */
     static void write(File gameDirectory, int features) {
         try {
-            String version = FabricLoader.getInstance()
-                    .getModContainer("fathom-optimizations")
-                    .map(container -> container.getMetadata().getVersion().getFriendlyString())
-                    .orElse("unknown");
+            String version = Platform.modVersion("fathom-optimizations");
+            if (version == null) {
+                version = "unknown";
+            }
             String jarSha1 = codeSourceSha1();
             String json = "{\"schema\":1,\"version\":\"" + json(version)
                     + "\",\"build\":\"" + json(net.fathom.optimizations.fabric.diag.BuildId.commit())
@@ -62,7 +61,14 @@ final class ClientMarker {
         if (source == null || source.getLocation() == null) {
             throw new IOException("client code source is unavailable");
         }
-        URI location = source.getLocation().toURI();
+        // Fabric reports the jar itself; LaunchWrapper (Forge) reports
+        // jar:file:/...!/ for a class loaded out of a jar. Either names one file.
+        String spec = source.getLocation().toString();
+        if (spec.startsWith("jar:")) {
+            int bang = spec.indexOf("!/");
+            spec = spec.substring(4, bang < 0 ? spec.length() : bang);
+        }
+        URI location = new URI(spec);
         File file = new File(location);
         if (file.isDirectory()) {
             return "development";

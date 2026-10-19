@@ -52,6 +52,8 @@ public final class ScoreboardWidget implements HudWidget {
     private int builtRevision = Integer.MIN_VALUE;
     private int builtSettings = Integer.MIN_VALUE;
     private HudFont builtFont;
+    /** Some line has {@code §k}, which vanilla redraws at random every frame: never replayed. */
+    private boolean obfuscated;
 
     /** The objective handed over this frame, or null. For the self-test. */
     /** The title and the lines as this widget will draw them, highest score first. For the self-test. */
@@ -161,6 +163,7 @@ public final class ScoreboardWidget implements HudWidget {
         names.clear();
         scores.clear();
         content = 0;
+        obfuscated = false;
         if (objective == null) {
             title = "";
             return;
@@ -168,6 +171,7 @@ public final class ScoreboardWidget implements HudWidget {
         boolean numbers = Widgets.option(ID, "numbers", true);
         Scoreboard scoreboard = objective.getScoreboard();
         title = String.valueOf(objective.getDisplayName());
+        obfuscated = obfuscated(title);
         if (Widgets.option(ID, "title", true)) {
             content = (int) Math.ceil(font.width(title));
         }
@@ -179,6 +183,7 @@ public final class ScoreboardWidget implements HudWidget {
             String value = "§c" + score.getScore();
             names.add(name);
             scores.add(value);
+            obfuscated |= obfuscated(name);
             // Measured the way vanilla measures it, separator included, so a
             // line is exactly as wide as the sidebar it replaced.
             String measured = numbers ? name + ": " + value : name;
@@ -203,12 +208,55 @@ public final class ScoreboardWidget implements HudWidget {
                 HudStyle.padding(Widgets.module(ID)));
     }
 
+    private static boolean obfuscated(String text) {
+        return text.indexOf("§k") >= 0 || text.indexOf("§K") >= 0;
+    }
+
+    /**
+     * Drawn as vanilla's sidebar is under {@code render.hud.vanilla-replay}:
+     * recorded once the rows have held for two frames and replayed until a
+     * score, a setting or where it stands changes. Vanilla's font lowercases
+     * the whole line for every colour code it meets, and a server's sidebar is
+     * mostly colour codes. With the replay off this is in HUD caching's layer
+     * instead (see {@code HudLayerCache.cacheable}).
+     */
     @Override
     public void draw(MinecraftClient client, HudFont font, int x, int y, int alpha) {
         build(font);
         if (names.isEmpty()) {
             return;
         }
+        net.fathom.optimizations.fabric.perf.VanillaHudReplay replay =
+                net.fathom.optimizations.fabric.perf.VanillaHudReplay.SCOREBOARD_WIDGET;
+        boolean replaying = !font.fathom() && net.fathom.optimizations.fabric.perf.VanillaHudReplay.active();
+        if (replaying) {
+            long signature = 0x53434f52L;
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature,
+                    System.identityHashCode(builtFor));
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature, builtRevision);
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature, builtSettings);
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature,
+                    System.identityHashCode(font));
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature, x);
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature, y);
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature, alpha);
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature, client.width);
+            signature = net.fathom.optimizations.fabric.perf.VanillaHudReplay.mix(signature, client.height);
+            if (!replay.begin(signature, !obfuscated)) {
+                return;
+            }
+        }
+        try {
+            drawLive(font, x, y, alpha);
+        } finally {
+            if (replaying) {
+                replay.end();
+            }
+        }
+    }
+
+    private void drawLive(HudFont font, int x, int y, int alpha) {
+        MinecraftClient client = MinecraftClient.getInstance();
         FathomModule module = Widgets.module(ID);
         int pad = HudStyle.padding(module);
         int width = width(client, font);

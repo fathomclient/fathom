@@ -239,13 +239,16 @@ fn builds_for(minecraft_version: &str, versions: &[String]) -> Vec<Build> {
             })
         })
         .collect();
-    builds.sort_by(|a, b| numeric(&b.forge).cmp(&numeric(&a.forge)));
+    builds.sort_by_key(|build| std::cmp::Reverse(numeric(&build.forge)));
     builds.dedup_by(|a, b| a.forge == b.forge);
     builds
 }
 
 fn numeric(version: &str) -> Vec<u32> {
-    version.split('.').filter_map(|part| part.parse().ok()).collect()
+    version
+        .split('.')
+        .filter_map(|part| part.parse().ok())
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -270,7 +273,11 @@ fn promoted(
     Ok(promotions
         .promos
         .get(&format!("{minecraft_version}-recommended"))
-        .or_else(|| promotions.promos.get(&format!("{minecraft_version}-latest")))
+        .or_else(|| {
+            promotions
+                .promos
+                .get(&format!("{minecraft_version}-latest"))
+        })
         .cloned())
 }
 
@@ -314,7 +321,11 @@ fn resolved_build(
         .paths()
         .metadata_cache_dir()
         .join("forge")
-        .join(format!("{}-{}.json", encode(minecraft_version), encode(forge)));
+        .join(format!(
+            "{}-{}.json",
+            encode(minecraft_version),
+            encode(forge)
+        ));
     if let Ok(bytes) = std::fs::read(&file) {
         match serde_json::from_slice::<ResolvedBuild>(&bytes) {
             Ok(build)
@@ -324,7 +335,9 @@ fn resolved_build(
             {
                 return Ok(build);
             }
-            _ => tracing::info!(file = %file.display(), "the kept Forge build is not usable; resolving again"),
+            _ => {
+                tracing::info!(file = %file.display(), "the kept Forge build is not usable; resolving again");
+            }
         }
     }
 
@@ -399,11 +412,12 @@ fn install_profile(
         "net/minecraftforge/forge/{0}/forge-{0}-installer.jar",
         encode(&build.maven)
     );
-    let expected = sidecar_sha1(&relative, Destination::ForgeMaven, http, feature)?.ok_or_else(
-        || LoaderError::UnverifiableArtifact {
-            name: format!("forge-{}-installer.jar", build.maven),
-        },
-    )?;
+    let expected =
+        sidecar_sha1(&relative, Destination::ForgeMaven, http, feature)?.ok_or_else(|| {
+            LoaderError::UnverifiableArtifact {
+                name: format!("forge-{}-installer.jar", build.maven),
+            }
+        })?;
     let request = RequestDescriptor::new(
         Destination::ForgeMaven,
         Purpose::ResolveLoaderMetadata,
@@ -419,7 +433,10 @@ fn install_profile(
     }
     if sha1_hex(&response.body) != expected {
         return Err(LoaderError::UnverifiableArtifact {
-            name: format!("forge-{}-installer.jar (does not match its published SHA-1)", build.maven),
+            name: format!(
+                "forge-{}-installer.jar (does not match its published SHA-1)",
+                build.maven
+            ),
         });
     }
     read_install_profile(&response.body)
@@ -493,7 +510,10 @@ fn resolve_profile(
             sha1,
         });
     }
-    if !libraries.iter().any(|library| library.name == forge_coordinate) {
+    if !libraries
+        .iter()
+        .any(|library| library.name == forge_coordinate)
+    {
         return Err(LoaderError::Malformed(
             "Forge's profile does not list Forge itself".to_owned(),
         ));
@@ -521,11 +541,12 @@ fn forge_itself(
         "net/minecraftforge/forge/{0}/forge-{0}-universal.jar",
         encode(&build.maven)
     );
-    let sha1 = sidecar_sha1(&universal, Destination::ForgeMaven, http, feature)?.ok_or_else(
-        || LoaderError::UnverifiableArtifact {
-            name: format!("forge-{}-universal.jar", build.maven),
-        },
-    )?;
+    let sha1 =
+        sidecar_sha1(&universal, Destination::ForgeMaven, http, feature)?.ok_or_else(|| {
+            LoaderError::UnverifiableArtifact {
+                name: format!("forge-{}-universal.jar", build.maven),
+            }
+        })?;
     Ok(ResolvedLibrary {
         name: format!("net.minecraftforge:forge:{}", build.maven),
         url: format!("{MAVEN}{universal}"),
@@ -545,12 +566,18 @@ fn repository_for(url: Option<&str>) -> Result<(String, Destination), LoaderErro
         ));
     };
     let url = url.trim();
-    let normalised = if url.contains("files.minecraftforge.net/maven") || url.contains("maven.minecraftforge.net") {
+    let normalised = if url.contains("files.minecraftforge.net/maven")
+        || url.contains("maven.minecraftforge.net")
+    {
         MAVEN.to_owned()
     } else {
         // Any other repository goes through the allowlist when the artifact is
         // requested; refuse here with the reason if it is not one we know.
-        let descriptor = descriptor_from_url(url, Purpose::DownloadLoaderArtifact, Feature::ProfileInstall)?;
+        let descriptor = descriptor_from_url(
+            url,
+            Purpose::DownloadLoaderArtifact,
+            Feature::ProfileInstall,
+        )?;
         return Ok((
             format!("https://{}/", descriptor.destination.host()),
             descriptor.destination,
@@ -562,7 +589,11 @@ fn repository_for(url: Option<&str>) -> Result<(String, Destination), LoaderErro
 /// The SHA-1 to expect for a library: its sidecar, cross-checked against the
 /// profile's checksums when it lists any; else the profile's first checksum;
 /// else nothing, and the build is refused.
-fn choose_hash(name: &str, sidecar: Option<String>, listed: &[String]) -> Result<String, LoaderError> {
+fn choose_hash(
+    name: &str,
+    sidecar: Option<String>,
+    listed: &[String],
+) -> Result<String, LoaderError> {
     let listed: Vec<String> = listed
         .iter()
         .map(|hash| hash.trim().to_ascii_lowercase())
@@ -576,7 +607,9 @@ fn choose_hash(name: &str, sidecar: Option<String>, listed: &[String]) -> Result
         None => listed
             .into_iter()
             .next()
-            .ok_or_else(|| LoaderError::UnverifiableArtifact { name: name.to_owned() }),
+            .ok_or_else(|| LoaderError::UnverifiableArtifact {
+                name: name.to_owned(),
+            }),
     }
 }
 
@@ -586,8 +619,8 @@ fn tweakers(arguments: &str) -> Result<Vec<String>, LoaderError> {
     let tokens: Vec<&str> = arguments.split_whitespace().collect();
     let mut out = Vec::new();
     let mut index = 0;
-    while index < tokens.len() {
-        if tokens[index] == "--tweakClass" {
+    while let Some(token) = tokens.get(index) {
+        if *token == "--tweakClass" {
             let Some(class) = tokens.get(index + 1) else {
                 return Err(LoaderError::Malformed(
                     "Forge's profile ends with a --tweakClass and no class".to_owned(),
@@ -632,7 +665,8 @@ fn fetch(
     http: &HttpClient,
     feature: Feature,
 ) -> Result<Vec<u8>, LoaderError> {
-    let request = RequestDescriptor::new(destination, Purpose::ResolveLoaderMetadata, feature, path);
+    let request =
+        RequestDescriptor::new(destination, Purpose::ResolveLoaderMetadata, feature, path);
     let response = http.get(&request)?;
     if !response.is_success() {
         return Err(LoaderError::Malformed(format!(
@@ -652,7 +686,12 @@ fn fetch(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 mod tests {
     use super::*;
     use crate::network::{NetworkJournal, NetworkPolicy};
@@ -673,12 +712,16 @@ mod tests {
         let forge: Vec<&str> = builds.iter().map(|b| b.forge.as_str()).collect();
         assert_eq!(forge, ["11.15.1.2318", "11.15.1.1722", "11.15.0.1656"]);
         assert_eq!(builds[0].maven, "1.8.9-11.15.1.2318-1.8.9");
-        assert_eq!(builds[1].maven, "1.8.9-11.15.1.1722", "the suffix is optional");
+        assert_eq!(
+            builds[1].maven, "1.8.9-11.15.1.1722",
+            "the suffix is optional"
+        );
     }
 
     #[test]
     fn a_version_element_that_could_be_anything_is_dropped() {
-        let versions = versions_in("<version>1.8.9-1/../x</version><version>1.8.9-11.15.1.2318</version>");
+        let versions =
+            versions_in("<version>1.8.9-1/../x</version><version>1.8.9-11.15.1.2318</version>");
         assert_eq!(versions, ["1.8.9-11.15.1.2318"]);
     }
 
@@ -707,21 +750,41 @@ mod tests {
     fn hashes_come_from_the_sidecar_cross_checked_or_the_profile() {
         let jar = "f05d7345bf5a58924f2837c6c1f4d73a938e1ff0".to_owned();
         let pack = "a1cbbcbde1dcc614f4253ed1aa0b320bc78d8f1d".to_owned();
-        assert_eq!(choose_hash("x", Some(jar.clone()), &[jar.clone(), pack.clone()]).unwrap(), jar);
+        assert_eq!(
+            choose_hash("x", Some(jar.clone()), &[jar.clone(), pack.clone()]).unwrap(),
+            jar
+        );
         assert_eq!(choose_hash("x", Some(jar.clone()), &[]).unwrap(), jar);
-        assert_eq!(choose_hash("x", None, &[jar.clone(), pack.clone()]).unwrap(), jar);
-        assert!(choose_hash("x", Some("0".repeat(40)), &[jar, pack]).is_err(), "a sidecar Forge does not list");
-        assert!(choose_hash("x", None, &[]).is_err(), "nothing to verify against");
+        assert_eq!(
+            choose_hash("x", None, &[jar.clone(), pack.clone()]).unwrap(),
+            jar
+        );
+        assert!(
+            choose_hash("x", Some("0".repeat(40)), &[jar, pack]).is_err(),
+            "a sidecar Forge does not list"
+        );
+        assert!(
+            choose_hash("x", None, &[]).is_err(),
+            "nothing to verify against"
+        );
     }
 
     #[test]
     fn libraries_without_a_url_come_from_mojang_and_forges_old_host_is_its_maven() {
-        assert_eq!(repository_for(None).unwrap().1, Destination::LibrariesMinecraft);
+        assert_eq!(
+            repository_for(None).unwrap().1,
+            Destination::LibrariesMinecraft
+        );
         assert_eq!(
             repository_for(Some("http://files.minecraftforge.net/maven/")).unwrap(),
             (MAVEN.to_owned(), Destination::ForgeMaven)
         );
-        assert_eq!(repository_for(Some("https://maven.minecraftforge.net/")).unwrap().1, Destination::ForgeMaven);
+        assert_eq!(
+            repository_for(Some("https://maven.minecraftforge.net/"))
+                .unwrap()
+                .1,
+            Destination::ForgeMaven
+        );
         assert!(repository_for(Some("https://evil.example/")).is_err());
     }
 
@@ -732,7 +795,10 @@ mod tests {
     #[test]
     fn a_profile_for_another_minecraft_is_refused() {
         let http = HttpClient::new(NetworkPolicy::default(), NetworkJournal::new(), "test/0");
-        let build = Build { forge: "11.15.1.2318".into(), maven: "1.8.9-11.15.1.2318-1.8.9".into() };
+        let build = Build {
+            forge: "11.15.1.2318".into(),
+            maven: "1.8.9-11.15.1.2318-1.8.9".into(),
+        };
         let wrong = profile(&format!(
             r#"{{"install":{{"minecraft":"1.8.8"}},"versionInfo":{{"mainClass":"net.minecraft.launchwrapper.Launch","minecraftArguments":"{ARGUMENTS}","libraries":[]}}}}"#
         ));
@@ -758,7 +824,10 @@ mod tests {
         }
         let read = read_install_profile(bytes.get_ref()).unwrap();
         assert_eq!(read.install.minecraft, "1.8.9");
-        assert_eq!(read.version_info.main_class, "net.minecraft.launchwrapper.Launch");
+        assert_eq!(
+            read.version_info.main_class,
+            "net.minecraft.launchwrapper.Launch"
+        );
         assert_eq!(read.version_info.libraries[0].clientreq, Some(false));
         assert!(read_install_profile(b"not a zip").is_err());
     }
@@ -784,27 +853,41 @@ mod tests {
                 sha1: "beda619c465af293e63952dd573c137c17c0a4cd".into(),
             }],
         };
-        let file = cache.paths().metadata_cache_dir().join("forge").join("1.8.9-11.15.1.2318.json");
+        let file = cache
+            .paths()
+            .metadata_cache_dir()
+            .join("forge")
+            .join("1.8.9-11.15.1.2318.json");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, serde_json::to_vec(&kept).unwrap()).unwrap();
 
         let installed = ForgeProvider
             .resolve("1.8.9", "11.15.1.2318", &cache, &http, Feature::Play)
             .expect("resolved from the kept build");
-        assert_eq!(installed.main_class.as_deref(), Some("net.minecraft.launchwrapper.Launch"));
+        assert_eq!(
+            installed.main_class.as_deref(),
+            Some("net.minecraft.launchwrapper.Launch")
+        );
         assert_eq!(
             installed.game_arguments,
-            ["--tweakClass", "net.minecraftforge.fml.common.launcher.FMLTweaker"]
+            [
+                "--tweakClass",
+                "net.minecraftforge.fml.common.launcher.FMLTweaker"
+            ]
         );
         assert_eq!(installed.minimum_java_major, Some(8));
         assert_eq!(installed.libraries.len(), 1);
-        assert!(installed.libraries[0].target.ends_with("forge-1.8.9-11.15.1.2318-1.8.9.jar"));
+        assert!(installed.libraries[0]
+            .target
+            .ends_with("forge-1.8.9-11.15.1.2318-1.8.9.jar"));
 
         let mut tampered = kept.clone();
         tampered.libraries[0].url = "https://evil.example/forge.jar".into();
         std::fs::write(&file, serde_json::to_vec(&tampered).unwrap()).unwrap();
         assert!(
-            ForgeProvider.resolve("1.8.9", "11.15.1.2318", &cache, &http, Feature::Play).is_err(),
+            ForgeProvider
+                .resolve("1.8.9", "11.15.1.2318", &cache, &http, Feature::Play)
+                .is_err(),
             "a kept URL is checked against the allowlist like any other"
         );
     }

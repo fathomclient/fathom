@@ -539,6 +539,27 @@ final class Modules {
                 .setting(new Setting.Whole("hour", "Custom hour", "On a 24-hour clock.", 12, 0, 23, 1, "h"))
                 .build());
 
+        // 1.7's first-person animations. Only how your own hand is drawn
+        // changes: no click, swing or packet reaches the server that would
+        // not have anyway, so it is safe everywhere.
+        out.add(FathomModule.builder("old-animations")
+                .name("1.7 Animations")
+                .description("The old blockhit and item swings.")
+                .category(Category.VISUAL)
+                .icon(Icon.SHIELD)
+                .behaviour(Behaviour.OLD_ANIMATIONS)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Toggle("blockhit", "Blockhit",
+                        "Your swing carries on while you block with a sword, as it did in 1.7.", true))
+                .setting(new Setting.Toggle("use-swing", "Swing while using items",
+                        "Eating, drinking and drawing a bow keep the swing too.", true))
+                .setting(new Setting.Toggle("punch", "Punch while using",
+                        "Holding attack on a block while using an item swings your arm, as 1.7 did. "
+                                + "Only you see it: nothing is sent to the server.", true))
+                .build());
+
         // -- Performance ---------------------------------------------------
         //
         // This owns nothing of its own: it is a switch on an

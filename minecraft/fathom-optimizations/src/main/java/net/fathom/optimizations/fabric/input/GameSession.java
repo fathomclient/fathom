@@ -50,6 +50,7 @@ public final class GameSession {
         if (client.world != lastWorld) {
             // The kept frame-item entity belongs to the world that is going away.
             net.fathom.optimizations.fabric.perf.FrameItems.release();
+            net.fathom.optimizations.fabric.perf.ForgeSkyBlend.release();
         }
         lastWorld = client.world;
         lastPlayer = client.player;

@@ -15,6 +15,7 @@
       "expectedBenefit": "Measured 66-86% faster than recomputing, for the measurement work alone, at realistic churn. Unknown as a fraction of a frame.",
       "defaultOn": false,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "ISOLATED",
         "runId": "bench-2026-08-26-text-metrics",
@@ -23,6 +24,40 @@
       "conflicts": [
         { "with": "OptiFine", "resolution": "DISABLE_OURS", "detail": "OptiFine rewrites large parts of the renderer, including its font paths. Fathom turns this off when OptiFine is present rather than fighting it: the user chose to install OptiFine." }
       ]
+    },
+    {
+      "id": "render.font.format-code-case",
+      "name": "Colour codes without copying",
+      "description": "Vanilla's text drawing reads the letter after every colour code from a lowercased copy of the whole line, made once per code and again for the shadow. This lowercases the one letter instead. Output-identical, except after the rare character whose lowercase is two characters long (U+0130), where vanilla misreads the code that follows.",
+      "group": "RENDERING",
+      "groupLabel": "Rendering",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Less allocation wherever coloured text is drawn live: the tab list, nametags, signs, holograms, scoreboards and chat when not replayed, and HUD widgets in Minecraft's font. A JFR profile traced a scoreboard's whole per-frame cost to these copies. Not yet measured in game.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
+      "evidence": null,
+      "conflicts": []
+    },
+    {
+      "id": "render.font.glyph-page-preload",
+      "name": "Preload symbol glyphs",
+      "description": "The font draws symbols such as stars, hearts and arrows from pages of its unicode sheet, and loads a page the first time anything on it is drawn: a PNG decoded on the render thread, mid-frame, the first time a lobby label comes into view. This loads the pages lobbies use while the font itself loads instead. The same textures, drawn the same way; about 1.5 MB of video memory.",
+      "group": "RENDERING",
+      "groupLabel": "Rendering",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "A first-look stutter, once per session per page, where labels or chat use symbols. Nothing in steady frames. Not yet measured.",
+      "defaultOn": false,
+      "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
+      "evidence": null,
+      "conflicts": []
     },
     {
       "id": "render.nametag.replay",
@@ -35,8 +70,9 @@
       "control": "IN_GAME",
       "status": "RUNS_IN_GAME",
       "expectedBenefit": "Largest where many named players or armour stands are in view.",
-      "defaultOn": false,
+      "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "performance-layer-2026-09-22",
@@ -57,6 +93,7 @@
       "expectedBenefit": "Workload-dependent: large in lobbies full of distant armour stands, nothing where everything is close.",
       "defaultOn": false,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "performance-layer-2026-09-22",
@@ -77,6 +114,7 @@
       "expectedBenefit": "Engaged in testing (3 of 68 tile entities culled a frame) but never isolated, so no frame-time claim is made.",
       "defaultOn": false,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": null,
       "conflicts": []
     },
@@ -91,8 +129,9 @@
       "control": "IN_GAME",
       "status": "RUNS_IN_GAME",
       "expectedBenefit": "Most of what Fathom's own HUD costs a frame, in every scene.",
-      "defaultOn": false,
+      "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "view-2026-10-02-hud-steady",
@@ -113,6 +152,7 @@
       "expectedBenefit": "The clones were 22% of the render thread's allocation in a sampled run. Together with the chunk lookup cache, an interleaved in-game A/B cut allocation 55% while panning and 35% while moving, with 5-8% lower mean frame time in those scenes.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "perf-2026-09-14-ab",
@@ -133,6 +173,7 @@
       "expectedBenefit": "The hash lookup was the hottest method on the render thread (28% of CPU samples) in a scene with torches. Largest where particles and entities are drawn.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "perf-2026-09-14-ab",
@@ -155,6 +196,7 @@
       "expectedBenefit": "Removes a stall of roughly a quarter of a second per world change on the reference machine, and more on a larger live set. The JVM flag -XX:+DisableExplicitGC achieves the same thing without a mod, and the launcher already passes it; this covers the case where it was not passed.",
       "defaultOn": false,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "ISOLATED",
         "runId": "bench-2026-08-26-explicit-gc",
@@ -175,6 +217,7 @@
       "expectedBenefit": "Frees video memory in proportion to how many packs are installed and how carelessly their icons were exported. Costs nothing at frame time either way -- this is a memory optimization and should not be expected to move FPS.",
       "defaultOn": false,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "ISOLATED",
         "runId": "opt-2026-08-26-pack-icons",
@@ -195,6 +238,7 @@
       "expectedBenefit": "Proportional to labels on screen: player lobbies, holograms, PvP. Removes per-label allocation and Java 8 regex compiles.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "view-2026-10-05-entities",
@@ -215,6 +259,7 @@
       "expectedBenefit": "Proportional to armoured players and mobs in view; up to five String.format calls per armoured player per frame.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "view-2026-10-05-entities",
@@ -235,6 +280,7 @@
       "expectedBenefit": "Proportional to signs in view: lobbies, sign walls, server spawns. Most of the render thread's allocation where signs are on screen.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "mp-2026-10-13-ab",
@@ -255,6 +301,7 @@
       "expectedBenefit": "Proportional to filled item frames in view: map walls, displays.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "mp-2026-10-13-ab",
@@ -275,6 +322,7 @@
       "expectedBenefit": "While the tab list is held, proportional to the players in it: most of the list's cost on a full server.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "mp-2026-10-14-ab2-ab3",
@@ -295,10 +343,32 @@
       "expectedBenefit": "Less allocation under piles of dropped items and crowds.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "mp-2026-10-14-ab2-ab3",
         "summary": "Local server, 160 dropped items on generators: client allocation 21.9 -> 16.4 and 25.0 -> 20.8 MB/s in two runs; shadow drawing time unchanged (0.393 -> 0.405 ms/frame) and no whole-frame change. Identical input to the lookup by construction."
+      },
+      "conflicts": []
+    },
+    {
+      "id": "render.forge.sky-blend-cache",
+      "name": "Forge sky colour cache",
+      "description": "With Fancy graphics, Forge averages the sky colour of every biome column around the camera -- 2,809 of them at render distance 12 -- twice a frame, because its own cache compares the wrong coordinate and never hits. This remembers the answer until the camera's block, the blend radius or the loaded chunks change, and computes it without allocating. Forge only. Output-identical.",
+      "group": "RENDERING",
+      "groupLabel": "Rendering",
+      "category": "SAFE",
+      "surface": "GAME",
+      "control": "SWITCH",
+      "status": "RUNS_IN_GAME",
+      "expectedBenefit": "Forge with Fancy graphics: less frame time and allocation in every scene.",
+      "defaultOn": true,
+      "minecraft": ["1.8.9"],
+      "loaders": ["forge"],
+      "evidence": {
+        "level": "IN_GAME",
+        "runId": "forge-2026-10-15-sky-blend",
+        "summary": "Forge 11.15.1.2318 with OptiFine M5, Fancy, render distance 12, 4 paired rounds: horizon 1.163 -> 0.896 ms median (4/4), down45 1.319 -> 1.010 (4/4), 48 players 3.146 -> 2.867 (3/4); client allocation 118 -> 18 MB/s. Verify mode: 28,672 answers compared with Forge's own, 0 differed."
       },
       "conflicts": []
     },
@@ -315,6 +385,7 @@
       "expectedBenefit": "Whenever chat lines or a server sidebar are on screen: in the multiplayer profile they cost 0.06-0.13 and 0.05-0.09 ms a frame.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "mp-2026-10-06-hud",
@@ -335,6 +406,7 @@
       "expectedBenefit": "Frees the GPU and CPU when the game is in the background. No effect on focused performance, by construction: the cap is only consulted while the window is unfocused.",
       "defaultOn": false,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "ISOLATED",
         "runId": "opt-2026-09-04-frame-caps",
@@ -355,6 +427,7 @@
       "expectedBenefit": "About 25 us per armoured mob drawn is the most it can save, and players and anything named are exempt. Needs a test far cheaper than that per entity -- likely GPU occlusion queries -- before it is worth offering.",
       "defaultOn": false,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": null,
       "conflicts": [
         { "with": "OptiFine shaders", "resolution": "DISABLE_OURS", "detail": "PolyPatcher documents that entity culling and OptiFine shaders cannot be made compatible. Shaders present is a hard gate: culling is off, not merely adjusted." }
@@ -373,6 +446,7 @@
       "expectedBenefit": "Chunks fill in sooner when joining, teleporting or reloading. Steady frame time is untouched: once a view settles nothing is being rebuilt. Not on by default -- one machine, and each arm had an outlier.",
       "defaultOn": false,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "view-2026-10-03-chunk-workers",
@@ -395,6 +469,7 @@
       "expectedBenefit": "More even frame pacing at a cap, same average FPS. Nothing at all uncapped.",
       "defaultOn": true,
       "minecraft": ["1.8.9"],
+      "loaders": ["legacy-fabric", "forge"],
       "evidence": {
         "level": "IN_GAME",
         "runId": "view-2026-10-02-pace144",

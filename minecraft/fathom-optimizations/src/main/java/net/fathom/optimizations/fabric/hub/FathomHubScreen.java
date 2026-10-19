@@ -105,15 +105,21 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             net.fathom.optimizations.fabric.menu.FathomMenuScreen.drawBackdrop(client);
         }
     };
-    /** Mockup B's reference canvas and the content frame inside it, in dp. */
-    private static final float FRAME_WIDTH = 1040f;
-    private static final float FRAME_HEIGHT = 600f;
-    private static final float RAIL_WIDTH = 184f;
-    private static final float RAIL_TOP = 52f;
+    /**
+     * The frame, the section rail and the header, from the game's density
+     * (theme {@code game.graphite.layout}): 900x540dp of the 1280x720 reference
+     * canvas, so the world keeps a margin round the Hub at every resolution,
+     * a 156dp rail of 28dp items, and the page 16dp after it.
+     */
+    private static final float FRAME_WIDTH = GraphiteTokens.LAYOUT_HUB_WIDTH;
+    private static final float FRAME_HEIGHT = GraphiteTokens.LAYOUT_HUB_HEIGHT;
+    private static final float RAIL_WIDTH = GraphiteTokens.LAYOUT_HUB_RAIL;
+    private static final float HEADER_HEIGHT = GraphiteTokens.LAYOUT_HUB_HEADER;
+    private static final float HEADER_GAP = GraphiteTokens.LAYOUT_HUB_HEADER_GAP;
     private static final float RAIL_ITEM = GraphiteTokens.SIZE_CONTROL;
-    private static final float RAIL_GAP = GraphiteTokens.SPACE_1;
-    private static final float CONTENT_X = 200f;
-    private static final float TELEMETRY_LINE = 16f;
+    private static final float RAIL_GAP = 2f;
+    private static final float CONTENT_GAP = GraphiteTokens.LAYOUT_HUB_RAIL_GAP;
+    private static final float TELEMETRY_LINE = 14f;
 
     /** Telemetry text, rebuilt at 4 Hz rather than every frame. */
     private String telemetryFps = "";
@@ -163,6 +169,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
     private final Box editHudBox = Box.row("hub.hud-editor");
     private final Box editIconBox = Box.fixed("hub.hud-editor.icon", Graphite.ICON_INLINE, Graphite.ICON_INLINE);
     private final Box closeBox = Box.fixed("hub.close", Graphite.CONTROL_COMPACT, Graphite.CONTROL_COMPACT);
+    /** Quick access: the Mods search from any page. Typing anywhere does the same. */
+    private final Box quickSearchBox = Box.fixed("hub.quick-search", 200f, Graphite.CONTROL_COMPACT);
+    private static final String QUICK_SEARCH_ID = "hub.quick-search";
     private final Box railBox = Box.column("hub.rail");
     private final Box railRule = Box.column("hub.rail.rule").height(1f);
     private final Box[] telemetryRows = new Box[2];
@@ -236,6 +245,53 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         if (section instanceof ModsSection) {
             ((ModsSection) section).qaTab(context, moduleId);
         }
+    }
+
+    private ModsSection qaMods() {
+        Section section = sections.isEmpty() ? null : sections.get(current);
+        return section instanceof ModsSection ? (ModsSection) section : null;
+    }
+
+    /** The Mods grid's cards, in order, by module id; empty on another section. */
+    public java.util.List<String> qaCards() {
+        ModsSection mods = qaMods();
+        return mods == null ? java.util.Collections.<String>emptyList() : mods.qaCards();
+    }
+
+    /** Where a card's part was last drawn: "card", "toggle", "gear" or "star". */
+    public Rect qaCardPart(String moduleId, String part) {
+        ModsSection mods = qaMods();
+        return mods == null ? null : mods.qaCardPart(moduleId, part);
+    }
+
+    /** As clicking a Mods category, by its label; null for All. */
+    public void qaCategory(String label) {
+        ModsSection mods = qaMods();
+        if (mods != null) {
+            mods.qaCategory(context, label);
+        }
+    }
+
+    /** As clicking the Mods state filter: 0 all, 1 enabled, 2 disabled. */
+    public void qaStateFilter(int value) {
+        ModsSection mods = qaMods();
+        if (mods != null) {
+            mods.qaStateFilter(value);
+        }
+    }
+
+    public int qaGridFocus() {
+        ModsSection mods = qaMods();
+        return mods == null ? -1 : mods.qaGridFocus();
+    }
+
+    public int qaColumns() {
+        ModsSection mods = qaMods();
+        return mods == null ? 0 : mods.qaColumns();
+    }
+
+    public String qaSearch() {
+        return context.search();
     }
 
     /** How many sections the rail lists. */
@@ -504,7 +560,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
     }
 
     /**
-     * Mockup B: the content frame, 1040x600dp, centred on the screen and never
+     * Mockup B: the content frame (LAYOUT_HUB_WIDTH x HEIGHT), centred on the screen and never
      * drawn. On a screen smaller than the reference canvas it shrinks to fit
      * with a 16dp game-menu margin; the extra width on a wider one stays
      * backdrop.
@@ -516,10 +572,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
      */
     private void buildTree() {
         built = true;
-        headerRow.height(RAIL_ITEM).gap(Graphite.S2).align(Box.Align.CENTRE);
+        headerRow.height(HEADER_HEIGHT).gap(Graphite.S2).align(Box.Align.CENTRE);
         headerRow.add(wordmarkBox);
         headerRow.add(Box.column("hub.header.gap").width(Graphite.S6));
         headerRow.add(restartNote.box().grow(1f));
+        headerRow.add(quickSearchBox);
         editHudBox.height(Graphite.CONTROL_COMPACT).padding(Graphite.S3, 0f, Graphite.S3, 0f).gap(Graphite.S2)
                 .align(Box.Align.CENTRE);
         editHudBox.add(editIconBox);
@@ -527,10 +584,10 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         headerRow.add(editHudBox);
         headerRow.add(closeBox);
         frame.add(headerRow);
-        frame.add(Box.column("hub.header.after").height(RAIL_TOP - RAIL_ITEM));
+        frame.add(Box.column("hub.header.after").height(HEADER_GAP));
 
         Box body = Box.row("hub.body").grow(1f).align(Box.Align.START);
-        railBox.width(RAIL_WIDTH).padding(Graphite.S2).gap(RAIL_GAP).align(Box.Align.STRETCH);
+        railBox.width(RAIL_WIDTH).padding(Graphite.S1 + 2f).gap(RAIL_GAP).align(Box.Align.STRETCH);
         int count = sections.size();
         railItems = new Box[count];
         railIds = new String[count];
@@ -553,7 +610,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         }
         railBox.add(telemetry);
         body.add(railBox);
-        body.add(Box.column("hub.body.gap").width(CONTENT_X - RAIL_WIDTH));
+        body.add(Box.column("hub.body.gap").width(CONTENT_GAP));
         body.add(contentBox);
         frame.add(body);
         root.add(frame);
@@ -602,6 +659,11 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
                     Colour.argb(Runtime.rshiftDim(), 0x071019));
             ui.popAlpha();
         }
+        // The dim: a soft pool of shade under the frame in both modes, and on
+        // the Fathom background an even veil as well. No blur of its own.
+        ui.pushAlpha(shown);
+        Graphite.dim(ui, panel, !gameplayGlass(), 1f);
+        ui.popAlpha();
 
         // Groups fade and rise 8dp on entry; on exit they fade.
         ui.pushAlpha(shown);
@@ -664,14 +726,33 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             context.editHud();
         }
 
+        // Quick access: a capsule that opens Mods with its search focused. On
+        // Mods itself the page's own search is right below, so it steps back.
+        Rect search = quickSearchBox.rect();
+        boolean onMods = sections.get(current) instanceof ModsSection;
+        Controls.State searchState = controls.state(QUICK_SEARCH_ID, search, !onMods);
+        float present = controls.towards(QUICK_SEARCH_ID + "#present", !onMods, GraphiteTokens.MOTION_FAST);
+        if (present > 0.01f) {
+            ui.pushAlpha(present);
+            Graphite.surface(ui, search, Graphite.R_CONTROL, Graphite.Material.LIGHT,
+                    searchState.hover, searchState.press, 0f, false);
+            float glyph = Graphite.ICON_INLINE;
+            ui.icon(Icon.SEARCH, search.x + Graphite.S2, search.centreY() - glyph / 2f, glyph, Graphite.TEXT_SECONDARY);
+            Type hint = Graphite.floor(ui, Graphite.SMALL);
+            String query = context.search();
+            ui.text(Text.fit(ui, query.isEmpty() ? "Search mods" : query, hint,
+                            search.width - glyph - Graphite.S2 * 3f),
+                    search.x + Graphite.S2 + glyph + Graphite.S2, Graphite.baseline(ui, search, hint), hint,
+                    query.isEmpty() ? Graphite.TEXT_TERTIARY : Graphite.TEXT);
+            controls.focusRing(ui, searchState, search, Graphite.R_CONTROL);
+            ui.popAlpha();
+            if (searchState.clicked) {
+                quickSearch();
+            }
+        }
+
         // A module that needs a restart says so, quietly, beside the wordmark.
         restartNote.draw(ui, Graphite.TEXT_SECONDARY);
-    }
-
-    private float railHeight() {
-        int count = sections.size();
-        float items = count * RAIL_ITEM + (count - 1) * RAIL_GAP;
-        return Graphite.S2 + items + Graphite.S2 + 1f + Graphite.S2 + TELEMETRY_LINE * 2f + Graphite.S2;
     }
 
     /**
@@ -706,24 +787,52 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             ui.text(section.title(), item.x + lead + glyph + Graphite.S3,
                     Graphite.baseline(ui, item, label), label, ink);
             if ((state.clicked || index == scriptedSection) && !selected) {
-                // When a second navigation input arrives mid-crossfade, retain
-                // the current page at exactly its visible opacity. A settled
-                // page starts a fresh transition at zero as usual.
-                float continuation = pageSwap.settled(now) ? 0f : pageSwap.opacity(now);
-                previous = current;
-                current = index;
-                pageSwap.set(continuation, now);
-                pageSwap.to(1f, now);
-                controls.closePopover();
-                controls.clearFocus();
-                context.keybindCapture().cancel();
-                sections.get(current).opened(context);
+                select(index, now);
             }
         }
         scriptedSection = -1;
         Rect rule = railRule.rect();
         Graphite.hairline(ui, rule.x, rule.right(), rule.y);
         telemetry(ui, now);
+    }
+
+    /**
+     * Show section {@code index}: the rail's click, the header's search and
+     * typing on a page without a search box all come through here, so they
+     * crossfade the same way.
+     */
+    private void select(int index, float now) {
+        if (index == current || index < 0 || index >= sections.size()) {
+            return;
+        }
+        // When a second navigation input arrives mid-crossfade, retain the
+        // current page at exactly its visible opacity. A settled page starts a
+        // fresh transition at zero as usual.
+        float continuation = pageSwap.settled(now) ? 0f : pageSwap.opacity(now);
+        previous = current;
+        current = index;
+        pageSwap.set(continuation, now);
+        pageSwap.to(1f, now);
+        controls.closePopover();
+        controls.clearFocus();
+        context.keybindCapture().cancel();
+        sections.get(current).opened(context);
+    }
+
+    /** The Mods page, which owns the search. */
+    private int modsIndex() {
+        for (int index = 0; index < sections.size(); index++) {
+            if (sections.get(index) instanceof ModsSection) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /** Open Mods with its search focused, keeping what has been typed. */
+    private void quickSearch() {
+        select(modsIndex(), Gfx.clock().seconds());
+        controls.focus(SEARCH_ID);
     }
 
     /** Frame rate and memory, 4 Hz, in Data S. The dot is signal only while live. */
@@ -869,6 +978,13 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             return true;
         }
         if (!sections.get(current).searchable()) {
+            // Quick module access: a printable key on a page with no search box
+            // of its own starts a Mods search, unless that page is typing.
+            if (character > ' ' && character != 127 && !sections.get(current).typing() && modsIndex() >= 0) {
+                context.setSearch(String.valueOf(character));
+                quickSearch();
+                return true;
+            }
             return false;
         }
         // Typing goes to the search box whether or not it has been clicked. In a

@@ -218,6 +218,20 @@ final class PingWidget implements HudWidget {
     }
 
     /**
+     * The reading: the text, and the latency the bars and colour come from.
+     * Everything else the widget draws is a setting, which the HUD hashes.
+     */
+    @Override
+    public long contentSignature(MinecraftClient client, HudFont font) {
+        read(client);
+        long hash = 0xcbf29ce484222325L;
+        hash = (hash ^ text.hashCode()) * 0x100000001b3L;
+        hash = (hash ^ latency) * 0x100000001b3L;
+        hash = (hash ^ System.identityHashCode(font)) * 0x100000001b3L;
+        return hash == 0L ? 1L : hash;
+    }
+
+    /**
      * Five bars, the shortest first, lit as far as the latency allows.
      *
      * <p>Unlit bars are drawn dark rather than left out, so the widget is the

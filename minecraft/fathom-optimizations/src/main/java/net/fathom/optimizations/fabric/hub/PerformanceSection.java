@@ -73,13 +73,13 @@ final class PerformanceSection implements Section {
 
     PerformanceSection() {
         page.add(metersBox);
-        page.add(Box.column("performance.meters.after").height(Skin.S5));
+        page.add(Box.column("performance.meters.after").height(Skin.S3));
         page.add(interfaceLabel);
         page.add(interfaceBox);
-        page.add(Box.column("performance.interface.after").height(Skin.S5));
+        page.add(Box.column("performance.interface.after").height(Skin.S3));
         page.add(presetLabel);
         page.add(presetBox);
-        page.add(Box.column("performance.preset.after").height(Skin.S5));
+        page.add(Box.column("performance.preset.after").height(Skin.S3));
         page.add(listViewport);
     }
 
@@ -123,7 +123,8 @@ final class PerformanceSection implements Section {
         interfaceLabel.height(labelHeight);
         interfaceBox.height(interfaceLine * 2f + Skin.S3 + Skin.S3 * 2f);
         presetLabel.height(labelHeight);
-        page.layout(ui, area.x, area.y, area.width, area.height);
+        // The right gutter every Hub page leaves, so its panels end where theirs do.
+        page.layout(ui, area.x, area.y, area.width - Skin.SCROLL_GUTTER, area.height);
         instrument.draw(context, metersBox.rect());
 
         // Stacked on a cursor, on real line heights. Every group is a label,
@@ -472,18 +473,12 @@ final class PerformanceSection implements Section {
             }
         }
 
-        // Two lines centred on the row, on their own heights.
-        float top = row.centreY()
-                - (ui.lineHeight(Type.ROW_TITLE) + ui.lineHeight(Type.SMALL)) / 2f;
-        ui.text(Text.fit(ui, entry.name(), Type.ROW_TITLE, room), row.x + Skin.S3,
-                top + ui.ascent(Type.ROW_TITLE), Type.ROW_TITLE,
-                live && on ? Skin.TEXT : Skin.TEXT_MUTED);
         // The claim, not the argument. The registry documents each entry at
         // length because that is where the reasoning belongs; the row has one
         // line, and a paragraph pushed into it is a paragraph nobody reads.
-        ui.text(Text.fit(ui, Text.firstSentence(entry.description()), Type.SMALL, room),
-                row.x + Skin.S3, top + ui.lineHeight(Type.ROW_TITLE) + ui.ascent(Type.SMALL),
-                Type.SMALL, Skin.TEXT_DISABLED);
+        // The shared settings-row label; the switch beside it says whether it is on.
+        net.fathom.optimizations.fabric.ui.FathomSettingRows.label(ui, row, row.x + Skin.S3, room,
+                entry.name(), Text.firstSentence(entry.description()), true);
     }
 
     @Override

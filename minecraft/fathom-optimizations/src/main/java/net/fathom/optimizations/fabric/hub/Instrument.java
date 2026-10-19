@@ -42,9 +42,9 @@ import net.fathom.optimizations.fabric.ui.Skin;
 final class Instrument {
 
     /** The panel's height: the figures, the timeline, the caption line. */
-    static final float HEIGHT = 132f;
+    static final float HEIGHT = 112f;
 
-    private static final float GRAPH = 40f;
+    private static final float GRAPH = 32f;
     private static final float HITCH_MILLIS = Pulse.HITCH_NANOS / 1_000_000f;
     /** A 60 fps frame: the dotted reference across the timeline. */
     private static final float FRAME_60 = 1000f / 60f;

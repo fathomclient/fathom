@@ -202,6 +202,34 @@ public final class ViewBucket {
         return sorted[rank] / 1_000_000d;
     }
 
+    /** The slowest frame recorded, in ms. */
+    public double maxFrameMillis() {
+        long max = 0L;
+        for (int index = 0; index < frameCount; index++) {
+            max = Math.max(max, frames[index]);
+        }
+        return max / 1_000_000d;
+    }
+
+    /**
+     * Frames over {@code millis}, per thousand frames. A spike count rather than
+     * a percentile: a turn that stutters four times a second moves p99 only if
+     * the stutters are more than one frame in a hundred, and is felt either way.
+     */
+    public double framesOverPerThousand(double millis) {
+        if (frameCount == 0) {
+            return 0d;
+        }
+        long limit = (long) (millis * 1_000_000d);
+        int over = 0;
+        for (int index = 0; index < frameCount; index++) {
+            if (frames[index] > limit) {
+                over++;
+            }
+        }
+        return over * 1000d / frameCount;
+    }
+
     public double totalMillis(ViewSection section) {
         return frameCount == 0 ? 0d : totalSum[section.ordinal()] / 1_000_000d / frameCount;
     }

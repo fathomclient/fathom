@@ -74,7 +74,7 @@ public final class BenchmarkState {
             // The loader keeps the arguments it was handed, which is the only
             // reliable source once the game has parsed and discarded its own.
             String[] arguments =
-                    net.fabricmc.loader.api.FabricLoader.getInstance().getLaunchArguments(true);
+                    net.fathom.optimizations.fabric.Platform.launchArguments();
             if (arguments != null) {
                 for (String argument : arguments) {
                     if ("--fathom-benchmark".equals(argument)) {

@@ -30,8 +30,11 @@ if (-not (Test-Path -LiteralPath $npm -PathType Leaf)) {
 }
 
 $wrapper = Join-Path $moduleRoot "gradlew.bat"
+# The Gradle tools/build-all.ps1 uses, downloaded into the checkout.
+$checkoutGradle = Join-Path $root ".tmp-gradle-8.10.2\gradle-8.10.2\bin\gradle.bat"
 $gradle = if ($GradlePath) { $GradlePath }
           elseif (Test-Path -LiteralPath $wrapper) { $wrapper }
+          elseif (Test-Path -LiteralPath $checkoutGradle) { $checkoutGradle }
           else {
               $command = Get-Command gradle -ErrorAction SilentlyContinue
               if ($command) { $command.Source } else { "" }

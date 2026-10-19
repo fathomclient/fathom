@@ -1,15 +1,8 @@
-# launcher-ui compatibility package
+# launcher-ui
 
-`launcher-ui` is intentionally not a second launcher implementation. It keeps
-the established development command working:
+A thin wrapper kept so `cargo run -p launcher-ui` still works. It just calls
+`launcher_desktop::run()` with the built frontend from `desktop/dist`, so it
+behaves exactly like the real launcher. The old UI that used to live here is in
+the git history.
 
-```powershell
-cargo run -p launcher-ui
-```
-
-That command calls `launcher_desktop::run()` and embeds the current
-`desktop/dist` bundle, exactly like the production launcher. The iced-era
-sources and assets that used to live here are in the git history.
-
-For hot frontend development, use `tools/dev.ps1`; it runs the same desktop
-shell against Vite's development server.
+For frontend work with hot reload, use `tools/dev.ps1` instead.

@@ -48,11 +48,11 @@ pub struct OptiFineIdentity {
     pub name: String,
     /// `MC_VERSION` — the Minecraft version this build patches, e.g. "1.8.9".
     pub minecraft: String,
-    /// `OF_EDITION`, e.g. "HD_U".
+    /// `OF_EDITION`, e.g. `HD_U`.
     pub edition: String,
     /// `OF_RELEASE`, e.g. "M5".
     pub release: String,
-    /// `VERSION` — the full name, e.g. "OptiFine_1.8.9_HD_U_M5".
+    /// `VERSION` — the full name, e.g. `OptiFine_1.8.9_HD_U_M5`.
     pub version: String,
 }
 
@@ -224,12 +224,16 @@ fn string_constants(class: &[u8]) -> Option<Vec<(String, String)>> {
                 at += len;
                 // Java's modified UTF-8 agrees with UTF-8 for the ASCII these
                 // constants are made of; anything else is not a version string.
-                utf8[index] = Some(String::from_utf8_lossy(bytes).into_owned());
+                if let Some(slot) = utf8.get_mut(index) {
+                    *slot = Some(String::from_utf8_lossy(bytes).into_owned());
+                }
             }
             7 | 8 | 16 | 19 | 20 => {
                 let target = u16_at(class, &mut at)?;
                 if tag == 8 {
-                    string_target[index] = Some(target);
+                    if let Some(slot) = string_target.get_mut(index) {
+                        *slot = Some(target);
+                    }
                 }
             }
             15 => at += 3,
@@ -267,8 +271,8 @@ fn string_constants(class: &[u8]) -> Option<Vec<(String, String)>> {
                 let value = string_target
                     .get(value_index)
                     .and_then(|t| *t)
-                    .and_then(|t| utf8.get(t as usize).and_then(|v| v.clone()));
-                let name = utf8.get(name_index).and_then(|n| n.clone());
+                    .and_then(|t| utf8.get(t as usize).and_then(Clone::clone));
+                let name = utf8.get(name_index).and_then(Clone::clone);
                 if let (Some(name), Some(value)) = (name, value) {
                     found.push((name, value));
                 }
@@ -281,19 +285,25 @@ fn string_constants(class: &[u8]) -> Option<Vec<(String, String)>> {
 }
 
 fn u16_at(bytes: &[u8], at: &mut usize) -> Option<u16> {
-    let slice = bytes.get(*at..at.checked_add(2)?)?;
+    let slice: [u8; 2] = bytes.get(*at..at.checked_add(2)?)?.try_into().ok()?;
     *at += 2;
-    Some(u16::from_be_bytes([slice[0], slice[1]]))
+    Some(u16::from_be_bytes(slice))
 }
 
 fn u32_at(bytes: &[u8], at: &mut usize) -> Option<u32> {
-    let slice = bytes.get(*at..at.checked_add(4)?)?;
+    let slice: [u8; 4] = bytes.get(*at..at.checked_add(4)?)?.try_into().ok()?;
     *at += 4;
-    Some(u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]]))
+    Some(u32::from_be_bytes(slice))
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation
+)]
 mod tests {
     use super::*;
     use std::io::Write;

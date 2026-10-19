@@ -552,12 +552,13 @@ impl Modrinth {
         if options.compatible_only {
             clauses.push(format!(r#"["versions:{minecraft}"]"#));
             match options.loader_scope {
-                LoaderScope::Exact => clauses.push(format!(r#"["categories:{facet}"]"#)),
                 // OR within one clause.
                 LoaderScope::WithFabric if facet != "fabric" => {
-                    clauses.push(format!(r#"["categories:{facet}","categories:fabric"]"#))
+                    clauses.push(format!(r#"["categories:{facet}","categories:fabric"]"#));
                 }
-                LoaderScope::WithFabric => clauses.push(format!(r#"["categories:{facet}"]"#)),
+                LoaderScope::Exact | LoaderScope::WithFabric => {
+                    clauses.push(format!(r#"["categories:{facet}"]"#));
+                }
                 LoaderScope::Any => {}
             }
         }

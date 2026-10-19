@@ -118,7 +118,12 @@ fn bench_plan() -> Result<(), launcher_core::ServiceError> {
     println!("the order between sessions so thermal drift does not favour whichever went first.\n");
 
     for (index, configuration) in CONFIGURATIONS.iter().enumerate() {
-        println!("{}. {}  [{}]", index + 1, configuration.name, configuration.id);
+        println!(
+            "{}. {}  [{}]",
+            index + 1,
+            configuration.name,
+            configuration.id
+        );
         println!("   {}", configuration.purpose);
         println!("   Setup: {}\n", configuration.setup);
     }
@@ -1343,7 +1348,10 @@ fn prepared(
 /// The point of this command is to check everything that does not need one.
 fn integration_command(args: &[String]) -> Result<(), launcher_core::ServiceError> {
     let offline = args.iter().any(|arg| arg == "--offline");
-    let target = args.iter().find(|arg| !arg.starts_with("--")).map(String::as_str);
+    let target = args
+        .iter()
+        .find(|arg| !arg.starts_with("--"))
+        .map(String::as_str);
 
     let mut core = open()?;
 

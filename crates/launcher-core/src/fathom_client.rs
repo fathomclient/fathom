@@ -42,6 +42,38 @@ pub const MARKER_PATH: &str = "fathom/client-loaded.json";
 /// The mod id Fathom's client module takes in a profile.
 pub const MODULE_ID: &str = crate::mods::catalog::FATHOM_OPTIMIZATIONS;
 
+/// The mod id of the same client built for Forge (`gradle forgeJar`).
+pub const FORGE_MODULE_ID: &str = crate::mods::catalog::FATHOM_FORGE;
+
+/// The client module's mod id for a loader, or `None` where Fathom does not run.
+pub fn module_id_for(loader: Loader) -> Option<&'static str> {
+    match loader {
+        Loader::LegacyFabric => Some(MODULE_ID),
+        Loader::Forge => Some(FORGE_MODULE_ID),
+        Loader::Vanilla => None,
+    }
+}
+
+/// Mixin's LaunchWrapper tweaker, which starts the Forge build of the client.
+pub const FORGE_TWEAKER: &str = "org.spongepowered.asm.launch.MixinTweaker";
+
+/// The Forge build of the client, when this profile will load it: Forge, and
+/// an enabled `fathom-forge` entry the launcher installed. Its file goes first
+/// on the class path and Mixin's tweaker after Forge's, because Forge 1.8.9 has
+/// no Mixin of its own and ships an ASM too old for it; see `docs/forge.md`.
+///
+/// Only the launcher's own entry: going first replaces ASM for the whole game,
+/// so a jar somebody supplied under the same id stays an ordinary mod.
+pub fn forge_client_entry(profile: &Profile) -> Option<&ProfileMod> {
+    if profile.loader_kind() != Loader::Forge {
+        return None;
+    }
+    profile
+        .mods
+        .enabled()
+        .find(|entry| entry.id.as_str() == FORGE_MODULE_ID && entry.source.is_launcher_owned())
+}
+
 /// What a Fathom profile will launch with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FathomClient {
@@ -65,18 +97,18 @@ impl FathomClient {
         if !profile.owns_components() {
             return FathomClient::NotExpected;
         }
-        if profile.loader_kind() != Loader::LegacyFabric {
+        let Some(module_id) = module_id_for(profile.loader_kind()) else {
             return FathomClient::Unavailable(format!(
-                "{} is a Fathom profile, and Fathom runs on Legacy Fabric, but this profile is \
-                 set to {}. Change its loader back to Legacy Fabric.",
+                "{} is a Fathom profile, and Fathom runs on Legacy Fabric or Forge, but this \
+                 profile is set to {}. Change its loader to Legacy Fabric or Forge.",
                 profile.display_name,
                 profile.loader_kind().label()
             ));
-        }
+        };
         let entry = profile
             .mods
             .iter()
-            .find(|entry| entry.id.as_str() == MODULE_ID)
+            .find(|entry| entry.id.as_str() == module_id)
             .cloned();
 
         if let Some(entry) = &entry {
@@ -126,8 +158,8 @@ impl FathomClient {
             FathomClient::Unavailable(reason) => {
                 // "Not installed yet" is fixed by the launch itself, which
                 // installs components first. Everything else is not.
-                let installable = lookup.jar().is_some()
-                    && profile.loader_kind() == Loader::LegacyFabric;
+                let installable =
+                    lookup.jar().is_some() && module_id_for(profile.loader_kind()).is_some();
                 (!installable).then_some(reason)
             }
             FathomClient::SwitchedOff { .. } => Some(
@@ -445,6 +477,60 @@ mod tests {
         let mut profile = fathom_profile();
         profile.loader.kind = Loader::Vanilla;
         assert!(FathomClient::decide(&profile, &jar()).refusal().is_some());
+    }
+
+    fn forge_entry(enabled: bool) -> ProfileMod {
+        let mut entry = ProfileMod::new(
+            ModId::new(FORGE_MODULE_ID).unwrap(),
+            "b".repeat(40),
+            "fathom-forge-1.jar",
+        )
+        .from_source(ModSource::FirstParty);
+        entry.enabled = enabled;
+        entry
+    }
+
+    /// Fathom runs on Forge as the same client under its Forge build, so a
+    /// Fathom profile on Forge launches with `fathom-forge`, not the Fabric jar.
+    #[test]
+    fn a_fathom_profile_on_forge_launches_the_forge_build() {
+        let mut profile = fathom_profile();
+        profile.loader.kind = Loader::Forge;
+        // The Fabric module alone is not the Forge client.
+        profile.mods.upsert(entry(true, ModSource::FirstParty));
+        assert!(FathomClient::decide(&profile, &jar()).refusal().is_some());
+
+        profile.mods.upsert(forge_entry(true));
+        let decided = FathomClient::decide(&profile, &jar());
+        assert!(matches!(decided, FathomClient::Bundled { .. }), "{decided:?}");
+        assert_eq!(
+            decided.expected_entry().map(|entry| entry.id.as_str()),
+            Some(FORGE_MODULE_ID)
+        );
+    }
+
+    /// The class path and tweaker that start it apply to Forge only, and only
+    /// while the entry is switched on.
+    #[test]
+    fn the_forge_build_is_started_only_on_forge_and_only_when_enabled() {
+        let mut profile = fathom_profile();
+        profile.mods.upsert(forge_entry(true));
+        assert!(forge_client_entry(&profile).is_none(), "not on Legacy Fabric");
+
+        profile.loader.kind = Loader::Forge;
+        assert_eq!(
+            forge_client_entry(&profile).map(|entry| entry.file_name.as_str()),
+            Some("fathom-forge-1.jar")
+        );
+
+        profile.mods.upsert(forge_entry(false));
+        assert!(forge_client_entry(&profile).is_none(), "switched off");
+
+        let mut supplied = forge_entry(true);
+        supplied.source = ModSource::UserSupplied;
+        profile.mods.upsert(supplied);
+        assert!(forge_client_entry(&profile).is_none(), "a supplied jar never goes ahead of Forge");
+        assert_eq!(module_id_for(Loader::Vanilla), None);
     }
 
     #[test]

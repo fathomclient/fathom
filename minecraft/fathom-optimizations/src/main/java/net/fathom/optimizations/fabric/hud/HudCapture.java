@@ -140,7 +140,7 @@ public final class HudCapture {
      * saved world is touched.
      */
     private static final boolean DRESS = Boolean.getBoolean("fathom.captureHudItems")
-            && net.fabricmc.loader.api.FabricLoader.getInstance().isDevelopmentEnvironment();
+            && net.fathom.optimizations.fabric.Platform.development();
 
     /** Set once a backdrop-source capture was requested; the client stops after it. */
     private static final boolean[] STOP_AFTER_SOURCE = {false};

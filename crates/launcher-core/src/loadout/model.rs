@@ -546,8 +546,14 @@ fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-#[allow(clippy::unwrap_used)]
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation
+)]
 mod tests {
     use super::*;
 

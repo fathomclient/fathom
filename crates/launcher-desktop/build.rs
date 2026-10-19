@@ -70,7 +70,59 @@ fn main() {
         "cargo:rustc-env=FATHOM_CLIENT_JAR_ID={hash:016x}-{}",
         jar.len()
     );
+
+    // The same client renamed for Forge 1.8.9, which the module's own
+    // `gradle build` writes beside the Fabric jar (the `forgeJar` task).
+    let forge_libs = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../minecraft/fathom-optimizations/build/libs");
+    println!("cargo:rerun-if-changed={}", forge_libs.display());
+    let forge_client = newest_jar(&forge_libs, "fathom-forge-").unwrap_or_else(|| {
+        panic!(
+            "no Forge build of the client in {}; run `gradle build` in minecraft/fathom-optimizations",
+            forge_libs.display()
+        )
+    });
+    println!("cargo:rerun-if-changed={}", forge_client.display());
+    println!(
+        "cargo:rustc-env=FATHOM_FORGE_JAR_PATH={}",
+        forge_client.display()
+    );
+    println!(
+        "cargo:rustc-env=FATHOM_FORGE_JAR_NAME={}",
+        forge_client
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("Forge client filename")
+    );
+    let forge_jar = std::fs::read(&forge_client).expect("read the Forge client jar");
+    let mut forge_hash = 0xcbf29ce484222325_u64;
+    for byte in &forge_jar {
+        forge_hash = (forge_hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
+    }
+    println!(
+        "cargo:rustc-env=FATHOM_FORGE_JAR_ID={forge_hash:016x}-{}",
+        forge_jar.len()
+    );
     tauri_build::build();
+}
+
+fn newest_jar(directory: &Path, prefix: &str) -> Option<PathBuf> {
+    std::fs::read_dir(directory)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            name.starts_with(prefix) && name.ends_with(".jar") && !name.ends_with("-sources.jar")
+        })
+        .max_by_key(|path| {
+            std::fs::metadata(path)
+                .and_then(|meta| meta.modified())
+                .ok()
+        })
 }
 
 /// A deterministic, diagnostic-only FNV-1a fingerprint. Security still comes

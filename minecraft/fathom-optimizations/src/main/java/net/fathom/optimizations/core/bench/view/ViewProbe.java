@@ -189,6 +189,16 @@ public final class ViewProbe {
     }
 
     /**
+     * An optimization's fast path was taken. Free outside the view benchmark:
+     * {@link #REQUESTED} is a constant the JIT folds, so the call disappears.
+     */
+    public static void engaged(ViewCounter counter) {
+        if (REQUESTED) {
+            tally(counter);
+        }
+    }
+
+    /**
      * A packet handler reached its main-thread half. On the client thread this
      * names the packet the open task is applying; on the network thread it is
      * the packet being queued.

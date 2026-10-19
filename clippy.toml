@@ -1,0 +1,2 @@
+# Product names the docs use as words, not code. ".." keeps clippy's defaults.
+doc-valid-idents = ["OptiFine", "OptiFabric", "LaunchWrapper", "VSync", "HotSpot", "RShift", ".."]

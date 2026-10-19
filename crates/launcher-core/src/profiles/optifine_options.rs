@@ -76,8 +76,7 @@ pub fn set_render_regions(dirs: &ProfileDirs, on: bool) -> Result<bool, fs_safet
     for line in existing.lines() {
         let key = line
             .split_once(':')
-            .map(|(key, _)| key.trim())
-            .unwrap_or("");
+            .map_or("", |(key, _)| key.trim());
         if key == RENDER_REGIONS {
             found = true;
             rewritten.push_str(RENDER_REGIONS);

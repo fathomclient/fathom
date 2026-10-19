@@ -388,7 +388,10 @@ fn removing_a_mod_never_deletes_bytes_anything_else_names() {
         let text = std::fs::read_to_string(&file).unwrap();
         std::fs::write(&file, &text[..text.len() - 20]).unwrap();
     }
-    assert!(world.launcher.profiles().iter().all(|p| p.id != second.id), "it no longer loads");
+    assert!(
+        world.launcher.profiles().iter().all(|p| p.id != second.id),
+        "it no longer loads"
+    );
 
     world
         .launcher

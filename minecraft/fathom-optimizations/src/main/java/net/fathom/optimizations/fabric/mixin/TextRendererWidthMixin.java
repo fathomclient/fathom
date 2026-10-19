@@ -93,6 +93,8 @@ public abstract class TextRendererWidthMixin {
                 && net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()) {
             Integer known = fathom$memo().lookup(text);
             if (known != null) {
+                net.fathom.optimizations.core.bench.view.ViewProbe.engaged(
+                        net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_FONT_METRICS);
                 callback.setReturnValue(known);
             }
         }
@@ -120,6 +122,7 @@ public abstract class TextRendererWidthMixin {
     @Inject(method = "init()V", at = @At("RETURN"))
     private void fathom$fontReloaded(CallbackInfo callback) {
         fathom$memo().invalidate();
+        net.fathom.optimizations.fabric.perf.GlyphPages.fontLoaded();
         net.fathom.optimizations.fabric.perf.SignTexts.fontChanged();
         net.fathom.optimizations.fabric.perf.TextLists.release();
         net.fathom.optimizations.fabric.perf.VanillaHudReplay.releaseAll();

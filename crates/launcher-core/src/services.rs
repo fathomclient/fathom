@@ -511,6 +511,19 @@ impl Launcher {
             let engine = ModEngine::new(paths.clone());
             for mut profile in profiles.list() {
                 if !profile.owns_components() {
+                    // A Custom profile keeps its own mods, but one that runs
+                    // Fathom's client (every Forge profile) and never chose any
+                    // optimizations should not show them all off on the
+                    // Performance page until its first launch.
+                    if crate::components::tune_if_never_chosen(&mut profile) {
+                        match profiles.save(&profile) {
+                            Ok(()) => tracing::info!(
+                                profile = %profile.id,
+                                "optimizations set to the Balanced preset at open"
+                            ),
+                            Err(error) => tracing::warn!(%error, "could not record the preset"),
+                        }
+                    }
                     continue;
                 }
                 match crate::components::ensure(&paths, &engine, &mut profile) {
@@ -1153,12 +1166,25 @@ impl Launcher {
         crate::components::bundled_jar(&self.paths, crate::components::FATHOM_JAR_PREFIX)
     }
 
+    /// The same, for the loader a profile uses: the Forge build under Forge.
+    pub fn fathom_jar_lookup_for(&self, loader: Loader) -> crate::components::JarLookup {
+        let prefix = if loader == Loader::Forge {
+            crate::components::FATHOM_FORGE_JAR_PREFIX
+        } else {
+            crate::components::FATHOM_JAR_PREFIX
+        };
+        crate::components::bundled_jar(&self.paths, prefix)
+    }
+
     /// What a profile would launch with, as far as Fathom's client goes.
     ///
     /// Judged against the profile as given; [`Launcher::launch`] asks after
     /// bringing components up to date.
     pub fn fathom_client(&self, profile: &Profile) -> crate::fathom_client::FathomClient {
-        crate::fathom_client::FathomClient::decide(profile, &self.fathom_jar_lookup())
+        crate::fathom_client::FathomClient::decide(
+            profile,
+            &self.fathom_jar_lookup_for(profile.loader_kind()),
+        )
     }
 
     /// Everything a launch of this profile would select, in words, without
@@ -1167,6 +1193,7 @@ impl Launcher {
     /// Logged on every launch and printed by `fathom-cli report`, so "which
     /// Minecraft did Play start" has an answer that does not depend on memory.
     /// Paths only; no token, account or session detail.
+    #[allow(clippy::too_many_lines)]
     pub fn launch_report(&self, profile: &Profile) -> Vec<(&'static str, String)> {
         let mut lines: Vec<(&'static str, String)> = Vec::new();
         lines.push((
@@ -1258,7 +1285,7 @@ impl Launcher {
                 Loader::LegacyFabric => {
                     "net.fabricmc.loader.impl.launch.knot.KnotClient".to_owned()
                 }
-                Loader::Forge => "(not implemented)".to_owned(),
+                Loader::Forge => "net.minecraft.launchwrapper.Launch".to_owned(),
             },
         ));
         let required_major = self
@@ -1280,7 +1307,7 @@ impl Launcher {
             },
         ));
 
-        let lookup = self.fathom_jar_lookup();
+        let lookup = self.fathom_jar_lookup_for(resolved.loader_kind());
         lines.push((
             "client module source",
             match &lookup {
@@ -2379,7 +2406,10 @@ impl Launcher {
         }
 
         if let Some(reason) =
-            crate::fathom_client::FathomClient::preflight(profile, &self.fathom_jar_lookup())
+            crate::fathom_client::FathomClient::preflight(
+                profile,
+                &self.fathom_jar_lookup_for(profile.loader_kind()),
+            )
         {
             blockers.push(Blocker::FathomClient(reason));
         }
@@ -2583,6 +2613,23 @@ impl Launcher {
         let dirs = self.profiles.dirs(&profile.id);
         dirs.ensure()
             .map_err(|e| LaunchRefusal::InvalidProfile(e.to_string()))?;
+        let installations: Vec<_> = self
+            .profiles
+            .list()
+            .iter()
+            .map(|known| self.dirs_for(known))
+            .collect();
+        match crate::profiles::global_options::sync_newest(&installations, &dirs) {
+            Ok(crate::profiles::global_options::Sync::Copied { source }) => tracing::info!(
+                from = %source.display(),
+                to = %dirs.options_file().display(),
+                "applied launcher-wide Minecraft settings"
+            ),
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(%error, "could not apply launcher-wide Minecraft settings");
+            }
+        }
         // A component that cannot work alone, without the thing it needs. This
         // is checked before the process starts rather than after, because the
         // alternative is a class-transformation crash the player cannot read.
@@ -2703,6 +2750,18 @@ impl Launcher {
         let mut classpath = loader
             .map(LoaderInstallation::classpath_additions)
             .unwrap_or_default();
+        // Fathom's Forge build goes in front of everything, Forge included: it
+        // carries the ASM its Mixin needs, and Forge's own ASM 5 would win if it
+        // came first. Mixin's tweaker then starts it after FML's. The file is
+        // the one `lay_out_mods` placed and `verify_placed` checked.
+        let mut extra_game_args = loader.map(|l| l.game_arguments.clone()).unwrap_or_default();
+        if loader.is_some() {
+            if let Some(entry) = crate::fathom_client::forge_client_entry(profile) {
+                classpath.insert(0, pre.dirs.mods_dir().join(&entry.file_name));
+                extra_game_args.push("--tweakClass".to_owned());
+                extra_game_args.push(crate::fathom_client::FORGE_TWEAKER.to_owned());
+            }
+        }
         classpath.extend(resolved.classpath());
         let natives = pre.dirs.natives_dir();
 
@@ -2774,7 +2833,7 @@ impl Launcher {
                 .and_then(|l| l.main_class.as_deref())
                 .unwrap_or(&version.main_class),
             argument_template: version.minecraft_arguments.as_deref(),
-            extra_game_args: loader.map_or(&[][..], |l| &l.game_arguments),
+            extra_game_args: &extra_game_args,
             profile_dir: pre.dirs.root(),
             natives_dir: &natives,
             log_file: &launch_log_path(&pre.dirs),

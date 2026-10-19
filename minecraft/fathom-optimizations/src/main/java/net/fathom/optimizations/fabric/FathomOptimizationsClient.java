@@ -3,8 +3,6 @@ package net.fathom.optimizations.fabric;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.resource.ReloadableResourceManager;
 import net.minecraft.resource.ResourceManager;
@@ -44,7 +42,7 @@ import net.fathom.optimizations.fabric.hud.HudWidget;
  * <p>It performs no optimization of its own; the Mixins do that, and only where an entry
  * is switched on.
  */
-public final class FathomOptimizationsClient implements ClientModInitializer {
+public final class FathomOptimizationsClient {
 
     /**
      * Mod ids we check for, and the human name the registry's conflicts use.
@@ -60,7 +58,7 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
         {"polypatcher", "PolyPatcher"},
     };
 
-    @Override
+    /** Called once by the loader's entry: {@link FabricEntrypoint} on Fabric, the start-up Mixin on Forge. */
     public void onInitializeClient() {
         // First, before anything this class does can change what is being
         // reported. The point of the block is to describe the process as the
@@ -75,7 +73,7 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
         // load when it is installed by hand, without a launcher anywhere.
         LauncherConfig configuration =
                 LauncherConfig.fromGameDirectory(
-                        FabricLoader.getInstance().getGameDir().toFile());
+                        Platform.gameDir());
         SwitchBoard switches = configuration.apply(registry);
         for (String complaint : configuration.complaints()) {
             net.fathom.optimizations.core.module.ModuleLog.say("settings file: " + complaint);
@@ -115,7 +113,7 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
 
         Runtime.install(registry, switches, guard);
 
-        java.io.File gameDirectory = FabricLoader.getInstance().getGameDir().toFile();
+        java.io.File gameDirectory = Platform.gameDir();
 
         // The launcher bridge first, because the profile name
         // come from it and the HUD wants both. It never throws: no handshake
@@ -276,7 +274,7 @@ public final class FathomOptimizationsClient implements ClientModInitializer {
     private static List<String> detectConflictingSoftware() {
         List<String> present = new ArrayList<String>();
         for (String[] pair : CONFLICT_MOD_IDS) {
-            if (FabricLoader.getInstance().isModLoaded(pair[0]) && !present.contains(pair[1])) {
+            if (Platform.isModLoaded(pair[0]) && !present.contains(pair[1])) {
                 present.add(pair[1]);
             }
         }

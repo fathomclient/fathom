@@ -421,7 +421,7 @@ fn what_was_installed_and_from_where_survives_a_restart() {
             project: Some("9CJED7xi".to_owned()),
             version_id: Some("Znk9CSGQ".to_owned()),
             page: Some("https://modrinth.com/mod/legacy-fabric-api".to_owned()),
-            requires: Default::default(),
+            requires: BTreeSet::default(),
             summary: None,
         }),
     );

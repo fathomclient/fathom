@@ -930,7 +930,10 @@ mod tests {
         let mut optifabric = entry("optifabric", ModSource::Managed);
         optifabric.origin.repository = Some("modrinth".to_owned());
         assert_eq!(kind_of(&optifabric), "component");
-        assert_eq!(source_label(&optifabric), "Fathom component · from Modrinth");
+        assert_eq!(
+            source_label(&optifabric),
+            "Fathom component · from Modrinth"
+        );
 
         let mut browsed = entry("ksyxis", ModSource::Managed);
         browsed.origin.repository = Some("modrinth".to_owned());
@@ -940,7 +943,10 @@ mod tests {
         let mut identified = entry("my-mod", ModSource::UserSupplied);
         assert_eq!(source_label(&identified), "Your file");
         identified.origin.repository = Some("modrinth".to_owned());
-        assert_eq!(source_label(&identified), "Your file · identified on Modrinth");
+        assert_eq!(
+            source_label(&identified),
+            "Your file · identified on Modrinth"
+        );
     }
 
     /// Compatibility is shown from what was recorded about the build, and is
@@ -949,7 +955,8 @@ mod tests {
     fn recorded_compatibility_is_shown_and_unknown_is_unknown() {
         let profile = {
             let mut profile = launcher_core::profiles::Profile::new(
-                launcher_core::profiles::ProfileId::new("p").unwrap_or_else(|_| unreachable!("a literal id")),
+                launcher_core::profiles::ProfileId::new("p")
+                    .unwrap_or_else(|_| unreachable!("a literal id")),
                 "P",
             );
             profile.loader.kind = launcher_core::profiles::Loader::LegacyFabric;
@@ -962,11 +969,20 @@ mod tests {
         assert_eq!(verdict, Some("incompatible"));
 
         let unknown = entry("mystery", ModSource::UserSupplied);
-        assert_eq!(recorded_compatibility(&unknown, &profile).map(|c| c.verdict), Some("unknown"));
+        assert_eq!(
+            recorded_compatibility(&unknown, &profile).map(|c| c.verdict),
+            Some("unknown")
+        );
 
         // A mod Fathom's own catalogue knows (OptiFine) is judged by the
         // catalogue's researched facts instead.
-        assert!(recorded_compatibility(&entry("optifine", ModSource::UserSupplied), &profile).is_none());
-        assert!(recorded_compatibility(&entry("fathom-optimizations", ModSource::FirstParty), &profile).is_none());
+        assert!(
+            recorded_compatibility(&entry("optifine", ModSource::UserSupplied), &profile).is_none()
+        );
+        assert!(recorded_compatibility(
+            &entry("fathom-optimizations", ModSource::FirstParty),
+            &profile
+        )
+        .is_none());
     }
 }

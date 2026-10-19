@@ -137,6 +137,9 @@ const EMBEDDED_CLIENT: &[u8] = include_bytes!(env!("FATHOM_CLIENT_JAR_PATH"));
 const EMBEDDED_CLIENT_NAME: &str = env!("FATHOM_CLIENT_JAR_NAME");
 /// A fingerprint of `EMBEDDED_CLIENT`, computed by `build.rs`.
 const EMBEDDED_CLIENT_ID: &str = env!("FATHOM_CLIENT_JAR_ID");
+const EMBEDDED_FORGE_CLIENT: &[u8] = include_bytes!(env!("FATHOM_FORGE_JAR_PATH"));
+const EMBEDDED_FORGE_CLIENT_NAME: &str = env!("FATHOM_FORGE_JAR_NAME");
+const EMBEDDED_FORGE_CLIENT_ID: &str = env!("FATHOM_FORGE_JAR_ID");
 
 /// Materialise the client module carried inside the executable.
 ///
@@ -152,39 +155,64 @@ const EMBEDDED_CLIENT_ID: &str = env!("FATHOM_CLIENT_JAR_ID");
 /// fallback when there is no stamp -- an install from before stamps -- so
 /// staying authoritative costs one slow start, once.
 fn stage_embedded_client(paths: &DataPaths) -> Result<(), std::io::Error> {
+    stage_embedded_jar(
+        paths,
+        EMBEDDED_CLIENT_NAME,
+        EMBEDDED_CLIENT_ID,
+        EMBEDDED_CLIENT,
+    )?;
+    stage_embedded_jar(
+        paths,
+        EMBEDDED_FORGE_CLIENT_NAME,
+        EMBEDDED_FORGE_CLIENT_ID,
+        EMBEDDED_FORGE_CLIENT,
+    )
+}
+
+fn stage_embedded_jar(
+    paths: &DataPaths,
+    name: &str,
+    id: &str,
+    bytes: &[u8],
+) -> Result<(), std::io::Error> {
     let directory = paths.resources_dir();
     std::fs::create_dir_all(&directory)?;
-    let destination = directory.join(EMBEDDED_CLIENT_NAME);
-    let stamp = directory.join(format!(".{EMBEDDED_CLIENT_NAME}.id"));
-    if stamp_matches(&stamp, &destination) {
+    let destination = directory.join(name);
+    let stamp = directory.join(format!(".{name}.id"));
+    if stamp_matches(&stamp, &destination, id, bytes.len()) {
         return Ok(());
     }
-    if file_matches(&destination, EMBEDDED_CLIENT)? {
-        let _ = std::fs::write(&stamp, EMBEDDED_CLIENT_ID);
+    if file_matches(&destination, bytes)? {
+        let _ = std::fs::write(&stamp, id);
         return Ok(());
     }
-    let temporary = directory.join(format!(".{EMBEDDED_CLIENT_NAME}.new"));
-    std::fs::write(&temporary, EMBEDDED_CLIENT)?;
+    let temporary = directory.join(format!(".{name}.new"));
+    std::fs::write(&temporary, bytes)?;
     if destination.exists() {
         std::fs::remove_file(&destination)?;
     }
     std::fs::rename(temporary, destination)?;
     // Written after the jar is in place, so a stamp never vouches for a
     // half-written file.
-    let _ = std::fs::write(&stamp, EMBEDDED_CLIENT_ID);
+    let _ = std::fs::write(&stamp, id);
     Ok(())
 }
 
 /// Whether the staged jar is the one this build carries, from its stamp and
 /// length alone. Anything unexpected -- no stamp, another build's stamp, a
 /// jar of a different size -- answers no, and the full check runs.
-fn stamp_matches(stamp: &std::path::Path, destination: &std::path::Path) -> bool {
+fn stamp_matches(
+    stamp: &std::path::Path,
+    destination: &std::path::Path,
+    expected_id: &str,
+    expected_len: usize,
+) -> bool {
     let Ok(recorded) = std::fs::read_to_string(stamp) else {
         return false;
     };
-    recorded.trim() == EMBEDDED_CLIENT_ID
+    recorded.trim() == expected_id
         && std::fs::metadata(destination)
-            .is_ok_and(|meta| meta.is_file() && meta.len() == EMBEDDED_CLIENT.len() as u64)
+            .is_ok_and(|meta| meta.is_file() && meta.len() == expected_len as u64)
 }
 
 /// A rebuilt jar can have exactly the same byte length as the jar it replaces.

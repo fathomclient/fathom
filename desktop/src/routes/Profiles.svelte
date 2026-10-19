@@ -358,16 +358,19 @@
         <Select
           label="Loader"
           bind:value={editing.loader}
-          disabled={editing.kind === 'fathom'}
-          options={editing.loaders.map((loader) => ({
-            id: loader.id,
-            label: loader.label,
-            disabled: !loader.available,
-            note: loader.available ? '' : 'Not ready',
-          }))}
+          options={editing.loaders.map((loader) => {
+            // Fathom's client is built for Legacy Fabric and for Forge.
+            const outsideFathom = editing?.kind === 'fathom' && loader.id === 'vanilla';
+            return {
+              id: loader.id,
+              label: loader.label,
+              disabled: !loader.available || outsideFathom,
+              note: !loader.available ? 'Not ready' : outsideFathom ? 'Not for Fathom' : '',
+            };
+          })}
         />
         {#if editing.kind === 'fathom'}
-          <span class="fine">A Fathom installation's loader comes with the type.</span>
+          <span class="fine">Fathom runs on Legacy Fabric or Forge; switching installs the matching build.</span>
         {/if}
       </div>
 

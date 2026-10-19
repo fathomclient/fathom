@@ -210,6 +210,9 @@ pub struct Optimization {
     pub evidence: Option<&'static str>,
     /// Mods that stand this down when installed.
     pub conflicts: &'static [Conflict],
+    /// The loaders it does anything on, by registry id (`legacy-fabric`,
+    /// `forge`). Empty for the launcher's own JVM flags, which apply anywhere.
+    pub loaders: &'static [&'static str],
 }
 
 impl Optimization {
@@ -222,6 +225,21 @@ impl Optimization {
     /// Implemented, whoever controls it.
     pub fn is_implemented(&self) -> bool {
         self.status == Status::Active
+    }
+
+    /// Whether it belongs on the page of an installation running `loader`.
+    ///
+    /// Only a loader Fathom's client runs on can rule an entry out: Forge
+    /// installations do not list a Fabric-only fix, nor Fabric ones a
+    /// Forge-only fix. Anything else (Vanilla) lists every entry as before,
+    /// marked as needing the game module.
+    pub fn applies_to(&self, loader: crate::profiles::Loader) -> bool {
+        let id = match loader {
+            crate::profiles::Loader::LegacyFabric => "legacy-fabric",
+            crate::profiles::Loader::Forge => "forge",
+            crate::profiles::Loader::Vanilla => return true,
+        };
+        self.loaders.is_empty() || self.loaders.contains(&id)
     }
 
     /// The conflict that stands this down when `mod_name` is installed.
@@ -247,6 +265,7 @@ pub const JAVA: &[Optimization] = &[
         control: Control::Switch,
         evidence: Some("Neutralises the System.gc() vanilla calls on world load, which otherwise stalls the client for seconds."),
         conflicts: &[],
+        loaders: &[],
     },
     Optimization {
         id: "jvm.compile-huge-methods",
@@ -262,6 +281,7 @@ pub const JAVA: &[Optimization] = &[
         control: Control::Switch,
         evidence: Some("Measured on 1.8.9: exactly one method in the game exceeds the 8000-byte limit -- RecipeDispatcher.<init> at 8296 bytes, which registers crafting recipes once during startup. No render-path method is near the limit, so there is no frame-time effect to gain."),
         conflicts: &[],
+        loaders: &[],
     },
 ];
 
@@ -291,6 +311,9 @@ struct RegistryEntry {
     evidence: Option<RegistryEvidence>,
     #[serde(default)]
     conflicts: Vec<RegistryConflict>,
+    /// Older exports carry none; they predate Forge and mean Legacy Fabric.
+    #[serde(default)]
+    loaders: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -370,6 +393,14 @@ fn parse_registry(json: &str) -> Vec<Optimization> {
                 },
                 evidence: entry.evidence.map(|evidence| leak(evidence.summary)),
                 conflicts: Box::leak(conflicts.into_boxed_slice()),
+                loaders: {
+                    let loaders: Vec<&'static str> = if entry.loaders.is_empty() {
+                        vec!["legacy-fabric"]
+                    } else {
+                        entry.loaders.into_iter().map(leak).collect()
+                    };
+                    Box::leak(loaders.into_boxed_slice())
+                },
             }
         })
         .collect()
@@ -648,6 +679,24 @@ mod tests {
     /// The Java side's `RegistryTests` fails when the checked-in file is stale;
     /// this checks the other half -- that the launcher reads every entry it
     /// contains, with nothing dropped by a parse it did not understand.
+    #[test]
+    fn a_loader_specific_entry_is_offered_only_on_its_loader() {
+        use crate::profiles::Loader;
+        let forge_only = game()
+            .iter()
+            .find(|entry| entry.id == "render.forge.sky-blend-cache")
+            .expect("the Forge sky blend fix is in the registry");
+        assert!(forge_only.applies_to(Loader::Forge));
+        assert!(!forge_only.applies_to(Loader::LegacyFabric));
+        // Everything else is the same client on both loaders.
+        for entry in game().iter().filter(|entry| entry.id != forge_only.id) {
+            assert!(entry.applies_to(Loader::LegacyFabric), "{}", entry.id);
+            assert!(entry.applies_to(Loader::Forge), "{}", entry.id);
+        }
+        // The JVM flags are the launcher's own and apply anywhere.
+        assert!(JAVA.iter().all(|entry| entry.applies_to(Loader::Forge)));
+    }
+
     #[test]
     fn the_registry_file_is_read_whole() {
         let declared = REGISTRY_JSON.matches("\"id\":").count();

@@ -28,7 +28,9 @@ public final class Compatibility {
     }
 
     /**
-     * The baseline this project targets: 1.8.9 on Legacy Fabric, Java 8.
+     * The baseline this project targets: 1.8.9 on Legacy Fabric or Forge, Java 8.
+     * The Forge build is the same classes renamed (docs/forge.md), so an
+     * optimization runs on both unless its entry narrows it to one.
      *
      * <p>Java 8 is not a preference, it is what the version manifest declares
      * ({@code javaVersion.majorVersion = 8}). {@code performance.md} §5.1 is explicit that
@@ -36,7 +38,7 @@ public final class Compatibility {
      * rather than assumed.
      */
     public static Compatibility baseline() {
-        return builder().minecraft("1.8.9").loader("legacy-fabric").java(8).build();
+        return builder().minecraft("1.8.9").loader("legacy-fabric").loader("forge").java(8).build();
     }
 
     public static Builder builder() {

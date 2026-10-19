@@ -93,7 +93,8 @@ pub struct PulseMark {
 impl SessionPulse {
     /// Whether the module wrote this recently enough to call it live.
     pub fn is_fresh(&self, now: SystemTime) -> bool {
-        let Some(written) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(self.updated_at))
+        let Some(written) =
+            SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(self.updated_at))
         else {
             return false;
         };
@@ -140,7 +141,8 @@ impl SessionPulse {
             *value = millis(*value);
         }
         self.marks.retain(|mark| {
-            (mark.bucket as usize) < buckets.max(1) && matches!(mark.kind.as_str(), "world" | "settings")
+            (mark.bucket as usize) < buckets.max(1)
+                && matches!(mark.kind.as_str(), "world" | "settings")
         });
         self.marks.truncate(16);
         if self.bucket_seconds == 0 {
@@ -231,7 +233,10 @@ mod tests {
 
     #[test]
     fn mismatched_timelines_are_cut_to_the_shorter() {
-        let uneven = FROM_THE_MODULE.replace("\"timelineWorstMs\":[10.0,10.0]", "\"timelineWorstMs\":[10.0]");
+        let uneven = FROM_THE_MODULE.replace(
+            "\"timelineWorstMs\":[10.0,10.0]",
+            "\"timelineWorstMs\":[10.0]",
+        );
         let pulse = parse(&uneven).expect("a document");
         assert_eq!(pulse.timeline_fps.len(), 1);
         assert_eq!(pulse.timeline_worst_ms.len(), 1);
@@ -244,7 +249,10 @@ mod tests {
         let written = SystemTime::UNIX_EPOCH + Duration::from_millis(pulse.updated_at);
         assert!(pulse.is_fresh(written + Duration::from_secs(5)));
         assert!(!pulse.is_fresh(written + Duration::from_secs(60)));
-        assert!(pulse.is_fresh(written - Duration::from_secs(5)), "a clock that moved back");
+        assert!(
+            pulse.is_fresh(written - Duration::from_secs(5)),
+            "a clock that moved back"
+        );
     }
 
     #[test]

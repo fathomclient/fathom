@@ -1243,6 +1243,11 @@ public final class Controls {
                 s.press);
         float radius = Skin.control(area);
         VisualEffects.layeredSurface(ui, area, radius, face, s.hover);
+        // The same resting rim as the dropdown and the stepper beside it: the
+        // sunken fill alone vanishes into the glass, and an unfocused field
+        // read as loose text rather than something to click.
+        ui.rim(area.x, area.y, area.right(), area.bottom(), radius,
+                Skin.mix(Skin.EDGE_SURFACE, Skin.EDGE_ELEVATED, s.hover));
         if (edit > 0.01f) {
             // Editing is focus: the launcher's field wears the signal ring.
             ui.rim(area.x, area.y, area.right(), area.bottom(), radius, Skin.scaleAlpha(Skin.FOCUS, edit));

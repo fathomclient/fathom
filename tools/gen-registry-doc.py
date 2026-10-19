@@ -60,7 +60,8 @@ def generated(entries):
         out.append(f"#### `{e['id']}` — {e['name']}\n")
         out.append(e["description"] + "\n")
         out.append(f"- **Status:** {STATUS[e['status']]}. **Control:** {CONTROL[e['control']]}. "
-                   f"**Class:** {e['category'].title()}. **Group:** {e['groupLabel']}.")
+                   f"**Class:** {e['category'].title()}. **Group:** {e['groupLabel']}. "
+                   f"**Default:** {'on' if e['defaultOn'] else 'off'}.")
         out.append(f"- **Expected benefit:** {e['expectedBenefit']}")
         if e["evidence"]:
             out.append(f"- **Measured** ({e['evidence']['level'].lower().replace('_', '-')}, "

@@ -754,6 +754,9 @@ public final class ViewReport {
         }
         line(out, head.toString());
         for (ViewCounter counter : ViewCounter.ALL) {
+            if (counter.engagement()) {
+                continue; // reported per arm in ENGAGEMENT
+            }
             StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "%-34s", counter.label));
             for (String scene : scenes) {
                 ViewBucket bucket = bucket(scene, NORMAL);
@@ -787,6 +790,72 @@ public final class ViewReport {
         line(out, tags.toString());
         line(out, pairs.toString());
         line(out, "");
+        engagement(out);
+        spikes(out);
+    }
+
+    /**
+     * The tail as spikes, every arm. Sustained cost is the median; this is what
+     * a turn or a first look adds on top of it, and it is kept apart so a
+     * sustained difference is never read as a stutter or the other way round.
+     */
+    private void spikes(StringBuilder out) {
+        line(out, "SPIKES (every arm; frames over a threshold, per 1000 frames)");
+        line(out, "------------------------------------------------------------");
+        line(out, String.format(Locale.ROOT, "%-10s %-22s %7s %7s %7s %7s %8s %7s %7s %7s %9s",
+                "scene", "arm", "median", "p99", "p99.9", "max", ">2x med", ">8ms", ">16ms", ">33ms", "GC n/ms"));
+        for (String scene : scenes) {
+            for (String arm : arms) {
+                ViewBucket bucket = bucket(scene, arm);
+                if (bucket == null || bucket.frames() == 0) {
+                    continue;
+                }
+                double median = bucket.frameMillisAt(50d);
+                line(out, String.format(Locale.ROOT, "%-10s %-22s %7.3f %7.3f %7.3f %7.2f %8.1f %7.1f %7.1f %7.1f %9s",
+                        scene, shortArm(arm), median, bucket.frameMillisAt(99d), bucket.frameMillisAt(99.9d),
+                        bucket.maxFrameMillis(), bucket.framesOverPerThousand(2d * median),
+                        bucket.framesOverPerThousand(8d), bucket.framesOverPerThousand(16d),
+                        bucket.framesOverPerThousand(33d), bucket.gcCount() + "/" + bucket.gcMillis()));
+            }
+        }
+        line(out, "");
+    }
+
+    /**
+     * Each optimization's fast path, per frame, in every arm. The proof that an
+     * optimization ran rather than merely applied: an arm with it switched off
+     * must read zero, and an arm with it on must not.
+     */
+    private void engagement(StringBuilder out) {
+        line(out, "ENGAGEMENT (optimization fast paths taken per frame, every arm)");
+        line(out, "---------------------------------------------------------------");
+        for (String scene : scenes) {
+            for (String arm : arms) {
+                ViewBucket bucket = bucket(scene, arm);
+                if (bucket == null) {
+                    continue;
+                }
+                StringBuilder row = new StringBuilder(String.format(Locale.ROOT, "%-10s %-22s", scene, shortArm(arm)));
+                boolean any = false;
+                for (ViewCounter counter : ViewCounter.ALL) {
+                    double value = counter.engagement() ? bucket.counterPerFrame(counter) : 0d;
+                    if (value > 0d) {
+                        row.append(String.format(Locale.ROOT, " %s=%.2f",
+                                counter.label.substring("engaged: ".length()), value));
+                        any = true;
+                    }
+                }
+                line(out, any ? row.toString() : row.append(" (none)").toString());
+            }
+        }
+        line(out, "");
+    }
+
+    private static String shortArm(String arm) {
+        if (arm.startsWith("off:") && arm.indexOf('+') >= 0) {
+            return "off:" + arm.split("\\+").length + " switches";
+        }
+        return arm.length() <= 22 ? arm : arm.substring(0, 21) + "~";
     }
 
     private void arms(StringBuilder out) {

@@ -60,12 +60,19 @@ public final class Behaviour {
     /** The client world's sky at a fixed hour. Implemented by the sky angle Mixin. */
     public static final String TIME_CHANGER = "time-changer";
 
+    /**
+     * 1.7's first-person animations: the swing carried through blocking (the
+     * blockhit) and through eating, drinking and drawing a bow. Implemented by
+     * the held-item Mixin. Visual and client-only.
+     */
+    public static final String OLD_ANIMATIONS = "old-animations";
+
     /** Timestamps, folded repeats, background and shadow. Implemented by the chat Mixin. */
     public static final String CHAT = "chat";
 
     /** Every behaviour the client implements. */
     public static final String[] ALL = {
-        ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE, PERFORMANCE_LAYER, SCOREBOARD, FULLBRIGHT, TIME_CHANGER, CHAT
+        ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE, PERFORMANCE_LAYER, SCOREBOARD, FULLBRIGHT, TIME_CHANGER, OLD_ANIMATIONS, CHAT
     };
 
     private Behaviour() {}

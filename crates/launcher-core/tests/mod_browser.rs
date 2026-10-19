@@ -203,9 +203,10 @@ fn world() -> World {
     let store: Arc<dyn CredentialStore> = Arc::new(EphemeralCredentialStore::default());
     let launcher = Launcher::new(paths.clone(), store).unwrap();
 
-    let mut index = Index::default();
-    index.projects = vec![project("lib", "library"), project("root", "root-mod")];
-    let index = Arc::new(index);
+    let index = Arc::new(Index {
+        projects: vec![project("lib", "library"), project("root", "root-mod")],
+        ..Index::default()
+    });
     index.files.lock().unwrap().extend([
         stored_file(&paths, "lib", "1", &[]),
         stored_file(&paths, "root", "1", &["lib"]),

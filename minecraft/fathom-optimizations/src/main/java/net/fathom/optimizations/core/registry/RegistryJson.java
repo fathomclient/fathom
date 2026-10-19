@@ -72,6 +72,16 @@ public final class RegistryJson {
             string(out, version);
         }
         out.append("],\n");
+        // Which loaders an entry does anything on, so the launcher can leave a
+        // Forge-only fix out of a Fabric installation's page and the reverse.
+        out.append("      \"loaders\": [");
+        first = true;
+        for (String loader : entry.compatibility().loaders()) {
+            out.append(first ? "" : ", ");
+            first = false;
+            string(out, loader);
+        }
+        out.append("],\n");
         Evidence evidence = entry.evidence();
         if (evidence == null) {
             out.append("      \"evidence\": null,\n");

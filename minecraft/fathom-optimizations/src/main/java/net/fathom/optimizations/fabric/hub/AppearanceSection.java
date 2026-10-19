@@ -27,7 +27,7 @@ import net.fathom.optimizations.fabric.ui.Skin;
 final class AppearanceSection implements Section {
 
     private static final float PRESENTATION_HEIGHT = 92f;
-    private static final float GLASS_HEIGHT = 112f;
+    private static final float GLASS_HEIGHT = 132f;
     private static final float TILE_GAP = Skin.S3;
     private static final float TILE_LABEL = 28f;
     private static final String[] PRESENTATION = {"Fathom background", "Gameplay glass"};
@@ -86,7 +86,7 @@ final class AppearanceSection implements Section {
         float glass = glassReveal.opacity(context.now());
 
         MenuScenes.Scene[] scenes = MenuScenes.all();
-        float width = Math.min(744f, area.width - Skin.S4);
+        float width = Math.min(744f, area.width - Skin.SCROLL_GUTTER);
         float pickerWidth = Math.max(1f, width - Skin.CARD_PADDING * 2f);
         lastColumns = ResponsiveGrid.columns(pickerWidth, 150f, TILE_GAP, 4);
         float cellWidth = ResponsiveGrid.cellWidth(pickerWidth, TILE_GAP, lastColumns);
@@ -183,10 +183,10 @@ final class AppearanceSection implements Section {
         float rowTop = inner.y + ui.lineHeight(Type.LABEL) + Skin.S2;
         float rowHeight = (inner.bottom() - rowTop) / 2f;
         glassRow(context, new Rect(inner.x, rowTop, inner.width, rowHeight), "Blur",
-                "A restrained downsampled GPU blur.", "appearance.glass.blur",
+                "How much the world behind the menu is blurred.", "appearance.glass.blur",
                 ClientPrefs.RSHIFT_BLUR_CHOICES, context.hud().prefs().rshiftBlurChoice(), enabled);
         glassRow(context, new Rect(inner.x, rowTop + rowHeight, inner.width, rowHeight), "Dim",
-                "Neutral tint for legibility over bright play.", "appearance.glass.dim",
+                "Darkens the world behind the menu so text stays readable.", "appearance.glass.dim",
                 ClientPrefs.RSHIFT_DIM_CHOICES, context.hud().prefs().rshiftDimChoice(), enabled);
     }
 
@@ -194,11 +194,10 @@ final class AppearanceSection implements Section {
             String[] options, int selected, boolean enabled) {
         Renderer ui = context.ui();
         float pickerWidth = Math.min(190f, Math.max(142f, area.width * 0.28f));
-        Rect picker = area.vcentreRight(0f, pickerWidth, Skin.H_MD);
-        float top = Controls.stackTop(ui, area, Type.ROW_TITLE, Type.SMALL);
-        ui.text(title, area.x, Controls.stackTitle(ui, top, Type.ROW_TITLE), Type.ROW_TITLE, Skin.TEXT);
-        ui.text(Text.fit(ui, detail, Type.SMALL, picker.x - area.x - Skin.S4), area.x,
-                Controls.stackDetail(ui, top, Type.ROW_TITLE, Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
+        // The same control height and label as a module page's dropdown rows.
+        Rect picker = area.vcentreRight(0f, pickerWidth, Skin.H_SM);
+        net.fathom.optimizations.fabric.ui.FathomSettingRows.label(ui, area, area.x,
+                picker.x - area.x - Skin.S4, title, detail, true);
         int chosen = context.controls().dropdown(ui, id, picker, options, selected, enabled);
         if (chosen != selected) {
             if (id.endsWith("blur")) {

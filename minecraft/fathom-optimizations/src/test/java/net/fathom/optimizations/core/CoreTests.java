@@ -156,8 +156,9 @@ public final class CoreTests {
             check(!entry.expectedBenefit().trim().isEmpty(), entry.id() + " states a benefit");
             check(!entry.references().isEmpty(), entry.id() + " cites something");
             check(
-                    entry.compatibility().applies("1.8.9", "legacy-fabric", 8),
-                    entry.id() + " applies to the target platform");
+                    entry.compatibility().applies("1.8.9", "legacy-fabric", 8)
+                            || entry.compatibility().applies("1.8.9", "forge", 8),
+                    entry.id() + " applies to the target platform (Legacy Fabric, or Forge for a Forge-only fix)");
             check(!entry.defaultExplanation().trim().isEmpty(), entry.id() + " explains its default");
         }
         pass("every registry entry is complete and coherent");
@@ -272,7 +273,8 @@ public final class CoreTests {
         Compatibility baseline = Compatibility.baseline();
         check(baseline.applies("1.8.9", "legacy-fabric", 8), "the target platform applies");
         check(!baseline.applies("1.12.2", "legacy-fabric", 8), "a different version does not");
-        check(!baseline.applies("1.8.9", "forge", 8), "a different loader does not");
+        check(baseline.applies("1.8.9", "forge", 8), "Forge applies: the same client, renamed");
+        check(!baseline.applies("1.8.9", "quilt", 8), "a different loader does not");
         check(!baseline.applies("1.8.9", "legacy-fabric", 7), "an older JVM does not");
         check(
                 baseline.whyNotApplicable("1.12.2", "legacy-fabric", 8).contains("1.8.9"),

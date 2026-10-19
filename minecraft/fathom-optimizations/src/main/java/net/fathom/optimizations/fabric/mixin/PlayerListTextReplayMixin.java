@@ -23,6 +23,7 @@ public abstract class PlayerListTextReplayMixin {
             require = 1, allow = 8)
     private int fathom$replayText(TextRenderer font, String text, float x, float y, int colour) {
         if (Runtime.tabListTextReplay) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.engaged(net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_TAB_LIST);
             return TextLists.drawWithShadow(font, text, x, y, colour);
         }
         return font.drawWithShadow(text, x, y, colour);

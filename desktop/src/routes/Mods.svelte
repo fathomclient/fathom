@@ -546,12 +546,13 @@
         <!-- ---------------------------------------------------- installed -->
         {#if tab === 'installed'}
           {#if view.loader === 'Forge'}
-            <!-- Said once, plainly: a Forge profile is Minecraft, Forge and
-                 these mods. Fathom's own client is a Legacy Fabric mod. -->
+            <!-- Fathom for Forge is the same client as on Legacy Fabric, built
+                 for Forge's names: hub, HUD, menu, shared profiles and the
+                 optimizations. -->
             <p class="builtin-note">
-              This installation runs Forge. Fathom's in-game client — the Hub, HUD modules and performance layer —
-              runs on Legacy Fabric, so it is not part of this installation. Mods here are Forge mods; OptiFine
-              loads directly, with no OptiFabric.
+              This installation runs Forge. Fathom adds Fathom for Forge, the same client as on Legacy Fabric:
+              the Hub, HUD, menu, your shared Fathom profiles and keybinds, and the optimizations. Mods here are
+              Forge mods; OptiFine loads directly, with no OptiFabric.
             </p>
           {/if}
           {#if view.problems.length && !tabbed}

@@ -12,6 +12,22 @@ redistribute it.
 
 ---
 
+## Libraries bundled in Fathom for Forge
+
+The Forge build of the client (`gradle forgeJar`, `fathom-forge-*.jar`) carries
+three libraries Forge 1.8.9 does not provide. The Fabric build carries none of
+them; Fabric's loader supplies its own. The jar includes
+`META-INF/THIRD-PARTY-NOTICES.txt` with these notices and the licence texts.
+
+| Library | Version | Licence | Notes |
+|---|---|---|---|
+| [Mixin](https://github.com/FabricMC/Mixin) (SpongePowered; Fabric's fork) | 0.17.3+mixin.0.8.7 | MIT | Unmodified; its LaunchWrapper service starts the client under Forge |
+| [MixinExtras](https://github.com/LlamaLad7/MixinExtras) (LlamaLad7) | 0.5.4 | MIT | Unmodified |
+| [ASM](https://asm.ow2.io) (OW2; INRIA, France Telecom) | 9.6, plus five classes from 6.2.1 | BSD-3-Clause | **One method modified**: `Type.getTypeInternal` returns an internal-name type for a non-descriptor instead of throwing, the ASM 5 behaviour Forge 1.8.9 relies on. The `Remapping*Adapter` classes are 6.2.1's, unmodified |
+
+Neither Forge nor its deobfuscation table is redistributed: the build reads the
+table to rename Fathom's references and copies none of it into the jar.
+
 ## Background footage
 
 Every recording below is a user-selectable background again (see

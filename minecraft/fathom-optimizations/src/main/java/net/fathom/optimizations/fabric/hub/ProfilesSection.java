@@ -124,6 +124,8 @@ final class ProfilesSection implements Section {
     @Override
     public void render(HubContext context, Rect area) {
         Renderer ui = context.ui();
+        // The right gutter every Hub page leaves, so its panels end where theirs do.
+        area = Rect.of(area.x, area.y, area.right() - Skin.SCROLL_GUTTER, area.bottom());
         ProfileRuntime runtime = context.hud().profiles();
         if (runtime == null) {
             ui.text("Profiles are not available.", area.x, area.y + ui.ascent(Type.BODY), Type.BODY, Skin.WARN);

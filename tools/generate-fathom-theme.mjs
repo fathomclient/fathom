@@ -29,16 +29,16 @@ const METRIC_TABLES = [
   ['graphite.space', /^[1-8]$/],
 ];
 
-function resolveMetrics(node, where) {
+function resolveMetrics(node, where, metrics = theme.metrics) {
   if (typeof node === 'string' && node.startsWith('$')) {
-    const value = theme.metrics?.[node.slice(1)];
+    const value = metrics?.[node.slice(1)];
     if (typeof value !== 'number') throw new Error(`${where} names unknown metric ${node}`);
     return value;
   }
   if (node && typeof node === 'object' && !Array.isArray(node)) {
     for (const [key, value] of Object.entries(node)) {
-      if (where === '' && key === 'metrics') continue;
-      node[key] = resolveMetrics(value, where ? `${where}.${key}` : key);
+      if (where === '' && (key === 'metrics' || key === 'game')) continue;
+      node[key] = resolveMetrics(value, where ? `${where}.${key}` : key, metrics);
     }
   }
   return node;
@@ -60,6 +60,59 @@ function tableAt(dotted, from) {
   }
   resolveMetrics(theme, '');
 }
+
+/*
+ * THE GAME'S DENSITY.
+ *
+ * The launcher is a window of its own; the game's screens float over a world
+ * the player came to see, and at the launcher's control sizes they took most
+ * of it. `game` in the manifest is the game's density: `game.metrics`
+ * overrides metrics by name, and `game.graphite` is merged over `graphite`
+ * (and may add layout keys only the game has, such as the Hub frame). The
+ * manifest is resolved a second time with those, and that resolution is what
+ * every Java output is generated from. The CSS and TypeScript outputs keep
+ * `theme`, so nothing in the launcher changes.
+ *
+ * The rule above holds here too: a control size in a `game.graphite` table is
+ * a "$metric", never a literal, and a `game.metrics` key must name a metric
+ * that exists -- a density is a different value for the same thing, not a new
+ * thing.
+ */
+function mergeOver(base, over, where) {
+  for (const [key, value] of Object.entries(over)) {
+    if (key.startsWith('_')) continue;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      if (base[key] === undefined) base[key] = {};
+      if (typeof base[key] !== 'object') throw new Error(`${where}.${key} replaces a value with a table`);
+      mergeOver(base[key], value, `${where}.${key}`);
+    } else {
+      base[key] = value;
+    }
+  }
+}
+
+const gameTheme = (() => {
+  const raw = JSON.parse(fs.readFileSync(source, 'utf8'));
+  const game = raw.game ?? {};
+  for (const [dotted, pattern] of METRIC_TABLES) {
+    if (!dotted.startsWith('graphite.')) continue;
+    for (const [key, value] of Object.entries(tableAt(`game.${dotted}`, raw) ?? {})) {
+      if (pattern.test(key) && typeof value === 'number') {
+        throw new Error(`game.${dotted}.${key} is the literal ${value}. Write "$<metric>" and set the metric in game.metrics.`);
+      }
+    }
+  }
+  const metrics = {...raw.metrics};
+  for (const [key, value] of Object.entries(game.metrics ?? {})) {
+    if (key.startsWith('_')) continue;
+    if (!(key in raw.metrics)) throw new Error(`game.metrics.${key} overrides no metric`);
+    metrics[key] = value;
+  }
+  raw.metrics = metrics;
+  mergeOver(raw.graphite, game.graphite ?? {}, 'game.graphite');
+  delete raw.game;
+  return resolveMetrics(raw, '', metrics);
+})();
 
 /** The metrics that are counted in device pixels, not dp. */
 const DEVICE_METRICS = new Set(['rim-device-px', 'divider-device-px', 'focus-device-px']);
@@ -218,10 +271,10 @@ function graphiteJava(g) {
   return out;
 }
 
-if (theme.graphite) {
+if (gameTheme.graphite) {
   emit(path.join(root, 'minecraft', 'fathom-optimizations', 'src', 'main', 'java',
     'net', 'fathom', 'optimizations', 'generated', 'GraphiteTokens.java'),
-    graphiteJava(theme.graphite).join('\n'));
+    graphiteJava(gameTheme.graphite).join('\n'));
 }
 
 const motionTs = [
@@ -614,25 +667,25 @@ java.push('/** Generated from assets/theme/fathom-theme.json. Do not edit. */');
 java.push('public final class FathomTheme {');
 java.push('    private FathomTheme() {}');
 java.push('');
-for (const [name, value] of Object.entries(theme.colors)) {
+for (const [name, value] of Object.entries(gameTheme.colors)) {
   java.push(`    public static final int COLOR_${javaName(name)} = ${colour(value)};`);
 }
 java.push('');
-for (const [name, value] of Object.entries(theme.dimensions)) {
+for (const [name, value] of Object.entries(gameTheme.dimensions)) {
   java.push(`    public static final float DIM_${javaName(name)} = ${Number(value).toFixed(1)}f;`);
 }
-for (const [name, value] of Object.entries(theme.ratios)) {
+for (const [name, value] of Object.entries(gameTheme.ratios)) {
   java.push(`    public static final float RATIO_${javaName(name)} = ${Number(value).toFixed(3)}f;`);
 }
 java.push('');
-for (const [name, value] of Object.entries(theme.typography)) {
+for (const [name, value] of Object.entries(gameTheme.typography)) {
   java.push(`    public static final float TYPE_${javaName(name)} = ${Number(value).toFixed(1)}f;`);
 }
 java.push('');
-for (const [name, value] of Object.entries(theme.motion)) {
+for (const [name, value] of Object.entries(gameTheme.motion)) {
   java.push(`    public static final float MOTION_${javaName(name)} = ${(Number(value) / 1000).toFixed(3)}f;`);
 }
-java.push(...systemJava(theme.system));
+java.push(...systemJava(gameTheme.system));
 java.push('');
 java.push('    /**');
 java.push('     * The one control metric system (`metrics` in the manifest): the same');
@@ -643,7 +696,7 @@ java.push('     */');
 java.push('    public static final class Metrics {');
 java.push('        private Metrics() {}');
 java.push('');
-for (const [name, value] of Object.entries(theme.metrics)) {
+for (const [name, value] of Object.entries(gameTheme.metrics)) {
   if (name.startsWith('_')) continue;
   java.push(`        public static final float ${javaName(name)} = ${Number(value).toFixed(1)}f;`);
 }

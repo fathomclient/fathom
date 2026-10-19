@@ -130,7 +130,7 @@ fn random_path(rng: &mut Rng) -> String {
         if i > 0 {
             out.push(*rng.pick(&['/', '\\']));
         }
-        out.push_str(*rng.pick(PATH_FRAGMENTS));
+        out.push_str(rng.pick(PATH_FRAGMENTS));
     }
     out
 }
@@ -377,16 +377,16 @@ fn random_profile_document(rng: &mut Rng) -> Vec<u8> {
             }}
         }}"#,
         schema = rng.below(6),
-        id = escape(*rng.pick(NAMES)),
-        name = escape(*rng.pick(NAMES)),
-        version = escape(*rng.pick(&["1.8.9", "", "../../x"])),
+        id = escape(rng.pick(NAMES)),
+        name = escape(rng.pick(NAMES)),
+        version = escape(rng.pick(&["1.8.9", "", "../../x"])),
         heap = rng.pick(HEAPS),
         w = rng.pick(DIMS),
         h = rng.pick(DIMS),
         full = rng.pick(&["true", "false"]),
         java = escape(&random_path(rng)),
         gamedir = escape(&random_path(rng)),
-        arg = escape(*rng.pick(ARGS)),
+        arg = escape(rng.pick(ARGS)),
         sha = "a".repeat(40),
         modname = escape(&random_path(rng)),
     );
@@ -748,7 +748,7 @@ fn scrubbing_arbitrary_text_always_terminates() {
         let n = rng.below(12) + 1;
         let mut line = String::new();
         for _ in 0..n {
-            line.push_str(*rng.pick(PIECES));
+            line.push_str(rng.pick(PIECES));
         }
         // The assertion is that this returns at all; a hang fails the test by
         // timing out rather than by assertion, which is the only way to observe

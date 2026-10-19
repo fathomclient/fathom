@@ -40,7 +40,24 @@ public enum ViewCounter {
     /** {@code TextRenderer.getStringWidth} calls, every caller. */
     STRING_WIDTHS("string width queries"),
     /** Client ticks run this frame: 0 on most frames, 1 on about one in (fps / 20). */
-    TICKS("client ticks");
+    TICKS("client ticks"),
+
+    // Engagement: each optimization's fast path actually taken, client thread.
+    // A Mixin that applied proves nothing about whether its target is ever
+    // called (Forge draws armour through a method of its own, so the vanilla
+    // hook applied and never ran). These count the work done, so a loader on
+    // which an optimization is applied but idle shows a zero, not a guess.
+    ENGAGED_FONT_METRICS("engaged: font widths from cache"),
+    ENGAGED_CHUNK_LOOKUP("engaged: chunk lookups from cache"),
+    ENGAGED_DIRECTIONS("engaged: shared direction arrays"),
+    ENGAGED_NAMETAG_NAMES("engaged: nametag names from cache"),
+    ENGAGED_ARMOR_TEXTURE("engaged: armour textures from cache"),
+    ENGAGED_SIGN_TEXT("engaged: sign texts from cache"),
+    ENGAGED_ITEM_FRAME("engaged: item frame entities reused"),
+    ENGAGED_SHADOW("engaged: shadow positions reused"),
+    ENGAGED_HUD_REPLAY("engaged: chat/sidebar replayed"),
+    ENGAGED_TAB_LIST("engaged: tab list strings replayed"),
+    ENGAGED_SKY_BLEND("engaged: Forge sky colour from cache");
 
     public static final ViewCounter[] ALL = values();
     public static final int COUNT = ALL.length;
@@ -49,6 +66,11 @@ public enum ViewCounter {
 
     ViewCounter(String label) {
         this.label = label;
+    }
+
+    /** Whether this counts an optimization's fast path rather than work drawn. */
+    public boolean engagement() {
+        return name().startsWith("ENGAGED_");
     }
 
     /** The counter for terrain layer {@code index} in draw order, or null. */

@@ -781,5 +781,59 @@
       "accent-lightness": 0.66,
       "brand-mix": 0.6
     }
+  },
+  "game": {
+    "_about": "The game's density. The launcher is a window of its own; the game's screens float over a world the player came to see, so its controls are a size smaller and its menus leave the scene room. `metrics` overrides a metric by name, `graphite` is merged over `graphite` (and may add layout keys only the game has). Only the Java outputs read this; the launcher is unchanged.",
+    "metrics": {
+      "radius-panel": 14,
+      "radius-control": 9,
+      "radius-small": 7,
+      "control": 28,
+      "control-compact": 24,
+      "control-primary": 32,
+      "input": 28,
+      "search": 28,
+      "segmented": 28,
+      "row": 40,
+      "row-dense": 32,
+      "switch-width": 26,
+      "switch-height": 15,
+      "switch-knob": 11,
+      "icon-nav": 16,
+      "icon-inline": 14,
+      "icon-tile": 16,
+      "tile": 26
+    },
+    "graphite": {
+      "size": {
+        "primary-min-width": 140
+      },
+      "layout": {
+        "_about": "hub-*: the RShift Hub's frame, its section rail and the gap to the page, and its header row. menu-*: the title screen's header, its centred column of actions, the gap between them, and the cap height of its centred logo.",
+        "panel-pad": 12,
+        "panel-pad-dense": 10,
+        "group-gap": 8,
+        "game-margin": 12,
+        "hub-width": 900,
+        "hub-height": 540,
+        "hub-rail": 156,
+        "hub-rail-gap": 16,
+        "hub-header": 28,
+        "hub-header-gap": 14,
+        "menu-header": 44,
+        "menu-column": 208,
+        "menu-gap": 6,
+        "menu-logo-cap": 22
+      },
+      "type": {
+        "title": {"size": 18, "line": 22},
+        "heading": {"size": 14, "line": 18}
+      },
+      "backdrop": {
+        "_about": "The darkening between the scene and a Fathom screen. dim-veil: an even shade over the whole scene, on the Fathom background only (gameplay glass has its own, the RShift dim setting). dim-pool: a soft ellipse of shade under the menu itself, in both modes, so the world stays faintly visible at the edges and the controls sit on calm ground.",
+        "dim-veil": 0.16,
+        "dim-pool": 0.32
+      }
+    }
   }
 }

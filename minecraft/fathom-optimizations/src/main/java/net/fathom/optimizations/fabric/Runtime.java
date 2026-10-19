@@ -51,6 +51,8 @@ public final class Runtime {
 
     public static final net.fathom.optimizations.core.registry.OptimizationId FONT_METRICS_CACHE =
             net.fathom.optimizations.core.registry.OptimizationId.of("render.font.metrics-cache");
+    public static final net.fathom.optimizations.core.registry.OptimizationId FONT_CODE_CASE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.font.format-code-case");
     public static final net.fathom.optimizations.core.registry.OptimizationId CHUNK_LOOKUP_CACHE =
             net.fathom.optimizations.core.registry.OptimizationId.of("world.chunk.lookup-cache");
     public static final net.fathom.optimizations.core.registry.OptimizationId HOT_PATH_ALLOCATION =
@@ -75,6 +77,8 @@ public final class Runtime {
             net.fathom.optimizations.core.registry.OptimizationId.of("render.hud.tab-list-text-replay");
     public static final net.fathom.optimizations.core.registry.OptimizationId SHADOW_ALLOCATION =
             net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.shadow-allocation");
+    public static final net.fathom.optimizations.core.registry.OptimizationId FORGE_SKY_BLEND_CACHE =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.forge.sky-blend-cache");
     public static final net.fathom.optimizations.core.registry.OptimizationId VANILLA_HUD_REPLAY =
             net.fathom.optimizations.core.registry.OptimizationId.of("render.hud.vanilla-replay");
     public static final net.fathom.optimizations.core.registry.OptimizationId PACK_ICON_DOWNSCALE =
@@ -89,6 +93,7 @@ public final class Runtime {
      * value only chooses between two exactly equivalent code paths.
      */
     public static boolean fontMetricsCache;
+    public static boolean fontCodeCase;
     public static boolean chunkLookupCache;
     public static boolean hotPathAllocation;
     public static boolean frameLimiter;
@@ -99,6 +104,7 @@ public final class Runtime {
     public static boolean tabListTextReplay;
     public static boolean shadowAllocation;
     public static boolean itemFrameEntityReuse;
+    public static boolean forgeSkyBlendCache;
 
     /** Re-read the hot switches from the board. Cheap: a handful of map lookups. */
     public static void refreshHotSwitches() {
@@ -107,6 +113,7 @@ public final class Runtime {
             return;
         }
         fontMetricsCache = current.isEnabled(FONT_METRICS_CACHE);
+        fontCodeCase = current.isEnabled(FONT_CODE_CASE);
         chunkLookupCache = current.isEnabled(CHUNK_LOOKUP_CACHE);
         hotPathAllocation = current.isEnabled(HOT_PATH_ALLOCATION);
         frameLimiter = current.isEnabled(FRAME_LIMITER);
@@ -119,6 +126,11 @@ public final class Runtime {
         }
         tabListTextReplay = tabText;
         shadowAllocation = current.isEnabled(SHADOW_ALLOCATION);
+        boolean skyBlend = current.isEnabled(FORGE_SKY_BLEND_CACHE);
+        if (forgeSkyBlendCache && !skyBlend) {
+            net.fathom.optimizations.fabric.perf.ForgeSkyBlend.release();
+        }
+        forgeSkyBlendCache = skyBlend;
         boolean reuse = current.isEnabled(ITEM_FRAME_ENTITY_REUSE);
         if (itemFrameEntityReuse && !reuse) {
             net.fathom.optimizations.fabric.perf.FrameItems.release();
@@ -387,6 +399,7 @@ public final class Runtime {
         // The performance layer's hooks read plain statics; this refreshes them
         // when a setting changed, and resets the per-frame nametag budget.
         net.fathom.optimizations.fabric.perf.PerfLayer.frame();
+        net.fathom.optimizations.fabric.perf.GlyphPages.frame();
         if (net.fathom.optimizations.fabric.diag.UiTour.ACTIVE) {
             net.fathom.optimizations.fabric.diag.UiTour.frame(net.minecraft.client.MinecraftClient.getInstance());
         }

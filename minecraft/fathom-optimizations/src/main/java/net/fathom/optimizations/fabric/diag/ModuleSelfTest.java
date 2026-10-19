@@ -276,6 +276,12 @@ public final class ModuleSelfTest {
                 // behind. Put back in finish().
                 pausedOnFocus = client.options.pauseOnLostFocus;
                 client.options.pauseOnLostFocus = false;
+                // A pause menu already opened by an earlier loss of focus would
+                // sit over every check that needs the world in front.
+                if (client.currentScreen != null) {
+                    say("closing " + client.currentScreen.getClass().getSimpleName() + " left open at join");
+                    client.setScreen(null);
+                }
                 prepareModules();
                 pass("join", client.isInSingleplayer() ? "singleplayer" : "server "
                         + (client.getCurrentServerEntry() == null ? "?" : client.getCurrentServerEntry().address));
@@ -834,6 +840,23 @@ public final class ModuleSelfTest {
                 float server = client.world.dimension.getSkyAngle(client.world.getTimeOfDay(), 1f);
                 check("time changer: off, the sky follows the server again", Math.abs(sky - server) < 0.01f,
                         "sky " + sky + ", server's " + server);
+                // The equip transform is only called for an item in hand: an
+                // empty hand draws the bare arm. Hold one, on the client's copy
+                // only, until the hand has swapped to it and drawn a few frames.
+                heldSlot = client.player.inventory.selectedSlot;
+                heldBefore = client.player.inventory.main[heldSlot];
+                client.player.inventory.main[heldSlot] = new net.minecraft.item.ItemStack(net.minecraft.item.Items.STICK);
+                step = 66;
+                stepStarted = System.nanoTime();
+                return;
+            }
+            case 66: {
+                if (since() < 800L) {
+                    return;
+                }
+                oldAnimationChecks(client);
+                client.player.inventory.main[heldSlot] = heldBefore;
+                heldBefore = null;
                 // The crosshair, in a colour nothing else on screen is.
                 crosshairBefore = snapshot("crosshair");
                 setChoice("crosshair", "shape", "Cross");
@@ -849,7 +872,8 @@ public final class ModuleSelfTest {
                 guiBefore = client.options.guiScale;
                 guiStep = 1;
                 client.options.guiScale = guiStep;
-                next();
+                step = 50;
+                stepStarted = System.nanoTime();
                 return;
             }
             case 50: {
@@ -1023,6 +1047,8 @@ public final class ModuleSelfTest {
     private static float gammaBefore;
     private static int lightBefore;
     private static long timeBefore;
+    private static int heldSlot;
+    private static net.minecraft.item.ItemStack heldBefore;
     private static Map<String, String> crosshairBefore;
     private static int guiBefore;
     private static int guiStep;
@@ -1255,6 +1281,69 @@ public final class ModuleSelfTest {
     }
 
     // -- results -----------------------------------------------------------------
+
+    /**
+     * 1.7 Animations, without a mouse: an item put in use mid-swing, and the
+     * swing the equip transform is handed with the module on and off. Every
+     * value is put back, including the module's own settings.
+     */
+    private static void oldAnimationChecks(MinecraftClient client) {
+        net.minecraft.entity.player.ClientPlayerEntity player = client.player;
+        FathomModule animations = module("old-animations");
+        boolean enabledBefore = animations.enabled();
+        boolean blockhitBefore = animations.toggle("blockhit", true);
+        boolean useSwingBefore = animations.toggle("use-swing", true);
+        boolean hookSeen = net.fathom.optimizations.fabric.visual.OldAnimations.hookSeen();
+        check("1.7 animations: the held-item hook runs", hookSeen,
+                hookSeen ? "" : "the first-person equip transform was never wrapped, holding "
+                        + player.inventory.getMainHandStack());
+        boolean swingingBefore = player.handSwinging;
+        int ticksBefore = player.handSwingTicks;
+        float lastBefore = player.lastHandSwingProgress;
+        float nowBefore = player.handSwingProgress;
+        try {
+            player.handSwinging = true;
+            player.handSwingTicks = 2;
+            player.lastHandSwingProgress = 0.2f;
+            player.handSwingProgress = 0.4f;
+            net.fathom.optimizations.fabric.visual.OldAnimations.frame(0.5f);
+            float expected = player.getHandSwingProgress(0.5f);
+
+            player.setUseItem(new net.minecraft.item.ItemStack(net.minecraft.item.Items.DIAMOND_SWORD), 72000);
+            setEnabled("old-animations", true);
+            setToggle("old-animations", "blockhit", true);
+            float blocking = net.fathom.optimizations.fabric.visual.OldAnimations.swing(0f);
+            check("1.7 animations: blocking keeps the swing (the blockhit)", expected > 0f && blocking == expected,
+                    "expected " + expected + ", got " + blocking);
+            setToggle("old-animations", "blockhit", false);
+            float blockhitOff = net.fathom.optimizations.fabric.visual.OldAnimations.swing(0f);
+            check("1.7 animations: blockhit off, blocking is 1.8's again", blockhitOff == 0f, String.valueOf(blockhitOff));
+            setToggle("old-animations", "blockhit", true);
+            setEnabled("old-animations", false);
+            float moduleOff = net.fathom.optimizations.fabric.visual.OldAnimations.swing(0f);
+            check("1.7 animations: off, blocking is 1.8's again", moduleOff == 0f, String.valueOf(moduleOff));
+
+            player.setUseItem(new net.minecraft.item.ItemStack(net.minecraft.item.Items.COOKED_BEEF), 72000);
+            setEnabled("old-animations", true);
+            setToggle("old-animations", "use-swing", true);
+            float eating = net.fathom.optimizations.fabric.visual.OldAnimations.swing(0f);
+            check("1.7 animations: eating keeps the swing", eating == expected, "expected " + expected + ", got " + eating);
+            setToggle("old-animations", "use-swing", false);
+            float eatingOff = net.fathom.optimizations.fabric.visual.OldAnimations.swing(0f);
+            check("1.7 animations: item swing off, eating is 1.8's again", eatingOff == 0f, String.valueOf(eatingOff));
+            check("1.7 animations: a swing that was already drawn is left alone",
+                    net.fathom.optimizations.fabric.visual.OldAnimations.swing(0.7f) == 0.7f, "");
+        } finally {
+            player.resetUseItem();
+            player.handSwinging = swingingBefore;
+            player.handSwingTicks = ticksBefore;
+            player.lastHandSwingProgress = lastBefore;
+            player.handSwingProgress = nowBefore;
+            setToggle("old-animations", "blockhit", blockhitBefore);
+            setToggle("old-animations", "use-swing", useSwingBefore);
+            setEnabled("old-animations", enabledBefore);
+        }
+    }
 
     private static void check(String name, boolean ok, String detail) {
         if (ok) {

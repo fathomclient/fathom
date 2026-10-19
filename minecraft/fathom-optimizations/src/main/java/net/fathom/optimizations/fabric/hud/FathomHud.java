@@ -176,7 +176,7 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
     public String sessionKind() {
         return SessionName.of(
                 net.fathom.optimizations.fabric.Runtime.bridge().profileName(),
-                net.fabricmc.loader.api.FabricLoader.getInstance().isDevelopmentEnvironment());
+                net.fathom.optimizations.fabric.Platform.development());
     }
 
     /**
@@ -458,7 +458,8 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
             if (cached) {
                 long signature = layerSignature(client, screenWidth, screenHeight);
                 if (signature != 0L
-                        && net.fathom.optimizations.fabric.perf.HudLayerCache.beginFrame(signature, System.nanoTime())) {
+                        && net.fathom.optimizations.fabric.perf.HudLayerCache.beginFrame(
+                                signature, layerContent(client, minecraftFont), System.nanoTime())) {
                     try {
                         for (int index = 0; index < drawing.size(); index++) {
                             Drawable each = drawing.get(index);
@@ -616,6 +617,30 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
         hash = (hash ^ client.height) * 0x100000001b3L;
         hash = (hash ^ System.identityHashCode(layout)) * 0x100000001b3L;
         hash = (hash ^ net.fathom.optimizations.core.module.Setting.revision()) * 0x100000001b3L;
+        return hash == 0L ? 1L : hash;
+    }
+
+    /**
+     * What the cached layer's widgets draw, from their content signatures, or
+     * zero when any of them cannot vouch for it this frame -- the layer then
+     * records on the clock instead (see {@code HudLayerCache}). Width and
+     * height are included as {@link #steadySignature} includes them.
+     */
+    private long layerContent(MinecraftClient client, HudFont font) {
+        long hash = 0xcbf29ce484222325L;
+        for (int index = 0; index < drawing.size(); index++) {
+            Drawable each = drawing.get(index);
+            if (usesFathom(each.owner) || !layered(each)) {
+                continue;
+            }
+            long content = each.renderer.contentSignature(client, font);
+            if (content == 0L) {
+                return 0L;
+            }
+            hash = (hash ^ content) * 0x100000001b3L;
+            hash = (hash ^ each.renderer.width(client, font)) * 0x100000001b3L;
+            hash = (hash ^ each.renderer.height(client, font)) * 0x100000001b3L;
+        }
         return hash == 0L ? 1L : hash;
     }
 

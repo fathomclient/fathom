@@ -307,7 +307,7 @@ mod tests {
 
         let created = run(&paths, &store);
         assert!(
-            !created.iter().any(|made| *made == id),
+            !created.contains(&id),
             "the existing profile must not be re-created"
         );
 

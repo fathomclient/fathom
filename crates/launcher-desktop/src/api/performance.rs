@@ -466,6 +466,9 @@ pub fn view(core: &Launcher, profile: &Profile) -> PerformanceView {
             let rows: Vec<OptimizationRow> = catalogue
                 .iter()
                 .filter(|entry| page_group(entry) == *id && entry.status == Status::Active)
+                // A Forge-only fix is not offered to a Fabric installation,
+                // where it would be a switch with nothing behind it.
+                .filter(|entry| entry.applies_to(profile.loader_kind()))
                 .map(|entry| {
                     let stood_down = standdowns.iter().find(|s| s.optimization == entry.id);
                     // A game-side entry runs only where the module does. The

@@ -58,37 +58,6 @@ public abstract class InGameHudCrosshairMixin {
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/InGameHud;showCrosshair()Z",
                     shift = At.Shift.AFTER))
     private void fathom$drawCrosshair(float tickDelta, org.spongepowered.asm.mixin.injection.callback.CallbackInfo info) {
-        long probe = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
-        try {
-            if (!net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowRenderHooks()
-                    || !net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowHudPass()) return;
-            net.fathom.optimizations.fabric.hud.FathomHud hud = Runtime.hud();
-            if (hud == null) return;
-            net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
-            if (client == null || !net.minecraft.client.MinecraftClient.isHudEnabled()) return;
-            if (client.currentScreen instanceof net.fathom.optimizations.fabric.hud.HudEditorScreen
-                    || client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen) return;
-            java.util.Map<String, String> glBefore = null;
-            java.util.List<String> desyncBefore = null;
-            if (net.fathom.optimizations.fabric.diag.ModuleSelfTest.glChecking()) {
-                glBefore = net.fathom.optimizations.fabric.diag.GlLeakCheck.snapshot();
-                desyncBefore = net.fathom.optimizations.fabric.diag.GlLeakCheck.desync();
-            }
-            boolean drew = hud.renderCrosshair(client);
-            if (drew) {
-                // Put back what the rest of vanilla's HUD expects: its icon
-                // sheet bound, blending on, an untinted colour.
-                com.mojang.blaze3d.platform.GlStateManager.enableTexture();
-                com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, 1f);
-                client.getTextureManager().bindTexture(net.minecraft.client.gui.DrawableHelper.GUI_ICONS_TEXTURE);
-                com.mojang.blaze3d.platform.GlStateManager.enableBlend();
-            }
-            if (glBefore != null && drew) {
-                net.fathom.optimizations.fabric.diag.ModuleSelfTest.glChecked("crosshair", glBefore, desyncBefore);
-            }
-        } finally {
-            net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
-                    net.fathom.optimizations.core.instrument.Probe.Section.MIXIN_CALLBACKS, probe);
-        }
+        net.fathom.optimizations.fabric.hud.HudHooks.crosshair();
     }
 }

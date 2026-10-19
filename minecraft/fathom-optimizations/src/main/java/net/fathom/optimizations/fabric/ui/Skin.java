@@ -285,14 +285,19 @@ public final class Skin {
     /** A module or item mark. */
     public static final float TILE = FathomTheme.Metrics.TILE;
 
-    /** In-game composition tokens; pages use these rather than local guesses. */
-    public static final float SIDEBAR_WIDTH = 172f;
-    public static final float PAGE_INSET_X = 28f;
-    public static final float PAGE_INSET_Y = 24f;
-    public static final float CARD_PADDING = 16f;
-    public static final float CARD_GAP = 16f;
-    public static final float SECTION_GAP = 20f;
-    public static final float ROW_GAP = 12f;
+    /**
+     * In-game composition tokens; pages use these rather than local guesses.
+     * All from the shared theme, so a settings page and the launcher's space
+     * their groups the same (the launcher's {@code --layout-section-gap}).
+     */
+    public static final float PAGE_INSET_X = FathomTheme.DIM_PAGE_PAD_X;
+    public static final float PAGE_INSET_Y = FathomTheme.DIM_PAGE_PAD_Y;
+    public static final float CARD_PADDING = FathomTheme.Metrics.SPACE_4;
+    public static final float CARD_GAP = FathomTheme.Metrics.SPACE_4;
+    public static final float SECTION_GAP = FathomTheme.DIM_PAGE_GAP;
+    public static final float ROW_GAP = FathomTheme.Metrics.SPACE_3;
+    /** Room every Hub page leaves at its right edge for its scroll rail. */
+    public static final float SCROLL_GUTTER = FathomTheme.Metrics.SPACE_4;
 
     /**
      * How much of the screen the hub takes.

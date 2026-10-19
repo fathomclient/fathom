@@ -48,7 +48,7 @@ public final class ProfileLocationTests {
 
     static void windowsAppendsData() {
         ProfileLocation.Resolved resolved = ProfileLocation.resolve(null, null, "Windows 11",
-                "C:\\Users\\jb\\AppData\\Local", "C:\\Users\\jb", null, GAME, EVERYTHING_EXISTS);
+                "C:\\Users\\Example\\AppData\\Local", "C:\\Users\\Example", null, GAME, EVERYTHING_EXISTS);
         check(resolved.source == ProfileLocation.Source.PLATFORM, "the platform rule chose it");
         check(path(resolved).endsWith("AppData/Local/Fathom/data/profiles"), "windows: " + path(resolved));
         pass("Windows appends data");
@@ -56,18 +56,18 @@ public final class ProfileLocationTests {
 
     static void macUsesTheBundleId() {
         ProfileLocation.Resolved resolved = ProfileLocation.resolve(null, null, "Mac OS X", null,
-                "/Users/jb", null, GAME, EVERYTHING_EXISTS);
-        check(path(resolved).equals("/Users/jb/Library/Application Support/Fathom/profiles"), "mac: " + path(resolved));
+                "/Users/Example", null, GAME, EVERYTHING_EXISTS);
+        check(path(resolved).equals("/Users/Example/Library/Application Support/Fathom/profiles"), "mac: " + path(resolved));
         pass("macOS uses the bundle id");
     }
 
     static void linuxLowercasesAndHonoursXdg() {
         ProfileLocation.Resolved withXdg = ProfileLocation.resolve(null, null, "Linux", null,
-                "/home/jb", "/data/xdg", GAME, EVERYTHING_EXISTS);
+                "/home/Example", "/data/xdg", GAME, EVERYTHING_EXISTS);
         check(path(withXdg).equals("/data/xdg/fathom/profiles"), "xdg: " + path(withXdg));
         ProfileLocation.Resolved without = ProfileLocation.resolve(null, null, "Linux", null,
-                "/home/jb", null, GAME, EVERYTHING_EXISTS);
-        check(path(without).equals("/home/jb/.local/share/fathom/profiles"), "default: " + path(without));
+                "/home/Example", null, GAME, EVERYTHING_EXISTS);
+        check(path(without).equals("/home/Example/.local/share/fathom/profiles"), "default: " + path(without));
         pass("Linux lowercases and honours XDG_DATA_HOME");
     }
 
@@ -75,14 +75,14 @@ public final class ProfileLocationTests {
         // The XDG spec says a relative value is invalid and must be ignored, and
         // `directories` ignores it. So must we, or the two part company.
         ProfileLocation.Resolved resolved = ProfileLocation.resolve(null, null, "Linux", null,
-                "/home/jb", "relative/path", GAME, EVERYTHING_EXISTS);
-        check(path(resolved).equals("/home/jb/.local/share/fathom/profiles"), "relative ignored: " + path(resolved));
+                "/home/Example", "relative/path", GAME, EVERYTHING_EXISTS);
+        check(path(resolved).equals("/home/Example/.local/share/fathom/profiles"), "relative ignored: " + path(resolved));
         pass("Linux ignores a relative XDG_DATA_HOME");
     }
 
     static void theLaunchersOwnRootWins() {
         ProfileLocation.Resolved resolved = ProfileLocation.resolve(null, "E:/Portable/Fathom", "Windows 11",
-                "C:\\Users\\jb\\AppData\\Local", "C:\\Users\\jb", null, GAME, EVERYTHING_EXISTS);
+                "C:\\Users\\Example\\AppData\\Local", "C:\\Users\\Example", null, GAME, EVERYTHING_EXISTS);
         check(resolved.source == ProfileLocation.Source.LAUNCHER, "the session chose it");
         check(path(resolved).equals("E:/Portable/Fathom/profiles"), "portable: " + path(resolved));
         pass("the launcher's own root wins over the platform default");
@@ -90,7 +90,7 @@ public final class ProfileLocationTests {
 
     static void anOverrideWinsOverEverything() {
         ProfileLocation.Resolved resolved = ProfileLocation.resolve("/tmp/qa-profiles", "E:/Portable/Fathom",
-                "Windows 11", "C:\\Users\\jb\\AppData\\Local", null, null, GAME, EVERYTHING_EXISTS);
+                "Windows 11", "C:\\Users\\Example\\AppData\\Local", null, null, GAME, EVERYTHING_EXISTS);
         check(resolved.source == ProfileLocation.Source.OVERRIDE, "the override chose it");
         check(path(resolved).equals("/tmp/qa-profiles"), "override: " + path(resolved));
         pass("an override wins over everything");
@@ -98,7 +98,7 @@ public final class ProfileLocationTests {
 
     static void noLauncherMeansProfilesLocalToThisGame() {
         ProfileLocation.Resolved resolved = ProfileLocation.resolve(null, null, "Windows 11",
-                "C:\\Users\\jb\\AppData\\Local", "C:\\Users\\jb", null, GAME, NOTHING_EXISTS);
+                "C:\\Users\\Example\\AppData\\Local", "C:\\Users\\Example", null, GAME, NOTHING_EXISTS);
         check(resolved.source == ProfileLocation.Source.STANDALONE, "standalone");
         check(path(resolved).equals("/games/fathom-1-8-9/minecraft/fathom/profiles"), "local: " + path(resolved));
         pass("no launcher means profiles local to this game");
@@ -106,8 +106,8 @@ public final class ProfileLocationTests {
 
     static void theSessionCarriesTheRootAndOlderSessionsDoNot() {
         String current = "{\n  \"schema\": 1,\n  \"profile\": \"fathom-1-8-9\",\n  \"profileName\": \"Fathom 1.8.9\",\n"
-                + "  \"root\": \"C:\\\\Users\\\\jb\\\\AppData\\\\Local\\\\Fathom\\\\data\"\n}\n";
-        check("C:\\Users\\jb\\AppData\\Local\\Fathom\\data".equals(LaunchSession.parse(current).root()),
+                + "  \"root\": \"C:\\\\Users\\\\Example\\\\AppData\\\\Local\\\\Fathom\\\\data\"\n}\n";
+        check("C:\\Users\\Example\\AppData\\Local\\Fathom\\data".equals(LaunchSession.parse(current).root()),
                 "root is read and unescaped: " + LaunchSession.parse(current).root());
         String older = "{\n  \"schema\": 1,\n  \"profile\": \"fathom-1-8-9\",\n  \"profileName\": \"Fathom 1.8.9\"\n}\n";
         check("".equals(LaunchSession.parse(older).root()), "an older launcher's session has no root");

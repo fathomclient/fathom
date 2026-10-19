@@ -367,7 +367,7 @@ Done on Windows 11 26200 for this milestone, not assumed:
 
 1. `cargo build --workspace --release`
 2. PE subsystem read from the header: `WINDOWS_GUI`, `x64`
-3. `fathom.exe` copied to `C:\Users\jb\FathomPortableTest`, outside the repository
+3. `fathom.exe` copied to `C:\Users\Example\FathomPortableTest`, outside the repository
 4. launched with working directory `C:\Windows\System32`, `UseShellExecute=false`
 5. window opened, titled `Fathom — Play`
 6. data resolved to `%LOCALAPPDATA%\Fathom\data`; the full tree was created

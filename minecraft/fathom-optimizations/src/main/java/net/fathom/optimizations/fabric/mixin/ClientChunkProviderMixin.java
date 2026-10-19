@@ -79,6 +79,8 @@ public abstract class ClientChunkProviderMixin {
         }
         int slot = (int) ((key * 0x9E3779B97F4A7C15L) >>> SHIFT);
         if (fathom$filled[slot] && fathom$keys[slot] == key) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.engaged(
+                    net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_CHUNK_LOOKUP);
             return fathom$chunks[slot];
         }
         Object found = storage.get(key);

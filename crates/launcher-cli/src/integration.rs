@@ -75,7 +75,12 @@ impl Report {
             status,
             detail: detail.into(),
         };
-        println!("  {:<7} {:<22} {}", stage.status.mark(), stage.name, stage.detail);
+        println!(
+            "  {:<7} {:<22} {}",
+            stage.status.mark(),
+            stage.name,
+            stage.detail
+        );
         self.stages.push(stage);
     }
 
@@ -84,7 +89,10 @@ impl Report {
     /// `Blocked` does not count against this: the whole point is to report a
     /// healthy pipeline behind an external blocker as healthy.
     pub fn ok(&self) -> bool {
-        !self.stages.iter().any(|stage| stage.status == Status::Failed)
+        !self
+            .stages
+            .iter()
+            .any(|stage| stage.status == Status::Failed)
     }
 
     pub fn summary(&self) -> String {
@@ -109,14 +117,21 @@ impl Report {
 pub fn run(core: &mut Launcher, profile: &Profile, offline: bool) -> Report {
     let mut report = Report { stages: Vec::new() };
 
-    println!("Integration check: {} ({})", profile.display_name, profile.version_id);
+    println!(
+        "Integration check: {} ({})",
+        profile.display_name, profile.version_id
+    );
     println!("  loader: {}", profile.loader_kind().label());
     println!();
 
     // -- 1. metadata ------------------------------------------------------
     let version = match core.cached_version(&profile.version_id) {
         Some(version) => {
-            report.push("metadata", Status::Passed, format!("{} (cached)", version.id));
+            report.push(
+                "metadata",
+                Status::Passed,
+                format!("{} (cached)", version.id),
+            );
             Some(version)
         }
         None if offline => {
@@ -125,7 +140,11 @@ pub fn run(core: &mut Launcher, profile: &Profile, offline: bool) -> Report {
         }
         None => match core.fetch_version(&profile.version_id) {
             Ok(version) => {
-                report.push("metadata", Status::Passed, format!("{} (fetched)", version.id));
+                report.push(
+                    "metadata",
+                    Status::Passed,
+                    format!("{} (fetched)", version.id),
+                );
                 Some(version)
             }
             Err(error) => {
@@ -167,7 +186,11 @@ pub fn run(core: &mut Launcher, profile: &Profile, offline: bool) -> Report {
     let defects = check.defects.len();
     report.push(
         "installed files",
-        if defects == 0 { Status::Passed } else { Status::Failed },
+        if defects == 0 {
+            Status::Passed
+        } else {
+            Status::Failed
+        },
         if defects == 0 {
             format!("{} of {} verified", check.verified, check.total)
         } else {
@@ -274,7 +297,11 @@ pub fn run(core: &mut Launcher, profile: &Profile, offline: bool) -> Report {
                     .unwrap_or(false);
                 report.push(
                     "performance module",
-                    if module_present { Status::Passed } else { Status::Skipped },
+                    if module_present {
+                        Status::Passed
+                    } else {
+                        Status::Skipped
+                    },
                     if module_present {
                         "present in the mods directory".to_owned()
                     } else {
@@ -286,7 +313,11 @@ pub fn run(core: &mut Launcher, profile: &Profile, offline: bool) -> Report {
             Err(error) => report.push("mods", Status::Failed, error.to_string()),
         }
     } else {
-        report.push("mods", Status::Skipped, "this loader reads no mods directory");
+        report.push(
+            "mods",
+            Status::Skipped,
+            "this loader reads no mods directory",
+        );
         report.push("performance module", Status::Skipped, "needs a mod loader");
     }
 
@@ -331,7 +362,11 @@ pub fn run(core: &mut Launcher, profile: &Profile, offline: bool) -> Report {
             );
             report.push(
                 "launch plan",
-                if is_auth { Status::Blocked } else { Status::Failed },
+                if is_auth {
+                    Status::Blocked
+                } else {
+                    Status::Failed
+                },
                 text,
             );
         }

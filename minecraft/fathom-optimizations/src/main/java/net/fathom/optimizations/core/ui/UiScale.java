@@ -63,12 +63,14 @@ public final class UiScale {
 
     /**
      * The smallest logical canvas a Fathom screen is laid out for: the Hub's
-     * 1040x600 frame and the game margin on each side. A larger scale than
-     * one that leaves this much room made the Hub's rail run into its page
-     * and its page run off the window.
+     * frame and the game margin on each side (theme {@code game.graphite.layout}).
+     * A larger scale than one that leaves this much room made the Hub's rail
+     * run into its page and its page run off the window.
      */
-    public static final float SCREEN_MIN_WIDTH = 1040f + 2f * 16f;
-    public static final float SCREEN_MIN_HEIGHT = 600f + 2f * 16f;
+    public static final float SCREEN_MIN_WIDTH = net.fathom.optimizations.generated.GraphiteTokens.LAYOUT_HUB_WIDTH
+            + 2f * net.fathom.optimizations.generated.GraphiteTokens.LAYOUT_GAME_MARGIN;
+    public static final float SCREEN_MIN_HEIGHT = net.fathom.optimizations.generated.GraphiteTokens.LAYOUT_HUB_HEIGHT
+            + 2f * net.fathom.optimizations.generated.GraphiteTokens.LAYOUT_GAME_MARGIN;
 
     /**
      * The preference a screen is drawn at: what the user asked for, lowered

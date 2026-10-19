@@ -1,3 +1,5 @@
 [toolchain]
-channel = "stable"
+# Pinned: a floating "stable" brought new clippy lints that broke the
+# -D warnings gate without any code change (2026-10-18). Bump deliberately.
+channel = "1.98.0"
 components = ["rustfmt", "clippy"]

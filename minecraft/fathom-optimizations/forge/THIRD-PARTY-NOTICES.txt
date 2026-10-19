@@ -1,0 +1,55 @@
+Fathom for Forge -- third-party software in this jar
+=====================================================
+
+This jar is Fathom's client (Apache-2.0, LICENSE_fathom-optimizations) with
+three libraries bundled, because Forge 1.8.9 provides neither Mixin nor an ASM
+new enough for it. The Fabric build carries none of them: Fabric's loader
+supplies its own.
+
+Mixin (org.spongepowered.asm), Fabric's build 0.17.3+mixin.0.8.7
+  Copyright (c) SpongePowered and contributors; Fabric fork by FabricMC.
+  MIT License -- the full text is LICENSE.txt in this jar.
+  https://github.com/FabricMC/Mixin
+
+MixinExtras (com.llamalad7.mixinextras) 0.5.4
+  Copyright (c) LlamaLad7.
+  MIT License -- the full text is LICENSE_MixinExtras in this jar.
+  https://github.com/LlamaLad7/MixinExtras
+
+ASM (org.objectweb.asm) 9.6, with five classes from ASM 6.2.1
+  Copyright (c) 2000-2011 INRIA, France Telecom. All rights reserved.
+  BSD-3-Clause License, below. https://asm.ow2.io
+
+  MODIFIED: org/objectweb/asm/Type.class. Type.getTypeInternal returns an
+  internal-name type for a string that is not a descriptor, where ASM 9.6
+  throws. Forge 1.8.9 relies on ASM 5's behaviour there. Nothing else in ASM is
+  changed. The five classes org/objectweb/asm/commons/Remapping*Adapter.class
+  are ASM 6.2.1's, unmodified; ASM 9 no longer has them and Forge uses them.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
+  1. Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+  2. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+  3. Neither the name of the copyright holders nor the names of its
+     contributors may be used to endorse or promote products derived from
+     this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+  THE POSSIBILITY OF SUCH DAMAGE.
+
+Not in this jar: Forge, Minecraft, or the mapping tables used to build it.
+The build reads Forge's deobfuscation table to rename Fathom's references; the
+table itself is not copied into the output.

@@ -65,6 +65,7 @@ public final class ModuleTests {
         everyBehaviourIsClaimedAndEveryClaimIsImplemented();
         everyWidgetModuleCarriesTheCommonHudSettings();
         everyHudModuleDefaultsToMinecraftFont();
+        styleSettingsSayWhenTheyHaveNoEffect();
         vanillaCrosshairIsUntouchedUntilReplacementIsEnabled();
         vanillaButtonsHaveNoGlobalDrawInterceptor();
         keystrokesHasIndependentVisualControls();
@@ -207,6 +208,34 @@ public final class ModuleTests {
         check("Minecraft".equals(after.find("coordinates").choice(HudStyle.FONT, "missing")),
                 "FPS font did not leak into Coordinates");
         pass("HUD fonts default to Minecraft and persist per module");
+    }
+
+    /**
+     * The module page greys a style value that changes nothing as the others
+     * are set (HudStyle.inactiveReason), and writes units as the sliders do.
+     */
+    static void styleSettingsSayWhenTheyHaveNoEffect() {
+        FathomModule clock = ModuleRegistry.standard().find("clock");
+        ((Setting.Choice) clock.setting(HudStyle.BACKGROUND)).set("None");
+        ((Setting.Toggle) clock.setting(HudStyle.BORDER)).set(false);
+        check(HudStyle.inactiveReason(clock, HudStyle.BACKGROUND_COLOUR) != null, "no plate, no plate colour");
+        check(HudStyle.inactiveReason(clock, HudStyle.BACKGROUND_OPACITY) != null, "no plate, no strength");
+        check(HudStyle.inactiveReason(clock, HudStyle.DROP_SHADOW) != null, "no plate, no shadow");
+        check(HudStyle.inactiveReason(clock, HudStyle.RADIUS) != null, "nothing to round");
+        check(HudStyle.inactiveReason(clock, HudStyle.BORDER_COLOUR) != null, "no border, no border colour");
+        check(HudStyle.inactiveReason(clock, HudStyle.PADDING) == null, "padding always spaces the text");
+        check(HudStyle.inactiveReason(clock, HudStyle.TEXT_COLOUR) == null, "text colour always applies");
+
+        ((Setting.Toggle) clock.setting(HudStyle.BORDER)).set(true);
+        check(HudStyle.inactiveReason(clock, HudStyle.RADIUS) == null, "a border is rounded too");
+        check(HudStyle.inactiveReason(clock, HudStyle.BORDER_WIDTH) == null, "a border has a width");
+        ((Setting.Choice) clock.setting(HudStyle.BACKGROUND)).set("Standard");
+        check(HudStyle.inactiveReason(clock, HudStyle.BACKGROUND_COLOUR) == null, "a plate has a colour");
+
+        check("100%".equals(clock.setting(HudStyle.BACKGROUND_OPACITY).display()),
+                "a percentage is written 100%, not " + clock.setting(HudStyle.BACKGROUND_OPACITY).display());
+        check(clock.setting(HudStyle.PADDING).display().endsWith(" px"), "pixels keep their space");
+        pass("style settings say when they have no effect, and units read as the sliders write them");
     }
 
     /** The default path neither draws Fathom's crosshair nor cancels vanilla's. */

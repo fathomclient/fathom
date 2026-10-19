@@ -128,7 +128,7 @@ build enables it by default. Even with a key, CurseForge has no Legacy Fabric lo
 
 ## Forge installations
 
-A Custom installation with Forge browses for Forge: the search asks for the
+An installation on Forge (Custom or Fathom) browses for Forge: the search asks for the
 `forge` loader, **Verified Forge** means a 1.8.9 build tagged for Forge, and
 "Include unverified" adds builds that state no loader -- not plain Fabric builds,
 which are plausible only for Legacy Fabric. Fabric, Legacy Fabric and Ornithe

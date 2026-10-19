@@ -354,14 +354,15 @@ impl CatalogProvider for ModrinthProvider {
                     index: Self::index(query.sort),
                     compatible_only: !query.include_incompatible,
                     loader_scope: match query.breadth {
-                        Breadth::Tagged => LoaderScope::Exact,
                         // Plain `fabric` builds are plausible only for Legacy
                         // Fabric (pre-tag uploads). For Forge they are just
                         // Fabric mods, which the loader would never load.
-                        Breadth::Plausible if query.target.loader == crate::profiles::Loader::LegacyFabric => {
+                        Breadth::Plausible
+                            if query.target.loader == crate::profiles::Loader::LegacyFabric =>
+                        {
                             LoaderScope::WithFabric
                         }
-                        Breadth::Plausible => LoaderScope::Exact,
+                        Breadth::Tagged | Breadth::Plausible => LoaderScope::Exact,
                         Breadth::AnyLoader => LoaderScope::Any,
                     },
                 },

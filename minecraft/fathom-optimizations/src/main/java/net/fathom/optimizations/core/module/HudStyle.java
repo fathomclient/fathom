@@ -135,7 +135,7 @@ public final class HudStyle {
     /** Keep the id stable and accept the old toggle's stored values. */
     private static Setting.Choice material(String label, String fallback) {
         return new Setting.Choice(BACKGROUND, label,
-                "HUD-safe substrate density. None draws text only.", fallback, MATERIAL_CHOICES)
+                "The plate behind the text. None draws the text alone.", fallback, MATERIAL_CHOICES)
                 .alias("true", "Standard")
                 .alias("false", "None");
     }
@@ -218,6 +218,36 @@ public final class HudStyle {
     public static boolean dropShadow(FathomModule module) {
         return module != null && module.toggle(DROP_SHADOW, false);
     }
+
+    /**
+     * Why a style setting has no effect with the module's other settings as
+     * they are, or null when it does. The page greys such a row and says why,
+     * rather than offering a control that silently changes nothing: with no
+     * material there is no plate to colour, shadow or round, and with no
+     * border there is no outline to colour or widen.
+     */
+    public static String inactiveReason(FathomModule module, String settingId) {
+        if (module == null || module.setting(BACKGROUND) == null) {
+            return null;
+        }
+        boolean plate = background(module);
+        boolean outline = border(module);
+        if (BACKGROUND_COLOUR.equals(settingId) || BACKGROUND_OPACITY.equals(settingId)
+                || DROP_SHADOW.equals(settingId)) {
+            return plate ? null : NEEDS_MATERIAL;
+        }
+        if (RADIUS.equals(settingId)) {
+            return plate || outline ? null : NEEDS_MATERIAL_OR_BORDER;
+        }
+        if (BORDER_COLOUR.equals(settingId) || BORDER_WIDTH.equals(settingId)) {
+            return outline ? null : NEEDS_BORDER;
+        }
+        return null;
+    }
+
+    static final String NEEDS_MATERIAL = "No effect while the material is None.";
+    static final String NEEDS_MATERIAL_OR_BORDER = "No effect without a material or a border.";
+    static final String NEEDS_BORDER = "No effect while Border is off.";
 
     /** Whether an outline is drawn around the plate. Independent of the plate itself. */
     public static boolean border(FathomModule module) {

@@ -62,6 +62,7 @@ public abstract class InGameHudSidebarReplayMixin {
             fathom$recordable = !fathom$obfuscated(objective, scoreboard);
         }
         if (!VanillaHudReplay.SIDEBAR.begin(signature, fathom$recordable)) {
+            net.fathom.optimizations.core.bench.view.ViewProbe.engaged(net.fathom.optimizations.core.bench.view.ViewCounter.ENGAGED_HUD_REPLAY);
             callback.cancel();
             if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
                 net.fathom.optimizations.core.bench.view.ViewProbe.exit(

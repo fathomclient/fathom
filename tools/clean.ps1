@@ -36,7 +36,8 @@ param(
     # Actually delete. Without this the script only reports.
     [switch] $Delete,
 
-    # Also remove benchmark result JSON (`run-ab/fathom-bench`). Off by default:
+    # Also remove benchmark results: `run-ab/fathom-bench` and `run/fathom-bench`
+    # JSON, and the multiplayer reports in `run-mp/logs`. Off by default:
     # those files are measurements, and a measurement is not regenerable in the
     # way a build output is -- reproducing it means another twenty-minute run on
     # a machine in a different thermal state.
@@ -146,6 +147,38 @@ if ($Results) {
     Add-Target (Join-Path $benchRoot "fathom-bench") "benchmark RESULTS (measurements)"
 }
 Add-Target (Join-Path $root "tools\.bench-classpath.txt") "cached launch classpath"
+
+# -- the multiplayer benchmark (tools/mp-bench) ------------------------------
+# Deliberately kept: run-mp/server (the downloaded server jar, and the world and
+# arena that `mpbench.py prepare` generates), run-mp/saves (the arena copied from
+# it), and run-mp/fathom-profiles (the bench client's profile, copied once).
+$mpRoot = Join-Path $root "minecraft\fathom-optimizations\run-mp"
+Add-Target (Join-Path $mpRoot "mods") "multiplayer bench mods (recopied per run)"
+Add-Target (Join-Path $mpRoot ".fabric") "multiplayer bench Fabric remap cache"
+Add-Target (Join-Path $mpRoot ".optifine") "multiplayer bench OptiFine patch cache"
+Add-Target (Join-Path $mpRoot "control") "multiplayer bench scene-driver handshake files"
+Add-Target (Join-Path $mpRoot "crash-reports") "multiplayer bench crash reports"
+Add-Target (Join-Path $mpRoot "server\logs") "multiplayer bench server logs"
+foreach ($name in @("client-console.log", "server-console.log")) {
+    Add-Target (Join-Path $mpRoot $name) "multiplayer bench console log"
+}
+if (Test-Path -LiteralPath $mpRoot) {
+    Get-ChildItem -LiteralPath $mpRoot -Filter "serve-*.log" -File -ErrorAction SilentlyContinue |
+        ForEach-Object { Add-Target $_.FullName "multiplayer bench console log" }
+}
+$mpLogs = Join-Path $mpRoot "logs"
+if (Test-Path -LiteralPath $mpLogs) {
+    # Game logs only; the fathom-mp-* reports beside them are measurements.
+    Get-ChildItem -LiteralPath $mpLogs -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "*.log.gz" -or $_.Name -eq "latest.log" } |
+        ForEach-Object { Add-Target $_.FullName "multiplayer bench game logs" }
+    if ($Results) {
+        # compare_builds.py writes each report twice: timestamped, and again under
+        # its tag. Reports worth keeping are copied to benchmarks/reports.
+        Get-ChildItem -LiteralPath $mpLogs -Filter "fathom-mp-*" -File -ErrorAction SilentlyContinue |
+            ForEach-Object { Add-Target $_.FullName "multiplayer bench RESULTS (measurements)" }
+    }
+}
 # Deliberately NOT removed by default: the launcher reads this before it reads
 # application data, so deleting it silently sends the next launch back to
 # whatever stale jar %LOCALAPPDATA% happens to hold.
@@ -158,13 +191,31 @@ if ($All) {
 $runRoot = Join-Path $root "minecraft\fathom-optimizations\run"
 Add-Target (Join-Path $runRoot "logs") "development client logs"
 Add-Target (Join-Path $runRoot "crash-reports") "development client crash reports"
-if (Test-Path -LiteralPath (Join-Path $runRoot "screenshots")) {
-    # Only the ones the QA harness writes. A timestamped screenshot was taken by
-    # a person and is not this script's to judge.
-    Get-ChildItem -LiteralPath (Join-Path $runRoot "screenshots") -Filter "fathom-*.png" `
-        -File -ErrorAction SilentlyContinue |
-        ForEach-Object { Add-Target $_.FullName "QA screenshot" }
+# Profile copies an earlier QA phase left inside the instance; nothing reads them.
+foreach ($stale in @("phase4b-profiles", "phase4c-profiles", "phase4c-profiles-1080")) {
+    Add-Target (Join-Path $runRoot "build\$stale") "stale QA profile copies"
 }
+if ($Results) {
+    Add-Target (Join-Path $runRoot "fathom-bench") "development client bench RESULTS (measurements)"
+}
+foreach ($instance in @($runRoot, $mpRoot)) {
+    $shots = Join-Path $instance "screenshots"
+    if (Test-Path -LiteralPath $shots) {
+        # Only the ones the QA harness (fathom-*) and the UI tour (tour-*) write.
+        # A timestamped screenshot was taken by a person and is not this
+        # script's to judge.
+        Get-ChildItem -LiteralPath $shots -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "fathom-*.png" -or $_.Name -like "tour-*.png" } |
+            ForEach-Object { Add-Target $_.FullName "QA screenshot" }
+    }
+}
+
+# -- generated frontend and data bundles --------------------------------------
+# All rebuilt by tools/build-all.ps1 or gradle exportWebData; ignored by git.
+Add-Target (Join-Path $root "desktop\dist") "desktop frontend build output (Vite)"
+Add-Target (Join-Path $root "desktop\.vite") "Vite cache"
+Add-Target (Join-Path $root "crates\launcher-ui\gen") "tauri-build schema cache"
+Add-Target (Join-Path $root "web-export") "website data bundle (gradle exportWebData)"
 
 # -- JVM crash dumps, wherever they landed ----------------------------------
 foreach ($pattern in @("hs_err_pid*.log", "replay_pid*.log", "*.hprof")) {
@@ -175,7 +226,14 @@ foreach ($pattern in @("hs_err_pid*.log", "replay_pid*.log", "*.hprof")) {
 
 # -- optional, larger ------------------------------------------------------
 if ($CargoTarget) { Add-Target (Join-Path $root "target") "Cargo build output" }
-if ($Dist) { Add-Target (Join-Path $root "dist") "packaging output" }
+if ($Dist) {
+    Add-Target (Join-Path $root "dist") "packaging output"
+    # Test launchers from `build-all.ps1 -OutputName <name>.exe`: each a folder
+    # with its exe and resources\. Only folders that hold that layout.
+    Get-ChildItem -LiteralPath $root -Directory -Filter "Fathom-*" -ErrorAction SilentlyContinue |
+        Where-Object { (Test-Path -LiteralPath (Join-Path $_.FullName "$($_.Name).exe")) } |
+        ForEach-Object { Add-Target $_.FullName "test launcher build" }
+}
 
 # -- the Fathom data directory: only our own leavings -----------------------
 if (Test-Path -LiteralPath $data) {
