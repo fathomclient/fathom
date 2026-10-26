@@ -79,6 +79,15 @@ ed25519-dalek = { version = "2.2", default-features = false, features = [
     "zeroize",
 ] }
 
+# Debug builds: line tables for our own crates (backtraces still name file and
+# line), no debug info for dependencies. Full debug info for ~400 dependencies
+# was most of target/'s size and nothing here steps through them in a debugger.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 opt-level = "z"
 lto = true

@@ -175,6 +175,8 @@ if (-not $SkipLauncher) {
     }
 
     Step "Building the launcher"
+    # Cargo never shrinks target/ on its own; see tools/cap-target.ps1.
+    & (Join-Path $PSScriptRoot "cap-target.ps1")
     Push-Location $root
     try {
         if ($DebugBuild) {
