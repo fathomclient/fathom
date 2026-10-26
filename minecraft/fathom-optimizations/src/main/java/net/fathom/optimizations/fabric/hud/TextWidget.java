@@ -118,6 +118,11 @@ public abstract class TextWidget implements HudWidget {
         return alignment;
     }
 
+    /** This frame's lines, for the in-game self-test. */
+    public final List<String> linesForCheck(MinecraftClient client) {
+        return currentLines(client);
+    }
+
     /** The line builder, at most once per HUD frame. */
     protected final List<String> currentLines(MinecraftClient client) {
         long frame = Widgets.frameNumber();

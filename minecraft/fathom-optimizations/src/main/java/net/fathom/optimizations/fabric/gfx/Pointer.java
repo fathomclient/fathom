@@ -133,7 +133,7 @@ public final class Pointer {
                 continue;
             }
             boolean now = button == 0 && scriptedPrimary != null
-                    ? scriptedPrimary.booleanValue() : Mouse.isButtonDown(button);
+                    ? scriptedPrimary.booleanValue() : net.fathom.optimizations.fabric.input.MouseButtons.isDown(button);
             boolean before = down[button];
             // On the very first frame every button counts as "was already down",
             // so nothing that was held when the screen opened fires.

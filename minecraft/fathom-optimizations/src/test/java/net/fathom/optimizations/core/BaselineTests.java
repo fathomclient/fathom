@@ -343,6 +343,13 @@ public final class BaselineTests {
         check(net.fathom.optimizations.core.visual.Lighting.ticks("Noon", 3) == 6000L, "a preset ignores the hour");
         check(net.fathom.optimizations.core.visual.Lighting.ticks("Custom", 21) == 15000L, "custom uses it");
         check(net.fathom.optimizations.core.visual.Lighting.ticks("Dusk", 0) == 12500L, "dusk is the sun on the horizon");
+        check(net.fathom.optimizations.core.visual.Lighting.visualTimeOfDay(5 * 24000L + 23999L, 6000L)
+                == 5 * 24000L + 6000L, "the override keeps the real day and replaces the tick of the day");
+        check(net.fathom.optimizations.core.visual.Lighting.visualTimeOfDay(5 * 24000L, 6000L)
+                == net.fathom.optimizations.core.visual.Lighting.visualTimeOfDay(5 * 24000L + 12345L, 6000L),
+                "the presented time does not move as the real clock advances");
+        check(net.fathom.optimizations.core.visual.Lighting.visualTimeOfDay(-1L, 6000L) == -24000L + 6000L,
+                "a negative world time still floors to its own day");
         pass("fullbright never dims, and time changer shows the chosen hour");
     }
 

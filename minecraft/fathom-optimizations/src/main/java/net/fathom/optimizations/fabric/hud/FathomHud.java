@@ -115,6 +115,16 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
     }
 
     /** Where this installation keeps its files. For the editor preferences. */
+    private net.fathom.optimizations.core.hud.HubState hubState;
+
+    /** Where the Hub was left, read the first time it is asked for. Render thread only. */
+    public net.fathom.optimizations.core.hud.HubState hubState() {
+        if (hubState == null) {
+            hubState = net.fathom.optimizations.core.hud.HubState.read(gameDirectory);
+        }
+        return hubState;
+    }
+
     public java.io.File gameDirectory() {
         return gameDirectory;
     }
@@ -322,6 +332,24 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
         return features.owningWidget(widgetId);
     }
 
+    /** Widgets the Hub asks to see behind its window while a module's page is open; null for none. */
+    private java.util.List<String> hubPreview;
+
+    /**
+     * Show only these widgets, through the ordinary HUD pass, behind the Hub's
+     * window: the live preview of a module's page under Gameplay glass. Set by
+     * the Hub as its page is drawn and cleared when it closes; nothing is drawn
+     * twice, and nothing here takes input.
+     */
+    public void previewUnderHub(java.util.List<String> widgetIds) {
+        hubPreview = widgetIds == null || widgetIds.isEmpty() ? null : widgetIds;
+    }
+
+    /** Whether the Hub currently wants a module's widgets drawn behind it. */
+    public boolean hubPreviewing() {
+        return hubPreview != null;
+    }
+
     /** Hold one widget exactly where it is placed while the editor drags it; null lets go. */
     public void pin(String widgetId) {
         pinned = widgetId;
@@ -415,6 +443,12 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
             // Mods hides its widget on the next frame; there is no second flag
             // in the layout that can disagree with it.
             if (!allowed) {
+                continue;
+            }
+            // Under the Hub only the page's own widgets, so a module's setting
+            // can be seen changing in the place the widget really sits.
+            if (hubPreview != null && client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen
+                    && !hubPreview.contains(widget.id())) {
                 continue;
             }
             if (!editing && !renderer.visible(client)) {
@@ -660,7 +694,7 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
         for (int index = 0; index < drawing.size(); index++) {
             Drawable each = drawing.get(index);
             each.steady = false;
-            if (usesFathom(each.owner) || layered(each)) {
+            if (usesFathom(each.owner) || layered(each) || HudStyle.rainbow(each.owner)) {
                 continue;
             }
             long content = each.renderer.contentSignature(client, font);
@@ -707,8 +741,10 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
             this.placement = placement;
             this.owner = owner;
             this.steady = false;
+            // Rainbow text changes every frame without its content changing,
+            // so it is never cached: drawn live like an animating widget.
             this.layered = net.fathom.optimizations.fabric.perf.HudLayerCache.cacheable(renderer.id())
-                    && !renderer.animating(client);
+                    && !renderer.animating(client) && !HudStyle.rainbow(owner);
             return this;
         }
     }
@@ -773,7 +809,7 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
     private void drawOne(MinecraftClient client, HudFont font, Drawable each, boolean editing) {
         // Told its edge again: arrange() measured every widget before any was
         // drawn, and the last one measured is not necessarily this one.
-        each.renderer.align(each.placement.anchor().horizontal());
+        each.renderer.align(each.placement.textAlignment());
         drawOne(client, font, each.renderer, each.placement, each.x, each.y, editing);
     }
 
@@ -919,7 +955,7 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
             Placement placement,
             int screenWidth,
             int screenHeight) {
-        renderer.align(placement.anchor().horizontal());
+        renderer.align(placement.textAlignment());
         float scale = placement.scale();
         int width;
         int height;
@@ -935,11 +971,14 @@ public final class FathomHud implements net.fathom.optimizations.core.profile.Pr
             width = Math.round(previewWidth(font, renderer, owner) * scale);
             height = Math.round(previewHeight(font, renderer, owner) * scale);
         }
-        int x = placement.anchor().x(screenWidth, width, placement.offsetX());
+        // The one place a box's left edge is decided: drawing, the editor's hit
+        // boxes, snapping and dragging all read it back from here, with the same
+        // measured width, so they cannot disagree about where the text is.
+        int x = net.fathom.optimizations.core.hud.HudGeometry.clampLeft(
+                net.fathom.optimizations.core.hud.HudGeometry.left(placement.anchor(), placement.textAnchor(),
+                        screenWidth, width, placement.offsetX()),
+                width, screenWidth);
         int y = placement.anchor().y(screenHeight, height, placement.offsetY());
-        if (width <= screenWidth) {
-            x = Math.max(0, Math.min(x, screenWidth - width));
-        }
         if (height <= screenHeight) {
             y = Math.max(0, Math.min(y, screenHeight - height));
         }

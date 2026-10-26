@@ -69,14 +69,24 @@ final class QuadBatch {
     }
 
     static void end() {
+        finish(770, 771);
+    }
+
+    /** {@link #end}, blended the way vanilla's crosshair is: inverting what is behind. */
+    static void endInverted() {
+        finish(775, 769);
+    }
+
+    private static void finish(int source, int destination) {
         if (!open) {
             return;
         }
         open = false;
         GlStateManager.enableBlend();
         GlStateManager.disableTexture();
-        GlStateManager.blendFuncSeparate(770, 771, 1, 0);
+        GlStateManager.blendFuncSeparate(source, destination, 1, 0);
         Tessellator.getInstance().draw();
+        GlStateManager.blendFuncSeparate(770, 771, 1, 0);
         // Leave the state as the last `fill` would have: its colour current,
         // texturing back on, blending off.
         GlStateManager.color((lastArgb >> 16 & 0xFF) / 255f, (lastArgb >> 8 & 0xFF) / 255f,

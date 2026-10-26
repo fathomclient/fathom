@@ -70,7 +70,9 @@ public final class HudHooks {
             GlStateManager.pushMatrix();
             undone = true;
             GlStateManager.translate(0f, -(height - 48), 0f);
+            long hitch = net.fathom.optimizations.fabric.diag.Hitches.begin();
             hud.render(client, false);
+            net.fathom.optimizations.fabric.diag.Hitches.end(net.fathom.optimizations.fabric.diag.Hitches.Section.HUD_PASS, hitch);
         } finally {
             if (undone) {
                 GlStateManager.popMatrix();
@@ -174,7 +176,12 @@ public final class HudHooks {
         // Nor under the Hub: it is transparent now, and widgets drawn under
         // its header and rail read as clutter on top of it. A module's own
         // page previews its widget.
-        if (client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen) return false;
+        if (client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen) {
+            // Except the one module's widgets its page is previewing, and only
+            // then (Gameplay glass, a module open): see FathomHud#previewUnderHub.
+            return Runtime.hud().hubPreviewing()
+                    && net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowHudPass();
+        }
         // The benchmark's minimal pass switches the whole HUD off here rather
         // than switching eleven widgets off individually: the question it
         // answers is what the pass costs, including the frame it opens.

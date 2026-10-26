@@ -194,7 +194,7 @@ function graphiteCss(g) {
     out.push(`  --g-type-${name}-tracking: ${r.tracking}em;`);
   }
   out.push(`  --g-ease: cubic-bezier(${g.motion.ease.join(', ')});`);
-  for (const name of ['fast', 'panel', 'close', 'tooltip-delay', 'scrollbar-fade']) {
+  for (const name of ['fast', 'panel', 'close', 'hover', 'toggle', 'dropdown', 'navigation', 'tooltip-delay', 'scrollbar-fade']) {
     out.push(`  --g-motion-${name}: ${g.motion[name]}ms;`);
   }
   out.push(`  --g-travel: ${g.motion.travel}px;`);
@@ -261,7 +261,7 @@ function graphiteJava(g) {
   }
   out.push('');
   out.push(`    public static final float[] EASE = {${g.motion.ease.map((v) => `${Number(v).toFixed(2)}f`).join(', ')}};`);
-  for (const name of ['fast', 'panel', 'close', 'tooltip-delay', 'scrollbar-fade']) {
+  for (const name of ['fast', 'panel', 'close', 'hover', 'toggle', 'dropdown', 'navigation', 'tooltip-delay', 'scrollbar-fade']) {
     out.push(`    public static final float MOTION_${javaName(name)} = ${(g.motion[name] / 1000).toFixed(3)}f;`);
   }
   out.push(`    public static final float MOTION_TRAVEL = ${g.motion.travel.toFixed(1)}f;`);

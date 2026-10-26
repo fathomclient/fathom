@@ -33,7 +33,12 @@ public final class EditorPrefs {
     public static final String[] SNAP_CHOICES = {"Off", "Light", "Normal", "Strong"};
     private static final int[] SNAP_PIXELS = {0, 2, 4, 8};
 
+    /** The editor's toolbar sizes, in the order they are offered. */
+    public static final String[] TOOLBAR_SIZE_CHOICES = {"Standard", "Compact"};
+
     private int snap = 2;
+    private boolean toolbar = true;
+    private int toolbarSize;
     private boolean grid;
     private boolean bounds = true;
     private boolean separate = true;
@@ -55,6 +60,30 @@ public final class EditorPrefs {
     /** Step to the next strength, wrapping. What pressing the toolbar button does. */
     public void cycleSnap() {
         snap = (snap + 1) % SNAP_CHOICES.length;
+    }
+
+    /** Whether the editor's toolbar is showing. On by default; hidden, a small tab brings it back. */
+    public boolean toolbar() {
+        return toolbar;
+    }
+
+    public void setToolbar(boolean value) {
+        toolbar = value;
+    }
+
+    /** Which of {@link #TOOLBAR_SIZE_CHOICES} is in force. */
+    public int toolbarSizeChoice() {
+        return toolbarSize;
+    }
+
+    public boolean toolbarCompact() {
+        return toolbarSize == 1;
+    }
+
+    public void setToolbarSizeChoice(int index) {
+        if (index >= 0 && index < TOOLBAR_SIZE_CHOICES.length) {
+            toolbarSize = index;
+        }
     }
 
     public boolean grid() {
@@ -104,6 +133,13 @@ public final class EditorPrefs {
                 prefs.snap = index;
             }
         }
+        String size = properties.getProperty("toolbarSize");
+        for (int index = 0; index < TOOLBAR_SIZE_CHOICES.length; index++) {
+            if (TOOLBAR_SIZE_CHOICES[index].equalsIgnoreCase(String.valueOf(size).trim())) {
+                prefs.toolbarSize = index;
+            }
+        }
+        prefs.toolbar = bool(properties.getProperty("toolbar"), prefs.toolbar);
         prefs.grid = bool(properties.getProperty("grid"), prefs.grid);
         prefs.bounds = bool(properties.getProperty("bounds"), prefs.bounds);
         prefs.separate = bool(properties.getProperty("separate"), prefs.separate);
@@ -119,6 +155,8 @@ public final class EditorPrefs {
         }
         Properties properties = new Properties();
         properties.setProperty("snap", snapLabel());
+        properties.setProperty("toolbar", String.valueOf(toolbar));
+        properties.setProperty("toolbarSize", TOOLBAR_SIZE_CHOICES[toolbarSize]);
         properties.setProperty("grid", String.valueOf(grid));
         properties.setProperty("bounds", String.valueOf(bounds));
         properties.setProperty("separate", String.valueOf(separate));

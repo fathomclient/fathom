@@ -576,7 +576,7 @@ public final class FeatureTests {
                 "the RShift presentation mode survived");
         check("Strong".equals(readPrefs.rshiftBlurLabel()) && Math.abs(readPrefs.rshiftBlur() - 26f) < 0.01f,
                 "the glass blur preset survived");
-        check("Deep".equals(readPrefs.rshiftDimLabel()) && Math.abs(readPrefs.rshiftDim() - 0.44f) < 0.01f,
+        check("Deep".equals(readPrefs.rshiftDimLabel()) && Math.abs(readPrefs.rshiftDim() - 0.50f) < 0.01f,
                 "the glass dim preset survived");
         check("Right Click".equals(read.keyName()), "and renders with a name, got " + read.keyName());
 

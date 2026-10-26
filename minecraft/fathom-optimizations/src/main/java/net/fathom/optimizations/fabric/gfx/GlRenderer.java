@@ -649,6 +649,21 @@ public final class GlRenderer implements UiCanvas {
     }
 
     @Override
+    public void sprite(int texture, float left, float top, float right, float bottom,
+            float u0, float v0, float u1, float v1, int argb) {
+        if (texture <= 0 || right <= left || bottom <= top) {
+            return;
+        }
+        int colour = tint(argb);
+        if (Colour.invisible(colour)) {
+            return;
+        }
+        batch.bind(texture);
+        quad(snap(deviceX(left)), snap(deviceY(top)), snap(deviceX(right)), snap(deviceY(bottom)),
+                u0, v0, u1, v1, colour);
+    }
+
+    @Override
     public boolean glass(float left, float top, float right, float bottom, float radius, float blur,
             float saturate, float brightness) {
         return frost(left, top, right, bottom, radius);

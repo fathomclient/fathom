@@ -395,9 +395,25 @@ public final class UiTour {
         if (step.startsWith("wheel:")) {
             // Scroll whatever is open by N notches (negative is down), with the
             // pointer over the middle of the page, then shoot it.
-            net.fathom.optimizations.fabric.gfx.Pointer.script(560f, 360f);
+            // The middle of the screen, in the Hub window's logical units: the
+            // window is centred and compact, so a fixed point can miss it.
+            float scale = net.fathom.optimizations.core.ui.UiScale.scaleFor(client.height,
+                    net.fathom.optimizations.core.ui.UiScale.fittingPreference(client.width, client.height,
+                            net.fathom.optimizations.core.ui.UiScale.windowPreference(client.height,
+                                    net.fathom.optimizations.fabric.Runtime.uiScale())));
+            net.fathom.optimizations.fabric.gfx.Pointer.script(client.width / scale / 2f, client.height / scale / 2f);
             net.fathom.optimizations.fabric.gfx.Pointer.scriptWheel(Integer.parseInt(step.substring(6).trim()));
             return client.currentScreen != null;
+        }
+        if (step.startsWith("popover:")) {
+            // Open a dropdown on the Hub page showing, by its control id
+            // (e.g. set.clock.format), then shoot it open.
+            if (client.currentScreen instanceof net.fathom.optimizations.fabric.hub.FathomHubScreen) {
+                ((net.fathom.optimizations.fabric.hub.FathomHubScreen) client.currentScreen)
+                        .scriptPopover(step.substring(8).trim());
+                return true;
+            }
+            return false;
         }
         if (step.startsWith("gui:")) {
             // Minecraft's GUI Scale for the shots that follow, which carry it

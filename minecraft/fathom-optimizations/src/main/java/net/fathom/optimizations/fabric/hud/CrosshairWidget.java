@@ -88,16 +88,7 @@ public final class CrosshairWidget implements HudWidget {
 
     private CrosshairShape.Style style(FathomModule module) {
         String chosen = module == null ? "Cross" : module.choice(CrosshairPresets.STYLE, "Cross");
-        if ("Dot".equals(chosen)) {
-            return CrosshairShape.Style.DOT;
-        }
-        if ("Circle".equals(chosen)) {
-            return CrosshairShape.Style.CIRCLE;
-        }
-        if ("Tee".equals(chosen)) {
-            return CrosshairShape.Style.TEE;
-        }
-        return CrosshairShape.Style.CROSS;
+        return CrosshairShape.Style.named(chosen);
     }
 
     /**
@@ -192,6 +183,23 @@ public final class CrosshairWidget implements HudWidget {
         // One batched draw: a circle crosshair with an outline is up to a
         // hundred rectangles, and a hundred separate fills is a hundred rounds
         // of blend and texture state for a shape twenty pixels across.
+        if (module.toggle("invert", false)) {
+            // Vanilla's look: the shape inverts whatever is behind it, so it
+            // reads on snow and in caves alike. The outline is drawn plainly.
+            QuadBatch.begin();
+            try {
+                paint(geometry.outline(), geometry.outlineCount(), x, y, outlineColour);
+            } finally {
+                QuadBatch.end();
+            }
+            QuadBatch.begin();
+            try {
+                paint(geometry.fill(), geometry.fillCount(), x, y, colour);
+            } finally {
+                QuadBatch.endInverted();
+            }
+            return;
+        }
         QuadBatch.begin();
         try {
             paint(geometry.outline(), geometry.outlineCount(), x, y, outlineColour);
@@ -211,6 +219,10 @@ public final class CrosshairWidget implements HudWidget {
     /** The colour to draw in: the chosen one, or the feedback colour on a target or a hit. */
     private static int colour(MinecraftClient client, FathomModule module) {
         int base = module.colour("colour", 0xFFFFFF);
+        if (module.toggle("rainbow", false)) {
+            float hue = (System.currentTimeMillis() % 4000L) / 4000.0F;
+            base = java.awt.Color.HSBtoRGB(hue, 1.0F, 1.0F) & 0xFFFFFF;
+        }
         if (!module.toggle("feedback", false)) {
             return base;
         }

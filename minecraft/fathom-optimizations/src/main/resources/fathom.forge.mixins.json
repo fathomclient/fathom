@@ -10,7 +10,9 @@
     "ForgeChunkRevisionMixin",
     "ForgeClientStartMixin",
     "ForgeHudMixin",
-    "ForgeSkyBlendMixin"
+    "ForgeRenderEventsMixin",
+    "ForgeSkyBlendMixin",
+    "ForgeTitlesMixin"
   ],
   "injectors": {
     "defaultRequire": 0

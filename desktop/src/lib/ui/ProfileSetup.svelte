@@ -48,9 +48,9 @@
   } from '../api';
 
   export let onClose: () => void;
-  export let onCreated: (id: string) => void = () => {};
-  /** Leave setup for the full Add OptiFine screen. Set by the shell. */
-  export let onAddOptiFine: () => void = () => {};
+  /** `openIt`: the caller should open the new installation's page, where
+      OptiFine is added. */
+  export let onCreated: (id: string, openIt: boolean) => void = () => {};
 
   let options: SetupOptions | null = null;
   let draft: SetupDraft | null = null;
@@ -122,13 +122,13 @@
     await refresh();
   }
 
-  async function create() {
+  async function create(openIt = false) {
     if (!draft || busy) return;
     busy = true;
     error = '';
     try {
       const created = await createProfileFromSetup(draft);
-      onCreated(created.id);
+      onCreated(created.id, openIt);
       onClose();
     } catch (cause) {
       error = String(cause);
@@ -247,13 +247,13 @@
                  flow rather than at "Mods" is the difference between an
                  instruction and a destination. -->
             <p class="note">
-              OptiFine can't be bundled by Fathom. Download it from the author, then add the JAR —
-              Fathom checks it, files it locally, and says which profiles it fits.
+              OptiFine can't be bundled by Fathom. Download it from the author, then upload the JAR on
+              the installation's page — it shows whether OptiFine is on.
             </p>
             <div class="row">
               <span class="label">Have the JAR already?</span>
               <div class="right">
-                <Button onClick={onAddOptiFine}>Add OptiFine…</Button>
+                <Button disabled={!ready} onClick={() => void create(true)}>Create, then add OptiFine</Button>
               </div>
             </div>
           {/if}
@@ -334,7 +334,7 @@
       {:else if problems.length > 0}
         <p class="problem">{problems[0]}</p>
       {/if}
-      <Button block variant="primary" disabled={!ready} onClick={create}>
+      <Button block variant="primary" disabled={!ready} onClick={() => void create()}>
         {busy ? 'Creating…' : 'Create installation'}
       </Button>
     {/if}

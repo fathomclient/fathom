@@ -80,6 +80,12 @@ public abstract class TextRendererWidthMixin {
      */
     @Inject(method = "getStringWidth(Ljava/lang/String;)I", at = @At("HEAD"), cancellable = true)
     private void fathom$widthFromMemo(String text, CallbackInfoReturnable<Integer> callback) {
+        String hidden = net.fathom.optimizations.fabric.visual.NickHider.apply(text);
+        if (hidden != text) {
+            // Nick Hider: the width of what is drawn, which the memo holds under that text.
+            callback.setReturnValue(((net.minecraft.client.font.TextRenderer) (Object) this).getStringWidth(hidden));
+            return;
+        }
         net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                 net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.STRING_WIDTH);
         net.fathom.optimizations.fabric.diag.GlSync.stringWidthQueried();

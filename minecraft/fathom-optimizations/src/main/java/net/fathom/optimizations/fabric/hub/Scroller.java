@@ -1,6 +1,7 @@
 package net.fathom.optimizations.fabric.hub;
 
 import net.fathom.optimizations.core.ui.layout.Rect;
+import net.fathom.optimizations.core.ui.layout.ScrollMath;
 import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.anim.Motion;
 import net.fathom.optimizations.core.ui.anim.Spring;
@@ -31,7 +32,7 @@ import net.fathom.optimizations.fabric.ui.VisualEffects;
 public final class Scroller {
 
     /** Logical units per wheel notch. About two rows. */
-    private static final float NOTCH = 110f;
+    private static final float NOTCH = ScrollMath.NOTCH;
 
     private final Spring position = Spring.smooth(0f);
     private final Motion visibility = new Motion(0.22f, Timing.STANDARD);
@@ -44,12 +45,31 @@ public final class Scroller {
     private boolean dragging;
     private float dragGrab;
 
-    /** Turn the wheel. Positive notches are away from the user. */
-    public void wheel(int notches) {
-        target -= notches * NOTCH;
-        if (notches != 0) {
+    /**
+     * Turn the wheel. Positive notches are away from the user.
+     *
+     * @return the notches this list could not use because it reached an end,
+     *     with the sign they came in with: what a parent list should be given.
+     *     Zero for a list that took all of them.
+     */
+    public int wheel(int notches) {
+        float maximum = ScrollMath.max(contentHeight, viewportHeight);
+        int left = ScrollMath.leftover(notches, ScrollMath.clamp(target, 0f, maximum), maximum);
+        int taken = notches - left;
+        if (taken != 0) {
+            target = ScrollMath.clamp(target - taken * NOTCH, 0f, maximum);
             activeFor = 0.65f;
         }
+        return left;
+    }
+
+    /**
+     * Whether a wheel turn of {@code notches} would move this list at all, so a
+     * caller can decide who should get it without disturbing anything.
+     */
+    public boolean canTake(int notches) {
+        float maximum = ScrollMath.max(contentHeight, viewportHeight);
+        return ScrollMath.consumed(notches, ScrollMath.clamp(target, 0f, maximum), maximum) > 0;
     }
 
     /** Where the list is heading: what to remember to come back to it. */
@@ -134,10 +154,9 @@ public final class Scroller {
             return;
         }
 
-        float visible = viewportHeight / contentHeight;
-        float handle = Math.min(trackHeight, Math.max(32f, trackHeight * visible));
-        float progress = offset / Math.max(1f, contentHeight - viewportHeight);
-        float handleY = trackTop + (trackHeight - handle) * progress;
+        float maximum2 = ScrollMath.max(contentHeight, viewportHeight);
+        float handle = ScrollMath.thumbLength(trackHeight, viewportHeight, contentHeight);
+        float handleY = ScrollMath.thumbTop(trackTop, trackHeight, handle, offset, maximum2);
 
         // The visual is four units wide, while the hit target is twelve. The
         // scrollbar becomes easier to grab without taking any content space.
@@ -149,17 +168,24 @@ public final class Scroller {
             // eventual release, so the row beneath cannot receive half a click.
             pointer.consume(0);
         }
+        // A press on the rail's strip but not on the thumb pages the list one
+        // viewport (less a margin) towards the pointer, as every scrollbar
+        // does, and takes the press so nothing under the strip sees it.
+        if (!dragging && !hovered && pointer != null && pointer.pressed(0)
+                && pointer.over(x - 8f, trackTop, 12f, trackHeight)) {
+            target = ScrollMath.pageTarget(target, viewportHeight, pointer.y() > handleY + handle, maximum2);
+            activeFor = 0.65f;
+            pointer.consume(0);
+        }
         if (dragging) {
             if (pointer == null || !pointer.down(0)) {
                 dragging = false;
             } else {
-                float railTravel = Math.max(1f, trackHeight - handle);
-                float next = clamp((pointer.y() - dragGrab - trackTop) / railTravel, 0f, 1f);
-                target = next * Math.max(0f, contentHeight - viewportHeight);
+                target = ScrollMath.offsetForDrag(pointer.y(), dragGrab, trackTop, trackHeight, handle, maximum2);
                 offset = target;
                 position.set(target);
                 activeFor = 0.65f;
-                handleY = trackTop + railTravel * next;
+                handleY = ScrollMath.thumbTop(trackTop, trackHeight, handle, target, maximum2);
             }
         }
 

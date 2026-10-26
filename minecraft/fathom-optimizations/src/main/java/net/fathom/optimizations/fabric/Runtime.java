@@ -79,6 +79,14 @@ public final class Runtime {
             net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.shadow-allocation");
     public static final net.fathom.optimizations.core.registry.OptimizationId FORGE_SKY_BLEND_CACHE =
             net.fathom.optimizations.core.registry.OptimizationId.of("render.forge.sky-blend-cache");
+    public static final net.fathom.optimizations.core.registry.OptimizationId FORGE_UNHEARD_EVENTS =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.forge.unheard-render-events");
+    public static final net.fathom.optimizations.core.registry.OptimizationId MODEL_BOX_BATCHING =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.model-box-batching");
+    public static final net.fathom.optimizations.core.registry.OptimizationId ITEM_MODEL_LISTS =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.item-model-lists");
+    public static final net.fathom.optimizations.core.registry.OptimizationId DROPPED_ITEM_MODELS =
+            net.fathom.optimizations.core.registry.OptimizationId.of("render.entity.dropped-item-models");
     public static final net.fathom.optimizations.core.registry.OptimizationId VANILLA_HUD_REPLAY =
             net.fathom.optimizations.core.registry.OptimizationId.of("render.hud.vanilla-replay");
     public static final net.fathom.optimizations.core.registry.OptimizationId PACK_ICON_DOWNSCALE =
@@ -105,6 +113,11 @@ public final class Runtime {
     public static boolean shadowAllocation;
     public static boolean itemFrameEntityReuse;
     public static boolean forgeSkyBlendCache;
+    public static boolean forgeUnheardEvents;
+    public static boolean modelBoxBatching;
+    public static boolean itemModelLists;
+    /** {@code render.entity.dropped-item-models}, refreshed with the others. */
+    public static boolean droppedItemModels;
 
     /** Re-read the hot switches from the board. Cheap: a handful of map lookups. */
     public static void refreshHotSwitches() {
@@ -131,11 +144,28 @@ public final class Runtime {
             net.fathom.optimizations.fabric.perf.ForgeSkyBlend.release();
         }
         forgeSkyBlendCache = skyBlend;
+        forgeUnheardEvents = current.isEnabled(FORGE_UNHEARD_EVENTS);
         boolean reuse = current.isEnabled(ITEM_FRAME_ENTITY_REUSE);
         if (itemFrameEntityReuse && !reuse) {
             net.fathom.optimizations.fabric.perf.FrameItems.release();
         }
         itemFrameEntityReuse = reuse;
+        boolean batching = current.isEnabled(MODEL_BOX_BATCHING);
+        if (batching != modelBoxBatching) {
+            // Every model part compiled under the old setting recompiles once.
+            net.fathom.optimizations.fabric.perf.ModelBatch.generation++;
+        }
+        modelBoxBatching = batching;
+        boolean itemLists = current.isEnabled(ITEM_MODEL_LISTS);
+        if (itemModelLists && !itemLists) {
+            net.fathom.optimizations.fabric.perf.ItemModelLists.release();
+        }
+        itemModelLists = itemLists;
+        boolean droppedLists = current.isEnabled(DROPPED_ITEM_MODELS);
+        if (droppedItemModels && !droppedLists && !itemLists) {
+            net.fathom.optimizations.fabric.perf.ItemModelLists.release();
+        }
+        droppedItemModels = droppedLists;
         boolean replay = current.isEnabled(VANILLA_HUD_REPLAY);
         if (vanillaHudReplay && !replay) {
             net.fathom.optimizations.fabric.perf.VanillaHudReplay.releaseAll();
@@ -245,7 +275,7 @@ public final class Runtime {
             }
         }
         FathomHud current = hud();
-        return current == null ? 0.34f : current.prefs().rshiftDim();
+        return current == null ? 0.38f : current.prefs().rshiftDim();
     }
 
     /**

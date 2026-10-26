@@ -41,6 +41,7 @@ public final class GameSession {
             }
             return;
         }
+        long hitch = net.fathom.optimizations.fabric.diag.Hitches.begin();
         if (client.world != null && client.world != lastWorld) {
             // A tick on the instrument's timeline: a new world or dimension is the
             // commonest reason a frame rate changes, and the graph should say so.
@@ -62,5 +63,7 @@ public final class GameSession {
             hud.clicks().reset();
         }
         net.fathom.optimizations.fabric.hud.CrosshairWidget.reset();
+        net.fathom.optimizations.fabric.diag.Hitches.end(
+                net.fathom.optimizations.fabric.diag.Hitches.Section.WORLD_CHANGE, hitch);
     }
 }

@@ -135,6 +135,7 @@ public final class HudFonts {
 
         @Override
         public float width(String text) {
+            text = net.fathom.optimizations.fabric.visual.NickHider.apply(text);
             return renderer.measure(text, type) / mcToLogical;
         }
 
@@ -145,6 +146,7 @@ public final class HudFonts {
 
         @Override
         public void draw(String text, float x, float top, int argb, boolean shadow) {
+            text = net.fathom.optimizations.fabric.visual.NickHider.apply(text);
             float left = x * mcToLogical;
             float baseline = top * mcToLogical + renderer.ascent(type);
             if (shadow) {

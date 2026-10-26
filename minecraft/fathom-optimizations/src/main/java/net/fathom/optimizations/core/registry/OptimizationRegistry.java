@@ -528,6 +528,77 @@ public final class OptimizationRegistry {
                     .reference("docs/performance/multiplayer-2026-10-13.md")
                     .build());
 
+            out.add(Optimization.builder("render.entity.model-box-batching")
+                    .name("Model box batching")
+                    .description(
+                            "Every entity model is compiled into display lists, and inside them"
+                                    + " every face of every box is its own draw: six per box, 72 for a"
+                                    + " player's body. This compiles each box as one draw of the same"
+                                    + " vertices in the same order, so the driver replays a sixth of"
+                                    + " the draws per model. Output-identical.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
+                    .expectedBenefit("Proportional to entities drawn: players in a crowded lobby most.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "mp-2026-10-20-ab3",
+                            "Local server, 64-player PvP lobby scene, 6 interleaved rounds, on top of held"
+                                    + " item vertex reuse: Forge + OptiFine faster in 5/6 rounds (paired"
+                                    + " -0.100 ms/frame), 6/6 in a 40-player lobby (-0.037), 5/6 with 20"
+                                    + " armoured players (-0.054); body model 8.3 -> 7.4 us per player. 1,990"
+                                    + " (Fabric) and 1,940 (Forge) compiled lists compared offscreen against"
+                                    + " vanilla-compiled ones: 0 differing bytes."))
+                    .reference("docs/performance/multiplayer-2026-10-20.md")
+                    .build());
+
+            out.add(Optimization.builder("render.entity.item-model-lists")
+                    .name("Held item vertex reuse")
+                    .description(
+                            "Every item a player holds is rebuilt vertex by vertex and sent to the"
+                                    + " driver again every frame: a few hundred quads for a sword or a"
+                                    + " compass. This keeps each item model's vertex data after its first"
+                                    + " draw and hands it to the tessellator in one copy, drawn by the"
+                                    + " game's own upload path; transforms, textures, the enchantment glint"
+                                    + " and OptiFine's custom items stay live. Tinted and emissive models"
+                                    + " are always drawn live. Output-identical.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
+                    .expectedBenefit("Proportional to players holding items in view: most of a crowded lobby.")
+                    .defaultOnWhenMeasured()
+                    .evidence(Evidence.inGame(
+                            "mp-2026-10-20-ab3",
+                            "Local server, 64-player PvP lobby scene, 6 interleaved rounds: Forge +"
+                                    + " OptiFine faster in 5/5 complete rounds (paired -0.321 ms/frame, -8.4%),"
+                                    + " 6/6 in a 40-player lobby (-0.150) and with 20 armoured players"
+                                    + " (-0.183); held item 8.9 -> 5.2 us per player. Fabric + OptiFine"
+                                    + " 5/5, 6/6, 5/6 (-0.067, -0.018, -0.048). 1,277 (Forge) and 243"
+                                    + " (Fabric) draws compared offscreen with the live path: 0 differing"
+                                    + " bytes, vertex data identical."))
+                    .reference("docs/performance/multiplayer-2026-10-20.md")
+                    .build());
+
+            out.add(Optimization.builder("render.entity.dropped-item-models")
+                    .name("Dropped item vertex reuse")
+                    .description(
+                            "Held item vertex reuse, for items on the ground: a minigame generator's"
+                                    + " pile is the same few ingot models drawn dozens of times a frame, up"
+                                    + " to five copies each, every one rebuilt vertex by vertex. The same"
+                                    + " kept copy is handed to the tessellator instead; the bob, spin,"
+                                    + " transforms, glint and OptiFine's custom items stay live. Tinted and"
+                                    + " emissive models are always drawn live. Output-identical.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .runsInGame()
+                    .expectedBenefit("Proportional to dropped items in view: generators in Bedwars and SkyWars.")
+                    .defaultOnWhenMeasured()
+                    .reference("docs/performance/audit-2026-10-22.md")
+                    .build());
+
             out.add(Optimization.builder("render.hud.tab-list-text-replay")
                     .name("Tab list text replay")
                     .description(
@@ -600,6 +671,25 @@ public final class OptimizationRegistry {
                                     + " 48 players 3.146 -> 2.867 (3/4); client allocation 118 -> 18 MB/s."
                                     + " Verify mode: 28,672 answers compared with Forge's own, 0 differed."))
                     .reference("docs/forge.md")
+                    .build());
+
+            out.add(Optimization.builder("render.forge.unheard-render-events")
+                    .name("Skip unheard Forge render events")
+                    .description(
+                            "On Forge, OptiFine posts four Forge events for every living entity drawn,"
+                                    + " every frame -- around its body and around its name label, hologram"
+                                    + " lines included -- each built and sent through reflection. This"
+                                    + " skips an event when nothing is listening for it, which is exactly"
+                                    + " what posting it would have done; a mod that listens still gets"
+                                    + " every one. Forge with OptiFine only. Output-identical.")
+                    .group(Optimization.Group.ENTITIES)
+                    .category(Category.SAFE)
+                    .basis(Basis.VANILLA_ANALYSIS)
+                    .compatibility(Compatibility.builder().minecraft("1.8.9").loader("forge").java(8).build())
+                    .runsInGame()
+                    .expectedBenefit("Forge with OptiFine: proportional to living entities and hologram lines in view.")
+                    .defaultOnWhenMeasured()
+                    .reference("docs/performance/multiplayer-2026-10-20.md")
                     .build());
 
             out.add(Optimization.builder("render.hud.vanilla-replay")

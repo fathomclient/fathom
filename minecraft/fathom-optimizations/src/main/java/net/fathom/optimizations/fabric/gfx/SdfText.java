@@ -35,26 +35,67 @@ final class SdfText {
     private float inverseWidth;
     private float inverseHeight;
 
-    /** Read the atlas and upload it. Throws if either file is missing or unreadable. */
-    void create() throws IOException {
-        if (texture != 0) {
-            return;
+    /** The atlas as read from the jar: metrics, and the field's texels ready to upload. */
+    private static final class Prepared {
+        final FontAtlas atlas;
+        final ByteBuffer pixels;
+        final int width;
+        final int height;
+
+        Prepared(FontAtlas atlas, ByteBuffer pixels, int width, int height) {
+            this.atlas = atlas;
+            this.pixels = pixels;
+            this.width = width;
+            this.height = height;
         }
+    }
+
+    /** The read in flight or finished and not yet uploaded. Guarded by the class. */
+    private static java.util.concurrent.Future<Prepared> pending;
+
+    /**
+     * Start reading and decoding the atlas on the asset thread, if no read is
+     * already waiting to be used. Touches no OpenGL, so it may be called from
+     * anywhere. The read is consumed by the next {@link #create}, which then
+     * only uploads; without it, {@code create} reads inline as it always did.
+     */
+    static synchronized void prepareAsync() {
+        if (pending == null) {
+            pending = AssetPrep.submit(new java.util.concurrent.Callable<Prepared>() {
+                @Override
+                public Prepared call() throws IOException {
+                    return read();
+                }
+            });
+        }
+    }
+
+    private static synchronized Prepared take() throws IOException {
+        java.util.concurrent.Future<Prepared> ahead = pending;
+        pending = null;
+        if (ahead != null) {
+            try {
+                return ahead.get();
+            } catch (Exception failed) {
+                // Fall through and read it here: the same files, and the same
+                // IOException if they really are unreadable.
+            }
+        }
+        return read();
+    }
+
+    /** The slow half: the jar's two files, parsed and decoded. Pure; safe on any thread. */
+    private static Prepared read() throws IOException {
         InputStream metrics = SdfText.class.getResourceAsStream(ROOT + "ui.atlas");
         if (metrics == null) {
             throw new IOException("ui.atlas is missing from the mod");
         }
+        FontAtlas parsed;
         try {
-            atlas = FontAtlas.read(metrics);
+            parsed = FontAtlas.read(metrics);
         } finally {
             metrics.close();
         }
-        faces[Type.Weight.REGULAR.ordinal()] = require("regular");
-        faces[Type.Weight.MEDIUM.ordinal()] = require("medium");
-        faces[Type.Weight.SEMIBOLD.ordinal()] = require("semibold");
-        faces[Type.Weight.MONO_REGULAR.ordinal()] = require("mono-regular");
-        faces[Type.Weight.MONO_MEDIUM.ordinal()] = require("mono-medium");
-
         InputStream png = SdfText.class.getResourceAsStream(ROOT + "ui.png");
         if (png == null) {
             throw new IOException("ui.png is missing from the mod");
@@ -67,9 +108,9 @@ final class SdfText {
         }
         int width = image.getWidth();
         int height = image.getHeight();
-        if (width != atlas.width || height != atlas.height) {
+        if (width != parsed.width || height != parsed.height) {
             throw new IOException("ui.png is " + width + "x" + height + ", ui.atlas expects "
-                    + atlas.width + "x" + atlas.height);
+                    + parsed.width + "x" + parsed.height);
         }
         int[] argb = image.getRGB(0, 0, width, height, null, 0, width);
         ByteBuffer pixels = BufferUtils.createByteBuffer(width * height * 4);
@@ -77,10 +118,28 @@ final class SdfText {
             pixels.put((byte) (value >> 16)).put((byte) (value >> 8)).put((byte) value).put((byte) (value >>> 24));
         }
         pixels.flip();
+        return new Prepared(parsed, pixels, width, height);
+    }
+
+    /** Take the atlas (read ahead if it was) and upload it. Throws if either file is missing or unreadable. */
+    void create() throws IOException {
+        if (texture != 0) {
+            return;
+        }
+        Prepared ready = take();
+        atlas = ready.atlas;
+        faces[Type.Weight.REGULAR.ordinal()] = require("regular");
+        faces[Type.Weight.MEDIUM.ordinal()] = require("medium");
+        faces[Type.Weight.SEMIBOLD.ordinal()] = require("semibold");
+        faces[Type.Weight.MONO_REGULAR.ordinal()] = require("mono-regular");
+        faces[Type.Weight.MONO_MEDIUM.ordinal()] = require("mono-medium");
+
+        int width = ready.width;
+        int height = ready.height;
         texture = GL11.glGenTextures();
         GlStateManager.bindTexture(texture);
         GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, width, height, 0, GL11.GL_RGBA,
-                GL11.GL_UNSIGNED_BYTE, pixels);
+                GL11.GL_UNSIGNED_BYTE, ready.pixels);
         // Linear: the field is meant to be interpolated. No mipmaps: averaging
         // distances across a corner would break the channels' agreement.
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);

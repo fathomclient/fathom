@@ -81,9 +81,17 @@ public abstract class MinecraftClientFrameMixin {
             long dispatch = net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStart();
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                     net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_DISPATCH);
+            long listeners = net.fathom.optimizations.fabric.diag.Hitches.begin();
             net.fathom.optimizations.fabric.FathomOptimizationsClient.ensureReloadHook();
+            net.fathom.optimizations.fabric.input.MouseButtons.poll();
+            net.fathom.optimizations.fabric.visual.NickHider.frame(client);
+            net.fathom.optimizations.fabric.visual.HudTweaks.snaplook(client);
+            net.fathom.optimizations.fabric.visual.Waypoints.frame(client);
+            net.fathom.optimizations.fabric.input.ChatMacros.frame(client);
+            net.fathom.optimizations.fabric.input.Freelook.frame(client);
             net.fathom.optimizations.fabric.gfx.FrameInput.poll(client);
             net.fathom.optimizations.fabric.input.ModuleKeys.poll(client);
+            net.fathom.optimizations.fabric.input.HotbarKeys.frame(client);
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                     net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_LISTENER);
             net.fathom.optimizations.fabric.gfx.FrameKeyboard.pollCurrent(client);
@@ -98,6 +106,8 @@ public abstract class MinecraftClientFrameMixin {
             }
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.count(
                     net.fathom.optimizations.core.bench.auto.RenderCounters.Counter.EVENT_LISTENER);
+            net.fathom.optimizations.fabric.diag.Hitches.end(
+                    net.fathom.optimizations.fabric.diag.Hitches.Section.EVENT_DISPATCH, listeners);
             net.fathom.optimizations.fabric.bench.auto.BenchmarkState.profileStop(
                     net.fathom.optimizations.core.instrument.Probe.Section.EVENT_DISPATCH, dispatch);
         }
@@ -141,6 +151,7 @@ public abstract class MinecraftClientFrameMixin {
                         (MinecraftClient) (Object) this, start + frameNanos);
             }
         }
+        net.fathom.optimizations.fabric.diag.Hitches.frame(frameNanos);
         if (net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE) {
             net.fathom.optimizations.fabric.bench.PerfBench.frame((MinecraftClient) (Object) this, frameNanos);
         }

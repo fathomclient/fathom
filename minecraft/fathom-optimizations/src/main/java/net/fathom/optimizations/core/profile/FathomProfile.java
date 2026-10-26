@@ -97,6 +97,8 @@ public final class FathomProfile {
         public float scale = 1f;
         public float opacity = 1f;
         public boolean hidden;
+        /** {@code auto} (follow the anchor), {@code left}, {@code center} or {@code right}. */
+        public String textAnchor = "auto";
 
         public HudEntry copy() {
             HudEntry out = new HudEntry();
@@ -106,6 +108,7 @@ public final class FathomProfile {
             out.scale = scale;
             out.opacity = opacity;
             out.hidden = hidden;
+            out.textAnchor = textAnchor;
             return out;
         }
     }
@@ -453,6 +456,7 @@ public final class FathomProfile {
             float opacity = decimal(fields.get("opacity"), 1f);
             placement.opacity = Float.isNaN(opacity) ? 1f : Math.max(0f, Math.min(1f, opacity));
             placement.hidden = Boolean.TRUE.equals(fields.get("hidden"));
+            placement.textAnchor = net.fathom.optimizations.core.hud.TextAnchor.parse(text(fields.get("textAnchor"))).saved();
             profile.hud.put(String.valueOf(entry.getKey()), placement);
         }
 
@@ -540,6 +544,10 @@ public final class FathomProfile {
                 fields.put("opacity", Float.valueOf(placement.opacity));
                 if (placement.hidden) {
                     fields.put("hidden", Boolean.TRUE);
+                }
+                // Only when chosen, so every profile written before text anchors reads and writes as it did.
+                if (!"auto".equals(placement.textAnchor)) {
+                    fields.put("textAnchor", placement.textAnchor);
                 }
                 hudMap.put(entry.getKey(), fields);
             }

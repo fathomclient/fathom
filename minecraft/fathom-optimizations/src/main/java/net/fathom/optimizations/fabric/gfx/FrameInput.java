@@ -74,8 +74,7 @@ public final class FrameInput {
         }
         if (key.isMouseButton()) {
             int button = key.mouseButton();
-            return Mouse.isCreated() && button >= 0 && button < Mouse.getButtonCount()
-                    && Mouse.isButtonDown(button);
+            return net.fathom.optimizations.fabric.input.MouseButtons.isDown(button);
         }
         return Keyboard.isCreated() && key.key() >= 0 && key.key() < Keyboard.KEYBOARD_SIZE
                 && Keyboard.isKeyDown(key.key());

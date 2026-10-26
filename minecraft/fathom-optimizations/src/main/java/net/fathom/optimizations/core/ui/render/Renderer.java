@@ -193,6 +193,16 @@ public interface Renderer {
     }
 
     /**
+     * A region of a game texture ({@code u0..u1}, {@code v0..v1}, 0-1) in a
+     * square-cornered rectangle, multiplied by {@code argb}: an item sprite
+     * from the block atlas, an icon from a GUI sheet, a glyph of the bitmap
+     * font. Edges land on whole device pixels, so pixel art stays sharp.
+     */
+    default void sprite(int texture, float left, float top, float right, float bottom,
+            float u0, float v0, float u1, float v1, int argb) {
+    }
+
+    /**
      * CSS {@code radial-gradient(radiusX radiusY at centre, colour,
      * transparent stop)} as an element's background: an ellipse of colour
      * fading linearly to nothing at {@code stop} of its radii, clipped to the

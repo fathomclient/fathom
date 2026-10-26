@@ -142,6 +142,13 @@ public final class Skin {
     public static final int ELEVATED = Tokens.CONTROL_FILL_SELECTED;
     /** Transient: popovers, drawers, anything over everything. Dense glass. */
     public static final int FLOATING = MATERIAL_DENSE;
+    /**
+     * Menus and tooltips over a page: nearly opaque ink. Their glass would
+     * blur the world behind the window, not the controls under the menu, so
+     * at the dense tint (about half) the rows beneath showed through.
+     */
+    public static final int POPOVER = (0xF0 << 24)
+            | (net.fathom.optimizations.generated.GraphiteTokens.COLOR_INK_1 & 0xFFFFFF);
 
     /** One step up from a surface: what hover does, and nothing more. */
     public static final int SURFACE_HOVER = Tokens.CONTROL_FILL_HOVER;

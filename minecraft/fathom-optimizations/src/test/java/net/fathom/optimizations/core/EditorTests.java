@@ -54,15 +54,15 @@ public final class EditorTests {
     // HudFlow
     // -----------------------------------------------------------------------
 
-    /** Arrays for up to eight widgets, laid out by the test. */
+    /** Arrays for up to thirty-two widgets, laid out by the test. */
     private static final class Frame {
-        final int[] x = new int[16];
-        final int[] y = new int[16];
-        final int[] w = new int[16];
-        final int[] h = new int[16];
-        final int[] direction = new int[16];
-        final boolean[] fixed = new boolean[16];
-        final int[] order = new int[16];
+        final int[] x = new int[32];
+        final int[] y = new int[32];
+        final int[] w = new int[32];
+        final int[] h = new int[32];
+        final int[] direction = new int[32];
+        final boolean[] fixed = new boolean[32];
+        final int[] order = new int[32];
         int count;
 
         int add(int left, int top, int width, int height, int dir) {
@@ -178,10 +178,17 @@ public final class EditorTests {
         sizes.put("direction", new int[] {150, 30});
         sizes.put("scoreboard", new int[] {90, 70});
         sizes.put("crosshair", new int[] {9, 9});
+        sizes.put("saturation", new int[] {80, 14});
+        sizes.put("server-address", new int[] {90, 14});
+        sizes.put("speed", new int[] {56, 14});
+        sizes.put("item-counter", new int[] {70, 50});
+        sizes.put("block-info", new int[] {90, 26});
+        sizes.put("height-limit", new int[] {90, 14});
+        sizes.put("bedwars-stats", new int[] {54, 38});
         int[][] screens = {{426, 240}, {480, 270}, {640, 360}, {960, 540}};
         for (int[] screen : screens) {
             Frame frame = new Frame();
-            String[] ids = new String[16];
+            String[] ids = new String[32];
             for (Widget widget : HudRegistry.standard().all()) {
                 int[] size = sizes.get(widget.id());
                 check(size != null, "a size for " + widget.id());

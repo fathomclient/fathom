@@ -18,36 +18,51 @@ import net.fathom.optimizations.core.ui.render.Type;
 public final class FathomSettingRows {
 
     /**
-     * One setting row height, described or not: {@code Metrics.ROW}. A row
-     * with a detail line used to be 64 and one without 54, so two switches in
-     * one group sat in rows of different heights.
+     * One setting row height, described or not: 36 in the RShift window
+     * (theme game.graphite.layout.setting-row). A row with a detail line used
+     * to be taller than one without, so two switches in one group sat in rows
+     * of different heights; identical rows are identical.
      */
-    public static final float ROW = FathomTheme.Metrics.ROW;
-    /** Kept for callers; the same height -- identical rows are identical. */
+    public static final float ROW = net.fathom.optimizations.generated.GraphiteTokens.LAYOUT_SETTING_ROW;
+    /** Kept for callers; the same height. */
     public static final float COMPACT_ROW = ROW;
-    public static final float SECTION_HEADING = 43f;
+    /** A group's heading: one line, and the space down to its rows. */
+    public static final float SECTION_HEADING = 28f;
 
     private FathomSettingRows() {}
 
-    /** Draw the single surface that owns all rows in a semantic section. */
+    /**
+     * The surface that owns a group's rows: a faint fill and a hairline, not a
+     * pane of glass. The RShift window is the glass; a second frosted pane
+     * inside it was glass on glass.
+     */
     public static void surface(Renderer ui, Rect area) {
-        FathomComponents.panel(ui, area);
+        float radius = Skin.radius(Skin.R_CARD, area);
+        ui.rounded(area.x, area.y, area.right(), area.bottom(), radius,
+                FathomTheme.Tokens.CONTROL_FILL_FAINT);
+        ui.rim(area.x, area.y, area.right(), area.bottom(), radius, Skin.EDGE_RECESSED);
     }
 
-    /** Draw a section name and its optional one-line explanation. */
+    /**
+     * A group's name, and after it on the same line an optional hint in the
+     * detail style (how keybinds are edited, say). One line, so every heading
+     * is the same height.
+     */
     public static void heading(Renderer ui, Rect area, String title, String description) {
-        ui.text(title, area.x, Controls.stackTitle(ui, area.y, Type.ROW_TITLE),
-                Type.ROW_TITLE, Skin.TEXT);
+        Rect line = new Rect(area.x, area.y, area.width, SECTION_HEADING - Skin.S2);
+        float baseline = Controls.baseline(ui, line, TITLE);
+        ui.text(title, area.x, baseline, TITLE, Skin.TEXT);
         if (description != null && !description.isEmpty()) {
-            ui.text(Text.fit(ui, description, Type.SMALL, area.width), area.x,
-                    Controls.stackDetail(ui, area.y, Type.ROW_TITLE, Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
+            float x = area.x + ui.measure(title, TITLE) + Skin.S3;
+            ui.text(Text.fit(ui, description, DETAIL, Math.max(0f, area.right() - x)), x, baseline,
+                    DETAIL, Skin.TEXT_FAINT);
         }
     }
 
-    /** A setting's name: the launcher's row title (14, its full text colour). */
+    /** A setting's name: the row title (14, its full text colour), as the launcher's. */
     public static final Type TITLE = Type.ROW_TITLE;
-    /** The line under it: the launcher's row detail (13, secondary text). */
-    public static final Type DETAIL = Type.BODY;
+    /** The line under it: 12, secondary text -- the game's one-size-smaller detail. */
+    public static final Type DETAIL = Type.SMALL;
 
     /**
      * A setting's name and its optional detail line, in the one type scale
@@ -73,8 +88,14 @@ public final class FathomSettingRows {
 
     /** Height of a setting row; explained values get room for a second line. */
     public static float height(String description) {
-        return ROW;
+        return description == null || description.isEmpty() ? ROW : DESCRIBED_ROW;
     }
+
+    /**
+     * A row with a detail line: 44, so the two lines keep clear of the
+     * dividers either side. Every row of one kind is still the same height.
+     */
+    public static final float DESCRIBED_ROW = ROW + FathomTheme.Metrics.SPACE_2;
 
     /**
      * Draw a setting row and return the rectangle reserved for its control.

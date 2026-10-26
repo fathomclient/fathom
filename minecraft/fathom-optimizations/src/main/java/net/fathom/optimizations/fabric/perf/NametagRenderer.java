@@ -261,11 +261,13 @@ public final class NametagRenderer {
         // recorded instead of skipped as redundant.
         GlStateManager.bindTexture(0);
         GlStateManager.clearColor();
+        long hitch = net.fathom.optimizations.fabric.diag.Hitches.begin();
         GL11.glNewList(list, GL11.GL_COMPILE_AND_EXECUTE);
         try {
             font.draw(text, left, top, colour);
         } finally {
             GL11.glEndList();
+            net.fathom.optimizations.fabric.diag.Hitches.end(net.fathom.optimizations.fabric.diag.Hitches.Section.NAMETAG_COMPILE, hitch);
         }
         label.lists[pass] = list;
         label.endTexture[pass] = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);

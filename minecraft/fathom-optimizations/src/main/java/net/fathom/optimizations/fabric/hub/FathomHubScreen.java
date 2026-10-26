@@ -106,13 +106,17 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         }
     };
     /**
-     * The frame, the section rail and the header, from the game's density
-     * (theme {@code game.graphite.layout}): 900x540dp of the 1280x720 reference
-     * canvas, so the world keeps a margin round the Hub at every resolution,
-     * a 156dp rail of 28dp items, and the page 16dp after it.
+     * The window, the section rail and the header, from the game's density
+     * (theme {@code game.graphite.layout}): a 780x490dp pane of glass, drawn at
+     * the window scale ({@link net.fathom.optimizations.core.ui.UiScale#windowPreference}),
+     * so 780x490 pixels on a 1080p screen with the live game round it; 12dp
+     * inside its edge, a 150dp rail of 28dp items, and the page 12dp after it.
      */
     private static final float FRAME_WIDTH = GraphiteTokens.LAYOUT_HUB_WIDTH;
     private static final float FRAME_HEIGHT = GraphiteTokens.LAYOUT_HUB_HEIGHT;
+    private static final float FRAME_PAD = GraphiteTokens.LAYOUT_HUB_PAD;
+    /** How far the window sinks as it fades out: a retreat, not a fall. */
+    private static final float EXIT_TRAVEL = 4f;
     private static final float RAIL_WIDTH = GraphiteTokens.LAYOUT_HUB_RAIL;
     private static final float HEADER_HEIGHT = GraphiteTokens.LAYOUT_HUB_HEADER;
     private static final float HEADER_GAP = GraphiteTokens.LAYOUT_HUB_HEADER_GAP;
@@ -165,13 +169,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         }
     });
     private final TextLeaf restartNote = TextLeaf.of("hub.restart", Graphite.SMALL, 16f);
-    private final TextLeaf editLabel = TextLeaf.of("hub.hud-editor.label", Graphite.UI, 16f);
-    private final Box editHudBox = Box.row("hub.hud-editor");
-    private final Box editIconBox = Box.fixed("hub.hud-editor.icon", Graphite.ICON_INLINE, Graphite.ICON_INLINE);
     private final Box closeBox = Box.fixed("hub.close", Graphite.CONTROL_COMPACT, Graphite.CONTROL_COMPACT);
-    /** Quick access: the Mods search from any page. Typing anywhere does the same. */
-    private final Box quickSearchBox = Box.fixed("hub.quick-search", 200f, Graphite.CONTROL_COMPACT);
-    private static final String QUICK_SEARCH_ID = "hub.quick-search";
     private final Box railBox = Box.column("hub.rail");
     private final Box railRule = Box.column("hub.rail.rule").height(1f);
     private final Box[] telemetryRows = new Box[2];
@@ -314,29 +312,32 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         buttons.clear();
         if (context == null) {
             context = new HubContext(client, hud, Runtime.features(), controls, this, pointer);
-            sections.add(new QuickSection());
+            // The rail: Modules, HUD Editor, Appearance, Performance, Settings.
+            // Settings holds the pages that had rail entries of their own.
             sections.add(new ModsSection());
-            sections.add(new PerformanceSection());
+            sections.add(new HudEditorLink());
             sections.add(new AppearanceSection());
-            sections.add(new ProfilesSection());
-            sections.add(new DiagnosticsSection());
-            sections.add(new LauncherSection());
+            sections.add(new PerformanceSection());
+            sections.add(new SettingsSection(new QuickSection(), new ProfilesSection(),
+                    new DiagnosticsSection(), new LauncherSection()));
 
             float now = Gfx.clock().seconds();
+            // 180ms in, 120ms out, on the shared standard and exit curves.
             transition = new Transition(GraphiteTokens.MOTION_PANEL, GraphiteTokens.MOTION_CLOSE,
-                    Ease.Curve.GRAPHITE, Ease.Curve.GRAPHITE);
+                    Ease.Curve.STANDARD, Ease.Curve.EXIT);
             transition.open(now);
             openedAtNs = System.nanoTime();
-            pageSwap = new Motion(1f, GraphiteTokens.MOTION_PANEL, Ease.Curve.GRAPHITE);
-            // Mods is where the Hub opens.
-            current = 1;
-            for (int index = 0; startAt != null && index < sections.size(); index++) {
-                if (sections.get(index).title().equalsIgnoreCase(startAt)) {
-                    current = index;
-                }
+            pageSwap = new Motion(1f, Timing.NAVIGATION, Ease.Curve.STANDARD);
+            // Modules is where the Hub opens.
+            current = 0;
+            if (startAt != null) {
+                current = sectionFor(startAt, current);
             }
             previous = current;
             sections.get(current).opened(context);
+            if (startAt == null && requestedModule == null) {
+                restoreLastPage();
+            }
             selectCaptureSection();
         }
         // Back from the HUD editor's "Settings": show Mods, which opens the page.
@@ -354,6 +355,56 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         pointer.reset();
         controls.reset();
         controls.setInputEnabled(!closing);
+    }
+
+    /**
+     * The rail entry for a section name, old names included: "Mods" is
+     * Modules, and Quick, Profiles, Diagnostics and Launcher are tabs of
+     * Settings. {@code fallback} when nothing matches.
+     */
+    private int sectionFor(String title, int fallback) {
+        String wanted = "Mods".equalsIgnoreCase(title) ? "Modules" : title;
+        for (int index = 0; index < sections.size(); index++) {
+            Section section = sections.get(index);
+            if (section.title().equalsIgnoreCase(wanted) && !(section instanceof HudEditorLink)) {
+                return index;
+            }
+            if (section instanceof SettingsSection && ((SettingsSection) section).show(title)) {
+                return index;
+            }
+        }
+        return fallback;
+    }
+
+    /**
+     * The rail's HUD Editor entry: an action, not a page. Choosing it opens the
+     * editor (which returns to the Hub), so it is never the section showing.
+     */
+    static final class HudEditorLink implements Section {
+        @Override
+        public String title() {
+            return "HUD Editor";
+        }
+
+        @Override
+        public Icon icon() {
+            return Icon.MOVE;
+        }
+
+        @Override
+        public boolean searchable() {
+            return false;
+        }
+
+        @Override
+        public String subtitle() {
+            return "";
+        }
+
+        @Override
+        public void render(HubContext context, Rect area) {
+            // Never shown: choosing it leaves for the editor.
+        }
     }
 
     @Override
@@ -421,7 +472,10 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         if (!gameplayGlass()) {
             Gfx.isolated(backdropPass);
         }
-        Renderer ui = Gfx.beginScreen(client, Runtime.uiScale());
+        // The window scale: 1.0 at 1080p, so the window is a compact pane over
+        // the game rather than most of the screen.
+        Renderer ui = Gfx.beginScreen(client, net.fathom.optimizations.core.ui.UiScale.windowPreference(
+                client.height, Runtime.uiScale()));
         float delta = Gfx.screenDelta();
         boolean restorePrevious = false;
         try {
@@ -506,7 +560,8 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
     private void selectCaptureSection() {
         String target = captureTarget();
         for (int index = 0; index < sections.size(); index++) {
-            if (sections.get(index).title().equalsIgnoreCase(target)) {
+            if (sections.get(index).title().equalsIgnoreCase(target)
+                    && !(sections.get(index) instanceof HudEditorLink)) {
                 current = index;
                 previous = index;
                 sections.get(index).opened(context);
@@ -572,21 +627,19 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
      */
     private void buildTree() {
         built = true;
-        headerRow.height(HEADER_HEIGHT).gap(Graphite.S2).align(Box.Align.CENTRE);
+        // The header: the lockup, a module's restart note when there is one,
+        // and Close. Everything else is in the rail.
+        frame.padding(FRAME_PAD);
+        headerRow.height(HEADER_HEIGHT).gap(Graphite.S2).align(Box.Align.CENTRE)
+                .padding(Graphite.S1, 0f, 0f, 0f);
         headerRow.add(wordmarkBox);
-        headerRow.add(Box.column("hub.header.gap").width(Graphite.S6));
+        headerRow.add(Box.column("hub.header.gap").width(Graphite.S4));
         headerRow.add(restartNote.box().grow(1f));
-        headerRow.add(quickSearchBox);
-        editHudBox.height(Graphite.CONTROL_COMPACT).padding(Graphite.S3, 0f, Graphite.S3, 0f).gap(Graphite.S2)
-                .align(Box.Align.CENTRE);
-        editHudBox.add(editIconBox);
-        editHudBox.add(editLabel.box());
-        headerRow.add(editHudBox);
         headerRow.add(closeBox);
         frame.add(headerRow);
         frame.add(Box.column("hub.header.after").height(HEADER_GAP));
 
-        Box body = Box.row("hub.body").grow(1f).align(Box.Align.START);
+        Box body = Box.row("hub.body").grow(1f).align(Box.Align.STRETCH);
         railBox.width(RAIL_WIDTH).padding(Graphite.S1 + 2f).gap(RAIL_GAP).align(Box.Align.STRETCH);
         int count = sections.size();
         railItems = new Box[count];
@@ -598,7 +651,9 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             railItems[index] = Box.column(railIds[index]).height(RAIL_ITEM);
             railBox.add(railItems[index]);
         }
-        // The divider and the telemetry: S2 under the last item, S2 under the rule.
+        // The status lines sit at the rail's foot, so the entries above them
+        // stay where they are whichever page is showing.
+        railBox.add(Box.column("hub.rail.spacer").grow(1f));
         railBox.add(Box.column("hub.rail.rule.before").height(Graphite.S2 - RAIL_GAP * 2f));
         railBox.add(railRule);
         railBox.add(Box.column("hub.rail.rule.after").height(Graphite.S2 - RAIL_GAP * 2f));
@@ -614,7 +669,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         body.add(contentBox);
         frame.add(body);
         root.add(frame);
-        editLabel.set("Edit HUD");
     }
 
     private void layout(Renderer ui) {
@@ -665,14 +719,18 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         Graphite.dim(ui, panel, !gameplayGlass(), 1f);
         ui.popAlpha();
 
-        // Groups fade and rise 8dp on entry; on exit they fade.
+        // The window rises 6dp as it fades in; on the way out it fades and
+        // sinks 4dp. Both on the clock, so a reopen mid-exit turns round
+        // from where it is.
         ui.pushAlpha(shown);
-        ui.pushTransform(0f, (1f - open) * GraphiteTokens.MOTION_TRAVEL);
+        ui.pushTransform(0f, (1f - open) * GraphiteTokens.MOTION_TRAVEL
+                + transition.exit(now) * EXIT_TRAVEL);
 
-        // The scene behind the glass, so the Hub's panes are frosted like the
-        // title screen's and the launcher's. No light pooled behind the panel:
-        // it read as a pale haze the launcher does not have.
+        // The scene behind the glass, so the window is frosted like the title
+        // screen's panes and the launcher's. One pane of standard glass holds
+        // the header, the rail and the page; nothing inside it runs a blur.
         Graphite.captureFrost(ui);
+        Graphite.surface(ui, panel, Graphite.R_PANEL, Graphite.Material.STANDARD, true);
         header(ui);
         rail(ui, railBox.rect());
         content(ui, contentBox.rect());
@@ -712,45 +770,6 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
             beginClose();
         }
 
-        // Edit HUD: a secondary capsule with the HUD-editor glyph, as the
-        // launcher draws an action with an icon.
-        Rect editHud = editHudBox.rect();
-        Controls.State editState = controls.state("hub.hud-editor", editHud, true);
-        Graphite.surface(ui, editHud, Graphite.R_CONTROL, Graphite.Material.LIGHT,
-                editState.hover, editState.press, 0f, false);
-        Rect editIcon = editIconBox.rect();
-        ui.icon(Icon.MOVE, editIcon.x, editIcon.y, editIcon.width, Graphite.TEXT_SECONDARY);
-        editLabel.draw(ui, Graphite.TEXT);
-        controls.focusRing(ui, editState, editHud, Graphite.R_CONTROL);
-        if (editState.clicked) {
-            context.editHud();
-        }
-
-        // Quick access: a capsule that opens Mods with its search focused. On
-        // Mods itself the page's own search is right below, so it steps back.
-        Rect search = quickSearchBox.rect();
-        boolean onMods = sections.get(current) instanceof ModsSection;
-        Controls.State searchState = controls.state(QUICK_SEARCH_ID, search, !onMods);
-        float present = controls.towards(QUICK_SEARCH_ID + "#present", !onMods, GraphiteTokens.MOTION_FAST);
-        if (present > 0.01f) {
-            ui.pushAlpha(present);
-            Graphite.surface(ui, search, Graphite.R_CONTROL, Graphite.Material.LIGHT,
-                    searchState.hover, searchState.press, 0f, false);
-            float glyph = Graphite.ICON_INLINE;
-            ui.icon(Icon.SEARCH, search.x + Graphite.S2, search.centreY() - glyph / 2f, glyph, Graphite.TEXT_SECONDARY);
-            Type hint = Graphite.floor(ui, Graphite.SMALL);
-            String query = context.search();
-            ui.text(Text.fit(ui, query.isEmpty() ? "Search mods" : query, hint,
-                            search.width - glyph - Graphite.S2 * 3f),
-                    search.x + Graphite.S2 + glyph + Graphite.S2, Graphite.baseline(ui, search, hint), hint,
-                    query.isEmpty() ? Graphite.TEXT_TERTIARY : Graphite.TEXT);
-            controls.focusRing(ui, searchState, search, Graphite.R_CONTROL);
-            ui.popAlpha();
-            if (searchState.clicked) {
-                quickSearch();
-            }
-        }
-
         // A module that needs a restart says so, quietly, beside the wordmark.
         restartNote.draw(ui, Graphite.TEXT_SECONDARY);
     }
@@ -764,7 +783,10 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
      */
     private void rail(Renderer ui, Rect rail) {
         float now = Gfx.clock().seconds();
-        Graphite.surface(ui, rail, Graphite.R_PANEL, Graphite.Material.LIGHT, false);
+        // No pane of its own: the window is the glass. A hairline at its right
+        // edge is all that separates the rail from the page.
+        Graphite.hairlineVertical(ui, rail.right() + CONTENT_GAP / 2f, rail.y + Graphite.S1,
+                rail.bottom() - Graphite.S1);
         Type label = Graphite.floor(ui, Graphite.UI);
         for (int index = 0; index < sections.size(); index++) {
             Section section = sections.get(index);
@@ -786,7 +808,12 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
                     Colour.mix(ink, Graphite.BRAND_LIGHT, on));
             ui.text(section.title(), item.x + lead + glyph + Graphite.S3,
                     Graphite.baseline(ui, item, label), label, ink);
-            if ((state.clicked || index == scriptedSection) && !selected) {
+            if (section instanceof HudEditorLink) {
+                // An action: it opens the editor, which comes back here.
+                if (state.clicked) {
+                    context.editHud();
+                }
+            } else if ((state.clicked || index == scriptedSection) && !selected) {
                 select(index, now);
             }
         }
@@ -802,12 +829,14 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
      * crossfade the same way.
      */
     private void select(int index, float now) {
-        if (index == current || index < 0 || index >= sections.size()) {
+        if (index == current || index < 0 || index >= sections.size()
+                || sections.get(index) instanceof HudEditorLink) {
             return;
         }
         // When a second navigation input arrives mid-crossfade, retain the
         // current page at exactly its visible opacity. A settled page starts a
         // fresh transition at zero as usual.
+        hud.previewUnderHub(null);
         float continuation = pageSwap.settled(now) ? 0f : pageSwap.opacity(now);
         previous = current;
         current = index;
@@ -817,6 +846,30 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         controls.clearFocus();
         context.keybindCapture().cancel();
         sections.get(current).opened(context);
+    }
+
+    /**
+     * Reopen where the Hub was left, when the preference is on. A section,
+     * tab or module that no longer exists leaves the Hub on its default page.
+     */
+    private void restoreLastPage() {
+        net.fathom.optimizations.core.hud.HubState state = hud.hubState();
+        if (!state.reopenLast() || state.section().isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < sections.size(); index++) {
+            Section section = sections.get(index);
+            if (section instanceof HudEditorLink || !section.title().equalsIgnoreCase(state.section())) {
+                continue;
+            }
+            if (index != current) {
+                current = index;
+                previous = index;
+                section.opened(context);
+            }
+            section.restore(context, state.page(), state.scroll());
+            return;
+        }
     }
 
     /** The Mods page, which owns the search. */
@@ -871,8 +924,10 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         float swap = pageSwap.value(Gfx.clock().seconds());
         float rise = (1f - swap) * GraphiteTokens.MOTION_TRAVEL;
 
-        ui.clip(content.x - Graphite.S6, content.y - Graphite.S2, content.right() + Graphite.S6,
-                content.bottom() + Graphite.S6);
+        // Inside the window's own edge: room for a card's hover and the page's
+        // rise, never past the glass.
+        ui.clip(content.x - Graphite.S2, content.y - Graphite.S2, panel.right() - Graphite.S1,
+                panel.bottom() - Graphite.S1);
         if (previous != current && swap < 1f) {
             controls.setInputEnabled(false);
             ui.pushAlpha(1f - swap);
@@ -895,7 +950,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         // synthetic wheel is not tied to wherever an unfocused pointer sits.)
         if (notches != 0 && (panel.contains(pointer.x(), pointer.y())
                 || net.fathom.optimizations.fabric.bench.PerfBench.ACTIVE)) {
-            section.scroll(notches);
+            section.scroll(notches, pointer.x(), pointer.y());
         }
     }
 
@@ -1033,6 +1088,7 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
 
     @Override
     public void removed() {
+        hud.previewUnderHub(null);
         net.fathom.optimizations.fabric.menu.FathomMenuScreen.stopBackdropPlayback();
         if (context != null && context.dirty()) {
             String failure = hud.saveAll();
@@ -1044,6 +1100,15 @@ public final class FathomHubScreen extends Screen implements FathomScreen,
         pointer.reset();
         if (context != null) {
             context.keybindCapture().cancel();
+            if (!sections.isEmpty() && !(sections.get(current) instanceof HudEditorLink)) {
+                Section section = sections.get(current);
+                net.fathom.optimizations.core.hud.HubState state = hud.hubState();
+                state.remember(section.title(), section.pageId(), section.scrollPosition());
+                String failure = state.write(hud.gameDirectory());
+                if (failure != null) {
+                    System.out.println("[Fathom] could not save the Hub's place: " + failure);
+                }
+            }
         }
     }
 }

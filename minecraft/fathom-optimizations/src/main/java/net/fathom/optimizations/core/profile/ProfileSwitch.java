@@ -139,7 +139,8 @@ public final class ProfileSwitch {
             }
             FathomProfile.HudEntry stored = entry.getValue();
             Anchor anchor = anchor(stored.anchor, widget.defaultPlacement().anchor(), entry.getKey(), skipped);
-            layout.put(entry.getKey(), new Placement(anchor, stored.x, stored.y, stored.scale, stored.opacity));
+            layout.put(entry.getKey(), new Placement(anchor, stored.x, stored.y, stored.scale, stored.opacity,
+                    net.fathom.optimizations.core.hud.TextAnchor.parse(stored.textAnchor)));
         }
         hud.replaceLayout(layout);
 
@@ -252,7 +253,8 @@ public final class ProfileSwitch {
                 continue;
             }
             Anchor anchor = anchor(stored.anchor, widget.defaultPlacement().anchor(), id, skipped);
-            hud.layout().put(id, new Placement(anchor, stored.x, stored.y, stored.scale, stored.opacity));
+            hud.layout().put(id, new Placement(anchor, stored.x, stored.y, stored.scale, stored.opacity,
+                    net.fathom.optimizations.core.hud.TextAnchor.parse(stored.textAnchor)));
         }
     }
 
@@ -306,6 +308,7 @@ public final class ProfileSwitch {
             stored.y = placement.offsetY();
             stored.scale = placement.scale();
             stored.opacity = placement.opacity();
+            stored.textAnchor = placement.textAnchor().saved();
             out.hud().put(entry.getKey(), stored);
         }
 

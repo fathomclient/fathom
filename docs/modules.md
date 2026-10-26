@@ -59,7 +59,8 @@ are the widget's placement, stored in the profile's `hud` section. They are set
 in the HUD editor (§8) and, for the numbers, in the **Position and size** group
 on the module's own page, which writes the same placement the editor does. Every HUD module except the
 crosshair also carries the eight common style settings from `HudStyle` — text
-colour, text shadow, background, background colour, background opacity, border,
+colour, rainbow text and its speed (a rainbow widget is always drawn live,
+never replayed from the HUD caches), text shadow, background, background colour, background opacity, border,
 border colour, border width, padding, corner radius, drop shadow — declared in
 one call and read in one place (`TextWidget`), so they cannot drift apart. The
 three widgets that are not text (Keystrokes, Armour HUD, Potion HUD) draw their
@@ -76,7 +77,7 @@ default and applied by `FathomHud` before a widget is measured.
 | Pack Display | HUD | Working | `pack-display` widget | — | no | Pack icon, Format, Description, Packs shown |
 | Ping | HUD | Working | `ping` widget | A server | no | Display (Number/Bars/both), Format, Update every, Colour by quality, Good below, Poor above |
 | Scoreboard | HUD | Working | `scoreboard` widget + `scoreboard` behaviour | A world | no | Hide sidebar, Score numbers, Title, Row background — plus the common style, defaulting to vanilla's look |
-| Chat | HUD | Working | `chat` behaviour | — | no | Timestamps, their format and seconds, Fold repeats, Background, Text shadow |
+| Chat | HUD | Working | `chat` behaviour | — | no | Timestamps, their format and seconds, Fold repeats, Background, Text shadow, four Presets, each sent by its own key (a line starting with / is a command; at most one send a second) |
 | CPS | PvP | Working | `cps` widget | — | no | Buttons (Both/Left/Right/Combined), Button letters, Label, Sample window |
 | Keystrokes | PvP | Working | `keystrokes` widget | — | no | Movement keys, Mouse buttons, Space bar, Sneak key, CPS on buttons, Key size, Spacing, Key background and its two colours, Opacity, Two text colours, Border, its colour and width, Press fade |
 | Armour HUD | PvP | Working | `armour` widget | A world | no | Display, Icon size, Durability, Label, Held item, Arrow count, Layout, Reverse order, Spacing, Durability bar, Colour by condition, Amber below, Red below |
@@ -84,10 +85,36 @@ default and applied by `FathomHud` before a widget is measured.
 | Sprint and sneak | Utility | Working | `toggle-sprint` widget + `movement-toggle` behaviour | A world | no | Sprint key and Sneak key (Hold/Toggle), Show status, Show sprinting, Show sneaking, five labels, Toggled colour, Walking colour |
 | Zoom | Utility | Working | `zoom` behaviour | A world | no | Key (Hold/Toggle), Amount, Scroll to adjust, Scroll step, Minimum, Maximum, On release, Smooth zoom, Zoom duration, Sensitivity compensation and its strength, Cinematic camera, Hide hand — plus its keybind |
 | Fathom main menu | Visual | Working | `main-menu` behaviour | — | **yes** | Cinematic background |
-| Crosshair | Visual | Working | `crosshair` widget + `crosshair` behaviour | A world | no | Preset, Shape, Length, Thickness, Gap, Centre dot and size, Outline and thickness, Colour, Outline colour, Opacity, Dynamic, Target colour, three hide rules |
+| Crosshair | Visual | Working | `crosshair` widget + `crosshair` behaviour | A world | no | Preset, Shape, Length, Thickness, Gap, Centre dot and size, Outline and thickness, Colour, Outline colour, Rainbow, Invert like vanilla, Opacity, Dynamic, Target colour, three hide rules. Shapes: Vanilla, Cross, Dot, Circle, Tee, X, Square |
 | Fullbright | Visual | Working | `fullbright` behaviour | A world | no | Brightness — plus a Toggle key |
 | Time Changer | Visual | Working | `time-changer` behaviour | A world | no | Time (seven presets or Custom), Custom hour — plus a Toggle key |
 | 1.7 Animations | Visual | Working | `old-animations` behaviour | A world | no | Blockhit, Swing while using items, Punch while using — plus a Toggle key |
+| Hurt Camera | Visual | Working | `hurt-camera` behaviour | A world | no | Shake (0–300%, starts at 0%) — plus a Toggle key |
+| Block Outline | Visual | Working | `block-outline` behaviour | A world | no | Outline colour, Rainbow outline, Outline opacity, Thickness, Fill, Fill colour, Rainbow fill, Fill opacity — plus a Toggle key |
+| Hitboxes | PvP | Working | `hitboxes` behaviour | A world | no | Colour, Rainbow, Opacity, Thickness, Target colour, Hurt colour, Eye line, Look direction, and which entities: Players, Yourself, Mobs, Dropped items, Everything else — plus a Toggle key. Depth-tested like F3+B: never through walls |
+| Item Physics | Visual | Working | `item-physics` behaviour | A world | no | Tumble speed — plus a Toggle key |
+| Weather Changer | Visual | Working | `weather-changer` behaviour | A world | no | Weather (Clear/Rain/Thunder), Intensity — plus a Toggle key. The client's world only |
+| TNT Countdown | PvP | Working | `tnt-countdown` behaviour | A world | no | Format (Seconds/Ticks), Colour by time — plus a Toggle key |
+| Particles | PvP | Working | `particles` behaviour | A world | no | Crit and Sharpness multipliers (0–10x), Always crit, Always sharpness, Hide block particles, Explosion particles (All / Fewer / None) — plus a Toggle key |
+| Motion Blur | Visual | Working | `motion-blur` behaviour | A world | no | Strength — plus a Toggle key. Blends the world only; the HUD stays sharp |
+| Nick Hider | Utility | Working | `nick-hider` behaviour | — | no | Shown name — plus a Toggle key. Replaces your username wherever the font draws it (chat, tab list, nametags, scoreboard, Fathom's HUD); nothing sent to the server changes |
+| Saturation | HUD | Working | `saturation` widget | A world | no | Format (Saturation 5.0 / 5.0 / Food 20 / Sat 5.0) — plus the common style |
+| Server Address | HUD | Working | `server-address` widget | A world | no | Label, Hide the default port, In singleplayer — plus the common style |
+| Speed | HUD | Working | `speed` widget | A world | no | Unit (m/s, km/h), Decimal places, Count falling and jumping — plus the common style. The "momentum" read-out |
+| Item Counter | PvP | Working | `item-counter` widget | A world | no | Blocks, Arrows, Ender pearls, Golden apples, Fireballs, Snowballs and eggs, Iron, Gold, Diamonds, Emeralds, Hide what you have none of — plus the common style |
+| Block Info | HUD | Working | `block-info` widget | A world | no | Block position, Entities, Entity health — plus the common style. The WAILA read-out |
+| Titles | HUD | Working | `titles` behaviour | A world | no | Size (25–150%), Hide titles, Hide subtitles — plus a Toggle key. A hidden title is dropped as it arrives; Forge's own title drawing is hooked separately |
+| Hide Boss Bar | HUD | Working | `boss-bar` behaviour | A world | no | Toggle key only |
+| Hit Colour | PvP | Working | `hit-colour` behaviour | A world | no | Colour, Strength (30% is vanilla's) — plus a Toggle key |
+| Snaplook | Utility | Working | `snaplook` behaviour | A world | no | Look key (hold), View (Behind you / Third person). Only the camera turns |
+| Nametags | Visual | Working | `nametags` behaviour | A world | no | Your own nametag (third person), Size, Text colour (Server colours / Custom / Rainbow) and its colour, Text shadow, Background on or off, Faint through walls, Background opacity and colour — plus a Toggle key. While on, it draws the label itself and the performance layer's cached nametags stand aside; a sneaking player's label stays vanilla's |
+| Waypoints | Utility | Working | `waypoints` behaviour | A world | no | Beam, Distance, Label size, Hide beyond, Mark where you die — plus Add here and Remove nearest keys, and the client-side `/fwp add [name] [x y z]`, `remove`, `list`, `clear` (never sent to the server). Kept per server or world and dimension in `config/fathom-waypoints.txt` |
+| Shiny Pots | Visual | Working | `shiny-pots` behaviour | — | no | Shine (Bright/Very bright): the potion glint drawn once or twice more |
+| Teamview | PvP | Working | `teamview` behaviour | A world | no | Colour, Names, Hide beyond — plus a Toggle key. Marks players on your own scoreboard team only, through walls; nobody else is ever marked. Server-sensitive |
+| Height Limit | PvP | Working | `height-limit` widget | A world | no | Limit (Y; servers do not send it), Warn within, Always show — plus the common style |
+| Bedwars Stats | PvP | Working | `bedwars-stats` widget | A world | no | Deaths — plus the common style. Kills, final kills and beds this game, read from the server's kill and bed lines; player chat is never counted; reset on every world change |
+| Auto GG | Utility | Working | `auto-gg` behaviour | A world | no | Message, Send to (Chat / Hypixel all chat), Delay. Fires once per game on a game-end line; a player typing that line cannot trigger it |
+| Freelook | Utility | Working | `freelook` behaviour | A world | no | Key (Hold/Toggle), Invert up and down. The mouse turns the camera, not you; the server sees no rotation change. Server-sensitive |
 | Unfocused FPS limit | Performance | Working | `input.unfocused-fps-cap` | — | **yes** | Limit |
 | Performance layer | Performance | Working | `performance-layer` behaviour | — | **yes** | Its own page: `docs/performance-module.md` |
 
@@ -188,6 +215,12 @@ says so.
 **Time Changer** answers the client world's sky angle for the chosen hour. Only
 the client's world: in singleplayer the integrated server's world is a separate
 object, and its time — spawning, beds — is never touched.
+
+**Hurt Camera** scales the 14° roll vanilla gives the camera when the player is
+hit (`bobViewWhenHurt`): 0% removes it, 100% is vanilla's, up to 300%. The death
+roll, knockback and the red flash on the model are untouched. Like Fullbright's,
+its injection may find nothing (`require = 0`), leaving the module inert rather
+than the game unable to start.
 
 **1.7 Animations** hands the swing progress back to the first-person equip
 transform while an item is in use, where 1.8 passes zero: a sword keeps swinging

@@ -681,7 +681,7 @@
         {:else if route === 'profiles'}
           <FathomProfiles />
         {:else if route === 'installations'}
-          <Profiles onChanged={refreshShell} onAddOptiFine={() => go('add-optifine')} />
+          <Profiles onChanged={refreshShell} />
         {:else if route === 'mods'}
           <Mods
             onChanged={refreshShell}

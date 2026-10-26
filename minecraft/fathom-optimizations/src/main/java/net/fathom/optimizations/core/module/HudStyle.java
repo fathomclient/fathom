@@ -29,6 +29,9 @@ public final class HudStyle {
     public static final String[] FONT_CHOICES = {"Minecraft", "Fathom"};
     public static final String TEXT_COLOUR = "text.colour";
     public static final String TEXT_SHADOW = "text.shadow";
+    /** Text cycling through every hue, instead of the text colour. */
+    public static final String TEXT_RAINBOW = "text.rainbow";
+    public static final String TEXT_RAINBOW_SPEED = "text.rainbow.speed";
     public static final String BACKGROUND = "background";
     public static final String[] MATERIAL_CHOICES = {"None", "Light", "Standard", "Dense"};
     public static final String BACKGROUND_COLOUR = "background.colour";
@@ -116,6 +119,10 @@ public final class HudStyle {
                 .setting(new Setting.Choice(FONT, "Font", "Typeface for this HUD module.",
                         FONT_CHOICES[0], FONT_CHOICES))
                 .setting(new Setting.Colour(TEXT_COLOUR, "Text colour", "", textColour))
+                .setting(new Setting.Toggle(TEXT_RAINBOW, "Rainbow text",
+                        "Cycle through every colour in place of the text colour.", false))
+                .setting(new Setting.Whole(TEXT_RAINBOW_SPEED, "Rainbow speed", "Seconds for one full cycle.",
+                        4, 1, 20, 1, "s"))
                 .setting(new Setting.Toggle(TEXT_SHADOW, "Text shadow", "A dark edge under the letters.", shadow))
                 .setting(material(backgroundLabel, materialDefault))
                 .setting(new Setting.Colour(BACKGROUND_COLOUR, "Background colour", "", DEFAULT_BACKGROUND_COLOUR))
@@ -180,7 +187,36 @@ public final class HudStyle {
     }
 
     public static int textColour(FathomModule module) {
+        if (rainbow(module)) {
+            long period = Math.max(1L, (long) module.number(TEXT_RAINBOW_SPEED, 4)) * 1000L;
+            return hue((System.currentTimeMillis() % period) / (float) period);
+        }
         return module == null ? DEFAULT_TEXT_COLOUR : module.colour(TEXT_COLOUR, DEFAULT_TEXT_COLOUR);
+    }
+
+    /** Whether a module's text is cycling, and so changes every frame. */
+    public static boolean rainbow(FathomModule module) {
+        return module != null && module.toggle(TEXT_RAINBOW, false);
+    }
+
+    /** A fully saturated, bright colour at {@code hue} (0 to 1), as RGB. */
+    static int hue(float hue) {
+        float h = (hue - (float) Math.floor(hue)) * 6f;
+        int sector = (int) h;
+        float f = h - sector;
+        float q = 1f - f;
+        float r;
+        float g;
+        float b;
+        switch (sector) {
+            case 0: r = 1f; g = f; b = 0f; break;
+            case 1: r = q; g = 1f; b = 0f; break;
+            case 2: r = 0f; g = 1f; b = f; break;
+            case 3: r = 0f; g = q; b = 1f; break;
+            case 4: r = f; g = 0f; b = 1f; break;
+            default: r = 1f; g = 0f; b = q; break;
+        }
+        return (Math.round(r * 255f) << 16) | (Math.round(g * 255f) << 8) | Math.round(b * 255f);
     }
 
     public static boolean textShadow(FathomModule module) {

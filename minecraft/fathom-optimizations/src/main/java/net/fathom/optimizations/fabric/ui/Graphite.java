@@ -315,6 +315,12 @@ public final class Graphite {
         ui.fill(left, y, right, y + px, HAIRLINE);
     }
 
+    /** The same rule, standing: one device pixel wide from {@code top} to {@code bottom}. */
+    public static void hairlineVertical(Renderer ui, float x, float top, float bottom) {
+        float px = ui.pixel();
+        ui.fill(x, top, x + px, bottom, HAIRLINE);
+    }
+
     // -----------------------------------------------------------------------
     // Controls
     // -----------------------------------------------------------------------

@@ -690,6 +690,10 @@
   --g-motion-fast: 120ms;
   --g-motion-panel: 180ms;
   --g-motion-close: 120ms;
+  --g-motion-hover: 120ms;
+  --g-motion-toggle: 160ms;
+  --g-motion-dropdown: 180ms;
+  --g-motion-navigation: 160ms;
   --g-motion-tooltip-delay: 400ms;
   --g-motion-scrollbar-fade: 600ms;
   --g-travel: 8px;

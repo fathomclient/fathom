@@ -305,7 +305,7 @@ public final class EditorSelfTest {
                 check("settings: the editor closes onto the Hub", hub != null,
                         client.currentScreen == null ? "no screen" : client.currentScreen.getClass().getSimpleName());
                 check("settings: the Hub shows Mods with the clock's page open",
-                        hub != null && "Mods".equals(hub.qaSection()) && CLOCK.equals(hub.qaOpenModule()),
+                        hub != null && "Modules".equals(hub.qaSection()) && CLOCK.equals(hub.qaOpenModule()),
                         hub == null ? "" : hub.qaSection() + " / " + hub.qaOpenModule());
                 if (hub == null) {
                     finish(client);

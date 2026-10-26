@@ -16,6 +16,8 @@ public final class WorldLighting {
 
     /** Whether the lightmap hook has ever run: false under a renderer that replaced it. */
     private static boolean lightmapSeen;
+    /** Whether the gamma hook ran during the lightmap update in progress. */
+    private static boolean gammaApplied;
 
     private WorldLighting() {}
 
@@ -30,11 +32,34 @@ public final class WorldLighting {
     /** The gamma the lightmap should use this update. */
     public static float gamma(float original) {
         lightmapSeen = true;
+        gammaApplied = true;
         FathomModule module = active("fullbright");
         if (module == null) {
             return original;
         }
         return Math.max(original, Lighting.gamma(module.number("strength", 1000)));
+    }
+
+    /** A lightmap update is starting. */
+    public static void beginLightmap() {
+        gammaApplied = false;
+    }
+
+    /**
+     * Brightens a finished lightmap that was built without the gamma hook
+     * (OptiFine's custom lightmaps). Returns whether the pixels changed.
+     */
+    public static boolean brighten(int[] pixels) {
+        if (gammaApplied || pixels == null) {
+            return false;
+        }
+        FathomModule module = active("fullbright");
+        if (module == null) {
+            return false;
+        }
+        lightmapSeen = true;
+        Lighting.brighten(pixels, Lighting.gamma(module.number("strength", 1000)));
+        return true;
     }
 
     /** Whether vanilla's lightmap code has been seen running Fullbright's hook. */

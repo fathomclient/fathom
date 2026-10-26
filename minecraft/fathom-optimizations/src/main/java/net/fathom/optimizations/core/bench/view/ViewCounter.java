@@ -57,7 +57,9 @@ public enum ViewCounter {
     ENGAGED_SHADOW("engaged: shadow positions reused"),
     ENGAGED_HUD_REPLAY("engaged: chat/sidebar replayed"),
     ENGAGED_TAB_LIST("engaged: tab list strings replayed"),
-    ENGAGED_SKY_BLEND("engaged: Forge sky colour from cache");
+    ENGAGED_SKY_BLEND("engaged: Forge sky colour from cache"),
+    ENGAGED_FORGE_EVENTS("engaged: unheard Forge render events skipped"),
+    ENGAGED_ITEM_MODEL_LIST("engaged: item models replayed");
 
     public static final ViewCounter[] ALL = values();
     public static final int COUNT = ALL.length;

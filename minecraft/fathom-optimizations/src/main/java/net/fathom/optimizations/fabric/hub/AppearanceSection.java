@@ -13,7 +13,7 @@ import net.fathom.optimizations.core.ui.render.Renderer;
 import net.fathom.optimizations.core.ui.render.Type;
 import net.fathom.optimizations.fabric.menu.MenuScenes;
 import net.fathom.optimizations.fabric.ui.Controls;
-import net.fathom.optimizations.fabric.ui.FathomComponents;
+import net.fathom.optimizations.fabric.ui.FathomSettingRows;
 import net.fathom.optimizations.fabric.ui.Skin;
 
 /**
@@ -26,8 +26,6 @@ import net.fathom.optimizations.fabric.ui.Skin;
  */
 final class AppearanceSection implements Section {
 
-    private static final float PRESENTATION_HEIGHT = 92f;
-    private static final float GLASS_HEIGHT = 132f;
     private static final float TILE_GAP = Skin.S3;
     private static final float TILE_LABEL = 28f;
     private static final String[] PRESENTATION = {"Fathom background", "Gameplay glass"};
@@ -45,7 +43,7 @@ final class AppearanceSection implements Section {
 
     @Override
     public Icon icon() {
-        return Icon.SETTINGS;
+        return Icon.LAYERS;
     }
 
     @Override
@@ -61,8 +59,10 @@ final class AppearanceSection implements Section {
     @Override
     public void opened(HubContext context) {
         scroller.reset();
+        // Read again: the editor may have changed them since this page last showed.
+        editorPrefs = null;
         boolean gameplay = net.fathom.optimizations.fabric.Runtime.gameplayGlass();
-        glassReveal = new Motion(gameplay ? 1f : 0f, Timing.PANEL);
+        glassReveal = new Motion(gameplay ? 1f : 0f, Timing.NAVIGATION);
         MenuScenes.Scene selected = MenuScenes.selected();
         MenuScenes.Scene[] scenes = MenuScenes.all();
         keyboardIndex = 0;
@@ -75,130 +75,200 @@ final class AppearanceSection implements Section {
         }
     }
 
+    /** The presentation group: its heading and one row. */
+    private static final float PRESENTATION_BLOCK = FathomSettingRows.SECTION_HEADING
+            + FathomSettingRows.DESCRIBED_ROW * 2f;
+    /** The HUD editor group: its heading and the toolbar's two rows. */
+    private static final float EDITOR_BLOCK = FathomSettingRows.SECTION_HEADING
+            + FathomSettingRows.DESCRIBED_ROW * 2f;
+    /** The gameplay glass group: its heading and the blur and dim rows. */
+    private static final float GLASS_BLOCK = FathomSettingRows.SECTION_HEADING
+            + FathomSettingRows.DESCRIBED_ROW * 2f;
+
+    /**
+     * Three groups, as a module page has them: Presentation, Gameplay glass
+     * (only while that is the presentation, sliding open and shut), and
+     * Background. Headings over flat group surfaces, the shared settings rows,
+     * the shared controls.
+     */
     @Override
     public void render(HubContext context, Rect area) {
         Renderer ui = context.ui();
         if (glassReveal == null) {
             glassReveal = new Motion(net.fathom.optimizations.fabric.Runtime.gameplayGlass() ? 1f : 0f,
-                    Timing.PANEL);
+                    Timing.NAVIGATION);
         }
         glassReveal.to(net.fathom.optimizations.fabric.Runtime.gameplayGlass() ? 1f : 0f, context.now());
         float glass = glassReveal.opacity(context.now());
 
         MenuScenes.Scene[] scenes = MenuScenes.all();
-        float width = Math.min(744f, area.width - Skin.SCROLL_GUTTER);
+        float width = area.width - Skin.SCROLL_GUTTER;
         float pickerWidth = Math.max(1f, width - Skin.CARD_PADDING * 2f);
         lastColumns = ResponsiveGrid.columns(pickerWidth, 150f, TILE_GAP, 4);
         float cellWidth = ResponsiveGrid.cellWidth(pickerWidth, TILE_GAP, lastColumns);
         float imageHeight = cellWidth / MenuScenes.aspect();
         float tileHeight = imageHeight + TILE_LABEL;
         float gridHeight = ResponsiveGrid.contentHeight(scenes.length, lastColumns, tileHeight, TILE_GAP);
-        float backgroundHeading = ui.lineHeight(Type.LABEL) + ui.lineHeight(Type.SMALL) + Skin.S3;
-        float backgroundBlock = Skin.S3 + backgroundHeading + gridHeight + Skin.S4
-                + ui.lineHeight(Type.SMALL) + Skin.S3;
-        float presentationBlock = PRESENTATION_HEIGHT + glass * (GLASS_HEIGHT + Skin.SECTION_GAP);
-        float contentHeight = presentationBlock + Skin.SECTION_GAP + backgroundBlock;
+        float creditLine = ui.lineHeight(Type.SMALL) + Skin.S2;
+        float backgroundSurface = Skin.CARD_PADDING * 2f + gridHeight + creditLine;
+        float backgroundBlock = FathomSettingRows.SECTION_HEADING + backgroundSurface;
+        float glassBlock = glass * (Skin.SECTION_GAP + GLASS_BLOCK);
+        float contentHeight = PRESENTATION_BLOCK + glassBlock + Skin.SECTION_GAP + EDITOR_BLOCK
+                + Skin.SECTION_GAP + backgroundBlock + Skin.S4;
         float offset = scroller.offset(context.delta(), contentHeight, area.height);
         float y = area.y - offset;
 
         ui.clip(area.x, area.y, area.right(), area.bottom());
-        presentation(context, new Rect(area.x, y, width, PRESENTATION_HEIGHT));
-        y += PRESENTATION_HEIGHT;
+        presentation(context, new Rect(area.x, y, width, PRESENTATION_BLOCK));
+        y += PRESENTATION_BLOCK;
 
         if (glass > 0.001f) {
-            float visible = glass * (GLASS_HEIGHT + Skin.SECTION_GAP);
-            Rect revealClip = new Rect(area.x, y, width, visible);
-            ui.clip(revealClip.x, revealClip.y, revealClip.right(), revealClip.bottom());
+            // Revealed from the top, as one block: the clip grows with it.
+            Rect reveal = new Rect(area.x, y, width, glassBlock);
+            ui.clip(reveal.x, Math.max(area.y, reveal.y), reveal.right(), Math.min(area.bottom(), reveal.bottom()));
             ui.pushAlpha(glass);
-            glassControls(context, new Rect(area.x, y + Skin.SECTION_GAP, width, GLASS_HEIGHT), glass > 0.94f);
+            glassControls(context, new Rect(area.x, y + Skin.SECTION_GAP, width, GLASS_BLOCK), glass > 0.94f);
             ui.popAlpha();
             ui.unclip();
-            y += visible;
+            y += glassBlock;
         }
 
         y += Skin.SECTION_GAP;
-        Rect backgroundPanel = new Rect(area.x, y, width, backgroundBlock);
-        FathomComponents.panel(ui, backgroundPanel);
-        Rect backgroundInner = backgroundPanel.inset(Skin.CARD_PADDING, Skin.S3);
-        float contentX = backgroundInner.x;
-        y = backgroundInner.y;
-        Controls.label(ui, "Background", contentX, y);
-        y += ui.lineHeight(Type.LABEL) + Skin.S1;
-        ui.text(Text.fit(ui, "Shared with the launcher. A choice is preloaded, then applied everywhere.",
-                        Type.SMALL, pickerWidth),
-                contentX, y + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_FAINT);
-        y += ui.lineHeight(Type.SMALL) + Skin.S3;
+        editorGroup(context, new Rect(area.x, y, width, EDITOR_BLOCK));
+        y += EDITOR_BLOCK + Skin.SECTION_GAP;
+        Rect heading = new Rect(area.x, y, width, FathomSettingRows.SECTION_HEADING);
+        FathomSettingRows.heading(ui, heading, "Background", "Shared with the launcher.");
+        y = heading.bottom();
+        Rect surface = new Rect(area.x, y, width, backgroundSurface);
+        FathomSettingRows.surface(ui, surface);
+        float contentX = surface.x + Skin.CARD_PADDING;
+        float gridTop = surface.y + Skin.CARD_PADDING;
 
         MenuScenes.Scene selected = MenuScenes.selected();
         for (int index = 0; index < scenes.length; index++) {
             int row = index / lastColumns;
             int column = index % lastColumns;
             Rect tile = new Rect(contentX + column * (cellWidth + TILE_GAP),
-                    y + row * (tileHeight + TILE_GAP), cellWidth, tileHeight);
+                    gridTop + row * (tileHeight + TILE_GAP), cellWidth, tileHeight);
             if (tile.bottom() < area.y || tile.y > area.bottom()) {
                 continue;
             }
             drawScene(context, scenes[index], index, selected, tile, imageHeight);
         }
 
-        float footerY = y + gridHeight + Skin.S4;
         if (selected.credit != null) {
+            float creditTop = gridTop + gridHeight + Skin.S2;
             ui.text(Text.fit(ui, selected.credit, Type.SMALL, pickerWidth), contentX,
-                    footerY + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_DISABLED);
+                    creditTop + ui.ascent(Type.SMALL), Type.SMALL, Skin.TEXT_DISABLED);
         }
         ui.unclip();
         scroller.rail(ui, new Rect(area.x, area.y, width + Skin.S4, area.height),
                 context.pointer(), context.now());
     }
 
+    /** Fathom background or gameplay glass, with what the choice means right now as its detail. */
     private void presentation(HubContext context, Rect area) {
         Renderer ui = context.ui();
-        FathomComponents.panel(ui, area);
-        Rect inner = area.inset(Skin.CARD_PADDING, Skin.S3);
-        Controls.label(ui, "Presentation", inner.x, inner.y);
-        float controlWidth = Math.min(370f, inner.width);
-        Rect control = new Rect(inner.x, inner.bottom() - Skin.H_MD, controlWidth, Skin.H_MD);
+        Controls controls = context.controls();
+        Rect heading = new Rect(area.x, area.y, area.width, FathomSettingRows.SECTION_HEADING);
+        FathomSettingRows.heading(ui, heading, "Presentation", "");
+        Rect surface = new Rect(area.x, heading.bottom(), area.width, FathomSettingRows.DESCRIBED_ROW * 2f);
+        FathomSettingRows.surface(ui, surface);
+        Rect first = new Rect(surface.x, surface.y, surface.width, FathomSettingRows.DESCRIBED_ROW);
+        Rect second = new Rect(surface.x, first.bottom(), surface.width, FathomSettingRows.DESCRIBED_ROW);
+
         int selected = net.fathom.optimizations.fabric.Runtime.gameplayGlass() ? 1 : 0;
-        int chosen = context.controls().segmented(ui, "appearance.presentation", control,
-                PRESENTATION, selected);
+        String note = selected == 0
+                ? "The selected scene behind every Fathom surface."
+                : context.client().world == null
+                        ? "Available once a world is visible."
+                        : "The live game stays visible behind the window.";
+        float natural = controls.segmentedNaturalWidth(ui, PRESENTATION, first.width * 0.6f);
+        Rect control = FathomSettingRows.row(ui, controls, "appearance.row.presentation", first,
+                "Behind the window", note, natural, Skin.H_SM, true,
+                controls.pointerOverVisible(first), false);
+        int chosen = controls.segmentedNatural(ui, "appearance.presentation", control, PRESENTATION, selected);
         if (chosen != selected) {
             context.hud().prefs().setRshiftBackgroundChoice(chosen);
             context.markDirty();
         }
-        String note = selected == 0
-                ? "Uses the selected scene behind every Fathom surface."
-                : context.client().world == null
-                        ? "Available once a world is visible."
-                        : "The live world stays visible beneath the interface.";
-        ui.text(Text.fit(ui, note, Type.SMALL, Math.max(0f, inner.width - controlWidth - Skin.S4)),
-                control.right() + Skin.S4, Controls.baseline(ui, control, Type.SMALL),
-                Type.SMALL, Skin.TEXT_FAINT);
+
+        net.fathom.optimizations.core.hud.HubState state = context.hud().hubState();
+        Rect toggle = FathomSettingRows.row(ui, controls, "appearance.row.reopen", second,
+                "Reopen the last page", "RShift opens on the page you left, scrolled where it was.",
+                Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT, true, controls.pointerOverVisible(second), true);
+        if (controls.toggle(ui, "appearance.reopen", toggle, state.reopenLast(), true)) {
+            state.setReopenLast(!state.reopenLast());
+            // Written now: a preference changed from this page should not wait for the Hub to close.
+            state.write(context.hud().gameDirectory());
+        }
     }
 
+    /**
+     * The HUD editor's toolbar: whether it shows, and how big. The editor's own
+     * file holds them (they belong to the tool, not to a profile), read and
+     * written here as they change, never per frame.
+     */
+    private void editorGroup(HubContext context, Rect area) {
+        Renderer ui = context.ui();
+        Controls controls = context.controls();
+        Rect heading = new Rect(area.x, area.y, area.width, FathomSettingRows.SECTION_HEADING);
+        FathomSettingRows.heading(ui, heading, "HUD editor", "");
+        float rowHeight = FathomSettingRows.DESCRIBED_ROW;
+        Rect surface = new Rect(area.x, heading.bottom(), area.width, rowHeight * 2f);
+        FathomSettingRows.surface(ui, surface);
+        if (editorPrefs == null) {
+            editorPrefs = net.fathom.optimizations.core.hud.EditorPrefs.read(context.hud().gameDirectory());
+        }
+        Rect first = new Rect(surface.x, surface.y, surface.width, rowHeight);
+        Rect second = new Rect(surface.x, first.bottom(), surface.width, rowHeight);
+
+        Rect toggle = FathomSettingRows.row(ui, controls, "appearance.editor.toolbar.row", first,
+                "Show editor toolbar", "The bar along the bottom of the HUD editor. Press T in the editor to hide it.",
+                Controls.TOGGLE_WIDTH, Controls.TOGGLE_HEIGHT, true, controls.pointerOverVisible(first), false);
+        if (controls.toggle(ui, "appearance.editor.toolbar", toggle, editorPrefs.toolbar(), true)) {
+            editorPrefs.setToolbar(!editorPrefs.toolbar());
+            editorPrefs.write(context.hud().gameDirectory());
+        }
+        String[] sizes = net.fathom.optimizations.core.hud.EditorPrefs.TOOLBAR_SIZE_CHOICES;
+        float natural = controls.segmentedNaturalWidth(ui, sizes, second.width * 0.5f);
+        Rect control = FathomSettingRows.row(ui, controls, "appearance.editor.size.row", second,
+                "Toolbar size", "Compact is a shorter bar with smaller buttons.", natural, Skin.H_SM,
+                editorPrefs.toolbar(), controls.pointerOverVisible(second), true);
+        int selected = editorPrefs.toolbarSizeChoice();
+        int chosen = controls.segmentedNatural(ui, "appearance.editor.size", control, sizes, selected);
+        if (chosen != selected && editorPrefs.toolbar()) {
+            editorPrefs.setToolbarSizeChoice(chosen);
+            editorPrefs.write(context.hud().gameDirectory());
+        }
+    }
+
+    /** The editor's preferences, read when this page first needs them. */
+    private net.fathom.optimizations.core.hud.EditorPrefs editorPrefs;
+
+    /** How strongly the live game is blurred and darkened behind the window. */
     private void glassControls(HubContext context, Rect area, boolean enabled) {
         Renderer ui = context.ui();
-        FathomComponents.panel(ui, area);
-        Rect inner = area.inset(Skin.CARD_PADDING, Skin.S3);
-        Controls.label(ui, "Gameplay glass", inner.x, inner.y);
-        float rowTop = inner.y + ui.lineHeight(Type.LABEL) + Skin.S2;
-        float rowHeight = (inner.bottom() - rowTop) / 2f;
-        glassRow(context, new Rect(inner.x, rowTop, inner.width, rowHeight), "Blur",
-                "How much the world behind the menu is blurred.", "appearance.glass.blur",
-                ClientPrefs.RSHIFT_BLUR_CHOICES, context.hud().prefs().rshiftBlurChoice(), enabled);
-        glassRow(context, new Rect(inner.x, rowTop + rowHeight, inner.width, rowHeight), "Dim",
-                "Darkens the world behind the menu so text stays readable.", "appearance.glass.dim",
-                ClientPrefs.RSHIFT_DIM_CHOICES, context.hud().prefs().rshiftDimChoice(), enabled);
+        Rect heading = new Rect(area.x, area.y, area.width, FathomSettingRows.SECTION_HEADING);
+        FathomSettingRows.heading(ui, heading, "Gameplay glass", "");
+        float rowHeight = FathomSettingRows.DESCRIBED_ROW;
+        Rect surface = new Rect(area.x, heading.bottom(), area.width, rowHeight * 2f);
+        FathomSettingRows.surface(ui, surface);
+        glassRow(context, new Rect(surface.x, surface.y, surface.width, rowHeight), "Blur",
+                "How much the game behind the window is blurred.", "appearance.glass.blur",
+                ClientPrefs.RSHIFT_BLUR_CHOICES, context.hud().prefs().rshiftBlurChoice(), enabled, false);
+        glassRow(context, new Rect(surface.x, surface.y + rowHeight, surface.width, rowHeight), "Dim",
+                "Darkens the game behind the window so text stays readable.", "appearance.glass.dim",
+                ClientPrefs.RSHIFT_DIM_CHOICES, context.hud().prefs().rshiftDimChoice(), enabled, true);
     }
 
     private void glassRow(HubContext context, Rect area, String title, String detail, String id,
-            String[] options, int selected, boolean enabled) {
+            String[] options, int selected, boolean enabled, boolean last) {
         Renderer ui = context.ui();
-        float pickerWidth = Math.min(190f, Math.max(142f, area.width * 0.28f));
-        // The same control height and label as a module page's dropdown rows.
-        Rect picker = area.vcentreRight(0f, pickerWidth, Skin.H_SM);
-        net.fathom.optimizations.fabric.ui.FathomSettingRows.label(ui, area, area.x,
-                picker.x - area.x - Skin.S4, title, detail, true);
-        int chosen = context.controls().dropdown(ui, id, picker, options, selected, enabled);
+        Controls controls = context.controls();
+        Rect picker = FathomSettingRows.row(ui, controls, id + ".row", area, title, detail,
+                Math.min(150f, area.width * 0.5f), Skin.H_SM, enabled, controls.pointerOverVisible(area), last);
+        int chosen = controls.dropdown(ui, id, picker, options, selected, enabled);
         if (chosen != selected) {
             if (id.endsWith("blur")) {
                 context.hud().prefs().setRshiftBlurChoice(chosen);
@@ -248,6 +318,16 @@ final class AppearanceSection implements Section {
             }
             MenuScenes.choose(scene);
         }
+    }
+
+    @Override
+    public float scrollPosition() {
+        return scroller.position();
+    }
+
+    @Override
+    public void restore(HubContext context, String pageId, float scroll) {
+        scroller.restore(scroll);
     }
 
     @Override

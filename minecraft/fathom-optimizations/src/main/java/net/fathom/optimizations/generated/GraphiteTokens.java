@@ -92,12 +92,17 @@ public final class GraphiteTokens {
     public static final float LAYOUT_GAME_MARGIN = 12.000f;
     public static final float LAYOUT_CANVAS_WIDTH = 1280.000f;
     public static final float LAYOUT_CANVAS_HEIGHT = 720.000f;
-    public static final float LAYOUT_HUB_WIDTH = 900.000f;
-    public static final float LAYOUT_HUB_HEIGHT = 540.000f;
-    public static final float LAYOUT_HUB_RAIL = 156.000f;
-    public static final float LAYOUT_HUB_RAIL_GAP = 16.000f;
-    public static final float LAYOUT_HUB_HEADER = 28.000f;
-    public static final float LAYOUT_HUB_HEADER_GAP = 14.000f;
+    public static final float LAYOUT_HUB_WIDTH = 780.000f;
+    public static final float LAYOUT_HUB_HEIGHT = 490.000f;
+    public static final float LAYOUT_HUB_PAD = 12.000f;
+    public static final float LAYOUT_HUB_RAIL = 150.000f;
+    public static final float LAYOUT_HUB_RAIL_GAP = 12.000f;
+    public static final float LAYOUT_HUB_HEADER = 32.000f;
+    public static final float LAYOUT_HUB_HEADER_GAP = 8.000f;
+    public static final float LAYOUT_MOD_CARD_MIN_WIDTH = 150.000f;
+    public static final float LAYOUT_MOD_CARD_HEIGHT = 72.000f;
+    public static final float LAYOUT_MOD_CARD_PAD = 10.000f;
+    public static final float LAYOUT_SETTING_ROW = 36.000f;
     public static final float LAYOUT_MENU_HEADER = 44.000f;
     public static final float LAYOUT_MENU_COLUMN = 208.000f;
     public static final float LAYOUT_MENU_GAP = 6.000f;
@@ -213,8 +218,12 @@ public final class GraphiteTokens {
     public static final float MOTION_FAST = 0.120f;
     public static final float MOTION_PANEL = 0.180f;
     public static final float MOTION_CLOSE = 0.120f;
+    public static final float MOTION_HOVER = 0.110f;
+    public static final float MOTION_TOGGLE = 0.140f;
+    public static final float MOTION_DROPDOWN = 0.150f;
+    public static final float MOTION_NAVIGATION = 0.160f;
     public static final float MOTION_TOOLTIP_DELAY = 0.400f;
     public static final float MOTION_SCROLLBAR_FADE = 0.600f;
-    public static final float MOTION_TRAVEL = 8.0f;
+    public static final float MOTION_TRAVEL = 6.0f;
     public static final String WORDMARK_TEXT = "fathom";
 }

@@ -67,12 +67,76 @@ public final class Behaviour {
      */
     public static final String OLD_ANIMATIONS = "old-animations";
 
+    /**
+     * How far the camera tilts when you take damage: none, vanilla's, or more.
+     * Implemented by the hurt-camera Mixin. Visual and client-only.
+     */
+    public static final String HURT_CAMERA = "hurt-camera";
+
+    /** The targeted block's box in your colours. Implemented by the block outline Mixin. */
+    public static final String BLOCK_OUTLINE = "block-outline";
+
+    /** F3+B boxes, always on and styled. Implemented by the hitbox Mixin. */
+    public static final String HITBOXES = "hitboxes";
+
+    /** Dropped items lie flat and tumble. Implemented by the item entity renderer Mixin. */
+    public static final String ITEM_PHYSICS = "item-physics";
+
+    /** The client world's rain and thunder. Implemented by the weather Mixin. */
+    public static final String WEATHER_CHANGER = "weather-changer";
+
+    /** The fuse over primed TNT. Implemented by the TNT renderer Mixin. */
+    public static final String TNT_COUNTDOWN = "tnt-countdown";
+
+    /** Hit particles multiplied, block particles hidden. Implemented by the particle Mixins. */
+    public static final String PARTICLES = "particles";
+
+    /** Frames blended with the ones before. Implemented by the game renderer Mixin. */
+    public static final String MOTION_BLUR = "motion-blur";
+
+    /** Your username drawn as another name. Implemented by the font Mixins. */
+    public static final String NICK_HIDER = "nick-hider";
+
+    /** Titles hidden or resized. Implemented by the in-game HUD Mixins. */
+    public static final String TITLES = "titles";
+
+    /** The boss bar hidden. Implemented by the in-game HUD Mixin. */
+    public static final String BOSS_BAR = "boss-bar";
+
+    /** The tint on hurt entities. Implemented by the living entity renderer Mixin. */
+    public static final String HIT_COLOUR = "hit-colour";
+
+    /** The view flipped while a key is held. Implemented by the frame hook. */
+    public static final String SNAPLOOK = "snaplook";
+
+    /** Labels over players and named mobs, styled. Implemented by the label Mixins. */
+    public static final String NAMETAGS = "nametags";
+
+    /** Marked spots drawn in the world. Implemented by the world overlay and command Mixins. */
+    public static final String WAYPOINTS = "waypoints";
+
+    /** A stronger glint on potions. Implemented by the item renderer Mixin. */
+    public static final String SHINY_POTS = "shiny-pots";
+
+    /** Markers over teammates. Implemented by the world overlay Mixin. */
+    public static final String TEAMVIEW = "teamview";
+
+    /** Says gg when a game ends. Implemented by the chat reader. */
+    public static final String AUTO_GG = "auto-gg";
+
+    /** The camera turns without you. Implemented by the game renderer Mixin. */
+    public static final String FREELOOK = "freelook";
+
     /** Timestamps, folded repeats, background and shadow. Implemented by the chat Mixin. */
     public static final String CHAT = "chat";
 
     /** Every behaviour the client implements. */
     public static final String[] ALL = {
-        ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE, PERFORMANCE_LAYER, SCOREBOARD, FULLBRIGHT, TIME_CHANGER, OLD_ANIMATIONS, CHAT
+        ZOOM, CROSSHAIR, MAIN_MENU, MOVEMENT_TOGGLE, PERFORMANCE_LAYER, SCOREBOARD, FULLBRIGHT, TIME_CHANGER, OLD_ANIMATIONS, HURT_CAMERA, CHAT,
+        BLOCK_OUTLINE, HITBOXES, ITEM_PHYSICS, WEATHER_CHANGER, TNT_COUNTDOWN, PARTICLES, MOTION_BLUR,
+        NICK_HIDER, TITLES, BOSS_BAR, HIT_COLOUR, SNAPLOOK,
+        NAMETAGS, WAYPOINTS, SHINY_POTS, TEAMVIEW,
+        AUTO_GG, FREELOOK
     };
 
     private Behaviour() {}

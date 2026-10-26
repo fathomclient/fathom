@@ -133,6 +133,16 @@ final class QuickSection implements Section {
     }
 
     @Override
+    public float scrollPosition() {
+        return scroller.position();
+    }
+
+    @Override
+    public void restore(HubContext context, String pageId, float scroll) {
+        scroller.restore(scroll);
+    }
+
+    @Override
     public void scroll(int notches) {
         scroller.wheel(notches);
     }

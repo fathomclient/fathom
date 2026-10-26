@@ -196,6 +196,14 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 "160 dropped items piled on 4 generators, 8 armoured players fighting beside them"),
         DECOR("decor", 8f, Where.MP, "40 signs, 24 mob skulls, 16 banners and 12 item frames in front of the camera"),
         TAB_BIG("tab-big", 8f, Where.MP, "20 players in view, 80 online, 15-line sidebar, tab list held open"),
+        /** A 1.8 PvP practice lobby (Minemen): a crowd at every distance, the NPCs, the sidebar, tab list closed. */
+        MINEMEN("minemen", 8f, Where.MP,
+                "PvP lobby: 64 players walking 4-40 blocks ahead with rank-coloured names and lobby items,"
+                        + " 6 NPCs under 3-line holograms, 80 online, 12-line sidebar, chat"),
+        /** A server hub: many labels and few bodies, where the per-entity nametag decision dominates. */
+        HUB("hub", 8f, Where.MP,
+                "server hub: 16 NPCs in two arcs, each under a 4-line hologram (64 named invisible armor stands),"
+                        + " 24 rank-coloured players walking among them, 80 online"),
         /** Whatever a real server is doing; the camera is left alone. */
         LIVE("live", Float.NaN, Where.MP, "a live server, camera not held");
 
@@ -300,6 +308,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     private final Map<String, ViewBucket> buckets = new LinkedHashMap<String, ViewBucket>();
     private final List<ViewBucket> tags = new ArrayList<ViewBucket>();
     private final Map<String, String> sceneNotes = new LinkedHashMap<String, String>();
+    private long lastTerrainRefreshTick = Long.MIN_VALUE;
     private final List<String> runNotes = new ArrayList<String>();
 
     private Phase phase = Phase.WAIT_WORLD;
@@ -327,6 +336,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
     private long measureStarted;
     private long windowFrameNanos;
     private int windowFrames;
+    private int windowUnfocused;
     private long gcCountAtStart;
     private long gcMillisAtStart;
     private long allocatedAtStart;
@@ -508,6 +518,9 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         if (!focused && ending >= 0 && ending < tags.size()) {
             tags.get(ending).unfocused();
         }
+        if (!focused && phase == Phase.MEASURE) {
+            windowUnfocused++;
+        }
         long gc = gcTotals()[0];
         if (gcSeen >= 0L && gc != gcSeen) {
             ViewProbe.flagFrame(ViewProbe.FLAG_GC);
@@ -561,6 +574,18 @@ public final class ViewBenchmark implements ViewProbe.Sink {
         }
         if (current != null && current.scene == Scene.PARTICLES) {
             particles(client, now);
+        }
+        if (current != null && current.scene.remote() && client.world != null) {
+            // OptiFine draws entities only from the chunks that held entities at the last
+            // visibility rebuild, which a moving camera triggers every frame and a held one
+            // never does: players arriving in, or walking into, a chunk that had none were
+            // not drawn at all ("players loaded but not drawn"). Once a client tick, as an
+            // entity can only change chunks on a tick.
+            long tick = client.world.getLastUpdateTime();
+            if (tick != lastTerrainRefreshTick) {
+                lastTerrainRefreshTick = tick;
+                client.worldRenderer.scheduleTerrainUpdate();
+            }
         }
         if (current != null && current.scene == Scene.ENTITIES && net.fathom.optimizations.fabric.perf.NametagNames.VERIFY
                 && framesSeen % 30 == 0) {
@@ -958,6 +983,7 @@ public final class ViewBenchmark implements ViewProbe.Sink {
             lastChunkActivity = now;
         }
         windowFrames = 0;
+        windowUnfocused = 0;
         windowFrameNanos = 0L;
         long[] gc = gcTotals();
         gcCountAtStart = gc[0];
@@ -998,10 +1024,18 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                     "view-" + current.scene.id + "-" + current.arm.replaceAll("[^A-Za-z0-9.-]", "_") + ".png",
                     client.width, client.height, client.getFramebuffer());
         }
+        String entities;
+        try {
+            entities = client.worldRenderer.getEntitiesDebugString();
+        } catch (Throwable unreadable) {
+            entities = "?";
+        }
+        // The entity count at the window's end, so a window whose scene came up only partly
+        // (players loaded but not drawn) can be told apart from its pair.
         System.out.println(String.format(Locale.ROOT,
-                "[FATHOM VIEW] %s/%s round %d: %d frames, mean %.4f ms",
+                "[FATHOM VIEW] %s/%s round %d: %d frames, mean %.4f ms, %d unfocused | %s",
                 current.scene.id, current.arm, current.round + 1, windowFrames,
-                windowFrames == 0 ? 0d : windowFrameNanos / 1_000_000d / windowFrames));
+                windowFrames == 0 ? 0d : windowFrameNanos / 1_000_000d / windowFrames, windowUnfocused, entities));
     }
 
     // -----------------------------------------------------------------------
@@ -1471,6 +1505,30 @@ public final class ViewBenchmark implements ViewProbe.Sink {
                 net.fathom.optimizations.fabric.perf.TextLists.replays,
                 net.fathom.optimizations.fabric.perf.TextLists.records,
                 net.fathom.optimizations.fabric.perf.TextLists.live));
+        runNotes.add(String.format(Locale.ROOT,
+                "Item model lists: %d replayed, %d recorded, %d live; compared offscreen %d (%d with pixels"
+                        + " drawn), differing %d (glint %d; %d bytes differ, at most by %d).",
+                net.fathom.optimizations.fabric.perf.ItemModelLists.replays,
+                net.fathom.optimizations.fabric.perf.ItemModelLists.records,
+                net.fathom.optimizations.fabric.perf.ItemModelLists.live,
+                net.fathom.optimizations.fabric.perf.ItemModelLists.verified,
+                net.fathom.optimizations.fabric.perf.ItemModelLists.verifiedDrawn,
+                net.fathom.optimizations.fabric.perf.ItemModelLists.mismatches,
+                net.fathom.optimizations.fabric.perf.ItemModelLists.mismatchesGlint,
+                net.fathom.optimizations.fabric.perf.ItemModelLists.differingBytes,
+                net.fathom.optimizations.fabric.perf.ItemModelLists.maxDiff));
+        runNotes.add("Item model bytes: " + net.fathom.optimizations.fabric.perf.ItemModelLists.bytesCompared
+                + " compared, " + net.fathom.optimizations.fabric.perf.ItemModelLists.bytesDiffered + " differed"
+                + (net.fathom.optimizations.fabric.perf.ItemModelLists.firstByteDiff == null ? ""
+                        : " (first: " + net.fathom.optimizations.fabric.perf.ItemModelLists.firstByteDiff + ")") + ".");
+        runNotes.add(String.format(Locale.ROOT,
+                "Model box batching: %d boxes compiled batched, %d part recompiles; lists compared offscreen %d"
+                        + " (%d with pixels drawn), differing %d.",
+                net.fathom.optimizations.fabric.perf.ModelBatch.boxesBatched,
+                net.fathom.optimizations.fabric.perf.ModelBatch.recompiles,
+                net.fathom.optimizations.fabric.perf.ModelBatch.verified,
+                net.fathom.optimizations.fabric.perf.ModelBatch.verifiedDrawn,
+                net.fathom.optimizations.fabric.perf.ModelBatch.mismatches));
         try {
             write(client);
         } catch (Throwable failure) {

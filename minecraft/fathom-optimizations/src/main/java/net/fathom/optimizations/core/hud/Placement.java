@@ -31,8 +31,14 @@ public final class Placement {
     private final int offsetY;
     private final float scale;
     private final float opacity;
+    private final TextAnchor textAnchor;
 
     public Placement(Anchor anchor, int offsetX, int offsetY, float scale, float opacity) {
+        this(anchor, offsetX, offsetY, scale, opacity, TextAnchor.AUTO);
+    }
+
+    public Placement(Anchor anchor, int offsetX, int offsetY, float scale, float opacity, TextAnchor textAnchor) {
+        this.textAnchor = textAnchor == null ? TextAnchor.AUTO : textAnchor;
         this.anchor = anchor == null ? Anchor.TOP_LEFT : anchor;
         this.offsetX = offsetX;
         this.offsetY = offsetY;
@@ -55,6 +61,20 @@ public final class Placement {
         return anchor;
     }
 
+    /** Which edge of the text stays put as it changes length; {@link TextAnchor#AUTO} follows the anchor. */
+    public TextAnchor textAnchor() {
+        return textAnchor;
+    }
+
+    /** The text's alignment across its box: 0 left, 0.5 centre, 1 right. */
+    public float textAlignment() {
+        return textAnchor.fraction(anchor);
+    }
+
+    public Placement withTextAnchor(TextAnchor next) {
+        return new Placement(anchor, offsetX, offsetY, scale, opacity, next);
+    }
+
     public int offsetX() {
         return offsetX;
     }
@@ -72,19 +92,19 @@ public final class Placement {
     }
 
     public Placement withAnchor(Anchor next) {
-        return new Placement(next, offsetX, offsetY, scale, opacity);
+        return new Placement(next, offsetX, offsetY, scale, opacity, textAnchor);
     }
 
     public Placement withOffset(int x, int y) {
-        return new Placement(anchor, x, y, scale, opacity);
+        return new Placement(anchor, x, y, scale, opacity, textAnchor);
     }
 
     public Placement withScale(float next) {
-        return new Placement(anchor, offsetX, offsetY, next, opacity);
+        return new Placement(anchor, offsetX, offsetY, next, opacity, textAnchor);
     }
 
     public Placement withOpacity(float next) {
-        return new Placement(anchor, offsetX, offsetY, scale, next);
+        return new Placement(anchor, offsetX, offsetY, scale, next, textAnchor);
     }
 
     /** The alpha byte, for packing into an ARGB colour. */
@@ -105,7 +125,8 @@ public final class Placement {
                 && offsetX == that.offsetX
                 && offsetY == that.offsetY
                 && Float.compare(scale, that.scale) == 0
-                && Float.compare(opacity, that.opacity) == 0;
+                && Float.compare(opacity, that.opacity) == 0
+                && textAnchor == that.textAnchor;
     }
 
     @Override
@@ -114,7 +135,8 @@ public final class Placement {
         result = 31 * result + offsetX;
         result = 31 * result + offsetY;
         result = 31 * result + Float.floatToIntBits(scale);
-        return 31 * result + Float.floatToIntBits(opacity);
+        result = 31 * result + Float.floatToIntBits(opacity);
+        return 31 * result + textAnchor.hashCode();
     }
 
     @Override

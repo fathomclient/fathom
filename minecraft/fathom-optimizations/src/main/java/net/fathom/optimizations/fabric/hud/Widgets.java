@@ -62,6 +62,13 @@ public final class Widgets {
         out.add(new ScoreboardWidget());
         out.add(new DirectionWidget());
         out.add(new CrosshairWidget());
+        out.add(new InfoWidgets.Saturation());
+        out.add(new InfoWidgets.ServerAddress());
+        out.add(new InfoWidgets.Speed());
+        out.add(new InfoWidgets.ItemCounter());
+        out.add(new InfoWidgets.BlockInfo());
+        out.add(new InfoWidgets.HeightLimit());
+        out.add(new InfoWidgets.BedwarsStats());
         return out;
     }
 

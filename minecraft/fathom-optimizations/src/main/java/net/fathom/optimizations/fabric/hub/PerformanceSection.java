@@ -55,17 +55,23 @@ final class PerformanceSection implements Section {
     private static final float ROW = Skin.ROW_HEIGHT;
     private static final float GROUP = 34f;
 
+    /** The engine list inside its glass group. */
     private final Scroller scroller = new Scroller();
+    /** The whole page, for a window too short to show the list its minimum height. */
+    private final Scroller pageScroller = new Scroller();
+    /** The least height the engine list is given: about seven rows. The page scrolls past that. */
+    private static final float LIST_MIN = 7f * ROW + GROUP;
+    private float pageOffset;
     private List<Row> rows;
     private List<Optimization> cachedEngineEntries;
-    private final Box page = Box.column("performance.page");
+    private final Box page = Box.column("performance.page").scroll(true);
     private final Box metersBox = Box.row("performance.instrument").height(Instrument.HEIGHT);
     private final Instrument instrument = new Instrument();
     private final Box interfaceLabel = Box.column("performance.interface.label");
     private final Box interfaceBox = Box.column("performance.interface");
     private final Box presetLabel = Box.column("performance.preset.label");
     private final Box presetBox = Box.row("performance.preset").height(Skin.H_MD + Skin.S2 * 2f);
-    private final Box listViewport = Box.stack("performance.list.viewport").grow(1f);
+    private final Box listViewport = Box.stack("performance.list.viewport");
     private final Box listLayout = Box.column("performance.list").padding(Skin.S2).scroll(true);
     private final java.util.List<Box> layerBoxes = new java.util.ArrayList<Box>();
     private final java.util.List<Box> engineBoxes = new java.util.ArrayList<Box>();
@@ -106,6 +112,8 @@ final class PerformanceSection implements Section {
     @Override
     public void opened(HubContext context) {
         scroller.reset();
+        pageScroller.reset();
+        pageOffset = 0f;
     }
 
     @Override
@@ -123,8 +131,23 @@ final class PerformanceSection implements Section {
         interfaceLabel.height(labelHeight);
         interfaceBox.height(interfaceLine * 2f + Skin.S3 + Skin.S3 * 2f);
         presetLabel.height(labelHeight);
+        // The engine list takes whatever the page has left, but never less than
+        // LIST_MIN: below that the page itself scrolls, so everything above the
+        // list stays reachable in a short window or at a large GUI scale.
+        float fixed = Instrument.HEIGHT + Skin.S3 + labelHeight + (interfaceLine * 2f + Skin.S3 + Skin.S3 * 2f)
+                + Skin.S3 + labelHeight + (Skin.H_MD + Skin.S2 * 2f) + Skin.S3;
+        listViewport.height(Math.max(LIST_MIN, area.height - fixed));
         // The right gutter every Hub page leaves, so its panels end where theirs do.
+        page.scrollTo(pageOffset);
         page.layout(ui, area.x, area.y, area.width - Skin.SCROLL_GUTTER, area.height);
+        float pageContent = page.content().height + page.scrollRange();
+        float settled = pageScroller.offset(context.delta(), pageContent, page.content().height);
+        if (settled != pageOffset) {
+            pageOffset = settled;
+            page.scrollTo(settled);
+            page.layout(ui, area.x, area.y, area.width - Skin.SCROLL_GUTTER, area.height);
+        }
+        ui.clip(area.x, area.y, area.right(), area.bottom());
         instrument.draw(context, metersBox.rect());
 
         // Stacked on a cursor, on real line heights. Every group is a label,
@@ -184,6 +207,8 @@ final class PerformanceSection implements Section {
         }
         ui.unclip();
         scroller.rail(ui, body, context.pointer(), context.now());
+        ui.unclip();
+        pageScroller.rail(ui, area, context.pointer(), context.now());
     }
 
     private List<Optimization> cachedEngineEntries() {
@@ -482,8 +507,38 @@ final class PerformanceSection implements Section {
     }
 
     @Override
+    public float scrollPosition() {
+        return pageScroller.position();
+    }
+
+    @Override
+    public void restore(HubContext context, String pageId, float scroll) {
+        pageScroller.restore(scroll);
+        pageOffset = Math.max(0f, scroll);
+    }
+
+    @Override
     public void scroll(int notches) {
-        scroller.wheel(notches);
+        int left = scroller.wheel(notches);
+        if (left != 0) {
+            pageScroller.wheel(left);
+        }
+    }
+
+    /**
+     * The wheel goes to the list under the pointer first. What the list cannot
+     * use, because it is at that end or does not overflow, goes to the page, so
+     * a list at its end never traps the wheel. Over anything else the page
+     * scrolls.
+     */
+    @Override
+    public void scroll(int notches, float x, float y) {
+        Rect list = listViewport.rect();
+        if (list.contains(x, y)) {
+            scroll(notches);
+        } else {
+            pageScroller.wheel(notches);
+        }
     }
 
     /**

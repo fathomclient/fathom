@@ -63,6 +63,7 @@ public final class ModuleTests {
         everyWorkingModuleActuallyDoesSomething();
         nothingUnavailableOffersAToggle();
         everyBehaviourIsClaimedAndEveryClaimIsImplemented();
+        hurtCameraStartsOffAndRemovesTheShake();
         everyWidgetModuleCarriesTheCommonHudSettings();
         everyHudModuleDefaultsToMinecraftFont();
         styleSettingsSayWhenTheyHaveNoEffect();
@@ -165,6 +166,15 @@ public final class ModuleTests {
             check(Behaviour.implemented(behaviour), behaviour + " is claimed and not implemented");
         }
         pass("every behaviour is claimed and every claim is implemented");
+    }
+
+    /** Off until asked for; switched on, its first answer is no shake at all. */
+    static void hurtCameraStartsOffAndRemovesTheShake() {
+        FathomModule module = ModuleRegistry.standard().find("hurt-camera");
+        check(module != null, "hurt-camera is missing");
+        check(module.switchable() && !module.defaultEnabled(), "hurt-camera is off out of the box");
+        check(Math.round(module.number("strength", -1)) == 0, "its shake starts at 0%");
+        pass("hurt camera starts off and removes the shake");
     }
 
     /**

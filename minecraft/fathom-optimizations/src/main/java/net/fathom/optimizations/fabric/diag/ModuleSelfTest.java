@@ -825,9 +825,13 @@ public final class ModuleSelfTest {
                 float sky = client.world.getSkyAngle(1f);
                 check("time changer: the sky is at the chosen hour", ticks >= 0L && Math.abs(sky - wanted) < 1e-4f,
                         "sky " + sky + ", midnight " + wanted);
-                long now = client.world.getTimeOfDay();
+                long now = client.world.getLevelProperties().getTimeOfDay();
                 check("time changer: the world's own time is still the server's",
                         Math.abs(now - timeBefore) <= 40L, timeBefore + " -> " + now);
+                long shown = client.world.getTimeOfDay();
+                check("time changer: readers of the world time see the chosen hour on the real day",
+                        shown == net.fathom.optimizations.core.visual.Lighting.visualTimeOfDay(now, ticks),
+                        "shown " + shown + ", real " + now + ", chosen tick " + ticks);
                 setEnabled("time-changer", false);
                 next();
                 return;
@@ -843,6 +847,282 @@ public final class ModuleSelfTest {
                 // The equip transform is only called for an item in hand: an
                 // empty hand draws the bare arm. Hold one, on the client's copy
                 // only, until the hand has swapped to it and drawn a few frames.
+                // Block Outline, looking straight down at the block underfoot,
+                // and Hitboxes, on the player's own box in third person.
+                pitchBefore = client.player.pitch;
+                perspectiveBefore = client.options.perspective;
+                client.player.pitch = 90.0F;
+                ((Setting.Colour) module("block-outline").setting("colour")).set(0xFF00FF);
+                ((Setting.Whole) module("block-outline").setting("opacity")).set(100);
+                ((Setting.Whole) module("block-outline").setting("thickness")).set(4);
+                setToggle("block-outline", "fill", true);
+                setEnabled("block-outline", true);
+                net.fathom.optimizations.fabric.visual.BlockOutline.drawn = 0;
+                step = 70;
+                stepStarted = System.nanoTime();
+                return;
+            }
+            case 70: {
+                if (since() < 600L) {
+                    return;
+                }
+                screenshot(client, "fathom-qa-block-outline");
+                int drawn = net.fathom.optimizations.fabric.visual.BlockOutline.drawn;
+                check("block outline: drawn on the targeted block", drawn > 0,
+                        drawn + " frames, target " + (client.result == null ? "none" : String.valueOf(client.result.type)));
+                setEnabled("block-outline", false);
+                client.player.pitch = 0.0F;
+                client.options.perspective = 1;
+                setEnabled("hitboxes", true);
+                net.fathom.optimizations.fabric.visual.Hitboxes.drawn = 0;
+                next70(71);
+                return;
+            }
+            case 71: {
+                if (since() < 600L) {
+                    return;
+                }
+                screenshot(client, "fathom-qa-hitboxes");
+                int drawn = net.fathom.optimizations.fabric.visual.Hitboxes.drawn;
+                check("hitboxes: drawn for an entity on screen", drawn > 0, drawn + " boxes");
+                setEnabled("hitboxes", false);
+                net.fathom.optimizations.fabric.visual.Hitboxes.drawn = 0;
+                next70(72);
+                return;
+            }
+            case 72: {
+                if (since() < 300L) {
+                    return;
+                }
+                check("hitboxes: off, none drawn", net.fathom.optimizations.fabric.visual.Hitboxes.drawn == 0,
+                        net.fathom.optimizations.fabric.visual.Hitboxes.drawn + " boxes");
+                client.player.pitch = 30.0F;
+                // A dropped item and a primed TNT in front of the player, on
+                // the client's world only.
+                double ahead = 2.5;
+                double yawRad = Math.toRadians(client.player.yaw);
+                double ex = client.player.x - Math.sin(yawRad) * ahead;
+                double ez = client.player.z + Math.cos(yawRad) * ahead;
+                qaItem = new net.minecraft.entity.ItemEntity(client.world, ex, client.player.y, ez,
+                        new net.minecraft.item.ItemStack(net.minecraft.item.Items.DIAMOND));
+                qaTnt = new net.minecraft.entity.TntEntity(client.world, ex + 1.0, client.player.y, ez, null);
+                qaTnt.fuseTimer = 1000;
+                client.world.spawnEntity(qaItem);
+                client.world.spawnEntity(qaTnt);
+                setEnabled("item-physics", true);
+                setEnabled("tnt-countdown", true);
+                net.fathom.optimizations.fabric.visual.ItemPhysics.transformed = 0;
+                net.fathom.optimizations.fabric.visual.WorldEffects.tntLabels = 0;
+                next70(73);
+                return;
+            }
+            case 73: {
+                if (since() < 800L) {
+                    return;
+                }
+                screenshot(client, "fathom-qa-item-physics-tnt");
+                check("item physics: the dropped item is drawn with its transform",
+                        net.fathom.optimizations.fabric.visual.ItemPhysics.transformed > 0,
+                        net.fathom.optimizations.fabric.visual.ItemPhysics.transformed + " draws");
+                check("tnt countdown: primed TNT is labelled",
+                        net.fathom.optimizations.fabric.visual.WorldEffects.tntLabels > 0,
+                        net.fathom.optimizations.fabric.visual.WorldEffects.tntLabels + " labels");
+                setEnabled("item-physics", false);
+                setEnabled("tnt-countdown", false);
+                client.world.removeEntity(qaItem);
+                client.world.removeEntity(qaTnt);
+                qaItem = null;
+                qaTnt = null;
+                setChoice("weather-changer", "weather", "Thunder");
+                setEnabled("weather-changer", true);
+                setEnabled("motion-blur", true);
+                net.fathom.optimizations.fabric.visual.MotionBlur.blended = 0;
+                next70(74);
+                return;
+            }
+            case 74: {
+                if (since() < 800L) {
+                    return;
+                }
+                screenshot(client, "fathom-qa-weather-blur");
+                check("weather changer: the client's world shows thunder",
+                        client.world.getRainGradient(1.0F) == 1.0F && client.world.getThunderGradient(1.0F) == 1.0F,
+                        "rain " + client.world.getRainGradient(1.0F) + ", thunder " + client.world.getThunderGradient(1.0F));
+                check("motion blur: frames are blended",
+                        net.fathom.optimizations.fabric.visual.MotionBlur.blended > 0,
+                        net.fathom.optimizations.fabric.visual.MotionBlur.blended + " frames");
+                setEnabled("weather-changer", false);
+                setEnabled("motion-blur", false);
+                net.fathom.optimizations.fabric.visual.MotionBlur.blended = 0;
+                next70(75);
+                return;
+            }
+            case 75: {
+                if (since() < 300L) {
+                    return;
+                }
+                check("weather changer: off, the server's weather again",
+                        net.fathom.optimizations.fabric.visual.WorldEffects.rain() < 0.0F
+                                && net.fathom.optimizations.fabric.visual.WorldEffects.thunder() < 0.0F,
+                        "rain " + client.world.getRainGradient(1.0F) + ", thunder " + client.world.getThunderGradient(1.0F));
+                check("motion blur: off, nothing blended",
+                        net.fathom.optimizations.fabric.visual.MotionBlur.blended == 0,
+                        net.fathom.optimizations.fabric.visual.MotionBlur.blended + " frames");
+                ((Setting.Text) module("nick-hider").setting("name")).set("QAHidden");
+                setEnabled("nick-hider", true);
+                client.inGameHud.getChatHud().addMessage(
+                        new net.minecraft.text.LiteralText("<" + client.getSession().getUsername() + "> nick hider check"));
+                next70(76);
+                return;
+            }
+            case 76: {
+                if (since() < 500L) {
+                    return;
+                }
+                screenshot(client, "fathom-qa-nick-hider");
+                String real = client.getSession().getUsername();
+                check("nick hider: your name is drawn as the chosen one",
+                        net.fathom.optimizations.fabric.visual.NickHider.apply("<" + real + ">").equals("<QAHidden>"),
+                        net.fathom.optimizations.fabric.visual.NickHider.apply("<" + real + ">"));
+                check("nick hider: widths measure the shown name",
+                        client.textRenderer.getStringWidth(real) == client.textRenderer.getStringWidth("QAHidden"),
+                        client.textRenderer.getStringWidth(real) + " vs " + client.textRenderer.getStringWidth("QAHidden"));
+                setEnabled("nick-hider", false);
+                next70(77);
+                return;
+            }
+            case 77: {
+                if (since() < 300L) {
+                    return;
+                }
+                String real = client.getSession().getUsername();
+                check("nick hider: off, your own name again",
+                        net.fathom.optimizations.fabric.visual.NickHider.apply(real).equals(real), real);
+                infoChecks(client);
+                client.options.perspective = 1;
+                client.player.pitch = 20.0F;
+                // Stand up: an earlier check leaves sneak toggled on, and a
+                // sneaking player's label is vanilla's own.
+                sprintSneakBefore = module("toggle-sprint").enabled();
+                setEnabled("toggle-sprint", false);
+                setChoice("nametags", "text.colour.mode", "Custom");
+                ((Setting.Colour) module("nametags").setting("text.colour")).set(0xFF00FF);
+                setToggle("nametags", "background.show", false);
+                setEnabled("nametags", true);
+                setEnabled("waypoints", true);
+                net.fathom.optimizations.fabric.visual.Nametags.drawn = 0;
+                net.fathom.optimizations.fabric.visual.Waypoints.drawn = 0;
+                double yaw = Math.toRadians(client.player.yaw);
+                int wx = (int) Math.floor(client.player.x - Math.sin(yaw) * 12);
+                int wz = (int) Math.floor(client.player.z + Math.cos(yaw) * 12);
+                client.player.sendChatMessage("/fwp add QA mark " + wx + " " + (int) client.player.y + " " + wz);
+                next70(78);
+                return;
+            }
+            case 78: {
+                if (since() < 700L) {
+                    return;
+                }
+                screenshot(client, "fathom-qa-nametag-waypoint");
+                // A sneaking player's label is vanilla's own small one, drawn
+                // without the label call the module takes over.
+                check("nametags: your own label is drawn in third person",
+                        net.fathom.optimizations.fabric.visual.Nametags.drawn > 0,
+                        net.fathom.optimizations.fabric.visual.Nametags.drawn + " labels, sneaking "
+                                + client.player.isSneaking() + ", perspective " + client.options.perspective);
+                check("waypoints: /fwp made one, and it is drawn",
+                        net.fathom.optimizations.fabric.visual.Waypoints.drawn > 0
+                                && !net.fathom.optimizations.fabric.visual.Waypoints.list()
+                                        .at(net.fathom.optimizations.fabric.visual.Waypoints.place(client),
+                                                client.player.dimension).isEmpty(),
+                        net.fathom.optimizations.fabric.visual.Waypoints.drawn + " draws");
+                client.player.sendChatMessage("/fwp remove QA mark");
+                setEnabled("nametags", false);
+                setEnabled("waypoints", false);
+                setEnabled("toggle-sprint", sprintSneakBefore);
+                net.minecraft.item.ItemStack potion = new net.minecraft.item.ItemStack(net.minecraft.item.Items.POTION, 1, 8193);
+                int before = net.fathom.optimizations.fabric.visual.HudTweaks.extraPotionGlint(potion);
+                setEnabled("shiny-pots", true);
+                int during = net.fathom.optimizations.fabric.visual.HudTweaks.extraPotionGlint(potion);
+                int stick = net.fathom.optimizations.fabric.visual.HudTweaks.extraPotionGlint(
+                        new net.minecraft.item.ItemStack(net.minecraft.item.Items.STICK));
+                setEnabled("shiny-pots", false);
+                check("shiny pots: potions get the extra glint, nothing else does",
+                        before == 0 && during == 1 && stick == 0, before + " / " + during + " / " + stick);
+                // Bedwars Stats and Auto GG, from lines as the server would send them.
+                String you = client.getSession().getUsername();
+                int killsBefore = net.fathom.optimizations.fabric.input.ChatMacros.kills();
+                int finalsBefore = net.fathom.optimizations.fabric.input.ChatMacros.finals();
+                client.inGameHud.getChatHud().addMessage(new net.minecraft.text.LiteralText(
+                        "QABot was killed by " + you + ". FINAL KILL!"));
+                client.inGameHud.getChatHud().addMessage(new net.minecraft.text.LiteralText(
+                        "QABot: I was killed by " + you + "."));
+                check("bedwars stats: a final kill counts once, player chat not at all",
+                        net.fathom.optimizations.fabric.input.ChatMacros.kills() == killsBefore + 1
+                                && net.fathom.optimizations.fabric.input.ChatMacros.finals() == finalsBefore + 1,
+                        net.fathom.optimizations.fabric.input.ChatMacros.kills() + " kills, "
+                                + net.fathom.optimizations.fabric.input.ChatMacros.finals() + " finals");
+                ((Setting.Text) module("auto-gg").setting("message")).set("/fwp list");
+                ((Setting.Whole) module("auto-gg").setting("delay")).set(0);
+                setEnabled("auto-gg", true);
+                net.fathom.optimizations.fabric.input.ChatMacros.lastSentMessage = null;
+                client.inGameHud.getChatHud().addMessage(new net.minecraft.text.LiteralText("QABot: Reward Summary"));
+                client.inGameHud.getChatHud().addMessage(new net.minecraft.text.LiteralText("          Reward Summary"));
+                // Latch sneak again, as the earlier check left it, with a real
+                // press of the key: the leave-and-rejoin checks start from it.
+                net.minecraft.client.option.KeyBinding.setKeyPressed(client.options.sneakKey.getCode(), true);
+                next70(79);
+                return;
+            }
+            case 79: {
+                if (since() < 250L) {
+                    return;
+                }
+                check("auto gg: the game-end line sends the message, once",
+                        "/fwp list".equals(net.fathom.optimizations.fabric.input.ChatMacros.lastSentMessage),
+                        String.valueOf(net.fathom.optimizations.fabric.input.ChatMacros.lastSentMessage));
+                setEnabled("auto-gg", false);
+                // The lines above make chat tall enough to reach the crosshair,
+                // whose centring is measured from a screenshot next.
+                client.inGameHud.getChatHud().clear();
+                setChoice("freelook", "mode", "Toggle");
+                setEnabled("freelook", true);
+                freelookPerspective = client.options.perspective;
+                net.fathom.optimizations.fabric.input.Freelook.qaToggle();
+                next70(80);
+                return;
+            }
+            case 80: {
+                if (since() < 200L) {
+                    return;
+                }
+                float playerYaw = client.player.yaw;
+                float cameraBefore = net.fathom.optimizations.fabric.input.Freelook.cameraYaw();
+                boolean took = net.fathom.optimizations.fabric.input.Freelook.look(400f, 0f);
+                check("freelook: on, the mouse turns the camera and not you",
+                        net.fathom.optimizations.fabric.input.Freelook.active() && took
+                                && client.player.yaw == playerYaw
+                                && Math.abs(net.fathom.optimizations.fabric.input.Freelook.cameraYaw() - cameraBefore - 60f) < 0.01f
+                                && client.options.perspective != 0,
+                        "player " + playerYaw + " -> " + client.player.yaw + ", camera " + cameraBefore + " -> "
+                                + net.fathom.optimizations.fabric.input.Freelook.cameraYaw()
+                                + ", perspective " + client.options.perspective);
+                net.fathom.optimizations.fabric.input.Freelook.qaToggle();
+                next70(81);
+                return;
+            }
+            case 81: {
+                if (since() < 200L) {
+                    return;
+                }
+                check("freelook: off, the view is yours again",
+                        !net.fathom.optimizations.fabric.input.Freelook.active()
+                                && client.options.perspective == freelookPerspective,
+                        "perspective " + client.options.perspective + ", was " + freelookPerspective);
+                setEnabled("freelook", false);
+                net.minecraft.client.option.KeyBinding.setKeyPressed(client.options.sneakKey.getCode(), false);
+                client.options.perspective = perspectiveBefore;
+                client.player.pitch = pitchBefore;
                 heldSlot = client.player.inventory.selectedSlot;
                 heldBefore = client.player.inventory.main[heldSlot];
                 client.player.inventory.main[heldSlot] = new net.minecraft.item.ItemStack(net.minecraft.item.Items.STICK);
@@ -1048,6 +1328,12 @@ public final class ModuleSelfTest {
     private static int lightBefore;
     private static long timeBefore;
     private static int heldSlot;
+    private static float pitchBefore;
+    private static boolean sprintSneakBefore;
+    private static int freelookPerspective;
+    private static net.minecraft.entity.ItemEntity qaItem;
+    private static net.minecraft.entity.TntEntity qaTnt;
+    private static int perspectiveBefore;
     private static net.minecraft.item.ItemStack heldBefore;
     private static Map<String, String> crosshairBefore;
     private static int guiBefore;
@@ -1390,4 +1676,62 @@ public final class ModuleSelfTest {
                 + skipped + " skipped" + (entered ? "" : ", never entered a world"));
         client.scheduleStop();
     }
+
+    /** The read-out widgets, and Titles, from what the client already knows. */
+    private static void infoChecks(MinecraftClient client) {
+        java.util.List<String> saturation = new net.fathom.optimizations.fabric.hud.InfoWidgets.Saturation()
+                .linesForCheck(client);
+        check("saturation: shows the hunger saturation",
+                saturation.size() == 1 && saturation.get(0).startsWith("Saturation "), String.valueOf(saturation));
+        java.util.List<String> speed = new net.fathom.optimizations.fabric.hud.InfoWidgets.Speed()
+                .linesForCheck(client);
+        check("speed: shows a speed", speed.size() == 1 && speed.get(0).endsWith(" m/s"), String.valueOf(speed));
+        java.util.List<String> items = new net.fathom.optimizations.fabric.hud.InfoWidgets.ItemCounter()
+                .linesForCheck(client);
+        check("item counter: counts the blocks carried", !items.isEmpty() && items.get(0).startsWith("Blocks "),
+                String.valueOf(items));
+        ((Setting.Toggle) module("server-address").setting("singleplayer")).set(true);
+        java.util.List<String> server = new net.fathom.optimizations.fabric.hud.InfoWidgets.ServerAddress()
+                .linesForCheck(client);
+        check("server address: says singleplayer when asked", server.size() == 1
+                && server.get(0).equals("Singleplayer"), String.valueOf(server));
+        ((Setting.Toggle) module("server-address").setting("singleplayer")).set(false);
+        float pitch = client.player.pitch;
+        java.util.List<String> block = new net.fathom.optimizations.fabric.hud.InfoWidgets.BlockInfo()
+                .linesForCheck(client);
+        check("block info: names the targeted block, or nothing when there is none",
+                client.result == null || client.result.type != net.minecraft.util.hit.BlockHitResult.Type.BLOCK
+                        ? block.isEmpty() : block.size() == 1 && !block.get(0).isEmpty(),
+                String.valueOf(block) + " at pitch " + pitch);
+
+        // Titles: a hidden title never arrives; with hiding off it does.
+        setToggle("titles", "hide.title", true);
+        setEnabled("titles", true);
+        client.inGameHud.setTitles("QA hidden title", null, 5, 20, 5);
+        String afterHidden = ((net.fathom.optimizations.fabric.mixin.InGameHudTitleAccessor) client.inGameHud)
+                .fathom$title();
+        check("titles: a hidden title is dropped", !"QA hidden title".equals(afterHidden), String.valueOf(afterHidden));
+        setEnabled("titles", false);
+        client.inGameHud.setTitles("QA shown title", null, 5, 20, 5);
+        String afterShown = ((net.fathom.optimizations.fabric.mixin.InGameHudTitleAccessor) client.inGameHud)
+                .fathom$title();
+        check("titles: off, titles arrive again", "QA shown title".equals(afterShown), String.valueOf(afterShown));
+        client.inGameHud.setTitles(null, null, -1, -1, -1);
+
+        // Hit Colour's channels, as the renderer will ask for them.
+        ((Setting.Colour) module("hit-colour").setting("colour")).set(0x00FF00);
+        setEnabled("hit-colour", true);
+        boolean green = net.fathom.optimizations.fabric.visual.HudTweaks.hitColour(0, 1f) == 0f
+                && net.fathom.optimizations.fabric.visual.HudTweaks.hitColour(1, 0f) == 1f
+                && Math.abs(net.fathom.optimizations.fabric.visual.HudTweaks.hitColour(3, 0.3f) - 0.3f) < 1e-6f;
+        setEnabled("hit-colour", false);
+        check("hit colour: the tint is the chosen colour, vanilla's when off", green
+                && net.fathom.optimizations.fabric.visual.HudTweaks.hitColour(0, 1f) == 1f, "green " + green);
+    }
+
+    private static void next70(int target) {
+        step = target;
+        stepStarted = System.nanoTime();
+    }
+
 }

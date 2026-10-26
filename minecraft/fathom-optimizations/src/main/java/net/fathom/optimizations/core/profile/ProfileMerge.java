@@ -150,6 +150,7 @@ public final class ProfileMerge {
         return a.anchor.equals(b.anchor) && a.x == b.x && a.y == b.y
                 && Float.floatToIntBits(a.scale) == Float.floatToIntBits(b.scale)
                 && Float.floatToIntBits(a.opacity) == Float.floatToIntBits(b.opacity)
-                && a.hidden == b.hidden;
+                && a.hidden == b.hidden
+                && String.valueOf(a.textAnchor).equals(String.valueOf(b.textAnchor));
     }
 }

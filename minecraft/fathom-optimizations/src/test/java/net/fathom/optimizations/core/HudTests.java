@@ -70,6 +70,13 @@ public final class HudTests {
 
         // -- the crosshair --------------------------------------------------
         aCrosshairIsSymmetricAboutItsCentre();
+        theNewCrosshairShapesAreSymmetricAndFilled();
+        aShapeSettingNamesItsStyle();
+        waypointsBelongToTheirPlace();
+        theWaypointCommandAddsListsAndRemoves();
+        waypointsSurviveASaveAndSkipBadLines();
+        gameChatReadsKillsDeathsAndBeds();
+        gameChatKnowsWhenAGameEnds();
         aCrosshairOutlineNeverOverlapsItsOwnFill();
         aGaplessCrossHasNoHoleAtTheAim();
         crosshairInputsAreClampedRatherThanTrusted();
@@ -470,6 +477,115 @@ public final class HudTests {
         }
         check(size == 2 * (2 + 4 + 1) + 1, "the box is the arms, the gaps and the outline: " + size);
         pass("a crosshair is symmetric about its centre");
+    }
+
+    static void theNewCrosshairShapesAreSymmetricAndFilled() {
+        for (CrosshairShape.Style style : new CrosshairShape.Style[] {
+                CrosshairShape.Style.X, CrosshairShape.Style.SQUARE}) {
+            for (int thickness = 1; thickness <= 2; thickness++) {
+                CrosshairShape shape = new CrosshairShape();
+                shape.build(style, 4, thickness, 2, false, 1, 1);
+                int size = shape.size();
+                boolean[] cells = mask(shape, false);
+                for (int y = 0; y < size; y++) {
+                    for (int x = 0; x < size; x++) {
+                        check(cells[y * size + x] == cells[y * size + (size - 1 - x)],
+                                style + " left and right differ at " + x + "," + y);
+                        check(cells[y * size + x] == cells[(size - 1 - y) * size + x],
+                                style + " top and bottom differ at " + x + "," + y);
+                    }
+                }
+                check(shape.fillCount() > 0, style + " draws something");
+                boolean[] outline = mask(shape, true);
+                for (int cell = 0; cell < cells.length; cell++) {
+                    check(!(cells[cell] && outline[cell]), style + " outline covered the fill at " + cell);
+                }
+            }
+        }
+        pass("the X and Square crosshairs are symmetric, drawn and cleanly outlined");
+    }
+
+    static void waypointsBelongToTheirPlace() {
+        net.fathom.optimizations.core.visual.WaypointList list = new net.fathom.optimizations.core.visual.WaypointList();
+        list.add("server:a", 0, "Base", 1, 2, 3, 0xFF0000);
+        list.add("server:b", 0, "Base", 4, 5, 6, 0x00FF00);
+        list.add("server:a", -1, "Portal", 7, 8, 9, 0x0000FF);
+        check(list.at("server:a", 0).size() == 1, "one in a's overworld");
+        check(list.at("server:a", -1).size() == 1, "one in a's nether");
+        check(list.at("server:b", 0).get(0).x == 4, "b's own Base");
+        list.add("server:a", 0, "base", 10, 11, 12, 0xFF0000);
+        check(list.at("server:a", 0).size() == 1 && list.at("server:a", 0).get(0).x == 10,
+                "the same name in the same place replaces, whatever its case");
+        check("Base".equals(list.nearest("server:b", 0, 0, 0, 0).name), "nearest finds one");
+        check(list.nearest("server:c", 0, 0, 0, 0) == null, "and none where there are none");
+        pass("waypoints belong to their place and dimension");
+    }
+
+    static void theWaypointCommandAddsListsAndRemoves() {
+        net.fathom.optimizations.core.visual.WaypointList list = new net.fathom.optimizations.core.visual.WaypointList();
+        String added = list.command(" add Home sweet home", "p", 0, 10, 64, -5);
+        check(added.contains("Home sweet home") && added.contains("10 64 -5"), added);
+        String at = list.command("add Spawn 0 70 0", "p", 0, 10, 64, -5);
+        check(at.contains("0 70 0"), "three trailing numbers are a position: " + at);
+        String auto = list.command("add", "p", 0, 1, 2, 3);
+        check(auto.contains("Waypoint 1"), "no name gets the next free one: " + auto);
+        String listed = list.command("list", "p", 0, 0, 0, 0);
+        check(listed.contains("Home sweet home") && listed.contains("Spawn"), listed);
+        check(list.command("remove Spawn", "p", 0, 0, 0, 0).startsWith("Removed"), "remove by name");
+        check(list.command("remove Spawn", "p", 0, 0, 0, 0).startsWith("No waypoint"), "twice is nothing");
+        check(list.command("clear", "p", 0, 0, 0, 0).contains("2"), "clear removes the rest here");
+        check(list.command("", "p", 0, 0, 0, 0).startsWith("/fwp"), "nothing asked shows the usage");
+        pass("the waypoint command adds, lists and removes");
+    }
+
+    static void waypointsSurviveASaveAndSkipBadLines() {
+        net.fathom.optimizations.core.visual.WaypointList list = new net.fathom.optimizations.core.visual.WaypointList();
+        list.add("world:New World", 1, "End\tportal", 1, 2, 3, 0xABCDEF);
+        list.add("server:x", 0, "Bed", -4, 70, 9, 0x123456);
+        java.util.List<String> lines = new java.util.ArrayList<String>(list.save());
+        lines.add("not a waypoint");
+        lines.add("p\t0\tBroken\tx\t1\t2\t000000");
+        net.fathom.optimizations.core.visual.WaypointList back = new net.fathom.optimizations.core.visual.WaypointList();
+        back.load(lines);
+        check(back.all().size() == 2, "the two good lines, not the bad ones: " + back.all().size());
+        check(back.at("server:x", 0).get(0).rgb == 0x123456 && back.at("server:x", 0).get(0).y == 70, "values kept");
+        pass("waypoints survive a save, and bad lines are skipped");
+    }
+
+    static void gameChatReadsKillsDeathsAndBeds() {
+        net.fathom.optimizations.core.chat.GameChat.Event kill = net.fathom.optimizations.core.chat.GameChat
+                .read("Steve was knocked into the void by Alex.", "Alex");
+        check(kill == net.fathom.optimizations.core.chat.GameChat.Event.KILL, "a kill: " + kill);
+        check(net.fathom.optimizations.core.chat.GameChat.read("Steve was killed by Alex. FINAL KILL!", "Alex")
+                == net.fathom.optimizations.core.chat.GameChat.Event.FINAL_KILL, "a final kill");
+        check(net.fathom.optimizations.core.chat.GameChat.read("Alex was shot by Steve.", "Alex")
+                == net.fathom.optimizations.core.chat.GameChat.Event.DEATH, "your death");
+        check(net.fathom.optimizations.core.chat.GameChat.read("BED DESTRUCTION > Red Bed was dismantled by Alex!", "Alex")
+                == net.fathom.optimizations.core.chat.GameChat.Event.BED, "a bed");
+        check(net.fathom.optimizations.core.chat.GameChat.read("Steve: I was killed by Alex.", "Alex")
+                == net.fathom.optimizations.core.chat.GameChat.Event.NONE, "player chat is never an event");
+        check(net.fathom.optimizations.core.chat.GameChat.read("Steve was killed by XAlex.", "Alex")
+                == net.fathom.optimizations.core.chat.GameChat.Event.NONE, "a longer name is someone else");
+        pass("game chat reads your kills, deaths and beds, and ignores player chat");
+    }
+
+    static void gameChatKnowsWhenAGameEnds() {
+        check(net.fathom.optimizations.core.chat.GameChat.gameOver("                    Reward Summary"), "reward summary");
+        check(net.fathom.optimizations.core.chat.GameChat.gameOver("1st Killer - Alex - 7"), "1st killer");
+        check(net.fathom.optimizations.core.chat.GameChat.gameOver("Winner: Red"), "winner");
+        check(!net.fathom.optimizations.core.chat.GameChat.gameOver("Steve: Reward Summary"), "typed by a player");
+        check(!net.fathom.optimizations.core.chat.GameChat.gameOver("Steve: Winner: me"), "typed by a player, again");
+        check(!net.fathom.optimizations.core.chat.GameChat.gameOver("You have 3 kills"), "an ordinary line");
+        pass("game chat knows when a game ends, and a player cannot fake it");
+    }
+
+    static void aShapeSettingNamesItsStyle() {
+        check(CrosshairShape.Style.named("X") == CrosshairShape.Style.X, "X");
+        check(CrosshairShape.Style.named("Square") == CrosshairShape.Style.SQUARE, "Square");
+        check(CrosshairShape.Style.named("Tee") == CrosshairShape.Style.TEE, "Tee");
+        check(CrosshairShape.Style.named("Vanilla") == CrosshairShape.Style.CROSS, "Vanilla falls back to Cross");
+        check(CrosshairShape.Style.named(null) == CrosshairShape.Style.CROSS, "nothing falls back to Cross");
+        pass("a Shape setting names its style");
     }
 
     static void aCrosshairOutlineNeverOverlapsItsOwnFill() {

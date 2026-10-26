@@ -108,21 +108,39 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private static final int HANDLE = 6;
     private static final List<Snap.Guide> NO_GUIDES = Collections.emptyList();
 
-    private static final float TOOLBAR_HEIGHT = 52f;
+    /** The bar: its 24 buttons with eight above and below. */
+    private static final float TOOLBAR_HEIGHT = Skin.H_SM + Skin.S2 * 2f;
     private static final float TOOLBAR_TWO_ROW_HEIGHT = 92f;
+    /** The compact bar: smaller buttons, tighter padding. */
+    private static final float TOOLBAR_COMPACT_HEIGHT = Skin.H_SM + Skin.S1 * 2f;
+    private static final float TOOLBAR_COMPACT_TWO_ROW_HEIGHT = Skin.H_SM * 2f + Skin.S1 * 3f;
+    /** The tab that brings a hidden toolbar back. */
+    private static final float RESTORE_WIDTH = 30f;
+    private static final float RESTORE_HEIGHT = 18f;
     /** The floating bar stands this far in from the screen's edges. */
     private static final float TOOLBAR_MARGIN = Skin.S3;
 
     /** The gap after each toolbar control; retained rectangles own the widths. */
-    private static final float[] TOOL_GAPS = {Skin.S3, Skin.S2, Skin.S2, Skin.S2, Skin.S2, Skin.S2, Skin.S4};
+    private static final float[] TOOL_GAPS = {Skin.S3, Skin.S2, Skin.S2, Skin.S2, Skin.S2, Skin.S2, Skin.S2, Skin.S4};
     private static final int TOOLS = TOOL_GAPS.length;
 
     private static final float INSPECTOR_WIDTH = 296f;
     /** Label column in the inspector, as a settings row's label column. */
-    private static final float INSPECTOR_LABEL = 84f;
+    private static final float INSPECTOR_LABEL = 92f;
     private static final float INSPECTOR_ROW = Skin.H_SM;
     private static final Anchor[] ANCHORS = Anchor.values();
     private static final String[] ANCHOR_LABELS = anchorLabels();
+    private static final net.fathom.optimizations.core.hud.TextAnchor[] TEXT_ANCHORS =
+            net.fathom.optimizations.core.hud.TextAnchor.values();
+    private static final String[] TEXT_LABELS = textLabels();
+
+    private static String[] textLabels() {
+        String[] labels = new String[TEXT_ANCHORS.length];
+        for (int index = 0; index < labels.length; index++) {
+            labels[index] = TEXT_ANCHORS[index].label();
+        }
+        return labels;
+    }
 
     /** Undo history depth: gestures, not frames. */
     private static final int UNDO_DEPTH = 48;
@@ -152,6 +170,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
     private boolean cachedToolbarGrid;
     private boolean cachedToolbarBounds;
     private boolean cachedToolbarTwoRows;
+    private boolean cachedToolbarCompact;
     private String cachedToolbarSnap = "";
     /** Profile labels are rebuilt when profiles change, never once per frame. */
     private List<net.fathom.optimizations.core.profile.FathomProfile> toolbarProfiles =
@@ -316,7 +335,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         // Fathom takes the GL state, because it is the game's pass.
         hud.render(client, true);
 
-        Renderer ui = Gfx.beginScreen(client, Runtime.uiScale());
+        // The RShift window's scale, so the bar and the inspector are the same
+        // size as the Hub they open from.
+        Renderer ui = Gfx.beginScreen(client, net.fathom.optimizations.core.ui.UiScale.windowPreference(
+                client.height, Runtime.uiScale()));
         float delta = Gfx.screenDelta();
         boolean restorePrevious = false;
         try {
@@ -334,7 +356,7 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             int mouseY = toScaledY(pointer.y());
             // Decided before anything reads it: the bar's own controls consult it
             // to know whether to respond, and so does the widget hit test.
-            barYields = chromeYields(toolbarArea(ui), mouseX, mouseY);
+            barYields = chromeYields(prefs.toolbar() ? toolbarArea(ui) : restoreTab(ui), mouseX, mouseY);
             placeInspector(ui);
             inspectorYields = selected != null && chromeYields(inspectorArea(ui), mouseX, mouseY);
 
@@ -372,7 +394,11 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             }
             drawGuides(ui);
 
-            toolbar(ui);
+            if (prefs.toolbar()) {
+                toolbar(ui);
+            } else {
+                restoreTab(ui, true);
+            }
             if (selected != null) {
                 inspector(ui);
             }
@@ -753,6 +779,13 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 problem = failure.getMessage();
             }
         }
+        if (controls.secondary(ui, "edit.hide", keys[7], "Hide", true)) {
+            prefs.setToolbar(false);
+            note = "Toolbar hidden. Press T, or use the tab at the bottom right, to bring it back.";
+            ui.popAlpha();
+            controls.clearShield();
+            return;
+        }
         if (controls.danger(ui, "edit.reset", keys[6], "Reset all", true)) {
             remember("reset-all");
             hud.resetLayout();
@@ -880,9 +913,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
 
     /** The inspector's height: its rows are fixed, so this is too. */
     private static float inspectorHeight(Renderer ui) {
-        float title = ui.lineHeight(Type.ROW_TITLE) + Skin.S1 + ui.lineHeight(Type.CAPTION);
-        // Anchor, from-left, from-top, scale, opacity.
-        float rows = INSPECTOR_ROW * 5f + Skin.S2 * 4f;
+        float title = ui.lineHeight(Type.ROW_TITLE) + Skin.S1
+                + ui.lineHeight(net.fathom.optimizations.fabric.ui.FathomSettingRows.DETAIL);
+        // Anchor, text, from-left, from-top, scale, opacity.
+        float rows = INSPECTOR_ROW * 6f + Skin.S2 * 5f;
         float buttons = Skin.H_SM * 2f + Skin.S2;
         return Skin.S4 + title + Skin.S4 + rows + Skin.S4 + buttons + Skin.S4;
     }
@@ -899,9 +933,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         y += ui.lineHeight(Type.ROW_TITLE) + Skin.S1;
         String status = status(positioned);
         boolean warn = status.startsWith("Overlaps");
-        ui.text(Text.fit(ui, status, Type.CAPTION, inner.width), inner.x, y + ui.ascent(Type.CAPTION),
-                Type.CAPTION, warn ? Skin.WARN : Skin.TEXT_FAINT);
-        y += ui.lineHeight(Type.CAPTION) + Skin.S4;
+        Type detail = net.fathom.optimizations.fabric.ui.FathomSettingRows.DETAIL;
+        ui.text(Text.fit(ui, status, detail, inner.width), inner.x, y + ui.ascent(detail),
+                detail, warn ? Skin.WARN : Graphite.TEXT_SECONDARY);
+        y += ui.lineHeight(detail) + Skin.S4;
 
         float controlX = inner.x + INSPECTOR_LABEL;
         float controlWidth = inner.right() - controlX;
@@ -912,6 +947,16 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 ANCHOR_LABELS, placement.anchor().ordinal());
         if (chosen != placement.anchor().ordinal() && chosen >= 0 && chosen < ANCHORS.length) {
             reanchor(widget, positioned, ANCHORS[chosen]);
+        }
+        y += INSPECTOR_ROW + Skin.S2;
+
+        // Which edge of the text stays put when it changes length. Auto is what
+        // every layout did before: the text follows the anchor.
+        rowLabel(ui, "Text", inner.x, y);
+        int textChosen = controls.dropdown(ui, "insp.text", new Rect(controlX, y, controlWidth, INSPECTOR_ROW),
+                TEXT_LABELS, placement.textAnchor().ordinal());
+        if (textChosen != placement.textAnchor().ordinal() && textChosen >= 0 && textChosen < TEXT_ANCHORS.length) {
+            retext(widget, positioned, TEXT_ANCHORS[textChosen]);
         }
         y += INSPECTOR_ROW + Skin.S2;
 
@@ -996,8 +1041,11 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         return positioned.box.width + " × " + positioned.box.height + " at " + positioned.box.x + ", " + positioned.box.y;
     }
 
+    /** An inspector row's name, in the settings rows' title style. */
     private void rowLabel(Renderer ui, String label, float x, float y) {
-        ui.text(label, x, Controls.baseline(ui, y, INSPECTOR_ROW, Type.SMALL), Type.SMALL, Skin.TEXT_MUTED);
+        Type type = net.fathom.optimizations.fabric.ui.FathomSettingRows.TITLE;
+        ui.text(Text.fit(ui, label, type, INSPECTOR_LABEL - Skin.S2), x,
+                Controls.baseline(ui, y, INSPECTOR_ROW, type), type, Skin.TEXT);
     }
 
     /** What an offset is measured from, for an anchor's position on one axis. */
@@ -1090,13 +1138,37 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         } else {
             Snap.Box box = positioned.box;
             hud.place(widget.id(), placement.withAnchor(next).withOffset(
-                    offsetFor(next.horizontal(), box.x, box.width, screenWidth),
+                    net.fathom.optimizations.core.hud.HudGeometry.offset(next, placement.textAnchor(), screenWidth, box.width, box.x),
                     offsetFor(next.vertical(), positioned.naturalY, box.height, screenHeight)));
         }
         frameBoxes = null;
         typingAxis = 0;
         note = widget.name() + " now follows the " + next.label().toLowerCase(java.util.Locale.ROOT)
                 + (next == Anchor.CENTER ? "." : " edge.");
+        problem = hud.save();
+        gestureKey = null;
+    }
+
+    /**
+     * Change which edge of the text holds still, keeping the box exactly where
+     * it is on screen: only what the offset measures from changes.
+     */
+    private void retext(Widget widget, FathomHud.Positioned positioned,
+            net.fathom.optimizations.core.hud.TextAnchor next) {
+        remember("text-anchor");
+        Placement placement = hud.placement(widget.id());
+        if (positioned == null) {
+            hud.place(widget.id(), placement.withTextAnchor(next));
+        } else {
+            Snap.Box box = positioned.box;
+            hud.place(widget.id(), placement.withTextAnchor(next).withOffset(
+                    net.fathom.optimizations.core.hud.HudGeometry.offset(placement.anchor(), next, screenWidth, box.width, box.x),
+                    placement.offsetY()));
+        }
+        frameBoxes = null;
+        typingAxis = 0;
+        note = widget.name() + ": text " + (next == net.fathom.optimizations.core.hud.TextAnchor.AUTO
+                ? "follows the anchor." : "holds its " + next.label().toLowerCase(java.util.Locale.ROOT) + " edge.");
         problem = hud.save();
         gestureKey = null;
     }
@@ -1341,6 +1413,36 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         return cachedToolbarBar;
     }
 
+    /** Where the tab that restores a hidden toolbar sits: the bottom right corner, out of the way. */
+    private Rect restoreTab(Renderer ui) {
+        return new Rect(ui.width() - TOOLBAR_MARGIN - RESTORE_WIDTH, ui.height() - TOOLBAR_MARGIN - RESTORE_HEIGHT,
+                RESTORE_WIDTH, RESTORE_HEIGHT);
+    }
+
+    /**
+     * Draw the restore tab and act on a click on it. Small and faint until the
+     * pointer is on it, and it steps aside for a widget under it like the bar
+     * does. Its own rectangle is all it takes input from.
+     */
+    private void restoreTab(Renderer ui, boolean draw) {
+        Rect tab = restoreTab(ui);
+        if (barYields) {
+            controls.shield(tab);
+        }
+        Controls.State state = controls.state("edit.restore", tab, !barYields);
+        ui.pushAlpha(barYields ? 0.18f : 0.55f + 0.45f * state.hover);
+        floatingSurface(ui, tab);
+        ui.icon(Icon.SLIDERS, tab.x + (tab.width - 12f) / 2f, tab.y + (tab.height - 12f) / 2f, 12f,
+                Skin.mix(Skin.TEXT_MUTED, Skin.TEXT, state.hover));
+        controls.focusRing(ui, state, tab, Skin.radius(Skin.R_CARD, tab));
+        ui.popAlpha();
+        controls.clearShield();
+        if (state.clicked) {
+            prefs.setToolbar(true);
+            note = "Toolbar shown. Press T to hide it.";
+        }
+    }
+
     /**
      * Fit the editor toolbar at every supported interface scale. Wide screens
      * keep the document picker on the same line; narrow logical viewports put
@@ -1352,9 +1454,14 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 && cachedToolbarViewportHeight == ui.height()
                 && cachedToolbarGrid == prefs.grid()
                 && cachedToolbarBounds == prefs.bounds()
+                && cachedToolbarCompact == prefs.toolbarCompact()
                 && cachedToolbarSnap.equals(snap)) {
             return;
         }
+        boolean compact = prefs.toolbarCompact();
+        cachedToolbarCompact = compact;
+        float buttonHeight = compact ? Skin.H_SM : Skin.H_MD;
+        float minimumButton = compact ? 48f : 64f;
         cachedToolbarWidth = ui.width();
         cachedToolbarViewportHeight = ui.height();
         cachedToolbarGrid = prefs.grid();
@@ -1369,25 +1476,29 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
             "Snap: " + snap,
             "Duplicate",
             "Reset all",
+            "Hide",
         };
         float[] widths = new float[labels.length];
         float buttonsWidth = 0f;
         for (int index = 0; index < labels.length; index++) {
-            widths[index] = Math.max(64f, ui.measure(labels[index], Type.BODY_STRONG) + Skin.S4 * 2f);
+            widths[index] = Math.max(minimumButton,
+                    ui.measure(labels[index], Type.BODY_STRONG) + (compact ? Skin.S3 : Skin.S4) * 2f);
             buttonsWidth += widths[index] + TOOL_GAPS[index];
         }
 
         Rect bar = Rect.of(TOOLBAR_MARGIN, 0f, ui.width() - TOOLBAR_MARGIN, 1f);
-        float pad = Skin.S2;
+        float pad = compact ? Skin.S1 : Skin.S2;
         float available = Math.max(1f, bar.width - pad * 2f);
         float pickerWidth = Math.min(200f, Math.max(148f, ui.width() * 0.17f));
         cachedToolbarTwoRows = buttonsWidth + pickerWidth > available;
-        cachedToolbarHeight = cachedToolbarTwoRows ? TOOLBAR_TWO_ROW_HEIGHT : TOOLBAR_HEIGHT;
+        cachedToolbarHeight = compact
+                ? (cachedToolbarTwoRows ? TOOLBAR_COMPACT_TWO_ROW_HEIGHT : TOOLBAR_COMPACT_HEIGHT)
+                : (cachedToolbarTwoRows ? TOOLBAR_TWO_ROW_HEIGHT : TOOLBAR_HEIGHT);
         float top = ui.height() - TOOLBAR_MARGIN - cachedToolbarHeight;
         cachedToolbarBar = new Rect(bar.x, top, bar.width, cachedToolbarHeight);
-        float buttonY = cachedToolbarTwoRows ? top + pad : top + (cachedToolbarHeight - Skin.H_MD) / 2f;
+        float buttonY = cachedToolbarTwoRows ? top + pad : top + (cachedToolbarHeight - buttonHeight) / 2f;
         float pickerY = cachedToolbarTwoRows
-                ? top + cachedToolbarHeight - pad - Skin.H_MD
+                ? top + cachedToolbarHeight - pad - buttonHeight
                 : buttonY;
 
         // The two-line arrangement has the full row for buttons. Extremely
@@ -1398,11 +1509,11 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         float cursor = bar.x + pad;
         for (int index = 0; index < toolbarKeys.length; index++) {
             float width = widths[index] * buttonScale;
-            toolbarKeys[index] = new Rect(cursor, buttonY, width, Skin.H_MD);
+            toolbarKeys[index] = new Rect(cursor, buttonY, width, buttonHeight);
             cursor += width + TOOL_GAPS[index] * buttonScale;
         }
-        cachedToolbarPicker = new Rect(bar.right() - pad - pickerWidth, pickerY, pickerWidth, Skin.H_MD);
-        cachedToolbarRow = new Rect(bar.x + pad + Skin.S2, pickerY, available - Skin.S2, Skin.H_MD);
+        cachedToolbarPicker = new Rect(bar.right() - pad - pickerWidth, pickerY, pickerWidth, buttonHeight);
+        cachedToolbarRow = new Rect(bar.x + pad + Skin.S2, pickerY, available - Skin.S2, buttonHeight);
     }
 
     private void syncProfileOptions(List<net.fathom.optimizations.core.profile.FathomProfile> all) {
@@ -1440,6 +1551,10 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         if (barYields) {
             return false;
         }
+        if (!prefs.toolbar()) {
+            // Hidden: the tab is the only thing of the bar left, and only its own rectangle is taken.
+            return restoreTab(ui).contains(mouseX, mouseY);
+        }
         for (Rect key : toolbarButtons(ui)) {
             if (key.contains(mouseX, mouseY)) {
                 return true;
@@ -1458,7 +1573,9 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         float margin = Skin.S4;
         float height = inspectorHeight(ui);
         float left = corner % 2 == 0 ? ui.width() - INSPECTOR_WIDTH - margin : margin;
-        float top = corner < 2 ? margin : cachedToolbarBar.y - margin - height;
+        // Above the bar; with the bar hidden, above the restore tab's strip instead.
+        float floor = prefs.toolbar() ? cachedToolbarBar.y : ui.height() - TOOLBAR_MARGIN - RESTORE_HEIGHT;
+        float top = corner < 2 ? margin : floor - margin - height;
         return new Rect(left, Math.max(margin, top), INSPECTOR_WIDTH, height);
     }
 
@@ -1608,7 +1725,8 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
         // where the widget will actually be, and for a right-anchored widget
         // that is different arithmetic than for a left-anchored one.
         Anchor anchor = Anchor.nearest(placed.centerX(), placed.centerY(), screenWidth, screenHeight);
-        int offsetX = offsetFor(anchor.horizontal(), placed.x, placed.width, screenWidth);
+        net.fathom.optimizations.core.hud.TextAnchor text = hud.placement(target.widget.id()).textAnchor();
+        int offsetX = net.fathom.optimizations.core.hud.HudGeometry.offset(anchor, text, screenWidth, placed.width, placed.x);
         int offsetY = offsetFor(anchor.vertical(), placed.y, placed.height, screenHeight);
         hud.place(
                 target.widget.id(),
@@ -1743,6 +1861,11 @@ public final class HudEditorScreen extends Screen implements FathomScreen {
                 return true;
             case Keyboard.KEY_B:
                 prefs.setBounds(!prefs.bounds());
+                return true;
+            case Keyboard.KEY_T:
+                prefs.setToolbar(!prefs.toolbar());
+                note = prefs.toolbar() ? "Toolbar shown. Press T to hide it."
+                        : "Toolbar hidden. Press T, or use the tab at the bottom right, to bring it back.";
                 return true;
             case Keyboard.KEY_DELETE:
                 hideSelected();

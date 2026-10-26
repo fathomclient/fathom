@@ -103,6 +103,12 @@ fn main() {
         "cargo:rustc-env=FATHOM_FORGE_JAR_ID={forge_hash:016x}-{}",
         forge_jar.len()
     );
+    // The executable's icon is compiled into a Windows resource from these
+    // files. Say so explicitly, so replacing one always rebuilds the resource
+    // rather than relying on the tauri build helper alone to have registered it.
+    println!("cargo:rerun-if-changed=icons/icon.ico");
+    println!("cargo:rerun-if-changed=icons/icon.png");
+    println!("cargo:rerun-if-changed=tauri.conf.json");
     tauri_build::build();
 }
 

@@ -44,6 +44,12 @@ public abstract class EntityRendererNametagMixin {
             at = @At("HEAD"), cancellable = true)
     private void fathom$fastNametag(Entity entity, String text, double x, double y, double z,
             int maxDistance, CallbackInfo callback) {
+        if (net.fathom.optimizations.fabric.visual.Nametags.render(dispatcher, getFontRenderer(), entity, text,
+                x, y, z, maxDistance)) {
+            // The Nametags module draws its own; the cached path stands aside.
+            callback.cancel();
+            return;
+        }
         if (net.fathom.optimizations.core.bench.view.ViewProbe.REQUESTED) {
             net.fathom.optimizations.core.bench.view.ViewProbe.enter(net.fathom.optimizations.core.bench.view.ViewSection.NAMETAG);
         }

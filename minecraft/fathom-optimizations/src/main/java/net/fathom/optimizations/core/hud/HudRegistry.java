@@ -250,6 +250,69 @@ public final class HudRegistry {
             // where the game aims; it is in the layout at all so that somebody
             // who wants it slightly high, or on a second monitor's optical
             // centre, can move it. Nothing else in this list defaults to CENTER.
+            // The new read-outs sit around the middle, the only free room at a
+            // 426x240 GUI: saturation and speed just above the hunger bar, the
+            // server address under the block name, the item counter right of
+            // the crosshair and clear of the sidebar.
+            out.add(Widget.of(
+                    "saturation",
+                    "Saturation",
+                    "Hunger saturation, which the hunger bar does not show.",
+                    CATEGORY_STATUS,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.BOTTOM_CENTER, 0, 50)));
+
+            out.add(Widget.of(
+                    "server-address",
+                    "Server address",
+                    "The address of the server you are on.",
+                    CATEGORY_STATUS,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.TOP_CENTER, 0, 84)));
+
+            out.add(Widget.of(
+                    "speed",
+                    "Speed",
+                    "How fast you are moving.",
+                    CATEGORY_WORLD,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.BOTTOM_CENTER, 0, 64)));
+
+            out.add(Widget.of(
+                    "item-counter",
+                    "Item counter",
+                    "How many blocks, arrows, pearls and apples you carry.",
+                    CATEGORY_STATUS,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.MIDDLE_RIGHT, 100, 0)));
+
+            // Under the direction strip, where the eye already is.
+            out.add(Widget.of(
+                    "block-info",
+                    "Block info",
+                    "The name of the block or entity you are looking at.",
+                    CATEGORY_WORLD,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.TOP_CENTER, 0, 50)));
+
+            // Stacked above Speed, where a glance down at the hotbar finds it.
+            out.add(Widget.of(
+                    "height-limit",
+                    "Height limit",
+                    "How far you are below the map's build limit.",
+                    CATEGORY_WORLD,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.BOTTOM_CENTER, 0, 78)));
+
+            // Left of the crosshair, mirroring the item counter on its right.
+            out.add(Widget.of(
+                    "bedwars-stats",
+                    "Bedwars stats",
+                    "Kills, final kills and beds this game.",
+                    CATEGORY_STATUS,
+                    Sensitivity.SAFE,
+                    Placement.at(Anchor.MIDDLE_LEFT, 100, 0)));
+
             out.add(Widget.of(
                     "crosshair",
                     "Crosshair",

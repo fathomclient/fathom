@@ -448,6 +448,22 @@ SIDEBAR = ["Players:", "Kills:", "Final_Kills:", "Beds:", "Wins:", "Coins:", "St
            "Red:", "Blue:", "Green:", "Yellow:", "Event:Reset", "fathom.local"]
 TEAMS = ["red", "blue", "green", "yellow"]
 
+# A Minemen-style 1.8 PvP lobby: most players unranked (grey), a few ranked colours,
+# NPCs whose own nametag a team hides, a long sidebar, everyone holding a lobby item.
+RANKS = [("rgrey", "gray", 30), ("rgreen", "green", 8), ("raqua", "aqua", 6), ("rgold", "gold", 6),
+         ("rpurple", "light_purple", 4), ("rred", "red", 4), ("rblue", "blue", 3), ("rwhite", "white", 3)]
+LOBBY_ITEMS = ["compass", "compass", "compass", "book", "nether_star", "diamond_sword", "skull", "paper"]
+MINEMEN_IN_VIEW = 64
+MINEMEN_NPCS = 6
+MINEMEN_HOLOGRAM = [u"§b§lUNRANKED", u"§f%d playing", u"§7Click to queue"]
+# A server hub: two arcs of NPCs, each under a 4-line hologram, players walking among them.
+HUB_NPCS = 16
+HUB_PLAYERS = 24
+HUB_HOLOGRAM = [u"§e§lCLICK TO PLAY", u"§b§lMODE #%d", u"§7Solo, Doubles, Squads",
+                u"§a%d playing"]
+MINEMEN_SIDEBAR = ["Online:_1,342", "In_Queue:_57", "In_Fights:_402", "Ping:_8ms", "Elo:_1000", "Wins:_0",
+                   "Division:_Silver", "Streak:_0", "Region:_NA", "Event:_none", "--------", "minemen.club"]
+
 
 class Director(object):
     """Turns a scene request into bot behaviour and server commands.
@@ -473,6 +489,9 @@ class Director(object):
         self.setup_done = True
         self.ready_time = None
         self.notes = ""
+        # Commands held back until some ticks after setup (see hub()).
+        self.later = []
+        self.later_at = 0
 
     def cmd(self, text):
         self.server.command(text)
@@ -480,7 +499,7 @@ class Director(object):
     def reset_scoreboard(self):
         for objective in ("side", "hp", "tab"):
             self.cmd("scoreboard objectives remove %s" % objective)
-        for team in TEAMS:
+        for team in TEAMS + [rank[0] for rank in RANKS] + ["npc"]:
             self.cmd("scoreboard teams remove %s" % team)
 
     def equip(self, bot, armour, sword, enchanted):
@@ -580,7 +599,44 @@ class Director(object):
                 else:
                     plan.append((bot, PARK[0] - 15 + (index % 10) * 3, PARK[2] - 15 + (index // 10) * 3,
                                  "stand", {}))
+        elif scene == "minemen":
+            # Players milling about the spawn, 4-40 blocks ahead, most inside the view;
+            # the NPCs stand in an arc 9 blocks out; the rest are online but far away.
+            for index, bot in enumerate(bots[:MINEMEN_IN_VIEW]):
+                z = 4 + (index * 37 % MINEMEN_IN_VIEW) * 0.56 + random.uniform(-1, 1)
+                half = 3 + z * 0.75
+                x = -half + (index * 13 % 16) / 15.0 * 2 * half + random.uniform(-1, 1)
+                plan.append((bot, x, z, "walk", dict(radius=random.uniform(1.0, 4.0),
+                                                     speed=random.uniform(0.06, 0.2),
+                                                     chat=0.002, action=0.005)))
+            for index, bot in enumerate(bots[MINEMEN_IN_VIEW:MINEMEN_IN_VIEW + MINEMEN_NPCS]):
+                angle = math.radians(-50 + index * 20)
+                plan.append((bot, math.sin(angle) * 9, 3 + math.cos(angle) * 9, "stand", {}))
+            for index, bot in enumerate(bots[MINEMEN_IN_VIEW + MINEMEN_NPCS:80]):
+                plan.append((bot, PARK[0] - 15 + (index % 10) * 3, PARK[2] - 15 + (index // 10) * 3, "stand", {}))
+        elif scene == "hub":
+            # Players walking 5-25 blocks ahead; the NPCs stand in two arcs, 8 at 8 blocks
+            # and 8 at 14; the rest are online but far away.
+            for index, bot in enumerate(bots[:HUB_PLAYERS]):
+                z = 5 + (index * 7 % HUB_PLAYERS) * 0.85 + random.uniform(-1, 1)
+                half = 3 + z * 0.6
+                x = -half + (index * 5 % 12) / 11.0 * 2 * half + random.uniform(-1, 1)
+                plan.append((bot, x, z, "walk", dict(radius=random.uniform(1.0, 3.0),
+                                                     speed=random.uniform(0.06, 0.18), chat=0.002)))
+            for index, bot in enumerate(bots[HUB_PLAYERS:HUB_PLAYERS + HUB_NPCS]):
+                x, z = self.hub_spot(index)
+                plan.append((bot, x, z, "stand", {}))
+            for index, bot in enumerate(bots[HUB_PLAYERS + HUB_NPCS:80]):
+                plan.append((bot, PARK[0] - 15 + (index % 10) * 3, PARK[2] - 15 + (index // 10) * 3, "stand", {}))
         return plan
+
+    @staticmethod
+    def hub_spot(index):
+        """Where hub NPC `index` stands: an inner and an outer arc in front of the camera."""
+        ring, slot = divmod(index, HUB_NPCS // 2)
+        radius = 8 if ring == 0 else 14
+        angle = math.radians(-52 + slot * 15 + ring * 7)
+        return math.sin(angle) * radius, 3 + math.cos(angle) * radius
 
     def apply(self, scene):
         self.scene = scene
@@ -594,6 +650,7 @@ class Director(object):
                 bot.chat_rate = 0.0
                 bot.action_rate = 0.0
         self.to_connect = [entry[0] for entry in self.plan if entry[0].sock is None]
+        self.later = []
         self.setup_done = False
         self.ready_time = None
         self.notes = "%d players in view" % len(self.plan)
@@ -607,6 +664,14 @@ class Director(object):
             self.notes += ", %d signs, %d skulls, %d banners, %d item frames" % DECOR_COUNTS
         elif scene == "tab-big":
             self.notes = "20 players in view, 80 online, tab list held"
+        elif scene == "minemen":
+            self.notes = ("%d players in the lobby ahead, %d NPCs under %d-line holograms, %d online, "
+                          "%d-line sidebar" % (MINEMEN_IN_VIEW, MINEMEN_NPCS, len(MINEMEN_HOLOGRAM),
+                                                len(self.plan), len(MINEMEN_SIDEBAR)))
+        elif scene == "hub":
+            self.notes = ("%d players walking, %d NPCs under %d-line holograms (%d named invisible armor stands), "
+                          "%d online" % (HUB_PLAYERS, HUB_NPCS, len(HUB_HOLOGRAM), HUB_NPCS * len(HUB_HOLOGRAM),
+                                         len(self.plan)))
         return self.notes
 
     def clear_props(self):
@@ -662,6 +727,71 @@ class Director(object):
             self.cmd("summon ItemFrame %d %d 29 {TileX:%d,TileY:%d,TileZ:29,Facing:2,Item:{id:%s,Count:1}}" % (
                 x, STAND_Y + 1, x, STAND_Y + 1, items[index % len(items)]))
 
+    def minemen(self, members):
+        """Rank colours by team, hidden NPC nametags, holograms over the NPCs, the sidebar."""
+        # Holograms two seconds later, as in hub(): before 2026-10-21 they never reached the client.
+        self.later = []
+        self.later_at = self.tick + 40
+        for team, colour, _ in RANKS:
+            self.cmd("scoreboard teams add %s" % team)
+            self.cmd("scoreboard teams option %s color %s" % (team, colour))
+        weights = []
+        for team, _, weight in RANKS:
+            weights += [team] * weight
+        npcs = members[MINEMEN_IN_VIEW:MINEMEN_IN_VIEW + MINEMEN_NPCS]
+        for index, bot in enumerate(members):
+            if bot in npcs:
+                continue
+            self.cmd("scoreboard teams join %s %s" % (weights[index * 7 % len(weights)], bot.name))
+            self.cmd("replaceitem entity %s slot.hotbar.0 %s" % (bot.name, LOBBY_ITEMS[index % len(LOBBY_ITEMS)]))
+        self.cmd("scoreboard teams add npc")
+        self.cmd("scoreboard teams option npc nametagVisibility never")
+        for index, bot in enumerate(npcs):
+            self.cmd("scoreboard teams join npc %s" % bot.name)
+            self.cmd("replaceitem entity %s slot.hotbar.0 diamond_sword" % bot.name)
+            angle = math.radians(-50 + index * 20)
+            x, z = math.sin(angle) * 9, 3 + math.cos(angle) * 9
+            for line, text in enumerate(MINEMEN_HOLOGRAM):
+                name = text % (40 + index * 37) if "%d" in text else text
+                self.later.append('summon ArmorStand %.2f %.2f %.2f {CustomName:"%s",CustomNameVisible:1,Invisible:1,'
+                         'NoGravity:1,Marker:1}' % (x, STAND_Y + 2.35 - line * 0.27, z, name))
+        self.cmd("scoreboard objectives add side dummy MINEMEN")
+        self.cmd("scoreboard objectives setdisplay sidebar side")
+        for index, line in enumerate(MINEMEN_SIDEBAR):
+            self.cmd("scoreboard players set %s side %d" % (line, len(MINEMEN_SIDEBAR) - index))
+
+    def hub(self, members):
+        """Rank-coloured players, NPCs with hidden nametags holding an item, a hologram over each NPC.
+
+        The holograms are summoned two seconds after the rest. Summoned in the tick that
+        teleports the camera player, they never reached the client (E: 40 of 104 in
+        the first run); the entity tracker offers a new entity to each player once.
+        """
+        self.later = []
+        self.later_at = self.tick + 40
+        for team, colour, _ in RANKS:
+            self.cmd("scoreboard teams add %s" % team)
+            self.cmd("scoreboard teams option %s color %s" % (team, colour))
+        weights = []
+        for team, _, weight in RANKS:
+            weights += [team] * weight
+        npcs = members[HUB_PLAYERS:HUB_PLAYERS + HUB_NPCS]
+        for index, bot in enumerate(members):
+            if bot in npcs:
+                continue
+            self.cmd("scoreboard teams join %s %s" % (weights[index * 7 % len(weights)], bot.name))
+            self.cmd("replaceitem entity %s slot.hotbar.0 %s" % (bot.name, LOBBY_ITEMS[index % len(LOBBY_ITEMS)]))
+        self.cmd("scoreboard teams add npc")
+        self.cmd("scoreboard teams option npc nametagVisibility never")
+        for index, bot in enumerate(npcs):
+            self.cmd("scoreboard teams join npc %s" % bot.name)
+            self.cmd("replaceitem entity %s slot.hotbar.0 %s" % (bot.name, LOBBY_ITEMS[index % len(LOBBY_ITEMS)]))
+            x, z = self.hub_spot(index)
+            for line, text in enumerate(HUB_HOLOGRAM):
+                name = text % (index + 1 if line == 1 else 40 + index * 37) if "%d" in text else text
+                self.later.append('summon ArmorStand %.2f %.2f %.2f {CustomName:"%s",CustomNameVisible:1,Invisible:1,'
+                         'NoGravity:1,Marker:1}' % (x, STAND_Y + 2.62 - line * 0.27, z, name))
+
     def setup(self):
         """Once every bot of the scene is in the world: place, equip, decorate."""
         scene = self.scene
@@ -713,6 +843,10 @@ class Director(object):
             self.generators()
         if scene == "decor":
             self.decor()
+        if scene == "minemen":
+            self.minemen(members)
+        if scene == "hub":
+            self.hub(members)
         if scene == "tab-big":
             self.teams(members)
             self.sidebar()
@@ -723,6 +857,9 @@ class Director(object):
 
     def step(self):
         """Connections and setup, a few per tick."""
+        if not self.setup_done and not self.to_connect:
+            # A bot that dropped while connecting would hold setup back for good.
+            self.to_connect = [entry[0] for entry in self.plan if entry[0].sock is None]
         for _ in range(4):
             if not self.to_connect:
                 break
@@ -744,6 +881,11 @@ class Director(object):
         self.step()
         if not self.setup_done:
             return
+        if self.later and self.tick >= self.later_at:
+            for command in self.later:
+                self.cmd(command)
+            self.later = []
+            self.ready_time = time.perf_counter()
         scene = self.scene
         if scene == "combat-particles":
             for _ in range(3):
@@ -759,6 +901,8 @@ class Director(object):
         elif scene == "hud-heavy":
             for _ in range(2):
                 self.cmd("scoreboard players set %s side %d" % (random.choice(SIDEBAR), random.randint(0, 999)))
+        elif scene == "minemen" and self.tick % 20 == 0:
+            self.cmd("scoreboard players set %s side %d" % (random.choice(MINEMEN_SIDEBAR[:9]), random.randint(0, 12)))
         elif scene == "lobby" and self.tick % 20 == 0:
             self.cmd("scoreboard players set %s side %d" % (random.choice(SIDEBAR), random.randint(0, 99)))
         elif scene == "chunks":
@@ -881,7 +1025,7 @@ def serve(args):
                         notes = director.apply(parts[1])
                         LOG("[serve] scene %s (#%s): %s" % (parts[1], parts[0], notes))
                         pending_ready = "%s %s %s" % (parts[0], parts[1], notes)
-            if pending_ready and director.setup_done and director.ready_time is not None \
+            if pending_ready and director.setup_done and director.ready_time is not None and not director.later \
                     and time.perf_counter() >= director.ready_time + args.scene_delay:
                 write_text(os.path.join(CONTROL, "ready.txt"), pending_ready)
                 LOG("[serve] ready: %s" % pending_ready)

@@ -13,11 +13,11 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 
 ## 1. Where things stand
 
-**23** entries: **22** implemented and hooked into the game, **1** planned. **19** carry a measurement, **15** of them taken in a running game.
+**27** entries: **26** implemented and hooked into the game, **1** planned. **21** carry a measurement, **17** of them taken in a running game.
 
 | Status | Count |
 |---|---|
-| Runs in game | 22 |
+| Runs in game | 26 |
 | In the module, not yet seen in game | 0 |
 | Core written, not hooked up | 1 |
 | Planned | 0 |
@@ -41,9 +41,13 @@ checked-in copy is stale. §1-§3 below are generated from the same file by
 | `render.entity.armor-texture-cache` | Armor texture lookup cache | Entities | Safe | Runs in game | Launcher switch | in-game (`view-2026-10-05-entities`) | — |
 | `render.blockentity.sign-text-cache` | Sign text cache | Entities | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-13-ab`) | — |
 | `render.entity.item-frame-entity-reuse` | Item frame item entity reuse | Entities | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-13-ab`) | — |
+| `render.entity.model-box-batching` | Model box batching | Entities | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-20-ab3`) | — |
+| `render.entity.item-model-lists` | Held item vertex reuse | Entities | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-20-ab3`) | — |
+| `render.entity.dropped-item-models` | Dropped item vertex reuse | Entities | Safe | Runs in game | Launcher switch | **none** | — |
 | `render.hud.tab-list-text-replay` | Tab list text replay | HUD and interface | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-14-ab2-ab3`) | — |
 | `render.entity.shadow-allocation` | Shadow lookup without allocation | Entities | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-14-ab2-ab3`) | — |
 | `render.forge.sky-blend-cache` | Forge sky colour cache | Rendering | Safe | Runs in game | Launcher switch | in-game (`forge-2026-10-15-sky-blend`) | — |
+| `render.forge.unheard-render-events` | Skip unheard Forge render events | Entities | Safe | Runs in game | Launcher switch | **none** | — |
 | `render.hud.vanilla-replay` | Replay unchanged chat and scoreboard | HUD and interface | Safe | Runs in game | Launcher switch | in-game (`mp-2026-10-06-hud`) | — |
 | `input.unfocused-fps-cap` | Cap frame rate when unfocused | Frames and input | Safe | Runs in game | Launcher switch | isolated (`opt-2026-09-04-frame-caps`) | — |
 | `render.entity.occlusion-culling` | Entity occlusion culling | Entities | Optional | Core written, not hooked up | Launcher switch | **none** | OptiFine shaders |
@@ -174,6 +178,30 @@ To draw the item in an item frame, vanilla constructs a new item entity around i
 - **Expected benefit:** Proportional to filled item frames in view: map walls, displays.
 - **Measured** (in-game, `mp-2026-10-13-ab`): Local server, 12 filled item frames in view, 4 interleaved rounds against the switch off: frame-entity draws 0.303 -> 0.267 ms/frame (about 3 us per frame) and client allocation 78 -> 72 MB/s; the whole frame moved within noise at this count (paired +0.009 ms, 2/4). Inputs to the renderer are identical by construction.
 
+#### `render.entity.model-box-batching` — Model box batching
+
+Every entity model is compiled into display lists, and inside them every face of every box is its own draw: six per box, 72 for a player's body. This compiles each box as one draw of the same vertices in the same order, so the driver replays a sixth of the draws per model. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** on.
+- **Expected benefit:** Proportional to entities drawn: players in a crowded lobby most.
+- **Measured** (in-game, `mp-2026-10-20-ab3`): Local server, 64-player PvP lobby scene, 6 interleaved rounds, on top of held item vertex reuse: Forge + OptiFine faster in 5/6 rounds (paired -0.100 ms/frame), 6/6 in a 40-player lobby (-0.037), 5/6 with 20 armoured players (-0.054); body model 8.3 -> 7.4 us per player. 1,990 (Fabric) and 1,940 (Forge) compiled lists compared offscreen against vanilla-compiled ones: 0 differing bytes.
+
+#### `render.entity.item-model-lists` — Held item vertex reuse
+
+Every item a player holds is rebuilt vertex by vertex and sent to the driver again every frame: a few hundred quads for a sword or a compass. This keeps each item model's vertex data after its first draw and hands it to the tessellator in one copy, drawn by the game's own upload path; transforms, textures, the enchantment glint and OptiFine's custom items stay live. Tinted and emissive models are always drawn live. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** on.
+- **Expected benefit:** Proportional to players holding items in view: most of a crowded lobby.
+- **Measured** (in-game, `mp-2026-10-20-ab3`): Local server, 64-player PvP lobby scene, 6 interleaved rounds: Forge + OptiFine faster in 5/5 complete rounds (paired -0.321 ms/frame, -8.4%), 6/6 in a 40-player lobby (-0.150) and with 20 armoured players (-0.183); held item 8.9 -> 5.2 us per player. Fabric + OptiFine 5/5, 6/6, 5/6 (-0.067, -0.018, -0.048). 1,277 (Forge) and 243 (Fabric) draws compared offscreen with the live path: 0 differing bytes, vertex data identical.
+
+#### `render.entity.dropped-item-models` — Dropped item vertex reuse
+
+Held item vertex reuse, for items on the ground: a minigame generator's pile is the same few ingot models drawn dozens of times a frame, up to five copies each, every one rebuilt vertex by vertex. The same kept copy is handed to the tessellator instead; the bob, spin, transforms, glint and OptiFine's custom items stay live. Tinted and emissive models are always drawn live. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** off.
+- **Expected benefit:** Proportional to dropped items in view: generators in Bedwars and SkyWars.
+- **Measured:** nothing yet.
+
 #### `render.hud.tab-list-text-replay` — Tab list text replay
 
 While the tab list is held, vanilla draws every name glyph by glyph, every frame. This records each string once, at its position and colour, and replays it; the skins, icons, backgrounds and scores stay live, so nothing that changes can go stale. Obfuscated text is always drawn live. Output-identical.
@@ -197,6 +225,14 @@ With Fancy graphics, Forge averages the sky colour of every biome column around 
 - **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Rendering. **Default:** on.
 - **Expected benefit:** Forge with Fancy graphics: less frame time and allocation in every scene.
 - **Measured** (in-game, `forge-2026-10-15-sky-blend`): Forge 11.15.1.2318 with OptiFine M5, Fancy, render distance 12, 4 paired rounds: horizon 1.163 -> 0.896 ms median (4/4), down45 1.319 -> 1.010 (4/4), 48 players 3.146 -> 2.867 (3/4); client allocation 118 -> 18 MB/s. Verify mode: 28,672 answers compared with Forge's own, 0 differed.
+
+#### `render.forge.unheard-render-events` — Skip unheard Forge render events
+
+On Forge, OptiFine posts four Forge events for every living entity drawn, every frame -- around its body and around its name label, hologram lines included -- each built and sent through reflection. This skips an event when nothing is listening for it, which is exactly what posting it would have done; a mod that listens still gets every one. Forge with OptiFine only. Output-identical.
+
+- **Status:** Runs in game. **Control:** Launcher switch. **Class:** Safe. **Group:** Entities. **Default:** off.
+- **Expected benefit:** Forge with OptiFine: proportional to living entities and hologram lines in view.
+- **Measured:** nothing yet.
 
 #### `render.hud.vanilla-replay` — Replay unchanged chat and scoreboard
 

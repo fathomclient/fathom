@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
 
 import net.minecraft.client.MinecraftClient;
@@ -111,7 +110,7 @@ public final class ModuleKeys {
         }
         if (key.isMouseButton()) {
             int button = key.mouseButton();
-            return Mouse.isCreated() && button >= 0 && button < Mouse.getButtonCount() && Mouse.isButtonDown(button);
+            return MouseButtons.isDown(button);
         }
         return Keyboard.isCreated() && key.key() > 0 && key.key() < Keyboard.KEYBOARD_SIZE
                 && Keyboard.isKeyDown(key.key());

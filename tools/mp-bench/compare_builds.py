@@ -32,8 +32,9 @@ RUN = os.path.join(ROOT, "minecraft", "fathom-optimizations", "run-mp")
 LOGS = os.path.join(RUN, "logs")
 
 
-def newest_report():
-    reports = glob.glob(os.path.join(LOGS, "fathom-mp-20*.txt"))
+def newest_report(forge=False):
+    where = os.path.join(RUN, "forge", "logs") if forge else LOGS
+    reports = glob.glob(os.path.join(where, "fathom-mp-20*.txt"))
     return max(reports, key=os.path.getmtime) if reports else None
 
 
@@ -61,12 +62,16 @@ def step(label, index, jar, args):
     try:
         if not wait_for(serve_log, "[serve] server up", 180):
             raise SystemExit("the server did not come up; see %s" % serve_log)
-        before = newest_report()
+        before = newest_report(args.forge)
         client = [sys.executable, os.path.join(HERE, "run_client.py"), "--jar", jar,
                   "--scenes", args.scenes, "--arms", args.arms, "--rounds", str(args.rounds),
                   "--seconds", str(args.seconds)]
         for extra in args.extra:
             client += ["--extra", extra]
+        if args.forge:
+            client += ["--forge", "--heap", args.heap or "2304"]
+        elif args.heap:
+            client += ["--heap", args.heap]
         if args.jfr:
             client += ["--jfr", os.path.abspath(args.jfr.replace("{step}", stamp))]
         print("[compare] %s: client with %s" % (stamp, os.path.basename(jar)), flush=True)
@@ -76,13 +81,18 @@ def step(label, index, jar, args):
             server.wait(timeout=60)
         except subprocess.TimeoutExpired:
             pass
-        report = newest_report()
+        report = newest_report(args.forge)
         if report and report != before:
             for ext in (".txt", ".csv"):
                 source = report[:-4] + ext
                 if os.path.exists(source):
                     target = os.path.join(LOGS, "fathom-mp-%s-%s%s" % (args.tag, stamp, ext))
                     shutil.copy(source, target)
+            # The console holds one line per window, with the entities drawn in it, for
+            # paired_windows.py.
+            console = os.path.join(RUN, "forge" if args.forge else "", "client-console.log")
+            if os.path.exists(console):
+                shutil.copy(console, os.path.join(LOGS, "fathom-mp-%s-%s-console.log" % (args.tag, stamp)))
             print("[compare] %s: report %s" % (stamp, os.path.basename(report)), flush=True)
         else:
             print("[compare] %s: no new report" % stamp, flush=True)
@@ -109,6 +119,8 @@ def main():
     parser.add_argument("--bots", type=int, default=40)
     parser.add_argument("--tag", default=time.strftime("%Y%m%d-%H%M"))
     parser.add_argument("--extra", action="append", default=[])
+    parser.add_argument("--forge", action="store_true", help="run the client as the user's Forge profile (run_client --forge)")
+    parser.add_argument("--heap", default="", help="client heap in MB (default 4096; 2304, the Forge profile's, with --forge)")
     parser.add_argument("--jfr", default="", help="record a flight recording; {step} becomes the step's label")
     args = parser.parse_args()
 

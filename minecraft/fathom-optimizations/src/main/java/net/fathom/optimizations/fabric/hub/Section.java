@@ -67,6 +67,37 @@ public interface Section {
     }
 
     /**
+     * Which page inside this section is showing, as a stable name (a Settings
+     * tab, a module id), for reopening the Hub where it was left. Empty for a
+     * section with only the one page.
+     */
+    default String pageId() {
+        return "";
+    }
+
+    /** How far the page showing is scrolled, to come back to. */
+    default float scrollPosition() {
+        return 0f;
+    }
+
+    /**
+     * Show {@code pageId} scrolled to {@code scroll}, after {@link #opened}.
+     * A page that no longer exists is ignored: the section's own page shows.
+     */
+    default void restore(HubContext context, String pageId, float scroll) {
+    }
+
+    /**
+     * The wheel turned with the pointer at ({@code x}, {@code y}) in logical
+     * units, so a page with a scrolling list inside it can give the wheel to
+     * the list under the pointer and the rest to itself. Pages with one
+     * scrolling area need not override this.
+     */
+    default void scroll(int notches, float x, float y) {
+        scroll(notches);
+    }
+
+    /**
      * A key was pressed while this section had the screen.
      *
      * <p>Called before the shell's own handling, so a section that is capturing

@@ -100,6 +100,10 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
 
     private static final float TRAVEL = GraphiteTokens.MOTION_TRAVEL;
 
+    /** The utility row's controls: compact, a little under the column's buttons. */
+    private static final float UTILITY_HEIGHT = 24f;
+    private static final float[] UTILITY_WIDTHS = {104f, 84f, 116f, 96f};
+
     /** The required short notice, verbatim. The long form is in ATTRIBUTION.md. */
     static final String LEGAL = "Not affiliated with Mojang or Microsoft. Do not distribute!";
 
@@ -114,27 +118,26 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         {SINGLE, "Singleplayer", "PLAY"},
         {MULTI, "Multiplayer", "SIGNAL"},
         {MODS, "Mods", "MODS"},
-        {SETTINGS, "Settings", "SETTINGS"},
+        {SETTINGS, "Options", "SETTINGS"},
     };
 
-    /** The rail: id, label, icon, and the Hub section it opens (null: not the Hub). */
-    private static final String[][] RAIL_TOP = {
-        {"rail.home", "Home", "HOME", null},
-        {"rail.mods", "Mods", "MODS", "Mods"},
-        {"rail.performance", "Performance", "GAUGE", "Performance"},
-        {"rail.profiles", "Profiles", "USER", "Profiles"},
-    };
-    private static final String[][] RAIL_BOTTOM = {
-        {"rail.quick", "Quick settings", "SLIDERS", "Quick"},
-        {"rail.options", "Options", "SETTINGS", null},
+    /**
+     * The utility row along the bottom: id, label, icon, and the Hub section it
+     * opens (null: Quit). Every place the old side rail led to is here or in
+     * the column: Mods and Options are column actions, the rest are these.
+     */
+    private static final String[][] UTILITY = {
+        {"util.performance", "Performance", "GAUGE", "Performance"},
+        {"util.profiles", "Profiles", "USER", "Profiles"},
+        {"util.quick", "Quick settings", "SLIDERS", "Quick"},
+        {QUIT, "Quit game", "CLOSE", null},
     };
 
     /** Tab order: the column, top to bottom, then the rail. */
     private static final String[] FOCUS_ORDER = {
-        SINGLE, MULTI, MODS, SETTINGS, QUIT,
-        "rail.mods", "rail.performance", "rail.profiles", "rail.quick", "rail.options",
+        SINGLE, MULTI, MODS, SETTINGS,
+        "util.performance", "util.profiles", "util.quick", QUIT,
     };
-
     /** Reused because the background isolation pass runs once per rendered frame. */
     private final Runnable backgroundPass = new Runnable() {
         @Override
@@ -167,10 +170,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     private final Box avatarBox = Box.fixed("header.account.head", 24f, 24f);
     private final TextLeaf accountName = TextLeaf.of("header.account.name", CAPSULE_TYPE, 13f).keepCase(true);
     private final Box chevronBox = Box.fixed("header.account.chevron", 16f, 16f);
-    private final Box railTop = Box.column("rail.top");
-    private final Box railBottom = Box.column("rail.bottom");
-    private final Box[] railTopItems = new Box[RAIL_TOP.length];
-    private final Box[] railBottomItems = new Box[RAIL_BOTTOM.length];
+    private final Box utilityRow = Box.row("utility");
+    private final Box[] utilityItems = new Box[UTILITY.length];
     private final Box column = Box.column("column");
     private final Box logoBox = Box.leaf("column.logo", new Box.Measure() {
         @Override
@@ -184,7 +185,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         }
     });
     private final Box[] actionBoxes = new Box[ACTIONS.length];
-    private final Box quitBox = Box.fixed("column.quit", COLUMN, BUTTON);
     private final Box progressBox = Box.column("column.progress").height(6f);
     private final TextLeaf installLine = TextLeaf.of("column.installation", FACT_LABEL, 14f).keepCase(true);
     private final TextLeaf legalLine = TextLeaf.of("legal", FACT_LABEL, 14f).keepCase(true);
@@ -348,14 +348,16 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         headerSlot.add(header);
         root.add(headerSlot);
 
-        // The rail: two groups, 12 in, below the header and above the foot.
-        Box railSlot = Box.column("slot.rail").padding(RAIL_LEFT, HEADER + GraphiteTokens.SPACE_1, 0f, RAIL_FOOT)
-                .justify(Box.Align.BETWEEN).align(Box.Align.START);
-        railGroup(railTop, RAIL_TOP, railTopItems);
-        railGroup(railBottom, RAIL_BOTTOM, railBottomItems);
-        railSlot.add(railTop);
-        railSlot.add(railBottom);
-        root.add(railSlot);
+        // The utility row: one compact line along the bottom, centred.
+        Box utilitySlot = Box.column("slot.utility").padding(0f, 0f, 0f, GraphiteTokens.SPACE_4)
+                .justify(Box.Align.END).align(Box.Align.CENTRE);
+        utilityRow.gap(GraphiteTokens.SPACE_1).align(Box.Align.CENTRE);
+        for (int index = 0; index < UTILITY.length; index++) {
+            utilityItems[index] = Box.fixed(UTILITY[index][0], UTILITY_WIDTHS[index], UTILITY_HEIGHT);
+            utilityRow.add(utilityItems[index]);
+        }
+        utilitySlot.add(utilityRow);
+        root.add(utilitySlot);
 
         // The column, centred and lifted a little: the logo, the actions 6
         // apart, Quit after a wider gap, then the installation line.
@@ -375,9 +377,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
                 column.add(progressBox);
             }
         }
-        column.add(Box.column("column.quit.before").height(GraphiteTokens.SPACE_3));
-        column.add(quitBox);
-        column.add(Box.column("column.installation.before").height(GraphiteTokens.SPACE_4));
+        column.add(Box.column("column.installation.before").height(GraphiteTokens.SPACE_6));
         column.add(installLine.box());
         columnSlot.add(column);
         root.add(columnSlot);
@@ -402,14 +402,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         accountPanelBox.add(accountStatusAfter);
         accountPanelBox.add(accountAddBox);
         legalLine.set(LEGAL);
-    }
-
-    private void railGroup(Box group, String[][] items, Box[] boxes) {
-        group.width(RAIL_WIDTH).padding(RAIL_INSET).gap(RAIL_GAP).align(Box.Align.START);
-        for (int index = 0; index < items.length; index++) {
-            boxes[index] = Box.fixed(items[index][0], RAIL_ITEM, RAIL_ITEM);
-            group.add(boxes[index]);
-        }
     }
 
     /** Tell the tree what the strings say now; it lays out again only if they changed. */
@@ -466,9 +458,8 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         Graphite.captureFrost(ui);
 
         header(ui);
-        rail(ui, railTop, railTopItems, RAIL_TOP, "rail.top");
-        rail(ui, railBottom, railBottomItems, RAIL_BOTTOM, "rail.bottom");
         column(ui, now);
+        utility(ui);
         legal(ui);
         if (accountPanelPresent) {
             ui.pushLayer(net.fathom.optimizations.core.ui.render.Layer.POPOVER);
@@ -528,50 +519,30 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
     }
 
     /**
-     * One of the rail's two capsules: icons, widening to show labels while the
-     * pointer is over it, and only it -- the launcher's rule since its own
-     * rail widened both together.
+     * The utility row: quiet, compact, one line. Icon and label together at the
+     * game's small density; the pointer lifts a control the way every other
+     * control does and Quit stays the quietest until it is touched.
      */
-    private void rail(Renderer ui, Box groupBox, Box[] itemBoxes, String[][] items, String id) {
-        Rect closed = groupBox.rect();
-        boolean over = live() && pointer.x() >= closed.x && pointer.y() >= closed.y
-                && pointer.x() <= closed.x + RAIL_TRAY && pointer.y() <= closed.bottom()
-                && (pointer.x() <= closed.right() || controls.towards(id + "#open", true, 0f) > 0.5f);
-        float open = controls.towards(id + "#open", over, GraphiteTokens.MOTION_FAST);
-        float wide = closed.width + (RAIL_TRAY - closed.width) * open;
-        // The launcher's rail groups are its standard material (material-standard).
-        net.fathom.optimizations.core.ui.style.Material.STANDARD.paint(ui, closed.x, closed.y, closed.x + wide,
-                closed.bottom(), Graphite.R_PANEL);
-
-        Type label = Graphite.floor(ui, Graphite.UI);
-        for (int index = 0; index < items.length; index++) {
-            String[] item = items[index];
-            Rect slot = itemBoxes[index].rect();
-            Rect row = open > 0.001f ? new Rect(slot.x, slot.y, wide - RAIL_INSET * 2f, slot.height) : slot;
-            boolean current = "rail.home".equals(item[0]);
-            Controls.State state = controls.state(item[0], row, live() && !current);
-            Graphite.overlay(ui, row, Graphite.R_CONTROL, current ? 0f : Math.max(state.hover, state.press),
-                    current ? 1f : 0f);
-            if (current) {
-                Glow.current(ui, row, Graphite.R_CONTROL, 1f);
+    private void utility(Renderer ui) {
+        Type label = Graphite.floor(ui, Graphite.CAPTION);
+        float glyph = Graphite.ICON_INLINE;
+        for (int index = 0; index < UTILITY.length; index++) {
+            String[] item = UTILITY[index];
+            Rect area = utilityItems[index].rect();
+            Controls.State state = controls.state(item[0], area, live());
+            pressScale(ui, area, state.press);
+            Graphite.overlay(ui, area, Graphite.R_CONTROL, Math.max(state.hover, state.press), 0f);
+            int resting = QUIT.equals(item[0]) ? Graphite.TEXT_TERTIARY : Graphite.TEXT_SECONDARY;
+            int ink = net.fathom.optimizations.core.ui.Colour.mix(resting, Graphite.TEXT, state.hover);
+            float width = glyph + GraphiteTokens.SPACE_2 + ui.measure(item[1], label);
+            float left = area.centreX() - width / 2f;
+            ui.icon(Icon.valueOf(item[2]), left, area.centreY() - glyph / 2f, glyph, ink);
+            ui.text(item[1], left + glyph + GraphiteTokens.SPACE_2, Graphite.baseline(ui, area, label), label, ink);
+            ui.popTransform();
+            if (state.clicked || activated(item[0])) {
+                utilityAction(item);
             }
-            int ink = current || state.hover > 0.5f ? Graphite.TEXT : Graphite.TEXT_SECONDARY;
-            float iconSize = Graphite.ICON_NAV;
-            ui.icon(Icon.valueOf(item[2]), row.x + (RAIL_ITEM - iconSize) / 2f, row.centreY() - iconSize / 2f,
-                    iconSize, current ? Graphite.BRAND_LIGHT : ink);
-            if (open > 0.01f) {
-                ui.pushAlpha(open);
-                ui.text(item[1], row.x + RAIL_ITEM + GraphiteTokens.SPACE_1,
-                        Graphite.baseline(ui, row, label), label, ink);
-                ui.popAlpha();
-            }
-            if (keyboardFocus && controls.focused(item[0])) {
-                focusRing(ui, row, Graphite.R_CONTROL);
-            }
-            if (state.clicked || (state.enabled && item[0].equals(keyboardActivation))) {
-                keyboardActivation = null;
-                railAction(item);
-            }
+            focus(ui, item[0], area, Graphite.R_CONTROL);
         }
     }
 
@@ -587,7 +558,7 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
             if (id.equals(busy)) {
                 label = SINGLE.equals(id) ? "Opening worlds\u2026" : "Opening\u2026";
             }
-            if (columnButton(ui, id, area, label, Icon.valueOf(ACTIONS[index][2]), index == 0) || activated(id)) {
+            if (columnButton(ui, id, area, label, null, index == 0) || activated(id)) {
                 act(id);
             }
             focus(ui, id, area, Graphite.R_CONTROL);
@@ -596,25 +567,6 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
                 working(ui, area.x + 16f, slot.y + 3f, area.width - 32f, now);
             }
         }
-
-        // Quit: quiet until the pointer is on it, as a way out should be.
-        Rect quit = quitBox.rect();
-        Controls.State state = controls.state(QUIT, quit, live());
-        pressScale(ui, quit, state.press);
-        Graphite.overlay(ui, quit, Graphite.R_CONTROL, Math.max(state.hover, state.press), 0f);
-        int ink = net.fathom.optimizations.core.ui.Colour.mix(Graphite.TEXT_TERTIARY, Graphite.TEXT, state.hover);
-        Type type = Graphite.floor(ui, Graphite.UI);
-        float glyph = Graphite.ICON_INLINE;
-        String quitLabel = "Quit game";
-        float width = glyph + GraphiteTokens.SPACE_2 + ui.measure(quitLabel, type);
-        float left = quit.centreX() - width / 2f;
-        ui.icon(Icon.CLOSE, left, quit.centreY() - glyph / 2f, glyph, ink);
-        ui.text(quitLabel, left + glyph + GraphiteTokens.SPACE_2, Graphite.baseline(ui, quit, type), type, ink);
-        ui.popTransform();
-        if (state.clicked || activated(QUIT)) {
-            act(QUIT);
-        }
-        focus(ui, QUIT, quit, Graphite.R_CONTROL);
 
         installLine.draw(ui, Graphite.TEXT_TERTIARY);
     }
@@ -1119,14 +1071,9 @@ public final class FathomMenuScreen extends Screen implements FathomScreen,
         controls.closePopover();
     }
 
-    private void railAction(final String[] item) {
-        if ("rail.options".equals(item[0])) {
-            press(item[0], new Runnable() {
-                @Override
-                public void run() {
-                    client.setScreen(new SettingsScreen(FathomMenuScreen.this, client.options));
-                }
-            });
+    private void utilityAction(final String[] item) {
+        if (QUIT.equals(item[0])) {
+            act(QUIT);
             return;
         }
         if (item[3] != null) {

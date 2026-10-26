@@ -121,7 +121,9 @@ final class FontBook {
         GlyphPage page = pages.get(type.weight().name() + '/' + pixels);
         if (page == null) {
             load();
+            long hitch = net.fathom.optimizations.fabric.diag.Hitches.begin();
             page = new GlyphPage(family(type.weight()), pixels, atlas);
+            net.fathom.optimizations.fabric.diag.Hitches.end(net.fathom.optimizations.fabric.diag.Hitches.Section.GLYPH_PAGE, hitch);
             pages.put(type.weight().name() + '/' + pixels, page);
         }
         recentKeys[recentNext] = key;

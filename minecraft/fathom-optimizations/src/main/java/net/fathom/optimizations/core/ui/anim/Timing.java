@@ -21,15 +21,21 @@ import net.fathom.optimizations.generated.FathomTheme.Tokens;
  */
 public final class Timing {
 
-    /** The pointer arriving at or leaving a control (--motion-hover). */
-    public static final float HOVER_IN = Tokens.MOTION_HOVER;
-    public static final float HOVER_OUT = Tokens.MOTION_HOVER;
+    /**
+     * The pointer arriving at or leaving a control: the game's own 110ms
+     * (theme game.graphite.motion.hover), a touch quicker than the launcher's
+     * --motion-hover, as the in-game window is denser.
+     */
+    public static final float HOVER_IN = net.fathom.optimizations.generated.GraphiteTokens.MOTION_HOVER;
+    public static final float HOVER_OUT = net.fathom.optimizations.generated.GraphiteTokens.MOTION_HOVER;
     /** A button going down and coming back up (--motion-press). */
     public static final float PRESS = Tokens.MOTION_PRESS;
-    /** Toggles, sliders and other binary state (--motion-state). */
-    public static final float TOGGLE = Tokens.MOTION_STATE;
+    /** Toggles, sliders and other binary state: 140ms in game (game.graphite.motion.toggle). */
+    public static final float TOGGLE = net.fathom.optimizations.generated.GraphiteTokens.MOTION_TOGGLE;
+    /** A dropdown or other popover opening: 150ms in game (game.graphite.motion.dropdown). */
+    public static final float DROPDOWN = net.fathom.optimizations.generated.GraphiteTokens.MOTION_DROPDOWN;
     /** Tabs, segmented markers, the current section's mark (--motion-state). */
-    public static final float NAVIGATION = Tokens.MOTION_STATE;
+    public static final float NAVIGATION = net.fathom.optimizations.generated.GraphiteTokens.MOTION_NAVIGATION;
     /** Moving between a list and one detail page (--motion-page). */
     public static final float DETAIL = Tokens.MOTION_PAGE;
     /** Ordinary component and status transitions (--motion-state). */

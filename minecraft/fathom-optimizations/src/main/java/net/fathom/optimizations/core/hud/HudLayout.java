@@ -251,7 +251,9 @@ public final class HudLayout {
             // dropped. Whether a widget is drawn is its module's switch now, and
             // honouring a stale layout flag would re-create the defect where a
             // module reads as on and shows nothing.
-            put(widget.id(), new Placement(anchor, x, y, scale, opacity));
+            TextAnchor text = properties.getProperty(prefix + "textAnchor") == null
+                    ? base.textAnchor() : TextAnchor.parse(properties.getProperty(prefix + "textAnchor"));
+            put(widget.id(), new Placement(anchor, x, y, scale, opacity, text));
         }
     }
 
@@ -341,6 +343,10 @@ public final class HudLayout {
             properties.setProperty(prefix + "y", String.valueOf(placement.offsetY()));
             properties.setProperty(prefix + "scale", String.valueOf(placement.scale()));
             properties.setProperty(prefix + "opacity", String.valueOf(placement.opacity()));
+            // Written only when chosen, so a layout nobody touched is byte-for-byte what it was.
+            if (placement.textAnchor() != TextAnchor.AUTO) {
+                properties.setProperty(prefix + "textAnchor", placement.textAnchor().saved());
+            }
         }
         OutputStream out = null;
         try {

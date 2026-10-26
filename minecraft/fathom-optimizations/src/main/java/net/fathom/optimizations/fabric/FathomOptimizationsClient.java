@@ -136,6 +136,9 @@ public final class FathomOptimizationsClient {
             net.fathom.optimizations.core.module.ModuleLog.say("settings: " + complaint);
         }
         Runtime.installHud(hud);
+        // The first Fathom screen needs the interface font; read it now, off
+        // the render thread, instead of decoding it on the first frame.
+        net.fathom.optimizations.fabric.gfx.Gfx.prepareAssets();
 
         // The live Fathom Profile, applied before anything reads a module's state,
         // including the loop just below that lets a feature drive the optimization
@@ -242,9 +245,18 @@ public final class FathomOptimizationsClient {
         ((ReloadableResourceManager) client.getResourceManager()).registerListener(new ResourceReloadListener() {
             @Override
             public void reload(ResourceManager manager) {
+                // The atlas is a file in the jar and does not change with a
+                // resource pack, but its texture is thrown away; read it again
+                // off the render thread so rebuilding it is an upload only.
+                long hitch = net.fathom.optimizations.fabric.diag.Hitches.begin();
+                boolean inUse = net.fathom.optimizations.fabric.gfx.Gfx.peekCompositor() != null;
                 net.fathom.optimizations.fabric.gfx.Gfx.dispose();
+                if (inUse) {
+                    net.fathom.optimizations.fabric.gfx.Gfx.prepareAssets();
+                }
                 net.fathom.optimizations.fabric.hud.TextWidget.fontsReloaded();
                 net.fathom.optimizations.fabric.menu.FathomMenuScreen.disposeResources();
+                net.fathom.optimizations.fabric.diag.Hitches.end(net.fathom.optimizations.fabric.diag.Hitches.Section.RESOURCE_RELOAD, hitch);
             }
         });
     }

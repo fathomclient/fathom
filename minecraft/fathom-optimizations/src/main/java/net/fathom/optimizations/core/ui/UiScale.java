@@ -38,6 +38,16 @@ public final class UiScale {
     public static final float MIN_PREFERENCE = 0.65f;
     public static final float MAX_PREFERENCE = 1.5f;
 
+    /**
+     * The lowest preference a screen may be drawn at once it has been derived
+     * from the user's ({@link #windowPreference}); the user's own choice still
+     * stops at {@link #MIN_PREFERENCE}.
+     */
+    static final float DERIVED_MIN_PREFERENCE = 0.4f;
+
+    /** The height at which a compact window (the RShift Hub) is drawn at 1.0. */
+    public static final float WINDOW_REFERENCE_HEIGHT = 1080f;
+
     private final int framebufferWidth;
     private final int framebufferHeight;
     private final float scale;
@@ -56,7 +66,7 @@ public final class UiScale {
      * gets 0.75 rather than something unreadable.
      */
     public static float scaleFor(int framebufferHeight, float preference) {
-        float wanted = clamp(preference, MIN_PREFERENCE, MAX_PREFERENCE);
+        float wanted = clamp(preference, DERIVED_MIN_PREFERENCE, MAX_PREFERENCE);
         float automatic = Math.max(1, framebufferHeight) / REFERENCE_HEIGHT;
         return clamp(automatic * wanted, MIN_SCALE, MAX_SCALE);
     }
@@ -83,8 +93,23 @@ public final class UiScale {
         float fits = Math.min(Math.max(1, framebufferWidth) / SCREEN_MIN_WIDTH,
                 Math.max(1, framebufferHeight) / SCREEN_MIN_HEIGHT);
         float ceiling = fits / automatic;
+        float wanted = clamp(preference, DERIVED_MIN_PREFERENCE, MAX_PREFERENCE);
+        return Math.max(DERIVED_MIN_PREFERENCE, Math.min(wanted, ceiling));
+    }
+
+    /**
+     * The preference that draws a compact window -- the RShift Hub -- at
+     * {@code max(1, height / 1080) x preference}, rather than the
+     * {@code height / 720} every other screen uses: 1.0 at 720p and 1080p,
+     * 1.33 at 1440p, 2.0 at 4K. A 780x490 window is then 780x490 pixels on a
+     * 1080p screen, a compact panel over the game, and stays readable on a
+     * small window, where {@link #fittingPreference} shrinks it to fit.
+     */
+    public static float windowPreference(int framebufferHeight, float preference) {
         float wanted = clamp(preference, MIN_PREFERENCE, MAX_PREFERENCE);
-        return Math.max(MIN_PREFERENCE, Math.min(wanted, ceiling));
+        float height = Math.max(1, framebufferHeight);
+        float scale = Math.max(1f, height / WINDOW_REFERENCE_HEIGHT) * wanted;
+        return scale / (height / REFERENCE_HEIGHT);
     }
 
     /** Device pixels per logical unit. */

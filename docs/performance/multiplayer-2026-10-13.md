@@ -81,7 +81,7 @@ By measured cost in the scenes where each occurs. "Owner" is whose code it is.
 
 | # | Bottleneck | Evidence | Owner | Estimated saving | Status |
 |---|---|---|---|---|---|
-| 1 | **Player drawing** | 26–28 µs per player (body 10, label decision 7 of which the label 5, held item 5); 54–62 µs armoured with enchants. 40 players ≈ 1.0–1.1 ms | vanilla / OptiFine | Large, but needs cross-player batching: a renderer project | Plan |
+| 1 | **Player drawing** (see `multiplayer-2026-10-20.md`: held-item vertex reuse and model box batching shipped, −0.41 ms in a 64-player lobby on Forge) | 26–28 µs per player (body 10, label decision 7 of which the label 5, held item 5); 54–62 µs armoured with enchants. 40 players ≈ 1.0–1.1 ms | vanilla / OptiFine | Large, but needs cross-player batching: a renderer project | Plan |
 | 2 | **Tab list while held** | 0.74 ms at 80 players (glyph drawing 0.46 = 2.8 µs a name; its own work 0.29), 0.42 ms at 40 | vanilla | 0.3–0.5 ms while held (text replayed from display lists as nametags are; sort and name decoration once per change) | Plan, next |
 | 3 | **Client tick in p99 frames** | Tick frames are 1.4–5% of frames and 50–95% of the p99 band; 0.6–1.0 ms a tick, 1.6–2.0 ms with particles (particle physics 1.1 ms) | vanilla | p99 only; particle physics changes simulation (rejected before) | Not attempted |
 | 4 | **Dropped items** | 7 µs each: model 4.4, shadow 2.5. 160 items 1.13 ms CPU; the scene where the GPU is nearly the limit | vanilla / OptiFine | ~1 µs per item by making the shadow path allocation-free; more needs batching | Plan |

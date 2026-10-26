@@ -139,7 +139,9 @@ final class Icons {
         String name = icon.name() + '/' + size + '/' + tenths;
         Entry found = entries.get(name);
         if (found == null) {
+            long hitch = net.fathom.optimizations.fabric.diag.Hitches.begin();
             found = rasterise(icon, size, tenths / 10f);
+            net.fathom.optimizations.fabric.diag.Hitches.end(net.fathom.optimizations.fabric.diag.Hitches.Section.ICON_RASTER, hitch);
             entries.put(name, found);
         }
         recentKeys[recentNext] = key;

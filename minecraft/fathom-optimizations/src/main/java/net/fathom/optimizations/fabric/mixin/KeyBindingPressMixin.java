@@ -18,6 +18,10 @@ import net.fathom.optimizations.fabric.hud.FathomHud;
  * press, for keys and for mouse buttons (as {@code button - 100}). This reads
  * the code and returns; the press still reaches its binding untouched. Nothing
  * here can swallow, repeat or delay an attack.
+ *
+ * <p>At its end, a hotbar key's press selects its slot there and then, in the
+ * order presses arrive, rather than in slot order later in the tick: see
+ * {@link net.fathom.optimizations.fabric.input.HotbarKeys}.
  */
 @Mixin(KeyBinding.class)
 public abstract class KeyBindingPressMixin {
@@ -49,6 +53,13 @@ public abstract class KeyBindingPressMixin {
             // An attack on an entity, not a swing at the air or a click on a
             // button: that is what "flash when you hit one" promises.
             CrosshairWidget.attacked();
+        }
+    }
+
+    @Inject(method = "onKeyPressed(I)V", at = @At("RETURN"))
+    private static void fathom$hotbarInOrder(int code, CallbackInfo info) {
+        if (net.fathom.optimizations.fabric.bench.auto.BenchmarkState.allowEventDispatch()) {
+            net.fathom.optimizations.fabric.input.HotbarKeys.pressed(code);
         }
     }
 

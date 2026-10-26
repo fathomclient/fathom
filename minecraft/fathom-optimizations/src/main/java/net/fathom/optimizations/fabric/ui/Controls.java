@@ -135,6 +135,13 @@ public final class Controls {
     private String openId;
     private String choiceId;
     private int choiceIndex = -1;
+    /** A colour picked on the picker's square or hue strip, waiting for its control; -1 for none. */
+    private int pickedRgb = -1;
+    /** The picker's hue, kept apart from the colour so greys and black do not lose it. */
+    private float pickerHue = -1f;
+    private String pickerFor;
+    /** Which part of the picker the pointer is dragging: 0 none, 1 the square, 2 the hue strip. */
+    private int pickerDrag;
     private boolean overlayBlocking;
     private Rect shield;
 
@@ -144,7 +151,7 @@ public final class Controls {
     private String lastTooltipText;
     private Rect lastTooltipAnchor;
     private final Motion tooltipMotion = new Motion(0f, Timing.TOOLTIP);
-    private final Motion popoverMotion = new Motion(0f, Timing.PANEL);
+    private final Motion popoverMotion = new Motion(0f, Timing.DROPDOWN);
     /** Retained only while the single open popover finishes its exit. */
     private Overlay visibleOverlay;
 
@@ -159,6 +166,8 @@ public final class Controls {
         int[] colours;
         /** For a swatch popover: which of {@link #colours} is the setting's default, or -1. */
         int defaultIndex = -1;
+        /** For a swatch popover: the colour the setting has now, for the picker. */
+        int rgb;
 
         Overlay set(String id, Rect anchor, String[] options, int selected, boolean swatches) {
             this.id = id;
@@ -221,6 +230,9 @@ public final class Controls {
         openId = null;
         choiceId = null;
         choiceIndex = -1;
+        pickedRgb = -1;
+        pickerFor = null;
+        pickerDrag = 0;
         overlays.clear();
         visibleOverlay = null;
         popoverMotion.set(0f, Gfx.clock().seconds());
@@ -1273,6 +1285,10 @@ public final class Controls {
     // Colour
     // -----------------------------------------------------------------------
 
+    /** Visual QA: the id fragment of a colour control to open on sight, or null. */
+    private static final String QA_OPEN_COLOUR = System.getProperty("fathom.qaOpenColour");
+    private boolean qaColourOpened;
+
     public static final int[] PALETTE = {
         0xFFFFFF, 0xC4303C, 0xE0505C, 0xE0AE57, 0x4FC98A, 0x5B9BD5, 0xB37FE8, 0x8A93A3, 0x000000
     };
@@ -1330,6 +1346,11 @@ public final class Controls {
      * @return the chosen RGB
      */
     public int colour(Renderer ui, String id, Rect area, int rgb, int defaultRgb) {
+        if (QA_OPEN_COLOUR != null && !qaColourOpened && id.contains(QA_OPEN_COLOUR)) {
+            // Visual QA only: open this popover once, as a click would.
+            qaColourOpened = true;
+            openId = id;
+        }
         boolean open = id.equals(openId);
         Rect box = area.vcentreRight(0f, SWATCH, SWATCH);
         State s = state(id, box, true);
@@ -1359,13 +1380,20 @@ public final class Controls {
                 Overlay shown = overlay(id, box, PALETTE_LABELS, indexIn(colours, rgb), true);
                 shown.colours = colours;
                 shown.defaultIndex = defaultRgb >= 0 ? indexIn(colours, defaultRgb) : -1;
+                shown.rgb = rgb;
                 overlays.add(shown);
             }
             if (choosing) {
                 int chosen = choiceIndex;
+                int picked = pickedRgb;
                 choiceId = null;
                 choiceIndex = -1;
+                pickedRgb = -1;
+                if (picked >= 0) {
+                    return picked;
+                }
                 if (chosen >= 0 && chosen < colours.length) {
+                    pickerFor = null;
                     return colours[chosen];
                 }
             }
@@ -1457,7 +1485,7 @@ public final class Controls {
                 popoverMotion.set(0f, now);
             }
             visibleOverlay = current;
-            popoverMotion.to(1f, now, Timing.PANEL, Ease.Curve.STANDARD);
+            popoverMotion.to(1f, now, Timing.DROPDOWN, Ease.Curve.STANDARD);
         } else if (visibleOverlay != null) {
             popoverMotion.to(0f, now, Timing.SCREEN_EXIT, Ease.Curve.EXIT);
         }
@@ -1513,7 +1541,7 @@ public final class Controls {
         ui.pushAlpha(tooltipAlpha);
         Rect tooltip = Skin.pixelAligned(ui, new Rect(left, top, width, height));
         ui.rounded(tooltip.x, tooltip.y, tooltip.right(), tooltip.bottom(), Tokens.RADIUS_XS,
-                Graphite.Material.DENSE.fill);
+                Skin.POPOVER);
         Graphite.rim(ui, tooltip, Tokens.RADIUS_XS, Graphite.Material.DENSE.rim);
         ui.text(Text.fit(ui, lastTooltipText, Type.SMALL, width - Skin.S2 * 2f), tooltip.x + Skin.S2,
                 baseline(ui, tooltip, Type.SMALL), Type.SMALL, Skin.TEXT);
@@ -1534,7 +1562,7 @@ public final class Controls {
         ui.pushAlpha(grown);
         ui.pushTransform(0f, (1f - grown) * (upwards ? 6f : -6f));
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
-        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.POPOVER, 0f);
         ui.rim(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.EDGE_ELEVATED);
 
         for (int index = 0; index < overlay.options.length; index++) {
@@ -1564,11 +1592,11 @@ public final class Controls {
 
     private void drawSwatches(Renderer ui, Overlay overlay, float grown, boolean interactive) {
         int[] colours = overlay.colours == null ? PALETTE : overlay.colours;
-        int columns = colours.length > 9 ? 4 : 3;
+        int columns = 6;
         float cell = 30f;
         int rows = (colours.length + columns - 1) / columns;
         float width = columns * cell + Skin.S2 * 2f;
-        float height = rows * cell + Skin.S2 * 2f;
+        float height = rows * cell + Skin.S2 * 2f + PICKER_HEIGHT;
         boolean upwards = overlay.anchor.bottom() + height > ui.height() - Skin.S4;
         float top = upwards ? overlay.anchor.y - height - Skin.S1 : overlay.anchor.bottom() + Skin.S1;
         float left = Math.min(overlay.anchor.x + overlay.anchor.width - width, ui.width() - width - Skin.S4);
@@ -1576,7 +1604,7 @@ public final class Controls {
 
         ui.pushAlpha(grown);
         VisualEffects.overlayShadow(ui, panel, Skin.R_MEDIUM);
-        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.FLOATING, 0f);
+        VisualEffects.layeredSurface(ui, panel, Skin.R_MEDIUM, Skin.POPOVER, 0f);
         ui.rim(panel.x, panel.y, panel.right(), panel.bottom(), Skin.R_MEDIUM, Skin.EDGE_ELEVATED);
 
         for (int index = 0; index < colours.length; index++) {
@@ -1601,8 +1629,90 @@ public final class Controls {
                 openId = null;
             }
         }
+        Rect picker = new Rect(panel.x + Skin.S2 + 3f, panel.y + Skin.S2 + rows * cell + 4f,
+                columns * cell - 6f, PICKER_HEIGHT - Skin.S2);
+        drawPicker(ui, overlay, picker, interactive);
         ui.popAlpha();
         blockIfOver(panel);
+    }
+
+    /** The picker's square and hue strip, with the gap between them. */
+    private static final float PICKER_SQUARE = 110f;
+    private static final float PICKER_STRIP = 14f;
+    private static final float PICKER_HEIGHT = PICKER_SQUARE + 8f + PICKER_STRIP + Skin.S2 + 4f;
+
+    /**
+     * Any colour at all: saturation across and brightness down the square,
+     * hue along the strip. Dragging keeps choosing while the button is held,
+     * and the popover stays open until a click lands outside it.
+     */
+    private void drawPicker(Renderer ui, Overlay overlay, Rect area, boolean interactive) {
+        float[] hsb = java.awt.Color.RGBtoHSB((overlay.rgb >> 16) & 0xFF, (overlay.rgb >> 8) & 0xFF,
+                overlay.rgb & 0xFF, null);
+        if (!overlay.id.equals(pickerFor)) {
+            pickerFor = overlay.id;
+            pickerHue = hsb[0];
+        }
+        Rect square = new Rect(area.x, area.y, area.width, PICKER_SQUARE);
+        Rect strip = new Rect(area.x, square.bottom() + 8f, area.width, PICKER_STRIP);
+
+        int columns = 32;
+        float step = square.width / columns;
+        for (int column = 0; column < columns; column++) {
+            float saturation = (column + 0.5f) / columns;
+            int top = 0xFF000000 | java.awt.Color.HSBtoRGB(pickerHue, saturation, 1f);
+            float left = square.x + column * step;
+            ui.gradient(left, square.y, left + step + 0.5f, square.bottom(), 0f, top, 0xFF000000);
+        }
+        ui.rim(square.x, square.y, square.right(), square.bottom(), 0f, Skin.EDGE_STRONG);
+        int segments = 36;
+        float segment = strip.width / segments;
+        for (int index = 0; index < segments; index++) {
+            int hue = 0xFF000000 | java.awt.Color.HSBtoRGB((index + 0.5f) / segments, 1f, 1f);
+            ui.fill(strip.x + index * segment, strip.y, strip.x + (index + 1) * segment + 0.5f, strip.bottom(), hue);
+        }
+        ui.rim(strip.x, strip.y, strip.right(), strip.bottom(), 0f, Skin.EDGE_STRONG);
+
+        // Where the colour is now.
+        float markX = square.x + hsb[1] * square.width;
+        float markY = square.y + (1f - hsb[2]) * square.height;
+        int ring = hsb[2] > 0.55f ? 0xFF000000 : 0xFFFFFFFF;
+        ui.outline(markX - 4f, markY - 4f, markX + 4f, markY + 4f, 4f, 1.5f, ring);
+        float hueX = strip.x + pickerHue * strip.width;
+        ui.outline(hueX - 2f, strip.y - 2f, hueX + 2f, strip.bottom() + 2f, 1.5f, 1.5f, 0xFFFFFFFF);
+
+        if (!interactive || !inputEnabled || pointer == null) {
+            return;
+        }
+        if (pointer.pressed(0)) {
+            pickerDrag = square.contains(pointer.x(), pointer.y()) ? 1
+                    : strip.inset(0f, -4f).contains(pointer.x(), pointer.y()) ? 2 : 0;
+        } else if (!pointer.down(0)) {
+            pickerDrag = 0;
+        }
+        if (pickerDrag == 0) {
+            return;
+        }
+        float saturation = hsb[1];
+        float brightness = hsb[2];
+        if (pickerDrag == 1) {
+            saturation = Math.max(0f, Math.min(1f, (pointer.x() - square.x) / square.width));
+            brightness = 1f - Math.max(0f, Math.min(1f, (pointer.y() - square.y) / square.height));
+        } else {
+            pickerHue = Math.max(0f, Math.min(0.999f, (pointer.x() - strip.x) / strip.width));
+            if (saturation < 0.05f && brightness > 0.05f) {
+                // Dragging the hue of a grey would change nothing; give it colour.
+                saturation = 1f;
+            }
+            if (brightness < 0.05f) {
+                brightness = 1f;
+            }
+        }
+        int next = java.awt.Color.HSBtoRGB(pickerHue, saturation, brightness) & 0xFFFFFF;
+        if (next != overlay.rgb) {
+            choiceId = overlay.id;
+            pickedRgb = next;
+        }
     }
 
     private static float luminance(int rgb) {

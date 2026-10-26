@@ -32,4 +32,24 @@ public abstract class WorldSkyAngleMixin {
             info.setReturnValue(Float.valueOf(((World) (Object) this).dimension.getSkyAngle(ticks, 0f)));
         }
     }
+
+    /**
+     * Everything that reads the world time directly instead of the sky angle
+     * has to see the same hour, or it drifts back to the real one: OptiFine's
+     * custom sky decides which layers fade in and out, and how fast they turn,
+     * from this. The real day number is kept; the level properties, and so the
+     * integrated server's world and anything sent to a server, are untouched.
+     */
+    @Inject(method = "getTimeOfDay()J", at = @At("HEAD"), cancellable = true)
+    private void fathom$visualTime(CallbackInfoReturnable<Long> info) {
+        if (!((Object) this instanceof ClientWorld)) {
+            return;
+        }
+        long ticks = WorldLighting.skyTicks();
+        if (ticks >= 0L) {
+            long real = ((World) (Object) this).getLevelProperties().getTimeOfDay();
+            info.setReturnValue(Long.valueOf(
+                    net.fathom.optimizations.core.visual.Lighting.visualTimeOfDay(real, ticks)));
+        }
+    }
 }

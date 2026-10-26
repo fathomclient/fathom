@@ -260,6 +260,18 @@ final class Modules {
                 .setting(new Setting.Whole("background", "Background",
                         "How dark the band behind chat is. 100% is vanilla.", 100, 0, 100, 5, "%"))
                 .setting(new Setting.Toggle("shadow", "Text shadow", "Vanilla's dark edge under the letters.", true))
+                .setting(new Setting.Text("macro1.text", "Preset 1",
+                        "Sent when its key is pressed. Start with / for a command.", ""))
+                .setting(new Setting.Text("macro2.text", "Preset 2",
+                        "", ""))
+                .setting(new Setting.Text("macro3.text", "Preset 3",
+                        "", ""))
+                .setting(new Setting.Text("macro4.text", "Preset 4",
+                        "", ""))
+                .keybind(new Keybind("macro1", "Preset 1", Keybind.NONE))
+                .keybind(new Keybind("macro2", "Preset 2", Keybind.NONE))
+                .keybind(new Keybind("macro3", "Preset 3", Keybind.NONE))
+                .keybind(new Keybind("macro4", "Preset 4", Keybind.NONE))
                 .build());
 
         // -- PvP -----------------------------------------------------------
@@ -478,7 +490,7 @@ final class Modules {
                         "Default", CrosshairPresets.NAMES))
                 .setting(new Setting.Choice(CrosshairPresets.STYLE, "Shape",
                         "Vanilla keeps Minecraft's own, including a resource pack's.", "Cross",
-                        "Vanilla", "Cross", "Dot", "Circle", "Tee"))
+                        "Vanilla", "Cross", "Dot", "Circle", "Tee", "X", "Square"))
                 .setting(new Setting.Whole(CrosshairPresets.LENGTH, "Length", "How far each arm reaches.",
                         4, 0, 20, 1, "px"))
                 .setting(new Setting.Whole(CrosshairPresets.THICKNESS, "Thickness", "", 1, 1, 6, 1, "px"))
@@ -491,6 +503,9 @@ final class Modules {
                         1, 1, 3, 1, "px"))
                 .setting(new Setting.Colour("colour", "Colour", "", 0xFFFFFF))
                 .setting(new Setting.Colour("outline.colour", "Outline colour", "", 0x000000))
+                .setting(new Setting.Toggle("rainbow", "Rainbow", "Cycle through every colour.", false))
+                .setting(new Setting.Toggle("invert", "Invert like vanilla",
+                        "Invert what is behind it, so it reads on any background.", false))
                 .setting(new Setting.Whole("opacity", "Opacity", "", 100, 10, 100, 5, "%"))
                 .setting(new Setting.Toggle("dynamic", "Dynamic",
                         "The gap opens while you move, sprint or fall, and closes when you stop.", false))
@@ -558,6 +573,430 @@ final class Modules {
                 .setting(new Setting.Toggle("punch", "Punch while using",
                         "Holding attack on a block while using an item swings your arm, as 1.7 did. "
                                 + "Only you see it: nothing is sent to the server.", true))
+                .build());
+
+        // The tilt vanilla gives the camera when you are hit, scaled. 0% is no
+        // shake at all and 100% is vanilla's; it starts at 0% because turning it
+        // off is what most people switch this on for. Only the camera moves:
+        // knockback, the red flash on the player model and the death roll are
+        // vanilla's.
+        out.add(FathomModule.builder("hurt-camera")
+                .name("Hurt Camera")
+                .description("Less or more shake when you take damage.")
+                .category(Category.VISUAL)
+                .icon(Icon.SHIELD)
+                .behaviour(Behaviour.HURT_CAMERA)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Whole("strength", "Shake",
+                        "0% removes it, 100% is vanilla's, higher shakes harder.",
+                        0, 0, 300, 10, "%"))
+                .build());
+
+        // The box around the block you are looking at. Drawn where vanilla
+        // draws its own and depth-tested the same way, so it never shows
+        // through walls.
+        out.add(FathomModule.builder("block-outline")
+                .name("Block Outline")
+                .description("Restyle the targeted block box.")
+                .category(Category.VISUAL)
+                .icon(Icon.CROSSHAIR)
+                .behaviour(Behaviour.BLOCK_OUTLINE)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Colour("colour", "Outline colour", "", 0x000000))
+                .setting(new Setting.Toggle("chroma", "Rainbow outline", "Cycle through every colour.", false))
+                .setting(new Setting.Whole("opacity", "Outline opacity", "", 40, 0, 100, 5, "%"))
+                .setting(new Setting.Whole("thickness", "Thickness", "0 hides the outline and keeps the fill.",
+                        2, 0, 10, 1, "px"))
+                .setting(new Setting.Toggle("fill", "Fill", "Tint the faces of the block too.", false))
+                .setting(new Setting.Colour("fill.colour", "Fill colour", "", 0xFFFFFF))
+                .setting(new Setting.Toggle("fill.chroma", "Rainbow fill", "", false))
+                .setting(new Setting.Whole("fill.opacity", "Fill opacity", "", 15, 0, 100, 5, "%"))
+                .build());
+
+        // Vanilla's F3+B boxes, always on, styled and filtered. Only entities
+        // the game draws get one, and boxes are depth-tested like vanilla's:
+        // nothing here shows through walls.
+        out.add(FathomModule.builder("hitboxes")
+                .name("Hitboxes")
+                .description("Styled entity hitboxes.")
+                .category(Category.PVP)
+                .icon(Icon.SHIELD)
+                .behaviour(Behaviour.HITBOXES)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Colour("colour", "Colour", "", 0xFFFFFF))
+                .setting(new Setting.Toggle("chroma", "Rainbow", "Cycle through every colour.", false))
+                .setting(new Setting.Whole("opacity", "Opacity", "", 100, 10, 100, 5, "%"))
+                .setting(new Setting.Whole("thickness", "Thickness", "", 2, 1, 6, 1, "px"))
+                .setting(new Setting.Toggle("target", "Target colour", "Colour the entity you are aiming at.", true))
+                .setting(new Setting.Colour("target.colour", "Target colour value", "", 0x55FF55))
+                .setting(new Setting.Toggle("hurt", "Hurt colour", "Colour an entity while it is taking damage.", true))
+                .setting(new Setting.Colour("hurt.colour", "Hurt colour value", "", 0xFF5555))
+                .setting(new Setting.Toggle("eyes", "Eye line", "The red line at eye height.", true))
+                .setting(new Setting.Toggle("look", "Look direction", "The blue line where it is facing.", true))
+                .setting(new Setting.Toggle("players", "Players", "", true))
+                .setting(new Setting.Toggle("self", "Yourself", "In third person.", true))
+                .setting(new Setting.Toggle("mobs", "Mobs", "Animals, monsters and armour stands.", true))
+                .setting(new Setting.Toggle("items", "Dropped items", "", false))
+                .setting(new Setting.Toggle("other", "Everything else", "Arrows, pearls, minecarts, item frames.",
+                        false))
+                .build());
+
+        // Dropped items lie on the ground and tumble as they fall. Only the
+        // transform before the item is drawn changes; pickup is the server's.
+        out.add(FathomModule.builder("item-physics")
+                .name("Item Physics")
+                .description("Dropped items lie flat on the ground.")
+                .category(Category.VISUAL)
+                .icon(Icon.PACKAGE)
+                .behaviour(Behaviour.ITEM_PHYSICS)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Whole("speed", "Tumble speed", "How fast items turn while falling. 0 keeps them still.",
+                        100, 0, 300, 10, "%"))
+                .build());
+
+        // Rain and thunder on the client's world only: the server's weather,
+        // and everything that depends on it, is unchanged.
+        out.add(FathomModule.builder("weather-changer")
+                .name("Weather Changer")
+                .description("The weather you want to see.")
+                .category(Category.VISUAL)
+                .icon(Icon.SPARK)
+                .behaviour(Behaviour.WEATHER_CHANGER)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Choice("weather", "Weather", "Rain falls as snow in cold biomes, as in vanilla.",
+                        "Clear", "Clear", "Rain", "Thunder"))
+                .setting(new Setting.Whole("intensity", "Intensity", "", 100, 10, 100, 10, "%"))
+                .build());
+
+        out.add(FathomModule.builder("tnt-countdown")
+                .name("TNT Countdown")
+                .description("Time left on primed TNT.")
+                .category(Category.PVP)
+                .icon(Icon.CLOCK)
+                .behaviour(Behaviour.TNT_COUNTDOWN)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Choice("format", "Format", "", "Seconds", "Seconds", "Ticks"))
+                .setting(new Setting.Toggle("colour", "Colour by time",
+                        "Green, then amber under two seconds, then red under one.", true))
+                .build());
+
+        // Purely visual: hits, damage and knockback are vanilla's.
+        out.add(FathomModule.builder("particles")
+                .name("Particles")
+                .description("More hit particles, fewer block bits.")
+                .category(Category.PVP)
+                .icon(Icon.SPARK)
+                .behaviour(Behaviour.PARTICLES)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Whole("crit", "Crit particles", "Times as many as vanilla. 0 hides them.",
+                        1, 0, 10, 1, "x"))
+                .setting(new Setting.Whole("sharpness", "Sharpness particles", "Times as many as vanilla. 0 hides them.",
+                        1, 0, 10, 1, "x"))
+                .setting(new Setting.Toggle("always.crit", "Always crit particles",
+                        "Every hit you land shows them, not only critical hits.", false))
+                .setting(new Setting.Toggle("always.sharpness", "Always sharpness particles",
+                        "Every hit you land shows them, enchanted weapon or not.", false))
+                .setting(new Setting.Toggle("hide.blocks", "Hide block particles",
+                        "No bits when blocks are mined or broken.", false))
+                .setting(new Setting.Choice("explosions", "Explosion particles",
+                        "Smoke from every block a blast breaks. Fewer keeps one in four: a big frame-rate saver when TNT goes off.",
+                        "All", "All", "Fewer", "None"))
+                .build());
+
+        // Between the world and the HUD, so the HUD stays sharp.
+        out.add(FathomModule.builder("motion-blur")
+                .name("Motion Blur")
+                .description("Blur the world as you turn.")
+                .category(Category.VISUAL)
+                .icon(Icon.RUN)
+                .behaviour(Behaviour.MOTION_BLUR)
+                .needs(Compatibility.IN_GAME.saying("Shaders ignore it"))
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Whole("strength", "Strength", "How much of the last frames stays on screen.",
+                        50, 10, 90, 5, "%"))
+                .build());
+
+        // Only what is drawn on your screen changes: chat you send, commands
+        // and anything the server sees still carry your real name.
+        out.add(FathomModule.builder("nick-hider")
+                .name("Nick Hider")
+                .description("Show another name in place of yours.")
+                .category(Category.UTILITY)
+                .icon(Icon.MAGNIFIER)
+                .behaviour(Behaviour.NICK_HIDER)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Text("name", "Shown name",
+                        "Everywhere your username is drawn: chat, tab list, nametags, scoreboard.", "You"))
+                .build());
+
+        out.add(HudStyle.declare(FathomModule.builder("saturation")
+                .name("Saturation")
+                .description("Hunger saturation, as a number.")
+                .category(Category.HUD)
+                .icon(Icon.FLASK)
+                .widget("saturation")
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Choice("format", "Format", "", "Saturation 5.0",
+                        "Saturation 5.0", "5.0", "Food 20 / Sat 5.0")))
+                .build());
+
+        out.add(HudStyle.declare(FathomModule.builder("server-address")
+                .name("Server Address")
+                .description("The server you are playing on.")
+                .category(Category.HUD)
+                .icon(Icon.SIGNAL)
+                .widget("server-address")
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Toggle("label", "Label", "Write IP: before the address.", false))
+                .setting(new Setting.Toggle("hide.port", "Hide the default port", "Leave off :25565.", true))
+                .setting(new Setting.Toggle("singleplayer", "In singleplayer",
+                        "Say Singleplayer instead of showing nothing.", false)))
+                .build());
+
+        // The momentum read-out: how far the game moved you in the last tick.
+        out.add(HudStyle.declare(FathomModule.builder("speed")
+                .name("Speed")
+                .description("How fast you are moving.")
+                .category(Category.HUD)
+                .icon(Icon.RUN)
+                .widget("speed")
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Choice("unit", "Unit", "Blocks a second, or kilometres an hour.",
+                        "m/s", "m/s", "km/h"))
+                .setting(new Setting.Whole("decimals", "Decimal places", "", 2, 0, 3, 1, ""))
+                .setting(new Setting.Toggle("vertical", "Count falling and jumping",
+                        "Off, only movement across the ground counts.", false)))
+                .build());
+
+        out.add(HudStyle.declare(FathomModule.builder("item-counter")
+                .name("Item Counter")
+                .description("Blocks, arrows and pearls you carry.")
+                .category(Category.PVP)
+                .icon(Icon.PACKAGE)
+                .widget("item-counter")
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Toggle("blocks", "Blocks", "Every placeable block, added together.", true))
+                .setting(new Setting.Toggle("arrows", "Arrows", "", true))
+                .setting(new Setting.Toggle("pearls", "Ender pearls", "", true))
+                .setting(new Setting.Toggle("apples", "Golden apples", "", true))
+                .setting(new Setting.Toggle("fireballs", "Fireballs", "", false))
+                .setting(new Setting.Toggle("throwables", "Snowballs and eggs", "", false))
+                .setting(new Setting.Toggle("iron", "Iron", "Bedwars resources.", false))
+                .setting(new Setting.Toggle("gold", "Gold", "", false))
+                .setting(new Setting.Toggle("diamonds", "Diamonds", "", false))
+                .setting(new Setting.Toggle("emeralds", "Emeralds", "", false))
+                .setting(new Setting.Toggle("hide.zero", "Hide what you have none of", "", true)))
+                .build());
+
+        // WAILA: what you are looking at, named.
+        out.add(HudStyle.declare(FathomModule.builder("block-info")
+                .name("Block Info")
+                .description("Name what you are looking at.")
+                .category(Category.HUD)
+                .icon(Icon.MAGNIFIER)
+                .widget("block-info")
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Toggle("position", "Block position", "", false))
+                .setting(new Setting.Toggle("entities", "Entities", "Name mobs and players too.", true))
+                .setting(new Setting.Toggle("health", "Entity health", "", true)))
+                .build());
+
+        out.add(FathomModule.builder("titles")
+                .name("Titles")
+                .description("Resize or hide server titles.")
+                .category(Category.HUD)
+                .icon(Icon.SLIDERS)
+                .behaviour(Behaviour.TITLES)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Whole("scale", "Size", "100% is vanilla's.", 100, 25, 150, 5, "%"))
+                .setting(new Setting.Toggle("hide.title", "Hide titles", "The large line in the middle.", false))
+                .setting(new Setting.Toggle("hide.subtitle", "Hide subtitles", "The smaller line under it.", false))
+                .build());
+
+        out.add(FathomModule.builder("boss-bar")
+                .name("Hide Boss Bar")
+                .description("No boss bar at the top.")
+                .category(Category.HUD)
+                .icon(Icon.SLIDERS)
+                .behaviour(Behaviour.BOSS_BAR)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .build());
+
+        out.add(FathomModule.builder("hit-colour")
+                .name("Hit Colour")
+                .description("The tint on entities you hit.")
+                .category(Category.PVP)
+                .icon(Icon.SHIELD)
+                .behaviour(Behaviour.HIT_COLOUR)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Colour("colour", "Colour", "", 0xFF0000))
+                .setting(new Setting.Whole("opacity", "Strength", "30% is vanilla's.", 30, 0, 100, 5, "%"))
+                .build());
+
+        // Only the camera turns: where you face, move and aim is unchanged.
+        out.add(FathomModule.builder("snaplook")
+                .name("Snaplook")
+                .description("Look behind you while a key is held.")
+                .category(Category.UTILITY)
+                .icon(Icon.COMPASS)
+                .behaviour(Behaviour.SNAPLOOK)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("look", "Look (hold)", Keybind.NONE))
+                .setting(new Setting.Choice("view", "View", "Behind you is the front camera, facing you.",
+                        "Behind you", "Behind you", "Third person"))
+                .build());
+
+        out.add(FathomModule.builder("nametags")
+                .name("Nametags")
+                .description("Style the names over players.")
+                .category(Category.VISUAL)
+                .icon(Icon.SLIDERS)
+                .behaviour(Behaviour.NAMETAGS)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Toggle("own", "Your own nametag", "Over your head in third person.", true))
+                .setting(new Setting.Whole("scale", "Size", "100% is vanilla's.", 100, 50, 200, 10, "%"))
+                .setting(new Setting.Choice("text.colour.mode", "Text colour",
+                        "Server colours keeps rank and team colours; the others replace them.",
+                        "Server colours", "Server colours", "Custom", "Rainbow"))
+                .setting(new Setting.Colour("text.colour", "Custom text colour", "", 0xFFFFFF))
+                .setting(new Setting.Toggle("shadow", "Text shadow", "", false))
+                .setting(new Setting.Toggle("background.show", "Background", "The dark box behind the name.", true))
+                .setting(new Setting.Toggle("through-walls", "Faint through walls",
+                        "Vanilla's faded copy, seen through blocks in front.", true))
+                .setting(new Setting.Whole("background", "Background opacity", "25% is vanilla's.",
+                        25, 0, 100, 5, "%"))
+                .setting(new Setting.Colour("background.colour", "Background colour", "", 0x000000))
+                .build());
+
+        // Your own markers; /fwp never reaches the server.
+        out.add(FathomModule.builder("waypoints")
+                .name("Waypoints")
+                .description("Mark places and find them again.")
+                .category(Category.UTILITY)
+                .icon(Icon.COMPASS)
+                .behaviour(Behaviour.WAYPOINTS)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("add", "Add here", Keybind.NONE))
+                .keybind(new Keybind("remove", "Remove nearest", Keybind.NONE))
+                .setting(new Setting.Toggle("beam", "Beam", "A column of colour from the ground to the sky.", true))
+                .setting(new Setting.Toggle("show-distance", "Distance", "How far away each one is.", true))
+                .setting(new Setting.Whole("scale", "Label size", "", 100, 50, 200, 10, "%"))
+                .setting(new Setting.Whole("distance", "Hide beyond", "0 shows them at any distance.",
+                        0, 0, 2000, 50, " blocks"))
+                .setting(new Setting.Toggle("death", "Mark where you die",
+                        "A Death waypoint, replaced by the next death. Also: /fwp add, remove, list, clear.", true))
+                .build());
+
+        out.add(FathomModule.builder("shiny-pots")
+                .name("Shiny Pots")
+                .description("Potions shine the way they used to.")
+                .category(Category.VISUAL)
+                .icon(Icon.FLASK)
+                .behaviour(Behaviour.SHINY_POTS)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Choice("shine", "Shine", "", "Bright", "Bright", "Very bright"))
+                .build());
+
+        // Teammates only, as the scoreboard defines them; never anyone else.
+        out.add(FathomModule.builder("teamview")
+                .name("Teamview")
+                .description("See where your teammates are.")
+                .category(Category.PVP)
+                .sensitivity(Sensitivity.SERVER_SENSITIVE)
+                .icon(Icon.RUN)
+                .behaviour(Behaviour.TEAMVIEW)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("toggle", "Toggle", Keybind.NONE))
+                .setting(new Setting.Colour("colour", "Colour", "", 0x4FC98A))
+                .setting(new Setting.Toggle("names", "Names", "Write each teammate's name under the marker.", true))
+                .setting(new Setting.Whole("distance", "Hide beyond", "", 128, 16, 512, 16, " blocks"))
+                .build());
+
+        out.add(HudStyle.declare(FathomModule.builder("height-limit")
+                .name("Height Limit")
+                .description("Warn before the build limit.")
+                .category(Category.PVP)
+                .icon(Icon.GAUGE)
+                .widget("height-limit")
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Whole("limit", "Limit", "The highest Y you can build at. Servers do not send it.",
+                        100, 1, 255, 1, ""))
+                .setting(new Setting.Whole("warn", "Warn within", "Blocks below the limit to start showing.",
+                        10, 1, 50, 1, " blocks"))
+                .setting(new Setting.Toggle("always", "Always show", "Not only near the limit.", false)))
+                .build());
+
+        out.add(HudStyle.declare(FathomModule.builder("bedwars-stats")
+                .name("Bedwars Stats")
+                .description("Kills, finals and beds this game.")
+                .category(Category.PVP)
+                .icon(Icon.SHIELD)
+                .widget("bedwars-stats")
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Toggle("deaths", "Deaths", "", false)))
+                .build());
+
+        out.add(FathomModule.builder("auto-gg")
+                .name("Auto GG")
+                .description("Say gg when a game ends.")
+                .category(Category.UTILITY)
+                .icon(Icon.SPARK)
+                .behaviour(Behaviour.AUTO_GG)
+                .needs(Compatibility.IN_GAME)
+                .implementation(Implementation.WORKING)
+                .setting(new Setting.Text("message", "Message", "", "gg"))
+                .setting(new Setting.Choice("channel", "Send to", "All chat is Hypixel's /ac, so your team is not the only one to see it.",
+                        "Chat", "Chat", "All chat (/ac)"))
+                .setting(new Setting.Whole("delay", "Delay", "", 1, 0, 5, 1, "s"))
+                .build());
+
+        // Only the camera turns; the server sees no change in where you face.
+        out.add(FathomModule.builder("freelook")
+                .name("Freelook")
+                .description("Look around without turning.")
+                .category(Category.UTILITY)
+                .sensitivity(Sensitivity.SERVER_SENSITIVE)
+                .icon(Icon.COMPASS)
+                .behaviour(Behaviour.FREELOOK)
+                .needs(Compatibility.IN_GAME.saying("Some servers ask clients not to offer it"))
+                .implementation(Implementation.WORKING)
+                .keybind(new Keybind("look", "Freelook", Keybind.NONE))
+                .setting(new Setting.Choice("mode", "Key", "", "Hold", "Hold", "Toggle"))
+                .setting(new Setting.Toggle("invert", "Invert up and down", "", false))
                 .build());
 
         // -- Performance ---------------------------------------------------

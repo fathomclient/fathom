@@ -137,6 +137,14 @@ loom {
                 // The value may be a module id, to capture one drawer.
                 vmArg "-Dfathom.qaOpenSettings=${project.property('qaOpenSettings')}"
             }
+            if (project.hasProperty('qaDetailScroll')) {
+                // Visual-only: the open settings page starts scrolled this far.
+                vmArg "-Dfathom.qaDetailScroll=${project.property('qaDetailScroll')}"
+            }
+            if (project.hasProperty('qaOpenColour')) {
+                // Visual-only: opens the colour popover whose id contains this.
+                vmArg "-Dfathom.qaOpenColour=${project.property('qaOpenColour')}"
+            }
             if (project.hasProperty('qaEditorSelect')) {
                 // Visual-only: the HUD editor opens with this widget selected.
                 vmArg "-Dfathom.qaEditorSelect=${project.property('qaEditorSelect')}"
@@ -413,6 +421,7 @@ def coreSuites = [
         'net.fathom.optimizations.core.PacingTests',
         'net.fathom.optimizations.core.RendererTests',
         'net.fathom.optimizations.core.PulseTests',
+        'net.fathom.optimizations.core.InteractionTests',
 ]
 
 def coreTest = tasks.register('coreTest') {

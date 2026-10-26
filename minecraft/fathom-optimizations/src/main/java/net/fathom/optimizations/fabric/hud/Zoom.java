@@ -145,7 +145,7 @@ public final class Zoom {
             }
             if (binding.isMouseButton()) {
                 int button = binding.mouseButton();
-                return Mouse.isCreated() && button < Mouse.getButtonCount() && Mouse.isButtonDown(button);
+                return net.fathom.optimizations.fabric.input.MouseButtons.isDown(button);
             }
             return Keyboard.isCreated() && binding.key() > 0 && binding.key() < Keyboard.KEYBOARD_SIZE
                     && Keyboard.isKeyDown(binding.key());

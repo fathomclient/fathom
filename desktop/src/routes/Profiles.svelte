@@ -21,7 +21,8 @@
   Those are filenames.
 
   The installation in use sits in its own pane at the top, larger. Editing
-  opens the shared sheet.
+  opens the installation on its own page (InstallationEditor), which is also
+  where OptiFine is added and where it says whether it is on.
 -->
 <script lang="ts">
   import { ICON } from '../lib/metrics.generated';
@@ -33,36 +34,29 @@
   import Section from '../lib/ui/Section.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Notice from '../lib/ui/Notice.svelte';
-  import Sheet from '../lib/ui/Sheet.svelte';
-  import Switch from '../lib/ui/Switch.svelte';
   import ProfileSetup from '../lib/ui/ProfileSetup.svelte';
+  import InstallationEditor from './InstallationEditor.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
-  import Select from '../lib/ui/Select.svelte';
   import { tooltip } from '../lib/tooltip';
-  import { rangeFill } from '../lib/range';
   import { EASE, MOTION_HOVER, MOTION_PAGE, MOTION_STAGGER } from '../lib/motion';
   import {
     deleteProfile,
     deriveProfile,
     duplicateProfile,
     profileArt,
-    profileDetail,
     profilesView,
-    saveProfile,
     selectProfile,
-    type ProfileDetail,
     type ProfileRow,
   } from '../lib/api';
 
   export let onChanged: () => void = () => {};
-  /** Leave for the full Add OptiFine screen. Set by the shell. */
-  export let onAddOptiFine: () => void = () => {};
 
   let rows: ProfileRow[] = [];
   let loaded = false;
   let art: Record<string, string | null> = {};
   let busy = false;
-  let editing: ProfileDetail | null = null;
+  /** The installation open on its own page, if any. */
+  let editing: string | null = null;
   let settingUp = false;
   let confirmingDelete: string | null = null;
   let error = '';
@@ -101,25 +95,8 @@
     }
   }
 
-  async function openEditor(id: string) {
-    editing = await profileDetail(id);
-  }
-
-  async function save() {
-    if (!editing) return;
-    const detail = editing;
-    await run(async () => {
-      await saveProfile({
-        id: detail.id,
-        name: detail.name,
-        memoryMb: detail.memoryMb,
-        extraArgs: detail.extraArgs,
-        keepLauncherOpen: detail.keepLauncherOpen,
-        loader: detail.loader,
-        java: detail.java,
-      });
-      editing = null;
-    });
+  function openEditor(id: string) {
+    editing = id;
   }
 
   /* Pairs from the palette, so a generated field is always a colour the
@@ -163,6 +140,13 @@
   $: others = rows.filter((row) => !row.selected);
 </script>
 
+{#if editing}
+  <InstallationEditor
+    id={editing}
+    onBack={() => (editing = null)}
+    onChanged={() => void refresh().then(onChanged)}
+  />
+{:else}
 <Page title="Installations" summary="{rows.length} {rows.length === 1 ? 'installation' : 'installations'}">
   <svelte:fragment slot="actions">
     <Button variant="primary" disabled={busy} onClick={() => (settingUp = true)}>
@@ -316,162 +300,16 @@
     </Section>
   {/if}
 </Page>
+{/if}
 
 {#if settingUp}
   <ProfileSetup
     onClose={() => (settingUp = false)}
-    onCreated={() => void refresh().then(onChanged)}
-    onAddOptiFine={() => {
-      settingUp = false;
-      onAddOptiFine();
+    onCreated={(id, openIt) => {
+      void refresh().then(onChanged);
+      if (openIt) editing = id;
     }}
   />
-{/if}
-
-<!-- EDITOR -->
-{#if editing}
-  <Sheet title="Edit installation" width={420} onClose={() => (editing = null)}>
-    <p class="what">
-      {editing.kindLabel} · Minecraft {editing.version} · {editing.preset}
-    </p>
-
-    {#if editing.parent}
-      <!-- A derived profile's technical half comes from its parent, so the
-           fields that would be overwritten at launch are removed rather than
-           shown greyed. -->
-      <p class="fine">
-        Based on {editing.parent}. Version, loader, memory and Java come from it.
-      </p>
-    {/if}
-
-    <label class="field">
-      <span class="field-label">Name</span>
-      <input class="ui-field" bind:value={editing.name} spellcheck="false" />
-    </label>
-
-    {#if !editing.parent}
-      <div class="field">
-        <span class="field-label">Loader</span>
-        <!-- Unavailable loaders are shown and marked, not hidden. Hiding them
-             makes the product look smaller than it is and gives somebody
-             looking for Forge nothing to conclude. -->
-        <Select
-          label="Loader"
-          bind:value={editing.loader}
-          options={editing.loaders.map((loader) => {
-            // Fathom's client is built for Legacy Fabric and for Forge.
-            const outsideFathom = editing?.kind === 'fathom' && loader.id === 'vanilla';
-            return {
-              id: loader.id,
-              label: loader.label,
-              disabled: !loader.available || outsideFathom,
-              note: !loader.available ? 'Not ready' : outsideFathom ? 'Not for Fathom' : '',
-            };
-          })}
-        />
-        {#if editing.kind === 'fathom'}
-          <span class="fine">Fathom runs on Legacy Fabric or Forge; switching installs the matching build.</span>
-        {/if}
-      </div>
-
-      <div class="field">
-        <span class="field-label">Java runtime</span>
-        <Select
-          label="Java runtime"
-          bind:value={editing.java}
-          options={[
-            { id: 'automatic', label: 'Automatic' },
-            { id: 'managed', label: 'Fathom managed' },
-            { id: 'system', label: 'System' },
-            ...(editing.javaPath ? [{ id: 'custom', label: `Custom — ${editing.javaPath}` }] : []),
-          ]}
-        />
-      </div>
-
-      <label class="field">
-        <span class="field-line">
-          <span class="field-label">Memory</span>
-          <span class="value mono">{(editing.memoryMb / 1024).toFixed(1)} GB</span>
-        </span>
-        <input
-          type="range"
-          min="512"
-          max="8192"
-          step="256"
-          bind:value={editing.memoryMb}
-          use:rangeFill={editing.memoryMb}
-        />
-      </label>
-
-      <label class="field">
-        <span class="field-label">Extra Java arguments</span>
-        <input class="ui-field" bind:value={editing.extraArgs} spellcheck="false" placeholder="None" />
-      </label>
-    {/if}
-
-    <div class="toggle">
-      <span class="toggle-text">Keep Fathom open while playing</span>
-      <Switch
-        checked={editing.keepLauncherOpen}
-        label="Keep Fathom open while playing"
-        onChange={(value) => editing && (editing.keepLauncherOpen = value)}
-      />
-    </div>
-
-    {#if editing.components.length}
-      <section class="facts-list">
-        <h3>Components</h3>
-        <dl>
-          {#each editing.components as component}
-            <div>
-              <dt>{component.name}</dt>
-              <dd class:quiet={component.state === 'unavailable'} class:flag={component.state === 'missing'}>
-                {component.detail}
-              </dd>
-            </div>
-          {/each}
-        </dl>
-      </section>
-    {/if}
-
-    <!-- Everything a profile can carry, whether or not this one does. Rows that
-         are unset say so, rather than being omitted: the point is to show what
-         a profile *is*, not only what has been filled in. -->
-    {#if editing.identity.length}
-    <section class="facts-list">
-      <h3>Look</h3>
-      <dl>
-        {#each editing.identity as row}
-          <div>
-            <dt>{row.label}</dt>
-            <dd class:quiet={row.unset}>{row.value}</dd>
-          </div>
-        {/each}
-      </dl>
-    </section>
-    {/if}
-
-    {#if editing.servers.length}
-      <section class="facts-list">
-        <h3>Servers</h3>
-        <dl>
-          {#each editing.servers as server}
-            <div>
-              <dt>{server.name}</dt>
-              <dd>{server.address}</dd>
-            </div>
-          {/each}
-        </dl>
-      </section>
-    {/if}
-
-    <svelte:fragment slot="footer">
-      <div class="sheet-actions">
-        <Button onClick={() => (editing = null)}>Cancel</Button>
-        <Button variant="primary" disabled={busy} onClick={save}>Save</Button>
-      </div>
-    </svelte:fragment>
-  </Sheet>
 {/if}
 
 <style>
@@ -553,121 +391,5 @@
     font-size: var(--type-secondary-size);
     color: var(--color-text-secondary);
     margin-right: var(--space-1);
-  }
-
-  /* -- the editor ------------------------------------------------------------ */
-  .what {
-    margin: calc(-1 * var(--space-2)) 0 0;
-    font-size: var(--type-secondary-size);
-    color: var(--color-text-secondary);
-  }
-
-  .fine {
-    margin: 0;
-    font-size: var(--type-caption-size);
-    line-height: var(--type-caption-leading);
-    color: var(--color-text-tertiary);
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .field-line {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-  }
-
-  .field-label {
-    font-size: var(--type-label-size);
-    font-weight: var(--type-heading-weight);
-    letter-spacing: var(--type-label-tracking);
-    color: var(--color-text-secondary);
-  }
-
-  .value {
-    min-width: 7ch;
-    text-align: right;
-    font-size: var(--type-secondary-size);
-    font-weight: var(--type-button-weight);
-    color: var(--color-text);
-  }
-
-  .field input[type='range'] {
-    width: 100%;
-  }
-
-  .toggle {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding-top: var(--space-4);
-    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
-  }
-
-  .toggle-text {
-    flex: 1;
-    font-size: var(--type-body-size);
-    color: var(--color-text);
-  }
-
-  .facts-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-top: var(--space-4);
-    box-shadow: 0 calc(-1 * var(--hairline)) 0 var(--control-hairline);
-  }
-
-  h3 {
-    margin: 0;
-    font-size: var(--type-label-size);
-    font-weight: var(--type-heading-weight);
-    letter-spacing: var(--type-label-tracking);
-    color: var(--color-text-secondary);
-  }
-
-  dl {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-  }
-
-  dl div {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--space-3);
-    align-items: baseline;
-    font-size: var(--type-secondary-size);
-  }
-
-  dt {
-    color: var(--color-text-secondary);
-    overflow-wrap: anywhere;
-  }
-
-  dd {
-    margin: 0;
-    text-align: right;
-    color: var(--color-text);
-    overflow-wrap: anywhere;
-  }
-
-  dd.quiet {
-    color: var(--color-text-disabled);
-  }
-
-  dd.flag {
-    color: var(--color-warning-text);
-  }
-
-  .sheet-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
   }
 </style>

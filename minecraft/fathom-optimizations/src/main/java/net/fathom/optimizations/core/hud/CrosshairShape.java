@@ -40,7 +40,31 @@ public final class CrosshairShape {
         CROSS,
         TEE,
         DOT,
-        CIRCLE
+        CIRCLE,
+        /** A cross turned 45 degrees. */
+        X,
+        /** A hollow square around the centre. */
+        SQUARE;
+
+        /** The style a Shape setting names; Cross for anything unknown, Vanilla included. */
+        public static Style named(String chosen) {
+            if ("Dot".equals(chosen)) {
+                return DOT;
+            }
+            if ("Circle".equals(chosen)) {
+                return CIRCLE;
+            }
+            if ("Tee".equals(chosen)) {
+                return TEE;
+            }
+            if ("X".equals(chosen)) {
+                return X;
+            }
+            if ("Square".equals(chosen)) {
+                return SQUARE;
+            }
+            return CROSS;
+        }
     }
 
     /** Inputs are clamped to these, so a hand-edited profile cannot ask for a 10,000 pixel mask. */
@@ -95,6 +119,31 @@ public final class CrosshairShape {
                     square(d, t);
                 }
                 break;
+            case X:
+                // Each arm a run of t-by-t cells stepping one pixel diagonally,
+                // which draws as a line t pixels thick at 45 degrees.
+                for (int step = g + 1; step <= g + len; step++) {
+                    add(step, step, step + t, step + t);
+                    add(-step, -step, -step + t, -step + t);
+                    add(step, -step, step + t, -step + t);
+                    add(-step, step, -step + t, step + t);
+                }
+                if (dot || len == 0 || g == 0) {
+                    square(dot ? d : t, t);
+                }
+                break;
+            case SQUARE: {
+                // Sides at the gap plus length, each t thick, around the centre cell.
+                int reach = Math.max(1, g + len);
+                add(-reach, -reach, t + reach, -reach + t);           // top
+                add(-reach, reach, t + reach, reach + t);             // bottom
+                add(-reach, -reach, -reach + t, t + reach);           // left
+                add(reach, -reach, reach + t, t + reach);             // right
+                if (dot) {
+                    square(d, t);
+                }
+                break;
+            }
             case TEE:
             case CROSS:
             default:

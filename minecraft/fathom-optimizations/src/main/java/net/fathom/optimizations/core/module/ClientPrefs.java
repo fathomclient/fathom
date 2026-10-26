@@ -68,7 +68,10 @@ public final class ClientPrefs {
     private static final int DEFAULT_RSHIFT_BLUR = 1;
     private static final int DEFAULT_RSHIFT_DIM = 1;
     private static final float[] RSHIFT_BLUR_VALUES = {12f, 18f, 26f};
-    private static final float[] RSHIFT_DIM_VALUES = {0.24f, 0.34f, 0.44f};
+    // An eighth stronger than the first values (.24/.34/.44), so the live game
+    // sits a little further back behind the RShift window. Still one tint
+    // over the existing blur: no extra pass.
+    private static final float[] RSHIFT_DIM_VALUES = {0.27f, 0.38f, 0.50f};
     private int rshiftBackgroundChoice = DEFAULT_RSHIFT_BACKGROUND;
     private int rshiftBlurChoice = DEFAULT_RSHIFT_BLUR;
     private int rshiftDimChoice = DEFAULT_RSHIFT_DIM;

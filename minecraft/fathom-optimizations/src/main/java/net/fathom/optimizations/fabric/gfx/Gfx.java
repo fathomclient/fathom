@@ -345,6 +345,16 @@ public final class Gfx {
         return "GL coverage renderer";
     }
 
+    /**
+     * Read the interface's glyph atlas on a background thread, so that when the
+     * compositor is next created (the first Fathom screen or HUD frame, or the
+     * first one after a resource reload) the render thread only uploads it.
+     * Touches no OpenGL.
+     */
+    public static void prepareAssets() {
+        SdfText.prepareAsync();
+    }
+
     /** Throw away every texture — for a resource reload. */
     public static void dispose() {
         if (compositor != null) {

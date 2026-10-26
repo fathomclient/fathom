@@ -245,14 +245,20 @@ public final class SdfRenderer implements UiCanvas {
             return false;
         }
         if (!created) {
+            long creating = net.fathom.optimizations.fabric.diag.Hitches.begin();
             try {
+                long step = net.fathom.optimizations.fabric.diag.Hitches.begin();
                 shaders.create();
+                net.fathom.optimizations.fabric.diag.Hitches.end(net.fathom.optimizations.fabric.diag.Hitches.Section.COMPOSITOR_SHADERS, step);
+                step = net.fathom.optimizations.fabric.diag.Hitches.begin();
                 text.create();
+                net.fathom.optimizations.fabric.diag.Hitches.end(net.fathom.optimizations.fabric.diag.Hitches.Section.COMPOSITOR_ATLAS, step);
                 icons.create();
                 brand.create();
                 backdrop = new SdfBackdrop();
                 vbo = GL15.glGenBuffers();
                 created = true;
+                net.fathom.optimizations.fabric.diag.Hitches.end(net.fathom.optimizations.fabric.diag.Hitches.Section.COMPOSITOR_CREATE, creating);
             } catch (Exception problem) {
                 failed = true;
                 System.err.println("[Fathom] The interface compositor could not start ("
@@ -862,6 +868,27 @@ public final class SdfRenderer implements UiCanvas {
         }
         float rad = deviceSize(radius);
         shape(l, t, r, b, rad, rad, rad, rad, 0f, SdfShaders.KIND_IMAGE);
+        quad(l, t, r, b, u0, v0, u1, v1, colour, colour, texture);
+    }
+
+    @Override
+    public void sprite(int texture, float left, float top, float right, float bottom,
+            float u0, float v0, float u1, float v1, int argb) {
+        if (texture <= 0 || right <= left || bottom <= top) {
+            return;
+        }
+        int colour = tint(argb);
+        if (Colour.invisible(colour)) {
+            return;
+        }
+        float l = snap(deviceX(left));
+        float t = snap(deviceY(top));
+        float r = snap(deviceX(right));
+        float b = snap(deviceY(bottom));
+        if (r <= l || b <= t) {
+            return;
+        }
+        shape(l, t, r, b, 0f, 0f, 0f, 0f, 0f, SdfShaders.KIND_IMAGE);
         quad(l, t, r, b, u0, v0, u1, v1, colour, colour, texture);
     }
 
