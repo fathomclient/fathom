@@ -49,8 +49,8 @@ gpg --batch --pinentry-mode loopback --passphrase-file /path/to/passphrase.txt \
 tar -xzf fathom-private.tar.gz -C ~
 ```
 
-If you clone with `core.autocrlf` or filters set, compare against `SHA256SUMS`
-on this branch; the file is binary and should not change.
+To check the download, compare `sha256sum fathom-private.tar.gz.gpg` with
+`SHA256SUMS` on this branch.
 
 That creates three folders in your home directory:
 
