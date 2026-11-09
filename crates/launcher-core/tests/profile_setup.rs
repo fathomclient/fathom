@@ -402,6 +402,10 @@ fn a_profile_round_trips_through_disk_with_its_new_fields() {
         .find(|candidate| candidate.id == profile.id)
         .expect("still there");
 
+    // The store stamps `updated_at` when it writes, on its own copy, so this
+    // one field legitimately moves if the second ticks over during the test.
+    assert!(read_back.updated_at >= profile.updated_at);
+    profile.updated_at = read_back.updated_at;
     assert_eq!(read_back, profile);
     assert_eq!(read_back.kind, ProfileKind::Fathom);
     assert_eq!(read_back.presentation.theme.as_deref(), Some("bg_3"));
