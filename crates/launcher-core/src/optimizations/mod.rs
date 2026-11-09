@@ -682,15 +682,21 @@ mod tests {
     #[test]
     fn a_loader_specific_entry_is_offered_only_on_its_loader() {
         use crate::profiles::Loader;
-        let forge_only = game()
+        // Named rather than derived, so that restricting an entry to one loader
+        // by accident fails here. Everything else is the same client on both.
+        let not_on_fabric: Vec<_> = game()
             .iter()
-            .find(|entry| entry.id == "render.forge.sky-blend-cache")
-            .expect("the Forge sky blend fix is in the registry");
-        assert!(forge_only.applies_to(Loader::Forge));
-        assert!(!forge_only.applies_to(Loader::LegacyFabric));
-        // Everything else is the same client on both loaders.
-        for entry in game().iter().filter(|entry| entry.id != forge_only.id) {
-            assert!(entry.applies_to(Loader::LegacyFabric), "{}", entry.id);
+            .filter(|entry| !entry.applies_to(Loader::LegacyFabric))
+            .map(|entry| entry.id)
+            .collect();
+        assert_eq!(
+            not_on_fabric,
+            [
+                "render.forge.sky-blend-cache",
+                "render.forge.unheard-render-events",
+            ]
+        );
+        for entry in game() {
             assert!(entry.applies_to(Loader::Forge), "{}", entry.id);
         }
         // The JVM flags are the launcher's own and apply anywhere.

@@ -40,6 +40,11 @@ jobs:
           npm ci
           npm run check
           npm test
+      # The launcher's build script refuses to run without desktop/dist, which
+      # it embeds, and Clippy below runs that build script.
+      - name: Frontend (build the assets the launcher embeds)
+        working-directory: desktop
+        run: npx vite build
 
       # rust-toolchain.toml pins the compiler, so the lint gate does not move under us.
       - uses: Swatinem/rust-cache@v2
